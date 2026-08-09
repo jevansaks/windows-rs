@@ -6,6 +6,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialApp {
+                #[default]
                 IDialApp,
             }
             #[repr(i32)]
@@ -28,6 +29,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialAppStateDetails {
+                #[default]
                 IDialAppStateDetails,
             }
             #[repr(i32)]
@@ -43,7 +45,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDialDeviceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialDevice {
+                #[default]
                 IDialDevice,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 IDialDevice2,
             }
             #[repr(i32)]
@@ -62,6 +66,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialDevicePicker {
+                #[default]
                 IDialDevicePicker,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -69,6 +74,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialDevicePickerFilter {
+                #[default]
                 IDialDevicePickerFilter,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -76,6 +82,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialDeviceSelectedEventArgs {
+                #[default]
                 IDialDeviceSelectedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -83,6 +90,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialDisconnectButtonClickedEventArgs {
+                #[default]
                 IDialDisconnectButtonClickedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
@@ -90,7 +98,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDialReceiverAppStatics, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DialReceiverApp {
+                #[default]
                 IDialReceiverApp,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IDialReceiverApp2,
             }
             #[guid(0x555ffbd3_45b7_49f3_bbd7_302db6084646)]
@@ -143,14 +153,14 @@ mod Windows {
                 event DialDeviceSelected: super::super::Foundation::TypedEventHandler<DialDevicePicker, DialDeviceSelectedEventArgs>;
                 event DisconnectButtonClicked: super::super::Foundation::TypedEventHandler<DialDevicePicker, DialDisconnectButtonClickedEventArgs>;
                 event DialDevicePickerDismissed: super::super::Foundation::TypedEventHandler<DialDevicePicker, Object>;
-                #[Windows::Foundation::Metadata::Overload("Show")]
+                #[overload(Show)]
                 fn Show(&self, selection: super::super::Foundation::Rect);
-                #[Windows::Foundation::Metadata::Overload("ShowWithPlacement")]
-                fn Show(&self, selection: super::super::Foundation::Rect, preferredPlacement: super::super::UI::Popups::Placement);
-                #[Windows::Foundation::Metadata::Overload("PickSingleDialDeviceAsync")]
+                #[overload(Show)]
+                fn ShowWithPlacement(&self, selection: super::super::Foundation::Rect, preferredPlacement: super::super::UI::Popups::Placement);
+                #[overload(PickSingleDialDeviceAsync)]
                 fn PickSingleDialDeviceAsync(&self, selection: super::super::Foundation::Rect) -> super::super::Foundation::IAsyncOperation<DialDevice>;
-                #[Windows::Foundation::Metadata::Overload("PickSingleDialDeviceAsyncWithPlacement")]
-                fn PickSingleDialDeviceAsync(&self, selection: super::super::Foundation::Rect, preferredPlacement: super::super::UI::Popups::Placement) -> super::super::Foundation::IAsyncOperation<DialDevice>;
+                #[overload(PickSingleDialDeviceAsync)]
+                fn PickSingleDialDeviceAsyncWithPlacement(&self, selection: super::super::Foundation::Rect, preferredPlacement: super::super::UI::Popups::Placement) -> super::super::Foundation::IAsyncOperation<DialDevice>;
                 fn Hide(&self);
                 fn SetDisplayStatus(&self, device: DialDevice, status: DialDeviceDisplayStatus);
             }

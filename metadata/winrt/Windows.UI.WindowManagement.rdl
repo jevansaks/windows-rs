@@ -8,24 +8,28 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindow {
+                #[default]
                 IAppWindow,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowChangedEventArgs {
+                #[default]
                 IAppWindowChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowCloseRequestedEventArgs {
+                #[default]
                 IAppWindowCloseRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowClosedEventArgs {
+                #[default]
                 IAppWindowClosedEventArgs,
             }
             #[repr(i32)]
@@ -40,8 +44,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowFrame {
-                IAppWindowFrame,
                 IAppWindowFrameStyle,
+                #[default]
+                IAppWindowFrame,
             }
             #[repr(i32)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
@@ -54,14 +59,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowPlacement {
+                #[default]
                 IAppWindowPlacement,
             }
+            #[unsealed]
             #[Windows::Foundation::Metadata::Composable(IAppWindowPresentationConfigurationFactory, Public, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowPresentationConfiguration {
+                #[default]
                 IAppWindowPresentationConfiguration,
             }
             #[repr(i32)]
@@ -76,19 +84,22 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowPresenter {
+                #[default]
                 IAppWindowPresenter,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowTitleBar {
-                IAppWindowTitleBar,
                 IAppWindowTitleBarVisibility,
+                #[default]
+                IAppWindowTitleBar,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppWindowTitleBarOcclusion {
+                #[default]
                 IAppWindowTitleBarOcclusion,
             }
             #[repr(i32)]
@@ -104,6 +115,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CompactOverlayPresentationConfiguration: AppWindowPresentationConfiguration {
+                #[default]
                 ICompactOverlayPresentationConfiguration,
             }
             #[Windows::Foundation::Metadata::Activatable(524288, "Windows.Foundation.UniversalApiContract")]
@@ -112,12 +124,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class DefaultPresentationConfiguration: AppWindowPresentationConfiguration {
+                #[default]
                 IDefaultPresentationConfiguration,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class DisplayRegion {
+                #[default]
                 IDisplayRegion,
             }
             #[Windows::Foundation::Metadata::Activatable(524288, "Windows.Foundation.UniversalApiContract")]
@@ -126,6 +140,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class FullScreenPresentationConfiguration: AppWindowPresentationConfiguration {
+                #[default]
                 IFullScreenPresentationConfiguration,
             }
             #[guid(0x663014a6_b75e_5dbd_995c_f0117fa3fb61)]
@@ -253,11 +268,11 @@ mod Windows {
             interface IAppWindowPresenter {
                 fn GetConfiguration(&self) -> AppWindowPresentationConfiguration;
                 fn IsPresentationSupported(&self, presentationKind: AppWindowPresentationKind) -> bool;
-                #[Windows::Foundation::Metadata::Overload("RequestPresentation")]
+                #[overload(RequestPresentation)]
                 fn RequestPresentation(&self, configuration: AppWindowPresentationConfiguration) -> bool;
-                #[Windows::Foundation::Metadata::DefaultOverload]
-                #[Windows::Foundation::Metadata::Overload("RequestPresentationByKind")]
-                fn RequestPresentation(&self, presentationKind: AppWindowPresentationKind) -> bool;
+                #[overload(RequestPresentation)]
+                #[default_overload]
+                fn RequestPresentationByKind(&self, presentationKind: AppWindowPresentationKind) -> bool;
             }
             #[guid(0xff1f3ea3_b769_50ef_9873_108cd0e89746)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
@@ -383,11 +398,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(WindowingEnvironment)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface IWindowingEnvironmentStatics {
-                #[Windows::Foundation::Metadata::Overload("FindAll")]
+                #[overload(FindAll)]
                 fn FindAll(&self) -> super::super::Foundation::Collections::IVectorView<WindowingEnvironment>;
-                #[Windows::Foundation::Metadata::Overload("FindAllWithKind")]
-                fn FindAll(&self, kind: WindowingEnvironmentKind) -> super::super::Foundation::Collections::IVectorView<WindowingEnvironment>;
+                #[overload(FindAll)]
+                fn FindAllWithKind(&self, kind: WindowingEnvironmentKind) -> super::super::Foundation::Collections::IVectorView<WindowingEnvironment>;
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 786432)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IWindowServicesStatics, 786432, "Windows.Foundation.UniversalApiContract")]
@@ -400,18 +416,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class WindowingEnvironment {
+                #[default]
                 IWindowingEnvironment,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class WindowingEnvironmentAddedEventArgs {
+                #[default]
                 IWindowingEnvironmentAddedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class WindowingEnvironmentChangedEventArgs {
+                #[default]
                 IWindowingEnvironmentChangedEventArgs,
             }
             #[repr(i32)]
@@ -426,6 +445,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class WindowingEnvironmentRemovedEventArgs {
+                #[default]
                 IWindowingEnvironmentRemovedEventArgs,
             }
         }

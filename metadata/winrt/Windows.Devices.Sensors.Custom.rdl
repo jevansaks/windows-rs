@@ -9,7 +9,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ICustomSensorStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class CustomSensor {
+                    #[default]
                     ICustomSensor,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     ICustomSensor2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -17,7 +19,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class CustomSensorReading {
+                    #[default]
                     ICustomSensorReading,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     ICustomSensorReading2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -25,6 +29,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class CustomSensorReadingChangedEventArgs {
+                    #[default]
                     ICustomSensorReadingChangedEventArgs,
                 }
                 #[guid(0xa136f9ad_4034_4b4d_99dd_531aac649c09)]

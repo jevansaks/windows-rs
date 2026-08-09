@@ -21,6 +21,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class CivicAddress {
+                #[default]
                 ICivicAddress,
             }
             #[Windows::Foundation::Metadata::Activatable(IGeoboundingBoxFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -30,6 +31,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IGeoboundingBoxStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GeoboundingBox {
+                #[default]
                 IGeoboundingBox,
                 IGeoshape,
             }
@@ -38,6 +40,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Geocircle {
+                #[default]
                 IGeocircle,
                 IGeoshape,
             }
@@ -45,17 +48,24 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Geocoordinate {
+                #[default]
                 IGeocoordinate,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IGeocoordinateWithPositionData,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IGeocoordinateWithPoint,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IGeocoordinateWithPositionSourceTimestamp,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 917504)]
                 IGeocoordinateWithRemoteSource,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GeocoordinateSatelliteData {
+                #[default]
                 IGeocoordinateSatelliteData,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 IGeocoordinateSatelliteData2,
             }
             #[repr(i32)]
@@ -74,8 +84,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IGeolocatorStatics2, 196608, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Geolocator {
+                #[default]
                 IGeolocator,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IGeolocatorWithScalarAccuracy,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IGeolocator2,
             }
             #[Windows::Foundation::Metadata::Activatable(IGeopathFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -84,6 +97,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Geopath {
+                #[default]
                 IGeopath,
                 IGeoshape,
             }
@@ -92,6 +106,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Geopoint {
+                #[default]
                 IGeopoint,
                 IGeoshape,
             }
@@ -99,7 +114,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Geoposition {
+                #[default]
                 IGeoposition,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IGeoposition2,
             }
             #[repr(i32)]
@@ -107,13 +124,16 @@ mod Windows {
             enum GeoshapeType {
                 Geopoint = 0,
                 Geocircle = 1,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Geopath = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 GeoboundingBox = 3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Geovisit {
+                #[default]
                 IGeovisit,
             }
             #[Windows::Foundation::Metadata::Activatable(327680, "Windows.Foundation.UniversalApiContract")]
@@ -123,18 +143,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IGeovisitMonitorStatics, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GeovisitMonitor {
+                #[default]
                 IGeovisitMonitor,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GeovisitStateChangedEventArgs {
+                #[default]
                 IGeovisitStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GeovisitTriggerDetails {
+                #[default]
                 IGeovisitTriggerDetails,
             }
             #[guid(0xa8567a1a_64f4_4d48_bcea_f6b008eca34c)]
@@ -179,12 +202,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(GeoboundingBox)]
             interface IGeoboundingBoxStatics {
-                #[Windows::Foundation::Metadata::Overload("TryCompute")]
+                #[overload(TryCompute)]
                 fn TryCompute(&self, positions: super::super::Foundation::Collections::IIterable<BasicGeoposition>) -> GeoboundingBox;
-                #[Windows::Foundation::Metadata::Overload("TryComputeWithAltitudeReference")]
-                fn TryCompute(&self, positions: super::super::Foundation::Collections::IIterable<BasicGeoposition>, altitudeRefSystem: AltitudeReferenceSystem) -> GeoboundingBox;
-                #[Windows::Foundation::Metadata::Overload("TryComputeWithAltitudeReferenceAndSpatialReference")]
-                fn TryCompute(&self, positions: super::super::Foundation::Collections::IIterable<BasicGeoposition>, altitudeRefSystem: AltitudeReferenceSystem, spatialReferenceId: u32) -> GeoboundingBox;
+                #[overload(TryCompute)]
+                fn TryComputeWithAltitudeReference(&self, positions: super::super::Foundation::Collections::IIterable<BasicGeoposition>, altitudeRefSystem: AltitudeReferenceSystem) -> GeoboundingBox;
+                #[overload(TryCompute)]
+                fn TryComputeWithAltitudeReferenceAndSpatialReference(&self, positions: super::super::Foundation::Collections::IIterable<BasicGeoposition>, altitudeRefSystem: AltitudeReferenceSystem, spatialReferenceId: u32) -> GeoboundingBox;
             }
             #[guid(0x39e45843_a7f9_4e63_92a7_ba0c28d124b1)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -207,15 +230,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(Geocoordinate)]
             interface IGeocoordinate {
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Latitude may be altered or unavailable after Windows 8.1. Instead, use Point.Position.Latitude", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_Latitude(&self) -> f64;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Longitude may be altered or unavailable after Windows 8.1. Instead, use Point.Position.Longitude", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_Longitude(&self) -> f64;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Altitude may be altered or unavailable after Windows 8.1. Instead, use Point.Position.Altitude", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_Altitude(&self) -> super::super::Foundation::IReference<f64>;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Latitude may be altered or unavailable after Windows 8.1. Instead, use Point.Position.Latitude", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                Latitude: f64;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Longitude may be altered or unavailable after Windows 8.1. Instead, use Point.Position.Longitude", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                Longitude: f64;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Altitude may be altered or unavailable after Windows 8.1. Instead, use Point.Position.Altitude", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                Altitude: super::super::Foundation::IReference<f64>;
                 #[get]
                 Accuracy: f64;
                 #[get]
@@ -286,12 +309,12 @@ mod Windows {
                 ReportInterval: u32;
                 #[get]
                 LocationStatus: PositionStatus;
-                #[Windows::Foundation::Metadata::Overload("GetGeopositionAsync")]
+                #[overload(GetGeopositionAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetGeopositionAsync(&self) -> super::super::Foundation::IAsyncOperation<Geoposition>;
-                #[Windows::Foundation::Metadata::Overload("GetGeopositionAsyncWithAgeAndTimeout")]
+                #[overload(GetGeopositionAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetGeopositionAsync(&self, maximumAge: super::super::Foundation::TimeSpan, timeout: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperation<Geoposition>;
+                fn GetGeopositionAsyncWithAgeAndTimeout(&self, maximumAge: super::super::Foundation::TimeSpan, timeout: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperation<Geoposition>;
                 event PositionChanged: super::super::Foundation::TypedEventHandler<Geolocator, PositionChangedEventArgs>;
                 event StatusChanged: super::super::Foundation::TypedEventHandler<Geolocator, StatusChangedEventArgs>;
             }
@@ -307,14 +330,14 @@ mod Windows {
             interface IGeolocatorStatics {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn RequestAccessAsync(&self) -> super::super::Foundation::IAsyncOperation<GeolocationAccessStatus>;
+                #[overload(GetGeopositionHistoryAsync)]
                 #[Windows::Foundation::Metadata::Deprecated("GetGeopositionHistoryAsync is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 131072, "Windows.Foundation.UniversalApiContract")]
-                #[Windows::Foundation::Metadata::Overload("GetGeopositionHistoryAsync")]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetGeopositionHistoryAsync(&self, startTime: super::super::Foundation::DateTime) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<Geoposition>>;
+                #[overload(GetGeopositionHistoryAsync)]
                 #[Windows::Foundation::Metadata::Deprecated("GetGeopositionHistoryWithDurationAsync is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 131072, "Windows.Foundation.UniversalApiContract")]
-                #[Windows::Foundation::Metadata::Overload("GetGeopositionHistoryWithDurationAsync")]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetGeopositionHistoryAsync(&self, startTime: super::super::Foundation::DateTime, duration: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<Geoposition>>;
+                fn GetGeopositionHistoryWithDurationAsync(&self, startTime: super::super::Foundation::DateTime, duration: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<Geoposition>>;
             }
             #[guid(0x993011a2_fa1c_4631_a71d_0dbeb1250d9c)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
@@ -463,6 +486,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PositionChangedEventArgs {
+                #[default]
                 IPositionChangedEventArgs,
             }
             #[repr(i32)]
@@ -471,9 +495,13 @@ mod Windows {
                 Cellular = 0,
                 Satellite = 1,
                 WiFi = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IPAddress = 3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Unknown = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 Default = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 Obfuscated = 6,
             }
             #[repr(i32)]
@@ -490,12 +518,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StatusChangedEventArgs {
+                #[default]
                 IStatusChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class VenueData {
+                #[default]
                 IVenueData,
             }
             #[repr(i32)]

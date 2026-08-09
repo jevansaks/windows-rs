@@ -6,12 +6,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CardAddedEventArgs {
+                #[default]
                 ICardAddedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CardRemovedEventArgs {
+                #[default]
                 ICardRemovedEventArgs,
             }
             #[guid(0x18bbef98_f18b_4dd3_b118_dfb2c8e23cc6)]
@@ -143,12 +145,12 @@ mod Windows {
                 Challenge: super::super::Storage::Streams::IBuffer;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn VerifyResponseAsync(&self, response: super::super::Storage::Streams::IBuffer) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("ProvisionAsync")]
+                #[overload(ProvisionAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ProvisionAsync(&self, response: super::super::Storage::Streams::IBuffer, formatCard: bool) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("ProvisionAsyncWithNewCardId")]
+                #[overload(ProvisionAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn ProvisionAsync(&self, response: super::super::Storage::Streams::IBuffer, formatCard: bool, newCardId: GUID) -> super::super::Foundation::IAsyncAction;
+                fn ProvisionAsyncWithNewCardId(&self, response: super::super::Storage::Streams::IBuffer, formatCard: bool, newCardId: GUID) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ChangeAdministrativeKeyAsync(&self, response: super::super::Storage::Streams::IBuffer, newAdministrativeKey: super::super::Storage::Streams::IBuffer) -> super::super::Foundation::IAsyncAction;
             }
@@ -203,12 +205,12 @@ mod Windows {
                 fn ValidateRequestApduAsync(&self, promptingBehavior: SmartCardUnlockPromptingBehavior, apduToValidate: super::super::Storage::Streams::IBuffer, cryptogramPlacementSteps: super::super::Foundation::Collections::IIterable<SmartCardCryptogramPlacementStep>) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGeneratorOperationStatus>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetAllCryptogramStorageKeyCharacteristicsAsync(&self) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGetAllCryptogramStorageKeyCharacteristicsResult>;
-                #[Windows::Foundation::Metadata::Overload("GetAllCryptogramMaterialPackageCharacteristicsAsync")]
+                #[overload(GetAllCryptogramMaterialPackageCharacteristicsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetAllCryptogramMaterialPackageCharacteristicsAsync(&self) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGetAllCryptogramMaterialPackageCharacteristicsResult>;
-                #[Windows::Foundation::Metadata::Overload("GetAllCryptogramMaterialPackageCharacteristicsWithStorageKeyAsync")]
+                #[overload(GetAllCryptogramMaterialPackageCharacteristicsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetAllCryptogramMaterialPackageCharacteristicsAsync(&self, storageKeyName: String) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGetAllCryptogramMaterialPackageCharacteristicsResult>;
+                fn GetAllCryptogramMaterialPackageCharacteristicsWithStorageKeyAsync(&self, storageKeyName: String) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGetAllCryptogramMaterialPackageCharacteristicsResult>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetAllCryptogramMaterialCharacteristicsAsync(&self, promptingBehavior: SmartCardUnlockPromptingBehavior, materialPackageName: String) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGetAllCryptogramMaterialCharacteristicsResult>;
             }
@@ -359,7 +361,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(SmartCardEmulator)]
             interface ISmartCardEmulator2 {
+                #[add_name(value)]
+                #[remove_name(value)]
                 event ApduReceived: super::super::Foundation::TypedEventHandler<SmartCardEmulator, SmartCardEmulatorApduReceivedEventArgs>;
+                #[add_name(value)]
+                #[remove_name(value)]
                 event ConnectionDeactivated: super::super::Foundation::TypedEventHandler<SmartCardEmulator, SmartCardEmulatorConnectionDeactivatedEventArgs>;
                 fn Start(&self);
                 fn IsHostCardEmulationSupported(&self) -> bool;
@@ -383,20 +389,20 @@ mod Windows {
             interface ISmartCardEmulatorApduReceivedEventArgs2 {
                 #[get]
                 State: u32;
-                #[Windows::Foundation::Metadata::Overload("TryRespondWithStateAsync")]
+                #[overload(TryRespondAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryRespondAsync(&self, responseApdu: super::super::Storage::Streams::IBuffer, nextState: super::super::Foundation::IReference<u32>) -> super::super::Foundation::IAsyncOperation<bool>;
+                fn TryRespondWithStateAsync(&self, responseApdu: super::super::Storage::Streams::IBuffer, nextState: super::super::Foundation::IReference<u32>) -> super::super::Foundation::IAsyncOperation<bool>;
             }
             #[guid(0xd550bac7_b7bf_4e29_9294_0c4ac3c941bd)]
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 131072)]
             #[Windows::Foundation::Metadata::ExclusiveTo(SmartCardEmulatorApduReceivedEventArgs)]
             interface ISmartCardEmulatorApduReceivedEventArgsWithCryptograms {
-                #[Windows::Foundation::Metadata::Overload("TryRespondWithCryptogramsAsync")]
+                #[overload(TryRespondWithCryptogramsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryRespondWithCryptogramsAsync(&self, responseTemplate: super::super::Storage::Streams::IBuffer, cryptogramPlacementSteps: super::super::Foundation::Collections::IIterable<SmartCardCryptogramPlacementStep>) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGeneratorOperationStatus>;
-                #[Windows::Foundation::Metadata::Overload("TryRespondWithCryptogramsAndStateAsync")]
+                #[overload(TryRespondWithCryptogramsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryRespondWithCryptogramsAsync(&self, responseTemplate: super::super::Storage::Streams::IBuffer, cryptogramPlacementSteps: super::super::Foundation::Collections::IIterable<SmartCardCryptogramPlacementStep>, nextState: super::super::Foundation::IReference<u32>) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGeneratorOperationStatus>;
+                fn TryRespondWithCryptogramsAndStateAsync(&self, responseTemplate: super::super::Storage::Streams::IBuffer, cryptogramPlacementSteps: super::super::Foundation::Collections::IIterable<SmartCardCryptogramPlacementStep>, nextState: super::super::Foundation::IReference<u32>) -> super::super::Foundation::IAsyncOperation<SmartCardCryptogramGeneratorOperationStatus>;
             }
             #[guid(0x2186d8d3_c5eb_5262_43df_62a0a1b55557)]
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 65536)]
@@ -498,20 +504,20 @@ mod Windows {
             interface ISmartCardProvisioningStatics {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FromSmartCardAsync(&self, card: SmartCard) -> super::super::Foundation::IAsyncOperation<SmartCardProvisioning>;
-                #[Windows::Foundation::Metadata::Overload("RequestVirtualSmartCardCreationAsync")]
+                #[overload(RequestVirtualSmartCardCreationAsync)]
                 fn RequestVirtualSmartCardCreationAsync(&self, friendlyName: String, administrativeKey: super::super::Storage::Streams::IBuffer, pinPolicy: SmartCardPinPolicy) -> super::super::Foundation::IAsyncOperation<SmartCardProvisioning>;
-                #[Windows::Foundation::Metadata::Overload("RequestVirtualSmartCardCreationAsyncWithCardId")]
-                fn RequestVirtualSmartCardCreationAsync(&self, friendlyName: String, administrativeKey: super::super::Storage::Streams::IBuffer, pinPolicy: SmartCardPinPolicy, cardId: GUID) -> super::super::Foundation::IAsyncOperation<SmartCardProvisioning>;
+                #[overload(RequestVirtualSmartCardCreationAsync)]
+                fn RequestVirtualSmartCardCreationAsyncWithCardId(&self, friendlyName: String, administrativeKey: super::super::Storage::Streams::IBuffer, pinPolicy: SmartCardPinPolicy, cardId: GUID) -> super::super::Foundation::IAsyncOperation<SmartCardProvisioning>;
                 fn RequestVirtualSmartCardDeletionAsync(&self, card: SmartCard) -> super::super::Foundation::IAsyncOperation<bool>;
             }
             #[guid(0x3447c6a8_c9a0_4bd6_b50d_251f4e8d3a62)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(SmartCardProvisioning)]
             interface ISmartCardProvisioningStatics2 {
-                #[Windows::Foundation::Metadata::Overload("RequestAttestedVirtualSmartCardCreationAsync")]
+                #[overload(RequestAttestedVirtualSmartCardCreationAsync)]
                 fn RequestAttestedVirtualSmartCardCreationAsync(&self, friendlyName: String, administrativeKey: super::super::Storage::Streams::IBuffer, pinPolicy: SmartCardPinPolicy) -> super::super::Foundation::IAsyncOperation<SmartCardProvisioning>;
-                #[Windows::Foundation::Metadata::Overload("RequestAttestedVirtualSmartCardCreationAsyncWithCardId")]
-                fn RequestAttestedVirtualSmartCardCreationAsync(&self, friendlyName: String, administrativeKey: super::super::Storage::Streams::IBuffer, pinPolicy: SmartCardPinPolicy, cardId: GUID) -> super::super::Foundation::IAsyncOperation<SmartCardProvisioning>;
+                #[overload(RequestAttestedVirtualSmartCardCreationAsync)]
+                fn RequestAttestedVirtualSmartCardCreationAsyncWithCardId(&self, friendlyName: String, administrativeKey: super::super::Storage::Streams::IBuffer, pinPolicy: SmartCardPinPolicy, cardId: GUID) -> super::super::Foundation::IAsyncOperation<SmartCardProvisioning>;
             }
             #[guid(0x1074b4e0_54c2_4df0_817a_14c14378f06c)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -534,10 +540,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(SmartCardReader)]
             interface ISmartCardReaderStatics {
-                #[Windows::Foundation::Metadata::Overload("GetDeviceSelector")]
+                #[overload(GetDeviceSelector)]
                 fn GetDeviceSelector(&self) -> String;
-                #[Windows::Foundation::Metadata::Overload("GetDeviceSelectorWithKind")]
-                fn GetDeviceSelector(&self, kind: SmartCardReaderKind) -> String;
+                #[overload(GetDeviceSelector)]
+                fn GetDeviceSelectorWithKind(&self, kind: SmartCardReaderKind) -> String;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FromIdAsync(&self, deviceId: String) -> super::super::Foundation::IAsyncOperation<SmartCardReader>;
             }
@@ -558,12 +564,12 @@ mod Windows {
             interface ISmartCardTriggerDetails2 {
                 #[get]
                 Emulator: SmartCardEmulator;
-                #[Windows::Foundation::Metadata::Overload("TryLaunchCurrentAppAsync")]
+                #[overload(TryLaunchCurrentAppAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryLaunchCurrentAppAsync(&self, arguments: String) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("TryLaunchCurrentAppWithBehaviorAsync")]
+                #[overload(TryLaunchCurrentAppAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryLaunchCurrentAppAsync(&self, arguments: String, behavior: SmartCardLaunchBehavior) -> super::super::Foundation::IAsyncOperation<bool>;
+                fn TryLaunchCurrentAppWithBehaviorAsync(&self, arguments: String, behavior: SmartCardLaunchBehavior) -> super::super::Foundation::IAsyncOperation<bool>;
             }
             #[guid(0xb3e2c27d_18c6_4ba8_8376_ef03d4912666)]
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardBackgroundTriggerContract, 196608)]
@@ -572,6 +578,7 @@ mod Windows {
                 #[get]
                 SmartCard: SmartCard;
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 393216)]
             #[Windows::Foundation::Metadata::Static(IKnownSmartCardAppletIds, 393216, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
             class KnownSmartCardAppletIds {}
@@ -579,7 +586,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCard {
+                #[default]
                 ISmartCard,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ISmartCardConnect,
             }
             #[repr(i32)]
@@ -595,7 +604,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ISmartCardAppletIdGroupStatics, 65536, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardAppletIdGroup {
+                #[default]
                 ISmartCardAppletIdGroup,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 393216)]
                 ISmartCardAppletIdGroup2,
             }
             #[repr(i32)]
@@ -609,7 +620,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardAppletIdGroupRegistration {
+                #[default]
                 ISmartCardAppletIdGroupRegistration,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 393216)]
                 ISmartCardAppletIdGroupRegistration2,
             }
             #[Windows::Foundation::Metadata::Activatable(ISmartCardAutomaticResponseApduFactory, 65536, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
@@ -617,8 +630,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardAutomaticResponseApdu {
+                #[default]
                 ISmartCardAutomaticResponseApdu,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 131072)]
                 ISmartCardAutomaticResponseApdu2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 196608)]
                 ISmartCardAutomaticResponseApdu3,
             }
             #[repr(i32)]
@@ -635,6 +651,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardChallengeContext {
+                #[default]
                 ISmartCardChallengeContext,
                 super::super::Foundation::IClosable,
             }
@@ -642,6 +659,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardConnection {
+                #[default]
                 ISmartCardConnection,
                 super::super::Foundation::IClosable,
             }
@@ -656,6 +674,7 @@ mod Windows {
                 Sha1 = 5,
                 SignedDynamicApplicationData = 6,
                 RsaPkcs1 = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 262144)]
                 Sha256Hmac = 8,
             }
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 131072)]
@@ -664,7 +683,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ISmartCardCryptogramGeneratorStatics2, 327680, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramGenerator {
+                #[default]
                 ISmartCardCryptogramGenerator,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 262144)]
                 ISmartCardCryptogramGenerator2,
             }
             #[repr(i32)]
@@ -682,7 +703,9 @@ mod Windows {
                 InvalidCryptogramMaterialUsage = 9,
                 ApduResponseNotSent = 10,
                 OtherError = 11,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 262144)]
                 ValidationFailed = 12,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 327680)]
                 NotSupported = 13,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
@@ -690,6 +713,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramGetAllCryptogramMaterialCharacteristicsResult {
+                #[default]
                 ISmartCardCryptogramGetAllCryptogramMaterialCharacteristicsResult,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
@@ -697,6 +721,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramGetAllCryptogramMaterialPackageCharacteristicsResult {
+                #[default]
                 ISmartCardCryptogramGetAllCryptogramMaterialPackageCharacteristicsResult,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
@@ -704,6 +729,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramGetAllCryptogramStorageKeyCharacteristicsResult {
+                #[default]
                 ISmartCardCryptogramGetAllCryptogramStorageKeyCharacteristicsResult,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
@@ -711,6 +737,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramMaterialCharacteristics {
+                #[default]
                 ISmartCardCryptogramMaterialCharacteristics,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
@@ -718,6 +745,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramMaterialPackageCharacteristics {
+                #[default]
                 ISmartCardCryptogramMaterialPackageCharacteristics,
             }
             #[repr(i32)]
@@ -736,6 +764,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramMaterialPossessionProof {
+                #[default]
                 ISmartCardCryptogramMaterialPossessionProof,
             }
             #[repr(i32)]
@@ -766,6 +795,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramPlacementStep {
+                #[default]
                 ISmartCardCryptogramPlacementStep,
             }
             #[repr(i32)]
@@ -787,13 +817,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramStorageKeyCharacteristics {
+                #[default]
                 ISmartCardCryptogramStorageKeyCharacteristics,
             }
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardCryptogramStorageKeyInfo {
+                #[default]
                 ISmartCardCryptogramStorageKeyInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 196608)]
                 ISmartCardCryptogramStorageKeyInfo2,
             }
             #[repr(i32)]
@@ -819,6 +852,7 @@ mod Windows {
             enum SmartCardEmulationType {
                 Host = 0,
                 Uicc = 1,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 196608)]
                 EmbeddedSE = 2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 65536)]
@@ -828,21 +862,27 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ISmartCardEmulatorStatics3, 327680, "Windows.Devices.SmartCards.SmartCardEmulatorContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardEmulator {
+                #[default]
                 ISmartCardEmulator,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 131072)]
                 ISmartCardEmulator2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardEmulatorApduReceivedEventArgs {
+                #[default]
                 ISmartCardEmulatorApduReceivedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 131072)]
                 ISmartCardEmulatorApduReceivedEventArgsWithCryptograms,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardEmulatorContract", 131072)]
                 ISmartCardEmulatorApduReceivedEventArgs2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(SmartCardEmulatorContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardEmulatorConnectionDeactivatedEventArgs {
+                #[default]
                 ISmartCardEmulatorConnectionDeactivatedEventArgs,
             }
             #[repr(i32)]
@@ -855,6 +895,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardEmulatorConnectionProperties {
+                #[default]
                 ISmartCardEmulatorConnectionProperties,
             }
             #[repr(i32)]
@@ -892,12 +933,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardPinPolicy {
+                #[default]
                 ISmartCardPinPolicy,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardPinResetDeferral {
+                #[default]
                 ISmartCardPinResetDeferral,
             }
             #[guid(0x138d5e40_f3bc_4a5c_b41d_4b4ef684e237)]
@@ -907,6 +950,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardPinResetRequest {
+                #[default]
                 ISmartCardPinResetRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -915,7 +959,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ISmartCardProvisioningStatics2, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardProvisioning {
+                #[default]
                 ISmartCardProvisioning,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ISmartCardProvisioning2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -923,6 +969,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ISmartCardReaderStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardReader {
+                #[default]
                 ISmartCardReader,
             }
             #[repr(i32)]
@@ -933,6 +980,7 @@ mod Windows {
                 Tpm = 2,
                 Nfc = 3,
                 Uicc = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 EmbeddedSE = 5,
             }
             #[repr(i32)]
@@ -955,8 +1003,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartCardTriggerDetails {
+                #[default]
                 ISmartCardTriggerDetails,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardBackgroundTriggerContract", 65536)]
                 ISmartCardTriggerDetails2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardBackgroundTriggerContract", 196608)]
                 ISmartCardTriggerDetails3,
             }
             #[repr(i32)]
@@ -965,8 +1016,11 @@ mod Windows {
                 EmulatorTransaction = 0,
                 EmulatorNearFieldEntry = 1,
                 EmulatorNearFieldExit = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardBackgroundTriggerContract", 65536)]
                 EmulatorHostApplicationActivated = 3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardBackgroundTriggerContract", 65536)]
                 EmulatorAppletIdGroupRegistrationChanged = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Devices.SmartCards.SmartCardBackgroundTriggerContract", 131072)]
                 ReaderCardAdded = 5,
             }
             #[repr(i32)]

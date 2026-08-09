@@ -1,8 +1,5 @@
-// Negative tests for windows-rdl error reporting. The golden round-trip harness
-// only ever feeds valid input, so these drive the failure paths in the reader
-// and the resulting `Error` formatting. Unwrapping the `Err` panics with the
-// `Debug` output, which defers to `Display`, so `should_panic` exercises all
-// three `Display` branches in `src/error.rs`.
+// Negative tests for windows-rdl error reporting. The golden round-trip harness only feeds valid
+// input, so these drive single-error compatibility and collected diagnostic paths.
 
 fn out_path(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("OUT_DIR")).join(format!("test_rdl_err_{name}.winmd"))
@@ -17,6 +14,171 @@ fn syntax_error_reports_line_and_column() {
         .output(out_path("syntax"))
         .write()
         .unwrap();
+}
+
+#[test]
+fn named_source_populates_structured_diagnostic() {
+    let error = windows_rdl::reader()
+        .input_text_named(
+            "src/widget.rdl",
+            "#[winrt] mod Test { this is not valid rdl }",
+        )
+        .output(out_path("named_source"))
+        .write()
+        .unwrap_err();
+
+    assert_eq!(error.severity, windows_rdl::Severity::Error);
+    assert_eq!(error.file_name, "src/widget.rdl");
+    assert_eq!(error.labels.len(), 1);
+
+    let label = &error.labels[0];
+    assert_eq!(label.style, windows_rdl::LabelStyle::Primary);
+    assert_eq!(label.source, "src/widget.rdl");
+    assert_eq!(label.start.line, error.line);
+    assert_eq!(label.start.column, error.column);
+}
+
+#[test]
+fn multiple_named_sources_report_the_failing_source() {
+    let error = windows_rdl::reader()
+        .input_texts_named([
+            ("src/first.rdl", "#[winrt] mod First {}"),
+            (
+                "src/second.rdl",
+                "#[winrt] mod Second { this is not valid rdl }",
+            ),
+        ])
+        .output(out_path("multiple_named_sources"))
+        .write()
+        .unwrap_err();
+
+    assert_eq!(error.file_name, "src/second.rdl");
+    assert_eq!(error.labels[0].source, "src/second.rdl");
+}
+
+#[test]
+fn check_all_collects_sources_and_parse_errors() {
+    let first = "#[winrt] mod First { this is not valid rdl }";
+    let second = "#[winrt] mod Second { this is also not valid rdl }";
+    let report = windows_rdl::reader()
+        .input_texts_named([("src/first.rdl", first), ("src/second.rdl", second)])
+        .check_all();
+
+    assert!(!report.is_success());
+    assert_eq!(report.diagnostics().len(), 2);
+    assert_eq!(report.source("src/first.rdl"), Some(first));
+    assert_eq!(report.source("src/second.rdl"), Some(second));
+}
+
+#[test]
+fn report_does_not_guess_between_duplicate_source_names() {
+    let report = windows_rdl::reader()
+        .input_texts(["#[winrt] mod First {}", "#[winrt] mod Second {}"])
+        .check_all();
+
+    assert!(report.is_success());
+    assert_eq!(report.source(".rdl"), None);
+}
+
+#[test]
+fn duplicate_source_names_retain_distinct_source_ids() {
+    let first = "#[win32] mod Test { struct First { value: i32 } }";
+    let second = "#[win32] mod Test { struct First { value: u32 } }";
+    let report = windows_rdl::reader()
+        .input_texts([first, second])
+        .check_all();
+
+    assert_eq!(report.diagnostics().len(), 1);
+    let labels = &report.diagnostics()[0].labels;
+    assert_eq!(labels.len(), 2);
+    let primary = labels[0].source_id.unwrap();
+    let secondary = labels[1].source_id.unwrap();
+    assert_ne!(primary, secondary);
+    assert_eq!(report.source_by_id(primary), Some(second));
+    assert_eq!(report.source_by_id(secondary), Some(first));
+}
+
+#[test]
+fn syntax_recovery_preserves_later_semantic_diagnostics() {
+    let report = windows_rdl::reader()
+        .input_text_named(
+            "src/recovery.rdl",
+            r#"
+#[win32]
+mod Test {
+    this is not valid rdl
+    struct Value {
+        field: i32,
+        field: i32,
+    }
+}
+"#,
+        )
+        .check_all();
+
+    assert_eq!(report.diagnostics().len(), 2);
+    assert_eq!(report.diagnostics()[0].code, None);
+    assert_eq!(report.diagnostics()[1].code.as_deref(), Some("RDL0001"));
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.source_id.is_some())
+    );
+}
+
+#[test]
+fn check_all_collects_independent_semantic_errors() {
+    let report = windows_rdl::reader()
+        .input_text_named(
+            "src/duplicates.rdl",
+            r#"
+#[win32]
+mod Test {
+    struct First {
+        value: i32,
+        value: i32,
+    }
+    struct Second {
+        value: i32,
+        value: i32,
+    }
+}
+"#,
+        )
+        .check_all();
+
+    assert_eq!(report.diagnostics().len(), 2);
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_deref() == Some("RDL0001"))
+    );
+}
+
+#[test]
+fn diagnostic_supports_codes_labels_notes_and_help() {
+    let diagnostic = windows_rdl::Diagnostic::new("duplicate property", "src/widget.rdl", 8, 4)
+        .with_code("RDL0001")
+        .with_label(windows_rdl::Label::secondary(
+            "src/widget.rdl",
+            3,
+            4,
+            "first declared here",
+        ))
+        .with_note("properties in an interface must be unique")
+        .with_help("rename or remove one property");
+
+    assert_eq!(diagnostic.code.as_deref(), Some("RDL0001"));
+    assert_eq!(diagnostic.labels.len(), 2);
+    assert_eq!(diagnostic.notes.len(), 1);
+    assert_eq!(diagnostic.help.len(), 1);
+    assert!(
+        diagnostic
+            .to_string()
+            .starts_with("\nerror[RDL0001]: duplicate property")
+    );
 }
 
 #[test]

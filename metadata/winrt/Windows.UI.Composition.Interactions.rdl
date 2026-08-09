@@ -10,6 +10,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CompositionConditionalValue: super::CompositionObject {
+                    #[default]
                     ICompositionConditionalValue,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -18,6 +19,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CompositionInteractionSourceCollection: super::CompositionObject {
+                    #[default]
                     ICompositionInteractionSourceCollection,
                     super::super::super::Foundation::Collections::IIterable<ICompositionInteractionSource>,
                 }
@@ -122,10 +124,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(InteractionTracker)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IInteractionTracker4 {
-                    #[Windows::Foundation::Metadata::Overload("TryUpdatePositionWithOption")]
-                    fn TryUpdatePosition(&self, value: super::super::super::Foundation::Numerics::Vector3, option: InteractionTrackerClampingOption) -> i32;
-                    #[Windows::Foundation::Metadata::Overload("TryUpdatePositionByWithOption")]
-                    fn TryUpdatePositionBy(&self, amount: super::super::super::Foundation::Numerics::Vector3, option: InteractionTrackerClampingOption) -> i32;
+                    #[overload(TryUpdatePosition)]
+                    fn TryUpdatePositionWithOption(&self, value: super::super::super::Foundation::Numerics::Vector3, option: InteractionTrackerClampingOption) -> i32;
+                    #[overload(TryUpdatePositionBy)]
+                    fn TryUpdatePositionByWithOption(&self, amount: super::super::super::Foundation::Numerics::Vector3, option: InteractionTrackerClampingOption) -> i32;
                     #[get]
                     IsInertiaFromImpulse: bool;
                 }
@@ -134,8 +136,8 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(InteractionTracker)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IInteractionTracker5 {
-                    #[Windows::Foundation::Metadata::Overload("TryUpdatePositionWithOption")]
-                    fn TryUpdatePosition(&self, value: super::super::super::Foundation::Numerics::Vector3, option: InteractionTrackerClampingOption, posUpdateOption: InteractionTrackerPositionUpdateOption) -> i32;
+                    #[overload(TryUpdatePosition)]
+                    fn TryUpdatePositionWithOption(&self, value: super::super::super::Foundation::Numerics::Vector3, option: InteractionTrackerClampingOption, posUpdateOption: InteractionTrackerPositionUpdateOption) -> i32;
                 }
                 #[guid(0x8d1c8cf1_d7b0_434c_a5d2_2d7611864834)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -440,6 +442,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionSourceConfiguration: super::CompositionObject {
+                    #[default]
                     IInteractionSourceConfiguration,
                 }
                 #[repr(i32)]
@@ -465,10 +468,15 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTracker: super::CompositionObject {
+                    #[default]
                     IInteractionTracker,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInteractionTracker2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     IInteractionTracker3,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     IInteractionTracker4,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                     IInteractionTracker5,
                 }
                 #[repr(i32)]
@@ -483,7 +491,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerCustomAnimationStateEnteredArgs {
+                    #[default]
                     IInteractionTrackerCustomAnimationStateEnteredArgs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                     IInteractionTrackerCustomAnimationStateEnteredArgs2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -491,9 +501,12 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerIdleStateEnteredArgs {
+                    #[default]
                     IInteractionTrackerIdleStateEnteredArgs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                     IInteractionTrackerIdleStateEnteredArgs2,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IInteractionTrackerInertiaModifierFactory, Public, 196608, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
@@ -501,6 +514,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerInertiaModifier: super::CompositionObject {
+                    #[default]
                     IInteractionTrackerInertiaModifier,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -510,6 +524,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerInertiaMotion: InteractionTrackerInertiaModifier {
+                    #[default]
                     IInteractionTrackerInertiaMotion,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
@@ -519,6 +534,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerInertiaNaturalMotion: InteractionTrackerInertiaModifier {
+                    #[default]
                     IInteractionTrackerInertiaNaturalMotion,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -528,6 +544,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerInertiaRestingValue: InteractionTrackerInertiaModifier {
+                    #[default]
+                    #[no_property(Condition)]
+                    #[no_property(RestingValue)]
                     IInteractionTrackerInertiaRestingValue,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -535,8 +554,20 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerInertiaStateEnteredArgs {
+                    #[default]
+                    #[no_property(ModifiedRestingPosition)]
+                    #[no_property(ModifiedRestingScale)]
+                    #[no_property(NaturalRestingPosition)]
+                    #[no_property(NaturalRestingScale)]
+                    #[no_property(PositionVelocityInPixelsPerSecond)]
+                    #[no_property(RequestId)]
+                    #[no_property(ScaleVelocityInPercentPerSecond)]
                     IInteractionTrackerInertiaStateEnteredArgs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
+                    #[no_property(IsInertiaFromImpulse)]
                     IInteractionTrackerInertiaStateEnteredArgs2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
+                    #[no_property(IsFromBinding)]
                     IInteractionTrackerInertiaStateEnteredArgs3,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -544,7 +575,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerInteractingStateEnteredArgs {
+                    #[default]
+                    #[no_property(RequestId)]
                     IInteractionTrackerInteractingStateEnteredArgs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
+                    #[no_property(IsFromBinding)]
                     IInteractionTrackerInteractingStateEnteredArgs2,
                 }
                 #[repr(i32)]
@@ -559,6 +594,8 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerRequestIgnoredArgs {
+                    #[default]
+                    #[no_property(RequestId)]
                     IInteractionTrackerRequestIgnoredArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -566,8 +603,13 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerValuesChangedArgs {
+                    #[default]
+                    #[no_property(Position)]
+                    #[no_property(RequestId)]
+                    #[no_property(Scale)]
                     IInteractionTrackerValuesChangedArgs,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IInteractionTrackerVector2InertiaModifierFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
@@ -575,6 +617,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerVector2InertiaModifier: super::CompositionObject {
+                    #[default]
                     IInteractionTrackerVector2InertiaModifier,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
@@ -584,8 +627,12 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InteractionTrackerVector2InertiaNaturalMotion: InteractionTrackerVector2InertiaModifier {
+                    #[default]
+                    #[no_property(Condition)]
+                    #[no_property(NaturalMotion)]
                     IInteractionTrackerVector2InertiaNaturalMotion,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IVisualInteractionSourceObjectFactory, Public, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
@@ -595,8 +642,28 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class VisualInteractionSource: super::CompositionObject {
+                    #[default]
+                    #[no_property(IsPositionXRailsEnabled)]
+                    #[no_property(IsPositionYRailsEnabled)]
+                    #[no_property(ManipulationRedirectionMode)]
+                    #[no_property(PositionXChainingMode)]
+                    #[no_property(PositionXSourceMode)]
+                    #[no_property(PositionYChainingMode)]
+                    #[no_property(PositionYSourceMode)]
+                    #[no_property(ScaleChainingMode)]
+                    #[no_property(ScaleSourceMode)]
+                    #[no_property(Source)]
                     IVisualInteractionSource,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
+                    #[no_property(DeltaPosition)]
+                    #[no_property(DeltaScale)]
+                    #[no_property(Position)]
+                    #[no_property(PositionVelocity)]
+                    #[no_property(Scale)]
+                    #[no_property(ScaleVelocity)]
                     IVisualInteractionSource2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
+                    #[no_property(PointerWheelConfig)]
                     IVisualInteractionSource3,
                     ICompositionInteractionSource,
                 }
@@ -606,7 +673,9 @@ mod Windows {
                 enum VisualInteractionSourceRedirectionMode {
                     Off = 0,
                     CapableTouchpadOnly = 1,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     PointerWheelOnly = 2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     CapableTouchpadAndPointerWheel = 3,
                 }
             }

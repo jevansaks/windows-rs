@@ -5,11 +5,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ComponentLoadFailedEventArgs {
+                #[default]
                 IComponentLoadFailedEventArgs,
             }
             #[guid(0x95da643c_6db9_424b_86ca_091af432081c)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             delegate fn ComponentLoadFailedEventHandler(sender: MediaProtectionManager, e: ComponentLoadFailedEventArgs);
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(ProtectionRenewalContract, 65536)]
             #[Windows::Foundation::Metadata::Static(IComponentRenewalStatics, 65536, "Windows.Media.Protection.ProtectionRenewalContract")]
             class ComponentRenewal {}
@@ -37,6 +39,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HdcpSession {
+                #[default]
                 IHdcpSession,
                 super::super::Foundation::IClosable,
             }
@@ -78,8 +81,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(MediaProtectionManager)]
             interface IMediaProtectionManager {
+                #[remove_name(cookie)]
                 event ServiceRequested: ServiceRequestedEventHandler;
+                #[remove_name(cookie)]
                 event RebootNeeded: RebootNeededEventHandler;
+                #[remove_name(cookie)]
                 event ComponentLoadFailed: ComponentLoadFailedEventHandler;
                 #[get]
                 Properties: super::super::Foundation::Collections::IPropertySet;
@@ -160,6 +166,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaProtectionManager {
+                #[default]
                 IMediaProtectionManager,
             }
             #[Windows::Foundation::Metadata::Activatable(IMediaProtectionPMPServerFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -168,11 +175,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MediaProtectionPMPServer {
+                #[default]
                 IMediaProtectionPMPServer,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MediaProtectionServiceCompletion {
+                #[default]
                 IMediaProtectionServiceCompletion,
             }
             #[Windows::Foundation::Metadata::Activatable(196608, "Windows.Foundation.UniversalApiContract")]
@@ -181,6 +190,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProtectionCapabilities {
+                #[default]
                 IProtectionCapabilities,
             }
             #[repr(i32)]
@@ -208,11 +218,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RevocationAndRenewalInformation {
+                #[default]
                 IRevocationAndRenewalInformation,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RevocationAndRenewalItem {
+                #[default]
                 IRevocationAndRenewalItem,
             }
             #[repr(u32)]
@@ -238,7 +250,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ServiceRequestedEventArgs {
+                #[default]
                 IServiceRequestedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IServiceRequestedEventArgs2,
             }
             #[guid(0xd2d690ba_cac9_48e1_95c0_d38495a84055)]

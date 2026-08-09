@@ -2,6 +2,7 @@ mod attribute;
 mod attribute_ref;
 mod callback;
 mod class;
+mod compile;
 mod r#const;
 mod delegate;
 mod r#enum;
@@ -14,15 +15,22 @@ mod interface;
 mod item;
 mod method;
 mod module;
+mod origin;
 mod param;
+mod projection;
+mod resolver;
+mod source;
 mod r#struct;
+mod syntax;
 mod typedef;
 mod union;
+mod validate;
 
 use super::*;
 use attribute::*;
 use callback::*;
 use class::*;
+pub use compile::Reader;
 use r#const::*;
 use delegate::*;
 use r#enum::*;
@@ -34,7 +42,13 @@ use interface::*;
 use item::*;
 use method::*;
 use module::*;
+use origin::*;
+use param::*;
+use projection::*;
+use resolver::*;
+pub(crate) use source::{item_names, parse_source};
 use r#struct::*;
+use syntax::*;
 use typedef::*;
 use union::*;
 use windows_metadata as metadata;
@@ -51,468 +65,183 @@ fn fixed_unsigned_value(value: u64) -> metadata::Value {
         .unwrap_or(metadata::Value::U64(value))
 }
 
-#[derive(Default)]
-/// Builder that compiles RDL files into `.winmd` metadata.
-pub struct Reader {
-    input: Vec<PathBuf>,
-    input_text: Vec<String>,
-    reference: Vec<PathBuf>,
-    reference_default: bool,
-    reference_bytes: Vec<Vec<u8>>,
-    output: PathBuf,
-}
+fn encode(
+    assembly_name: &str,
+    index: &Index,
+    reference: metadata::reader::Index,
+) -> Result<(Vec<u8>, Vec<Error>), Error> {
+    let mut output = metadata::writer::File::new(assembly_name);
+    output.set_reference(reference);
+    let mut origins = OriginMap::default();
+    let mut projections = ProjectionContext::default();
 
-impl Reader {
-    /// Creates a new builder with default options.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Adds an input `.rdl` file or directory.
-    pub fn input(&mut self, input: impl AsRef<Path>) -> &mut Self {
-        self.input.push(input.as_ref().to_path_buf());
-        self
-    }
-
-    /// Adds inline RDL source text to compile instead of a file on disk.
-    pub fn input_text(&mut self, input: &str) -> &mut Self {
-        self.input_text.push(input.to_string());
-        self
-    }
-
-    /// Adds inline RDL source texts to compile instead of files on disk.
-    pub fn input_texts<I, S>(&mut self, inputs: I) -> &mut Self
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        for input in inputs {
-            self.input_text(input.as_ref());
-        }
-        self
-    }
-
-    /// Adds a `.winmd` reference file or directory.
-    pub fn reference(&mut self, input: impl AsRef<Path>) -> &mut Self {
-        self.reference.push(input.as_ref().to_path_buf());
-        self
-    }
-
-    /// Adds multiple `.winmd` reference files or directories.
-    pub fn references<I, S>(&mut self, inputs: I) -> &mut Self
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<Path>,
-    {
-        for input in inputs {
-            self.reference(input);
-        }
-        self
-    }
-
-    /// Adds a `.winmd` reference from memory.
-    pub fn reference_bytes(&mut self, input: &[u8]) -> &mut Self {
-        self.reference_bytes.push(input.to_vec());
-        self
-    }
-
-    /// Adds `.winmd` references from memory.
-    pub fn reference_byte_sets<I, B>(&mut self, inputs: I) -> &mut Self
-    where
-        I: IntoIterator<Item = B>,
-        B: AsRef<[u8]>,
-    {
-        for input in inputs {
-            self.reference_bytes(input.as_ref());
-        }
-        self
-    }
-
-    /// Adds the default Windows metadata references.
-    pub fn reference_default(&mut self) -> &mut Self {
-        self.reference_default = true;
-        self
-    }
-
-    /// Adds multiple input `.rdl` files or directories.
-    pub fn inputs<I, S>(&mut self, inputs: I) -> &mut Self
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<Path>,
-    {
-        for input in inputs {
-            self.input(input);
-        }
-        self
-    }
-
-    /// Sets the output `.winmd` file path.
-    pub fn output(&mut self, output: impl AsRef<Path>) -> &mut Self {
-        self.output = output.as_ref().to_path_buf();
-        self
-    }
-
-    /// Compiles the inputs and writes the `.winmd` to the configured output.
-    pub fn write(&self) -> Result<(), Error> {
-        if self.output.as_os_str().is_empty() {
-            return Err(Error::new("output is required", "", 0, 0));
-        }
-
-        let rdl_paths = expand_input_files(&self.input, "rdl")?;
-        let reference_paths = expand_input_files(&self.reference, "winmd")?;
-
-        let input = expand_rdl_files(&rdl_paths, &self.input_text)?;
-
-        let mut index = Index::new();
-
-        for file in &input {
-            for item in &file.items {
-                index.insert(file, "", item);
+    for (namespace, members) in &index.namespaces {
+        for variants in members.types.values() {
+            for (file, item) in variants {
+                let name = item.to_string();
+                let encoder = &mut Encoder {
+                    output: &mut output,
+                    index,
+                    file,
+                    namespace,
+                    name: &name,
+                    generics: vec![],
+                    generic_args: vec![],
+                    origins: &mut origins,
+                    projections: &mut projections,
+                };
+                match item {
+                    Item::Attribute(ty) => encoder.encode_attribute(ty),
+                    Item::Callback(ty) => encoder.encode_callback(ty),
+                    Item::Class(ty) => encoder.encode_class(ty),
+                    Item::Const(ty) => encoder.encode_const(ty),
+                    Item::Delegate(ty) => encoder.encode_delegate(ty),
+                    Item::Enum(ty) => encoder.encode_enum(ty),
+                    Item::Fn(ty) => encoder.encode_fn(ty),
+                    Item::Interface(ty) => encoder.encode_interface(ty),
+                    Item::Struct(ty) => encoder.encode_struct(ty),
+                    Item::Typedef(ty) => encoder.encode_typedef(ty),
+                    Item::Union(ty) => encoder.encode_union(ty),
+                    Item::Module(_) => unreachable!(
+                        "Module items are expanded during indexing and never encoded directly"
+                    ),
+                }?;
             }
         }
 
-        let mut reference = vec![];
+        if !members.functions.is_empty() || !members.constants.is_empty() {
+            let class = metadata::writer::TypeDefOrRef::TypeRef(output.TypeRef("System", "Object"));
 
-        for file_name in &reference_paths {
-            let source = file_name.to_string_lossy();
-            reference.push(
-                metadata::reader::File::read(file_name)
-                    .ok_or_else(|| Error::new("invalid reference", &source, 0, 0))?,
+            output.TypeDef(
+                namespace,
+                "Apis",
+                class,
+                metadata::TypeAttributes::Public | metadata::TypeAttributes::Sealed,
             );
-        }
 
-        if self.reference_default {
-            reference.extend(
-                [windows_default::WINRT, windows_default::WIN32]
-                    .into_iter()
-                    .map(|bytes| metadata::reader::File::new(bytes.to_vec()).unwrap()),
-            );
-        }
-
-        for bytes in &self.reference_bytes {
-            reference.push(
-                metadata::reader::File::new(bytes.clone())
-                    .ok_or_else(|| Error::new("invalid reference", "<memory>", 0, 0))?,
-            );
-        }
-
-        let reference = metadata::reader::Index::new(reference);
-        validate_use_declarations(&input, &index, &reference)?;
-
-        let assembly_name = self
-            .output
-            .file_stem()
-            .and_then(|file_name| file_name.to_str())
-            .ok_or_else(|| Error::new("invalid output", &self.output.to_string_lossy(), 0, 0))?;
-
-        let mut output = metadata::writer::File::new(assembly_name);
-        output.set_reference(reference);
-
-        for (namespace, members) in &index.namespaces {
-            for variants in members.types.values() {
+            for (name, variants) in &members.functions {
                 for (file, item) in variants {
-                    let name = item.to_string();
-                    let encoder = &mut Encoder {
+                    let Item::Fn(ty) = item else {
+                        unreachable!("functions index only contains Item::Fn")
+                    };
+                    Encoder {
                         output: &mut output,
-                        index: &index,
+                        index,
                         file,
                         namespace,
-                        name: &name,
+                        name,
                         generics: vec![],
+                        generic_args: vec![],
+                        origins: &mut origins,
+                        projections: &mut projections,
+                    }
+                    .encode_fn(ty)?;
+                }
+            }
+
+            for (name, variants) in &members.constants {
+                for (file, item) in variants {
+                    let Item::Const(ty) = item else {
+                        unreachable!("constants index only contains Item::Const")
                     };
-                    match item {
-                        Item::Attribute(ty) => encoder.encode_attribute(ty),
-                        Item::Callback(ty) => encoder.encode_callback(ty),
-                        Item::Class(ty) => encoder.encode_class(ty),
-                        Item::Const(ty) => encoder.encode_const(ty),
-                        Item::Delegate(ty) => encoder.encode_delegate(ty),
-                        Item::Enum(ty) => encoder.encode_enum(ty),
-                        Item::Fn(ty) => encoder.encode_fn(ty),
-                        Item::Interface(ty) => encoder.encode_interface(ty),
-                        Item::Struct(ty) => encoder.encode_struct(ty),
-                        Item::Typedef(ty) => encoder.encode_typedef(ty),
-                        Item::Union(ty) => encoder.encode_union(ty),
-                        Item::Module(_) => unreachable!(
-                            "Module items are expanded during indexing and never encoded directly"
-                        ),
-                    }?;
-                }
-            }
-
-            if !members.functions.is_empty() || !members.constants.is_empty() {
-                let class =
-                    metadata::writer::TypeDefOrRef::TypeRef(output.TypeRef("System", "Object"));
-
-                output.TypeDef(
-                    namespace,
-                    "Apis",
-                    class,
-                    metadata::TypeAttributes::Public | metadata::TypeAttributes::Sealed,
-                );
-
-                for (name, variants) in &members.functions {
-                    for (file, item) in variants {
-                        let Item::Fn(ty) = item else {
-                            unreachable!("functions index only contains Item::Fn")
-                        };
-                        Encoder {
-                            output: &mut output,
-                            index: &index,
-                            file,
-                            namespace,
-                            name,
-                            generics: vec![],
-                        }
-                        .encode_fn(ty)?;
+                    Encoder {
+                        output: &mut output,
+                        index,
+                        file,
+                        namespace,
+                        name,
+                        generics: vec![],
+                        generic_args: vec![],
+                        origins: &mut origins,
+                        projections: &mut projections,
                     }
-                }
-
-                for (name, variants) in &members.constants {
-                    for (file, item) in variants {
-                        let Item::Const(ty) = item else {
-                            unreachable!("constants index only contains Item::Const")
-                        };
-                        Encoder {
-                            output: &mut output,
-                            index: &index,
-                            file,
-                            namespace,
-                            name,
-                            generics: vec![],
-                        }
-                        .encode_const(ty)?;
-                    }
+                    .encode_const(ty)?;
                 }
             }
         }
-
-        std::fs::write(&self.output, output.into_stream())
-            .map_err(|error| Error::new(&error.to_string(), &self.output.to_string_lossy(), 0, 0))
-    }
-}
-
-/// Parses one `.rdl` file and returns the items it defines under `namespace`.
-pub(crate) fn item_names(path: impl AsRef<Path>, namespace: &str) -> Result<Vec<String>, Error> {
-    let path = path.as_ref().to_path_buf();
-    let input = expand_rdl_files(std::slice::from_ref(&path), &[])?;
-    let mut index = Index::new();
-    for file in &input {
-        for item in &file.items {
-            index.insert(file, "", item);
-        }
-    }
-    let mut names = vec![];
-    if let Some(ns) = index.namespaces.get(namespace) {
-        names.extend(ns.types.keys().cloned());
-        names.extend(ns.functions.keys().cloned());
-        names.extend(ns.constants.keys().cloned());
-    }
-    Ok(names)
-}
-
-/// Rewrites RDL tokens that would otherwise confuse `syn`.
-fn preprocess_rdl(contents: &str) -> std::borrow::Cow<'_, str> {
-    let needs_in = contents.contains("#[in]");
-    let needs_doc = contents.contains("//!");
-    if !needs_in && !needs_doc {
-        return std::borrow::Cow::Borrowed(contents);
-    }
-    let mut result = contents.to_string();
-    if needs_in {
-        result = result.replace("#[in]", "#[r#in]");
-    }
-    if needs_doc {
-        result = result.replace("//!", "//");
-    }
-    std::borrow::Cow::Owned(result)
-}
-
-fn expand_rdl_files(paths: &[PathBuf], input_text: &[String]) -> Result<Vec<File>, Error> {
-    let mut input = vec![];
-
-    for path in paths {
-        let source = path.to_string_lossy();
-        let Ok(contents) = std::fs::read_to_string(path) else {
-            return Err(Error::new("failed to read binary file", &source, 0, 0));
-        };
-
-        let contents = preprocess_rdl(&contents);
-        let mut file = syn::parse_str::<File>(&contents).map_err(|error| {
-            let start = error.span().start();
-            Error::new(&error.to_string(), &source, start.line, start.column)
-        })?;
-
-        file.source = source.replace('\\', "/");
-        input.push(file);
     }
 
-    for contents in input_text {
-        let contents = preprocess_rdl(contents);
-        let mut file = syn::parse_str::<File>(&contents).map_err(|error| {
-            let start = error.span().start();
-            Error::new(&error.to_string(), ".rdl", start.line, start.column)
-        })?;
-
-        file.source = ".rdl".to_string();
-        input.push(file);
-    }
-
-    for file in &mut input {
-        for item in &mut file.items {
-            resolve_winrt(item, &file.source, None)?;
-        }
-    }
-
-    Ok(input)
-}
-
-fn resolve_winrt(item: &mut Item, source_file: &str, parent: Option<bool>) -> Result<(), Error> {
-    match item {
-        Item::Enum(item) => {
-            item.winrt = read_winrt_expected(source_file, &item.token, &item.attrs, parent)?;
-        }
-        Item::Interface(item) => {
-            item.winrt = read_winrt_expected(source_file, &item.token, &item.attrs, parent)?;
-        }
-        Item::Struct(item) => {
-            item.winrt = read_winrt_expected(source_file, &item.span, &item.attrs, parent)?;
-        }
-        Item::Attribute(item) => {
-            item.winrt = read_winrt_expected(source_file, &item.token, &item.attrs, parent)?;
-        }
-        Item::Module(item) => {
-            let parent = read_winrt(source_file, &item.token, &item.attrs, parent)?;
-
-            for child in &mut item.items {
-                resolve_winrt(child, source_file, parent)?;
-            }
-        }
-        _ => {}
-    }
-
-    Ok(())
-}
-
-fn read_winrt_expected<S: Spanned>(
-    source_file: &str,
-    span: &S,
-    attrs: &[syn::Attribute],
-    parent: Option<bool>,
-) -> Result<bool, Error> {
-    if let Some(winrt) = read_winrt(source_file, span, attrs, parent)? {
-        Ok(winrt)
+    let output = output.finalize();
+    let validation = output
+        .validate_inferred()
+        .into_iter()
+        .map(|error| origins.error(error))
+        .collect::<Vec<_>>();
+    let bytes = if validation.is_empty() {
+        output.into_stream()
     } else {
-        let start = span.span().start();
+        vec![]
+    };
 
-        Err(Error::new(
-            "`winrt` or `win32` attribute required",
-            source_file,
-            start.line,
-            start.column,
-        ))
-    }
-}
-
-fn read_winrt<S: Spanned>(
-    source_file: &str,
-    span: &S,
-    attrs: &[syn::Attribute],
-    parent: Option<bool>,
-) -> Result<Option<bool>, Error> {
-    let mut winrt = false;
-    let mut win32 = false;
-
-    for attr in attrs {
-        if attr.path().is_ident("winrt") {
-            winrt = true;
-        } else if attr.path().is_ident("win32") {
-            win32 = true;
-        }
-    }
-
-    if winrt && win32 {
-        let start = span.span().start();
-
-        return Err(Error::new(
-            "`winrt` and `win32` attributes are mutually exclusive",
-            source_file,
-            start.line,
-            start.column,
-        ));
-    } else if !winrt
-        && !win32
-        && let Some(parent) = parent
-    {
-        if parent {
-            winrt = true;
-        } else {
-            win32 = true;
-        }
-    }
-
-    if winrt {
-        Ok(Some(true))
-    } else if win32 {
-        Ok(Some(false))
-    } else {
-        Ok(None)
-    }
-}
-
-fn validate_use_declarations(
-    input: &[File],
-    index: &Index,
-    reference: &metadata::reader::Index,
-) -> Result<(), Error> {
-    for file in input {
-        for use_item in &file.uses {
-            if let Some(ns) = glob_use_namespace(use_item)
-                && !index.namespaces.contains_key(&ns)
-                && !reference.contains_namespace(&ns)
-            {
-                let start = use_item.span().start();
-                return Err(Error::new(
-                    "use namespace not found",
-                    &file.source,
-                    start.line,
-                    start.column,
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Parses a `syn::LitInt` as a `u128`, supporting both `0x...` hex and decimal literals.
-/// Underscore separators (e.g. `0x005023ca_72b1_11d3_9fc4_00c04f79a0a3`) are accepted.
-pub(super) fn parse_guid_u128(lit: &syn::LitInt) -> Result<u128, ()> {
-    let s: String = lit
-        .token()
-        .to_string()
-        .chars()
-        .filter(|&c| c != '_')
-        .collect();
-    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        u128::from_str_radix(hex, 16).map_err(|_| ())
-    } else {
-        s.parse::<u128>().map_err(|_| ())
-    }
+    Ok((bytes, validation))
 }
 
 struct Encoder<'a> {
     output: &'a mut metadata::writer::File,
+    origins: &'a mut OriginMap,
     index: &'a Index<'a>,
     file: &'a File,
     namespace: &'a str,
     name: &'a str,
     generics: Vec<String>,
+    generic_args: Vec<metadata::Type>,
+    projections: &'a mut ProjectionContext,
+}
+
+#[derive(Default)]
+struct ProjectionContext {
+    methods: Vec<ProjectedMethod>,
+}
+
+struct ProjectedMethod {
+    owner: metadata::TypeName,
+    name: String,
+    method: metadata::writer::MethodDef,
+}
+
+impl ProjectionContext {
+    fn insert(
+        &mut self,
+        owner: &metadata::TypeName,
+        name: &str,
+        method: metadata::writer::MethodDef,
+    ) {
+        self.methods.push(ProjectedMethod {
+            owner: owner.clone(),
+            name: name.to_string(),
+            method,
+        });
+    }
+
+    fn get(&self, owner: &metadata::TypeName, name: &str) -> Option<metadata::writer::MethodDef> {
+        self.methods
+            .iter()
+            .find(|method| method.owner == *owner && method.name == name)
+            .map(|method| method.method)
+    }
 }
 
 impl Encoder<'_> {
+    fn origin<H: metadata::writer::RowHandle, S: Spanned>(&mut self, handle: H, source: &S) {
+        self.origins.insert(handle, self.file, source);
+    }
+
+    fn resolver(&self) -> Resolver<'_, '_> {
+        Resolver {
+            index: self.index,
+            reference: self.output.reference().unwrap(),
+            file: self.file,
+            namespace: self.namespace,
+            generics: &self.generics,
+            generic_args: &self.generic_args,
+        }
+    }
+
     fn error<S: Spanned>(&self, spanned: S, message: &str) -> Error {
         let start = spanned.span().start();
 
         Error::new(message, &self.file.source, start.line, start.column)
+            .with_source_id(self.file.source_id)
     }
 
     fn err<T, S: Spanned>(&self, spanned: S, message: &str) -> Result<T, Error> {
@@ -587,92 +316,7 @@ impl Encoder<'_> {
     }
 
     fn encode_type(&self, ty: &syn::Type) -> Result<metadata::Type, Error> {
-        match ty {
-            syn::Type::Path(ty) => self.encode_type_path(ty),
-            syn::Type::Ptr(ty) => self.encode_type_ptr(ty),
-            syn::Type::Reference(ty) => self.encode_type_reference(ty),
-            syn::Type::Slice(ty) => self.encode_type_slice(ty),
-            syn::Type::Array(ty) => self.encode_type_array(ty),
-            rest => self.err(rest, "type not supported"),
-        }
-    }
-
-    /// Resolves unqualified attribute-argument type names in the attribute's namespace first.
-    fn encode_type_in_attr_ns(
-        &self,
-        attr_ns: &str,
-        ty: &syn::Type,
-    ) -> Result<metadata::Type, Error> {
-        if attr_ns == self.namespace {
-            return self.encode_type(ty);
-        }
-
-        if let syn::Type::Path(type_path) = ty
-            && type_path.qself.is_none()
-            && type_path.path.leading_colon.is_none()
-        {
-            let segs: Vec<String> = type_path
-                .path
-                .segments
-                .iter()
-                .map(|s| s.ident.to_string())
-                .collect();
-
-            if !segs.is_empty() && !segs.iter().any(|s| s == "super") {
-                let name = segs.last().unwrap();
-                let candidate_ns = if segs.len() == 1 {
-                    attr_ns.to_string()
-                } else {
-                    format!("{}.{}", attr_ns, segs[..segs.len() - 1].join("."))
-                };
-
-                if self.index.contains(&candidate_ns, name)
-                    || self
-                        .output
-                        .reference()
-                        .is_some_and(|r| r.contains(&candidate_ns, name))
-                {
-                    let tn = metadata::TypeName {
-                        namespace: candidate_ns.clone(),
-                        name: name.clone(),
-                        generics: vec![],
-                    };
-                    return Ok(if self.type_is_value(&candidate_ns, name) {
-                        metadata::Type::ValueName(tn)
-                    } else {
-                        metadata::Type::ClassName(tn)
-                    });
-                }
-            }
-        }
-
-        self.encode_type(ty)
-    }
-
-    fn type_is_value(&self, namespace: &str, name: &str) -> bool {
-        self.index.is_value_type(namespace, name)
-            || self
-                .output
-                .reference()
-                .and_then(|r| r.get(namespace, name).next())
-                .is_some_and(|def| {
-                    matches!(
-                        def.category(),
-                        metadata::reader::TypeCategory::Struct
-                            | metadata::reader::TypeCategory::Enum
-                    )
-                })
-    }
-
-    fn encode_type_slice(&self, ty: &syn::TypeSlice) -> Result<metadata::Type, Error> {
-        Ok(metadata::Type::Array(Box::new(self.encode_type(&ty.elem)?)))
-    }
-
-    fn encode_type_array(&self, ty: &syn::TypeArray) -> Result<metadata::Type, Error> {
-        Ok(metadata::Type::ArrayFixed(
-            Box::new(self.encode_type(&ty.elem)?),
-            self.encode_lit_int::<usize>(&ty.len)?,
-        ))
+        self.resolver().resolve_type(ty)
     }
 
     fn encode_value(
@@ -687,6 +331,7 @@ impl Encoder<'_> {
         }
 
         let value = match ty {
+            metadata::Type::Char => metadata::Value::Char(self.encode_lit_uint(value, 16)? as u16),
             metadata::Type::I8 => metadata::Value::I8(self.encode_lit_sint(value, 8)? as i8),
             metadata::Type::U8 => metadata::Value::U8(self.encode_lit_uint(value, 8)? as u8),
             metadata::Type::I16 => metadata::Value::I16(self.encode_lit_sint(value, 16)? as i16),
@@ -708,6 +353,7 @@ impl Encoder<'_> {
                     metadata::Value::I64(v)
                 }
             }
+
             metadata::Type::ValueName(tn) | metadata::Type::ClassName(tn) => {
                 let underlying = self
                     .output
@@ -980,176 +626,8 @@ impl Encoder<'_> {
         value.ok_or_else(|| self.error(expr, "value not valid"))
     }
 
-    fn encode_type_reference(&self, ty: &syn::TypeReference) -> Result<metadata::Type, Error> {
-        let is_mut = ty.mutability.is_some();
-        let ty = self.encode_type(&ty.elem)?;
-
-        let ty = if is_mut {
-            metadata::Type::RefMut(Box::new(ty))
-        } else {
-            metadata::Type::RefConst(Box::new(ty))
-        };
-
-        Ok(ty)
-    }
-
-    fn encode_type_ptr(&self, ty: &syn::TypePtr) -> Result<metadata::Type, Error> {
-        let is_mut = ty.mutability.is_some();
-        let encoded = self.encode_type(&ty.elem)?;
-
-        let ty = match encoded {
-            metadata::Type::PtrMut(inner, pointers) if is_mut => {
-                metadata::Type::PtrMut(inner, pointers + 1)
-            }
-            metadata::Type::PtrConst(inner, pointers) if !is_mut => {
-                metadata::Type::PtrConst(inner, pointers + 1)
-            }
-            metadata::Type::PtrMut(..) | metadata::Type::PtrConst(..) => {
-                return self.err(
-                    ty.elem.as_ref(),
-                    "mixed `*mut` and `*const` pointer chains are not representable",
-                );
-            }
-            _ => {
-                if is_mut {
-                    metadata::Type::PtrMut(Box::new(encoded), 1)
-                } else {
-                    metadata::Type::PtrConst(Box::new(encoded), 1)
-                }
-            }
-        };
-
-        Ok(ty)
-    }
-
-    fn encode_type_path(&self, ty: &syn::TypePath) -> Result<metadata::Type, Error> {
-        self.encode_path(&ty.path)
-    }
-
     fn encode_path(&self, ty: &syn::Path) -> Result<metadata::Type, Error> {
-        let mut path = vec![];
-
-        for segment in &ty.segments {
-            if segment.ident == "super" {
-                if path.is_empty() {
-                    for part in self.namespace.split('.') {
-                        path.push(part.to_string());
-                    }
-                }
-
-                if path.pop().is_none() {
-                    return self.err(ty, "too many leading `super` keywords");
-                }
-            } else {
-                path.push(segment.ident.to_string());
-            }
-        }
-
-        let mut generics = vec![];
-
-        if let Some(last) = ty.segments.last()
-            && let syn::PathArguments::AngleBracketed(arguments) = &last.arguments
-        {
-            for argument in &arguments.args {
-                if let syn::GenericArgument::Type(ty) = argument {
-                    generics.push(self.encode_type(ty)?);
-                }
-            }
-        }
-
-        if path.len() == 1 {
-            if let Some(number) = self.generics.iter().position(|generic| *generic == path[0]) {
-                return Ok(metadata::Type::Generic(
-                    path[0].clone(),
-                    number.try_into().unwrap(),
-                ));
-            }
-
-            match path[0].as_str() {
-                "bool" => return Ok(metadata::Type::Bool),
-                "i8" => return Ok(metadata::Type::I8),
-                "u8" => return Ok(metadata::Type::U8),
-                "i16" => return Ok(metadata::Type::I16),
-                "u16" => return Ok(metadata::Type::U16),
-                "i32" => return Ok(metadata::Type::I32),
-                "u32" => return Ok(metadata::Type::U32),
-                "i64" => return Ok(metadata::Type::I64),
-                "u64" => return Ok(metadata::Type::U64),
-                "f32" => return Ok(metadata::Type::F32),
-                "f64" => return Ok(metadata::Type::F64),
-                "isize" => return Ok(metadata::Type::ISize),
-                "usize" => return Ok(metadata::Type::USize),
-
-                "void" => return Ok(metadata::Type::Void),
-                "String" => return Ok(metadata::Type::String),
-                "Object" => return Ok(metadata::Type::Object),
-                "Char16" => return Ok(metadata::Type::Char),
-
-                _ => {}
-            }
-        }
-
-        let (name, namespace) = path.split_last().unwrap();
-
-        let namespace = if namespace.is_empty() {
-            self.namespace.to_string()
-        } else {
-            namespace.join(".")
-        };
-
-        let make_type = |namespace: &str| -> Option<metadata::Type> {
-            if self.index.contains(namespace, name)
-                || self
-                    .output
-                    .reference()
-                    .is_some_and(|r| r.contains(namespace, name))
-            {
-                let tn = metadata::TypeName {
-                    namespace: namespace.to_string(),
-                    name: name.clone(),
-                    generics: generics.clone(),
-                };
-                if self.type_is_value(namespace, name) {
-                    Some(metadata::Type::ValueName(tn))
-                } else {
-                    Some(metadata::Type::ClassName(tn))
-                }
-            } else {
-                None
-            }
-        };
-
-        if let Some(ty) = make_type(&namespace) {
-            return Ok(ty);
-        }
-
-        let namespace = format!("{}.{}", self.namespace, namespace);
-
-        if let Some(ty) = make_type(&namespace) {
-            return Ok(ty);
-        }
-
-        for use_item in &self.file.uses {
-            if let Some(ns) = glob_use_namespace(use_item)
-                && let Some(ty) = make_type(&ns)
-            {
-                return Ok(ty);
-            }
-        }
-
-        // Fall back to core aliases only when the scrape did not define its own type.
-        if ty.segments.len() == 1 {
-            match name.as_str() {
-                "Type" => return Ok(metadata::Type::class_named("System", "Type")),
-                "GUID" => return Ok(metadata::Type::value_named("System", "Guid")),
-                "HRESULT" => {
-                    return Ok(metadata::Type::value_named("Windows.Foundation", "HResult"));
-                }
-                _ => {}
-            }
-        }
-
-        Err(self.error(ty, "type not found"))
+        self.resolver().resolve_path(ty)
     }
 
     fn encode_return_type(&self, ty: &syn::ReturnType) -> Result<metadata::Type, Error> {
@@ -1198,177 +676,4 @@ impl Encoder<'_> {
 
         Ok(())
     }
-}
-
-/// Parses a `#[arch(...)]` expression into the X86/X64/Arm64 bitmask.
-pub(crate) fn parse_arch_bitmask(expr: &syn::Expr) -> Option<i32> {
-    match expr {
-        syn::Expr::Path(p)
-            if p.qself.is_none()
-                && p.path.leading_colon.is_none()
-                && p.path.segments.len() == 1 =>
-        {
-            arch_name_to_bits(&p.path.segments[0].ident.to_string())
-        }
-        syn::Expr::Binary(syn::ExprBinary {
-            left,
-            op: syn::BinOp::BitOr(_),
-            right,
-            ..
-        }) => {
-            let l = parse_arch_bitmask(left)?;
-            let r = parse_arch_bitmask(right)?;
-            Some(l | r)
-        }
-        _ => None,
-    }
-}
-
-fn arch_name_to_bits(name: &str) -> Option<i32> {
-    match name {
-        "X86" => Some(1),
-        "X64" => Some(2),
-        "Arm64" => Some(4),
-        _ => None,
-    }
-}
-
-pub(crate) fn make_sig(
-    fn_token: syn::Token![fn],
-    ident: syn::Ident,
-    generics: syn::Generics,
-    paren_token: syn::token::Paren,
-    inputs: syn::punctuated::Punctuated<syn::FnArg, syn::Token![,]>,
-    variadic: Option<syn::Variadic>,
-    output: syn::ReturnType,
-) -> syn::Signature {
-    syn::Signature {
-        constness: None,
-        asyncness: None,
-        unsafety: None,
-        abi: None,
-        fn_token,
-        ident,
-        generics,
-        paren_token,
-        inputs,
-        variadic,
-        output,
-    }
-}
-
-pub(crate) fn parse_fn_inputs(
-    content: &syn::parse::ParseBuffer,
-) -> syn::Result<(
-    syn::punctuated::Punctuated<syn::FnArg, syn::Token![,]>,
-    Option<syn::Variadic>,
-)> {
-    let mut args = syn::punctuated::Punctuated::new();
-    let mut variadic = None;
-
-    while !content.is_empty() {
-        let fork = content.fork();
-        let _ = fork.call(syn::Attribute::parse_outer);
-        if fork.peek(syn::Token![...]) {
-            let attrs = content.call(syn::Attribute::parse_outer)?;
-            let dots: syn::Token![...] = content.parse()?;
-            variadic = Some(syn::Variadic {
-                attrs,
-                pat: None,
-                dots,
-                comma: if content.is_empty() {
-                    None
-                } else {
-                    Some(content.parse()?)
-                },
-            });
-            break;
-        }
-
-        let arg: syn::FnArg = content.parse()?;
-        args.push_value(arg);
-
-        if content.is_empty() {
-            break;
-        }
-
-        let comma: syn::Token![,] = content.parse()?;
-        args.push_punct(comma);
-    }
-
-    Ok((args, variadic))
-}
-
-/// Parses `-> #[attr]* Type`, keeping return-value attributes with the return type.
-pub(crate) fn parse_return_type_with_attrs(
-    input: syn::parse::ParseStream,
-) -> syn::Result<(syn::ReturnType, Vec<syn::Attribute>)> {
-    if input.peek(syn::Token![->]) {
-        let arrow = input.parse::<syn::Token![->]>()?;
-        let return_attrs = input.call(syn::Attribute::parse_outer)?;
-        let ty: syn::Type = input.parse()?;
-        Ok((syn::ReturnType::Type(arrow, Box::new(ty)), return_attrs))
-    } else {
-        Ok((syn::ReturnType::Default, vec![]))
-    }
-}
-
-fn glob_use_namespace(use_item: &syn::ItemUse) -> Option<String> {
-    fn extract(tree: &syn::UseTree, parts: &mut Vec<String>) -> bool {
-        match tree {
-            syn::UseTree::Path(p) => {
-                parts.push(p.ident.to_string());
-                extract(&p.tree, parts)
-            }
-            syn::UseTree::Glob(_) => true,
-            _ => false,
-        }
-    }
-    let mut parts = vec![];
-    if extract(&use_item.tree, &mut parts) && !parts.is_empty() {
-        Some(parts.join("."))
-    } else {
-        None
-    }
-}
-
-trait IdentMethods {
-    fn unraw_to_string(&self) -> String;
-}
-
-impl IdentMethods for syn::Ident {
-    fn unraw_to_string(&self) -> String {
-        use syn::ext::IdentExt;
-        self.unraw().to_string()
-    }
-}
-
-#[test]
-fn use_glob_resolves_type() {
-    let output = std::env::temp_dir().join("windows_rdl_use_glob_resolves_type.winmd");
-
-    reader()
-        .input_text(
-            r#"
-use Other::*;
-
-#[winrt]
-mod Test {
-    struct Thing {
-        a: Point,
-    }
-}
-
-#[winrt]
-mod Other {
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-}
-        "#,
-        )
-        .output(&output)
-        .write()
-        .unwrap();
 }

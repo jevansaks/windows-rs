@@ -13,6 +13,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class EndpointPair {
+            #[default]
             IEndpointPair,
         }
         #[Windows::Foundation::Metadata::Activatable(IHostNameFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -22,7 +23,9 @@ mod Windows {
         #[Windows::Foundation::Metadata::Static(IHostNameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class HostName {
+            #[default]
             IHostName,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
             super::Foundation::IStringable,
         }
         #[repr(u32)]

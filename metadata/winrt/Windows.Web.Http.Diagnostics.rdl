@@ -8,30 +8,35 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpDiagnosticProviderStatics, 65536, "Windows.Web.Http.Diagnostics.HttpDiagnosticsContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpDiagnosticProvider {
+                    #[default]
                     IHttpDiagnosticProvider,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HttpDiagnosticsContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpDiagnosticProviderRequestResponseCompletedEventArgs {
+                    #[default]
                     IHttpDiagnosticProviderRequestResponseCompletedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HttpDiagnosticsContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpDiagnosticProviderRequestResponseTimestamps {
+                    #[default]
                     IHttpDiagnosticProviderRequestResponseTimestamps,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HttpDiagnosticsContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpDiagnosticProviderRequestSentEventArgs {
+                    #[default]
                     IHttpDiagnosticProviderRequestSentEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HttpDiagnosticsContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpDiagnosticProviderResponseReceivedEventArgs {
+                    #[default]
                     IHttpDiagnosticProviderResponseReceivedEventArgs,
                 }
                 #[repr(i32)]
@@ -47,14 +52,18 @@ mod Windows {
                     HtmlDownload = 7,
                     Prefetch = 8,
                     Other = 9,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Web.Http.Diagnostics.HttpDiagnosticsContract", 131072)]
                     CrossOriginPreFlight = 10,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Web.Http.Diagnostics.HttpDiagnosticsContract", 131072)]
                     Fetch = 11,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Web.Http.Diagnostics.HttpDiagnosticsContract", 131072)]
                     Beacon = 12,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HttpDiagnosticsContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpDiagnosticSourceLocation {
+                    #[default]
                     IHttpDiagnosticSourceLocation,
                 }
                 #[Windows::Foundation::Metadata::ApiContract]

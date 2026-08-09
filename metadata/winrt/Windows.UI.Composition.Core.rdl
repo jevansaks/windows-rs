@@ -10,6 +10,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CompositorController {
+                    #[default]
                     ICompositorController,
                     super::super::super::Foundation::IClosable,
                 }

@@ -6,8 +6,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AcceleratorKeyEventArgs {
+                #[default]
                 IAcceleratorKeyEventArgs,
                 ICoreWindowEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IAcceleratorKeyEventArgs2,
             }
             #[repr(i32)]
@@ -15,24 +17,28 @@ mod Windows {
             enum AppViewBackButtonVisibility {
                 Visible = 0,
                 Collapsed = 1,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 Disabled = 2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AutomationProviderRequestedEventArgs {
+                #[default]
                 IAutomationProviderRequestedEventArgs,
                 ICoreWindowEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class BackRequestedEventArgs {
+                #[default]
                 IBackRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CharacterReceivedEventArgs {
+                #[default]
                 ICharacterReceivedEventArgs,
                 ICoreWindowEventArgs,
             }
@@ -40,6 +46,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class ClosestInteractiveBoundsRequestedEventArgs {
+                #[default]
                 IClosestInteractiveBoundsRequestedEventArgs,
             }
             #[repr(i32)]
@@ -61,6 +68,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreAcceleratorKeys {
+                #[default]
                 ICoreAcceleratorKeys,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -68,13 +76,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100859904)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreComponentInputSource {
+                #[default]
                 ICoreInputSourceBase,
                 ICorePointerInputSource,
                 ICoreKeyboardInputSource,
                 ICoreComponentFocusable,
                 ICoreTouchHitTesting,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 ICoreClosestInteractiveBoundsRequested,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 ICoreKeyboardInputSource2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 ICorePointerInputSource2,
             }
             #[Windows::Foundation::Metadata::Activatable(ICoreCursorFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -82,6 +94,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreCursor {
+                #[default]
                 ICoreCursor,
             }
             #[repr(i32)]
@@ -102,7 +115,9 @@ mod Windows {
                 UniversalNo = 11,
                 UpArrow = 12,
                 Wait = 13,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 Pin = 14,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 Person = 15,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -110,15 +125,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreDispatcher {
+                #[default]
                 ICoreDispatcher,
                 ICoreAcceleratorKeys,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ICoreDispatcherWithTaskPriority,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ICoreDispatcher2,
             }
             #[repr(i32)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             enum CoreDispatcherPriority {
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Idle = -2,
                 Low = -1,
                 Normal = 0,
@@ -140,9 +159,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100859904)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreIndependentInputSource {
+                #[default]
                 ICoreInputSourceBase,
                 ICorePointerInputSource,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 ICorePointerInputSource2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 ICorePointerRedirector,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
@@ -150,6 +172,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ICoreIndependentInputSourceControllerStatics, 851968, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CoreIndependentInputSourceController {
+                #[default]
                 ICoreIndependentInputSourceController,
                 super::super::Foundation::IClosable,
             }
@@ -209,12 +232,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ICoreWindowStatic, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreWindow {
+                #[default]
                 ICoreWindow,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ICoreWindow2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 ICorePointerRedirector,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 ICoreWindow3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 ICoreWindow4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 ICoreWindow5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 ICoreWindowWithContext,
             }
             #[repr(i32)]
@@ -241,6 +271,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreWindowDialog {
+                #[default]
                 ICoreWindowDialog,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -250,6 +281,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreWindowEventArgs {
+                #[default]
                 ICoreWindowEventArgs,
             }
             #[repr(i32)]
@@ -265,12 +297,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreWindowFlyout {
+                #[default]
                 ICoreWindowFlyout,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CoreWindowDialogsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreWindowPopupShowingEventArgs {
+                #[default]
                 ICoreWindowPopupShowingEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -278,7 +312,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ICoreWindowResizeManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CoreWindowResizeManager {
+                #[default]
                 ICoreWindowResizeManager,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ICoreWindowResizeManagerLayoutCapability,
             }
             #[guid(0xd1f276c4_98d8_4636_bf49_eb79507548e9)]
@@ -343,6 +379,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreAcceleratorKeys {
+                #[remove_name(cookie)]
                 event AcceleratorKeyActivated: super::super::Foundation::TypedEventHandler<CoreDispatcher, AcceleratorKeyEventArgs>;
             }
             #[guid(0xf303043a_e8bf_4e8e_ae69_c9dadd57a114)]
@@ -350,6 +387,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(CoreComponentInputSource)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreClosestInteractiveBoundsRequested {
+                #[remove_name(cookie)]
                 event ClosestInteractiveBoundsRequested: super::super::Foundation::TypedEventHandler<CoreComponentInputSource, ClosestInteractiveBoundsRequestedEventArgs>;
             }
             #[guid(0x52f96fa3_8742_4411_ae69_79a85f29ac8b)]
@@ -359,7 +397,9 @@ mod Windows {
             interface ICoreComponentFocusable {
                 #[get]
                 HasFocus: bool;
+                #[remove_name(cookie)]
                 event GotFocus: super::super::Foundation::TypedEventHandler<Object, CoreWindowEventArgs>;
+                #[remove_name(cookie)]
                 event LostFocus: super::super::Foundation::TypedEventHandler<Object, CoreWindowEventArgs>;
             }
             #[guid(0x96893acf_111d_442c_8a77_b87992f8e2d6)]
@@ -408,10 +448,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreDispatcherWithTaskPriority {
                 CurrentPriority: CoreDispatcherPriority;
-                #[Windows::Foundation::Metadata::Overload("ShouldYield")]
+                #[overload(ShouldYield)]
                 fn ShouldYield(&self) -> bool;
-                #[Windows::Foundation::Metadata::Overload("ShouldYieldToPriority")]
-                fn ShouldYield(&self, priority: CoreDispatcherPriority) -> bool;
+                #[overload(ShouldYield)]
+                fn ShouldYieldToPriority(&self, priority: CoreDispatcherPriority) -> bool;
                 fn StopProcessEvents(&self);
             }
             #[guid(0x0963261c_84fe_578a_83ca_6425309ccde4)]
@@ -422,10 +462,10 @@ mod Windows {
                 IsPalmRejectionEnabled: bool;
                 #[get]
                 Source: CoreIndependentInputSource;
-                #[Windows::Foundation::Metadata::Overload("SetControlledInput")]
+                #[overload(SetControlledInput)]
                 fn SetControlledInput(&self, inputTypes: CoreInputDeviceTypes);
-                #[Windows::Foundation::Metadata::Overload("SetControlledInputWithFilters")]
-                fn SetControlledInput(&self, inputTypes: CoreInputDeviceTypes, required: CoreIndependentInputFilters, excluded: CoreIndependentInputFilters);
+                #[overload(SetControlledInput)]
+                fn SetControlledInputWithFilters(&self, inputTypes: CoreInputDeviceTypes, required: CoreIndependentInputFilters, excluded: CoreIndependentInputFilters);
             }
             #[guid(0x3edc4e20_9a8a_5691_8586_fca4cb57526d)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
@@ -441,6 +481,7 @@ mod Windows {
                 #[get]
                 Dispatcher: CoreDispatcher;
                 IsInputEnabled: bool;
+                #[remove_name(cookie)]
                 event InputEnabled: super::super::Foundation::TypedEventHandler<Object, InputEnabledEventArgs>;
             }
             #[guid(0x231c9088_e469_4df1_b208_6e490d71cb90)]
@@ -449,8 +490,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreKeyboardInputSource {
                 fn GetCurrentKeyState(&self, virtualKey: super::super::System::VirtualKey) -> CoreVirtualKeyStates;
+                #[remove_name(cookie)]
                 event CharacterReceived: super::super::Foundation::TypedEventHandler<Object, CharacterReceivedEventArgs>;
+                #[remove_name(cookie)]
                 event KeyDown: super::super::Foundation::TypedEventHandler<Object, KeyEventArgs>;
+                #[remove_name(cookie)]
                 event KeyUp: super::super::Foundation::TypedEventHandler<Object, KeyEventArgs>;
             }
             #[guid(0xfa24cb94_f963_47a5_8778_207c482b0afd)]
@@ -471,12 +515,19 @@ mod Windows {
                 #[get]
                 PointerPosition: super::super::Foundation::Point;
                 PointerCursor: CoreCursor;
+                #[remove_name(cookie)]
                 event PointerCaptureLost: super::super::Foundation::TypedEventHandler<Object, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerEntered: super::super::Foundation::TypedEventHandler<Object, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerExited: super::super::Foundation::TypedEventHandler<Object, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerMoved: super::super::Foundation::TypedEventHandler<Object, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerPressed: super::super::Foundation::TypedEventHandler<Object, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerReleased: super::super::Foundation::TypedEventHandler<Object, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerWheelChanged: super::super::Foundation::TypedEventHandler<Object, PointerEventArgs>;
             }
             #[guid(0xd703708a_4516_4786_b1e5_2751d563f997)]
@@ -490,8 +541,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICorePointerRedirector {
+                #[remove_name(cookie)]
                 event PointerRoutedAway: super::super::Foundation::TypedEventHandler<ICorePointerRedirector, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerRoutedTo: super::super::Foundation::TypedEventHandler<ICorePointerRedirector, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerRoutedReleased: super::super::Foundation::TypedEventHandler<ICorePointerRedirector, PointerEventArgs>;
             }
             #[guid(0xb1d8a289_3acf_4124_9fa3_ea8aba353c21)]
@@ -499,6 +553,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(CoreComponentInputSource)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreTouchHitTesting {
+                #[remove_name(cookie)]
                 event TouchHitTesting: super::super::Foundation::TypedEventHandler<Object, TouchHitTestingEventArgs>;
             }
             #[guid(0x79b9d5f2_879e_4b89_b798_79e47598030c)]
@@ -526,22 +581,39 @@ mod Windows {
                 fn GetKeyState(&self, virtualKey: super::super::System::VirtualKey) -> CoreVirtualKeyStates;
                 fn ReleasePointerCapture(&self);
                 fn SetPointerCapture(&self);
+                #[remove_name(cookie)]
                 event Activated: super::super::Foundation::TypedEventHandler<CoreWindow, WindowActivatedEventArgs>;
+                #[remove_name(cookie)]
                 event AutomationProviderRequested: super::super::Foundation::TypedEventHandler<CoreWindow, AutomationProviderRequestedEventArgs>;
+                #[remove_name(cookie)]
                 event CharacterReceived: super::super::Foundation::TypedEventHandler<CoreWindow, CharacterReceivedEventArgs>;
+                #[remove_name(cookie)]
                 event Closed: super::super::Foundation::TypedEventHandler<CoreWindow, CoreWindowEventArgs>;
+                #[remove_name(cookie)]
                 event InputEnabled: super::super::Foundation::TypedEventHandler<CoreWindow, InputEnabledEventArgs>;
+                #[remove_name(cookie)]
                 event KeyDown: super::super::Foundation::TypedEventHandler<CoreWindow, KeyEventArgs>;
+                #[remove_name(cookie)]
                 event KeyUp: super::super::Foundation::TypedEventHandler<CoreWindow, KeyEventArgs>;
+                #[remove_name(cookie)]
                 event PointerCaptureLost: super::super::Foundation::TypedEventHandler<CoreWindow, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerEntered: super::super::Foundation::TypedEventHandler<CoreWindow, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerExited: super::super::Foundation::TypedEventHandler<CoreWindow, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerMoved: super::super::Foundation::TypedEventHandler<CoreWindow, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerPressed: super::super::Foundation::TypedEventHandler<CoreWindow, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event PointerReleased: super::super::Foundation::TypedEventHandler<CoreWindow, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event TouchHitTesting: super::super::Foundation::TypedEventHandler<CoreWindow, TouchHitTestingEventArgs>;
+                #[remove_name(cookie)]
                 event PointerWheelChanged: super::super::Foundation::TypedEventHandler<CoreWindow, PointerEventArgs>;
+                #[remove_name(cookie)]
                 event SizeChanged: super::super::Foundation::TypedEventHandler<CoreWindow, WindowSizeChangedEventArgs>;
+                #[remove_name(cookie)]
                 event VisibilityChanged: super::super::Foundation::TypedEventHandler<CoreWindow, VisibilityChangedEventArgs>;
             }
             #[guid(0x7c2b1b85_6917_4361_9c02_0d9e3a420b95)]
@@ -557,6 +629,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(CoreWindow)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreWindow3 {
+                #[remove_name(cookie)]
                 event ClosestInteractiveBoundsRequested: super::super::Foundation::TypedEventHandler<CoreWindow, ClosestInteractiveBoundsRequestedEventArgs>;
                 fn GetCurrentKeyEventDeviceId(&self) -> String;
             }
@@ -565,7 +638,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(CoreWindow)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreWindow4 {
+                #[remove_name(cookie)]
                 event ResizeStarted: super::super::Foundation::TypedEventHandler<CoreWindow, Object>;
+                #[remove_name(cookie)]
                 event ResizeCompleted: super::super::Foundation::TypedEventHandler<CoreWindow, Object>;
             }
             #[guid(0x4b4ae1e1_2e6d_4eaa_bda1_1c5cc1bee141)]
@@ -583,6 +658,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(CoreWindowDialog)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreWindowDialog {
+                #[remove_name(cookie)]
                 event Showing: super::super::Foundation::TypedEventHandler<CoreWindow, CoreWindowPopupShowingEventArgs>;
                 #[get]
                 MaxSize: super::super::Foundation::Size;
@@ -615,6 +691,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(CoreWindowFlyout)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface ICoreWindowFlyout {
+                #[remove_name(cookie)]
                 event Showing: super::super::Foundation::TypedEventHandler<CoreWindow, CoreWindowPopupShowingEventArgs>;
                 #[get]
                 MaxSize: super::super::Foundation::Size;
@@ -760,11 +837,11 @@ mod Windows {
                 Point: super::super::Foundation::Point;
                 #[get]
                 BoundingBox: super::super::Foundation::Rect;
-                #[Windows::Foundation::Metadata::DefaultOverload]
-                #[Windows::Foundation::Metadata::Overload("EvaluateProximityToRect")]
-                fn EvaluateProximity(&self, controlBoundingBox: super::super::Foundation::Rect) -> CoreProximityEvaluation;
-                #[Windows::Foundation::Metadata::Overload("EvaluateProximityToPolygon")]
-                fn EvaluateProximity(&self, controlVertices: [super::super::Foundation::Point]) -> CoreProximityEvaluation;
+                #[overload(EvaluateProximity)]
+                #[default_overload]
+                fn EvaluateProximityToRect(&self, controlBoundingBox: super::super::Foundation::Rect) -> CoreProximityEvaluation;
+                #[overload(EvaluateProximity)]
+                fn EvaluateProximityToPolygon(&self, controlVertices: [super::super::Foundation::Point]) -> CoreProximityEvaluation;
             }
             #[guid(0xbf9918ea_d801_4564_a495_b1e84f8ad085)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -799,12 +876,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100859904)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class IdleDispatchedHandlerArgs {
+                #[default]
                 IIdleDispatchedHandlerArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class InputEnabledEventArgs {
+                #[default]
                 IInputEnabledEventArgs,
                 ICoreWindowEventArgs,
             }
@@ -812,13 +891,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class KeyEventArgs {
+                #[default]
                 IKeyEventArgs,
                 ICoreWindowEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IKeyEventArgs2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class PointerEventArgs {
+                #[default]
                 IPointerEventArgs,
                 ICoreWindowEventArgs,
             }
@@ -826,13 +908,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(ISystemNavigationManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             class SystemNavigationManager {
+                #[default]
                 ISystemNavigationManager,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ISystemNavigationManager2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class TouchHitTestingEventArgs {
+                #[default]
                 ITouchHitTestingEventArgs,
                 ICoreWindowEventArgs,
             }
@@ -840,6 +925,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VisibilityChangedEventArgs {
+                #[default]
                 IVisibilityChangedEventArgs,
                 ICoreWindowEventArgs,
             }
@@ -847,6 +933,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class WindowActivatedEventArgs {
+                #[default]
                 IWindowActivatedEventArgs,
                 ICoreWindowEventArgs,
             }
@@ -854,6 +941,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class WindowSizeChangedEventArgs {
+                #[default]
                 IWindowSizeChangedEventArgs,
                 ICoreWindowEventArgs,
             }

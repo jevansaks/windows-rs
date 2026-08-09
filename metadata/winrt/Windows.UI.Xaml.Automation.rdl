@@ -9,6 +9,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AnnotationPatternIdentifiers {
+                    #[default]
                     IAnnotationPatternIdentifiers,
                 }
                 #[repr(i32)]
@@ -24,19 +25,33 @@ mod Windows {
                     Header = 60006,
                     Footer = 60007,
                     Highlighted = 60008,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     Endnote = 60009,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     Footnote = 60010,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     InsertionChange = 60011,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     DeletionChange = 60012,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     MoveChange = 60013,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     FormatChange = 60014,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     UnsyncedChange = 60015,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     EditingLockedChange = 60016,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     ExternalChange = 60017,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     ConflictingChange = 60018,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     Author = 60019,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     AdvancedProofingIssue = 60020,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     DataValidationError = 60021,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     CircularReferenceError = 60022,
                 }
                 #[repr(i32)]
@@ -68,6 +83,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AutomationAnnotation: super::DependencyObject {
+                    #[default]
                     IAutomationAnnotation,
                 }
                 #[repr(i32)]
@@ -110,6 +126,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AutomationElementIdentifiers {
+                    #[default]
                     IAutomationElementIdentifiers,
                 }
                 #[repr(i32)]
@@ -145,12 +162,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AutomationProperties {
+                    #[default]
                     IAutomationProperties,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AutomationProperty {
+                    #[default]
                     IAutomationProperty,
                 }
                 #[repr(i32)]
@@ -212,6 +231,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DockPatternIdentifiers {
+                    #[default]
                     IDockPatternIdentifiers,
                 }
                 #[repr(i32)]
@@ -231,6 +251,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DragPatternIdentifiers {
+                    #[default]
                     IDragPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -239,6 +260,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DropTargetPatternIdentifiers {
+                    #[default]
                     IDropTargetPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -247,6 +269,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ExpandCollapsePatternIdentifiers {
+                    #[default]
                     IExpandCollapsePatternIdentifiers,
                 }
                 #[repr(i32)]
@@ -264,6 +287,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GridItemPatternIdentifiers {
+                    #[default]
                     IGridItemPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -272,6 +296,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GridPatternIdentifiers {
+                    #[default]
                     IGridPatternIdentifiers,
                 }
                 #[guid(0xd475a0c1_48b2_4e40_a6cf_3dc4b638c0de)]
@@ -981,6 +1006,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class MultipleViewPatternIdentifiers {
+                    #[default]
                     IMultipleViewPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -989,6 +1015,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RangeValuePatternIdentifiers {
+                    #[default]
                     IRangeValuePatternIdentifiers,
                 }
                 #[repr(i32)]
@@ -1015,6 +1042,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ScrollPatternIdentifiers {
+                    #[default]
                     IScrollPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1023,6 +1051,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class SelectionItemPatternIdentifiers {
+                    #[default]
                     ISelectionItemPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1031,6 +1060,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class SelectionPatternIdentifiers {
+                    #[default]
                     ISelectionPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1039,6 +1069,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class SpreadsheetItemPatternIdentifiers {
+                    #[default]
                     ISpreadsheetItemPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1047,6 +1078,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class StylesPatternIdentifiers {
+                    #[default]
                     IStylesPatternIdentifiers,
                 }
                 #[repr(i32)]
@@ -1074,6 +1106,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TableItemPatternIdentifiers {
+                    #[default]
                     ITableItemPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1082,6 +1115,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TablePatternIdentifiers {
+                    #[default]
                     ITablePatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1090,6 +1124,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TogglePatternIdentifiers {
+                    #[default]
                     ITogglePatternIdentifiers,
                 }
                 #[repr(i32)]
@@ -1106,6 +1141,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TransformPattern2Identifiers {
+                    #[default]
                     ITransformPattern2Identifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1114,6 +1150,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TransformPatternIdentifiers {
+                    #[default]
                     ITransformPatternIdentifiers,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1122,6 +1159,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ValuePatternIdentifiers {
+                    #[default]
                     IValuePatternIdentifiers,
                 }
                 #[repr(i32)]
@@ -1140,6 +1178,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class WindowPatternIdentifiers {
+                    #[default]
                     IWindowPatternIdentifiers,
                 }
                 #[repr(i32)]

@@ -36,10 +36,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::ExclusiveTo(MiracastReceiverConnection)]
             interface IMiracastReceiverConnection {
-                #[Windows::Foundation::Metadata::Overload("Disconnect")]
+                #[overload(Disconnect)]
                 fn Disconnect(&self, reason: MiracastReceiverDisconnectReason);
-                #[Windows::Foundation::Metadata::Overload("DisconnectWithMessage")]
-                fn Disconnect(&self, reason: MiracastReceiverDisconnectReason, message: String);
+                #[overload(Disconnect)]
+                fn DisconnectWithMessage(&self, reason: MiracastReceiverDisconnectReason, message: String);
                 fn Pause(&self);
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn PauseAsync(&self) -> super::super::Foundation::IAsyncAction;
@@ -222,12 +222,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MiracastReceiver {
+                #[default]
                 IMiracastReceiver,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverApplySettingsResult {
+                #[default]
                 IMiracastReceiverApplySettingsResult,
             }
             #[repr(i32)]
@@ -254,6 +256,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverConnection {
+                #[default]
                 IMiracastReceiverConnection,
                 super::super::Foundation::IClosable,
             }
@@ -261,18 +264,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverConnectionCreatedEventArgs {
+                #[default]
                 IMiracastReceiverConnectionCreatedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverCursorImageChannel {
+                #[default]
                 IMiracastReceiverCursorImageChannel,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverCursorImageChannelSettings {
+                #[default]
                 IMiracastReceiverCursorImageChannelSettings,
             }
             #[repr(i32)]
@@ -291,12 +297,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverDisconnectedEventArgs {
+                #[default]
                 IMiracastReceiverDisconnectedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverGameControllerDevice {
+                #[default]
                 IMiracastReceiverGameControllerDevice,
             }
             #[repr(i32)]
@@ -309,12 +317,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverInputDevices {
+                #[default]
                 IMiracastReceiverInputDevices,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverKeyboardDevice {
+                #[default]
                 IMiracastReceiverKeyboardDevice,
             }
             #[repr(i32)]
@@ -331,12 +341,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverMediaSourceCreatedEventArgs {
+                #[default]
                 IMiracastReceiverMediaSourceCreatedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverSession {
+                #[default]
                 IMiracastReceiverSession,
                 super::super::Foundation::IClosable,
             }
@@ -344,6 +356,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverSessionStartResult {
+                #[default]
                 IMiracastReceiverSessionStartResult,
             }
             #[repr(i32)]
@@ -358,24 +371,28 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverSettings {
+                #[default]
                 IMiracastReceiverSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverStatus {
+                #[default]
                 IMiracastReceiverStatus,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverStreamControl {
+                #[default]
                 IMiracastReceiverStreamControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastReceiverVideoStreamSettings {
+                #[default]
                 IMiracastReceiverVideoStreamSettings,
             }
             #[repr(i32)]
@@ -390,6 +407,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MiracastTransmitter {
+                #[default]
                 IMiracastTransmitter,
             }
             #[repr(i32)]

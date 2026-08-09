@@ -14,20 +14,25 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class BluetoothLEAdvertisementPublisherTriggerDetails {
+                    #[default]
                     IBluetoothLEAdvertisementPublisherTriggerDetails,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                     IBluetoothLEAdvertisementPublisherTriggerDetails2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class BluetoothLEAdvertisementWatcherTriggerDetails {
+                    #[default]
                     IBluetoothLEAdvertisementWatcherTriggerDetails,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class GattCharacteristicNotificationTriggerDetails {
+                    #[default]
                     IGattCharacteristicNotificationTriggerDetails,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IGattCharacteristicNotificationTriggerDetails2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
@@ -36,13 +41,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IGattServiceProviderConnectionStatics, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class GattServiceProviderConnection {
+                    #[default]
                     IGattServiceProviderConnection,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                     IGattServiceProviderConnection2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class GattServiceProviderTriggerDetails {
+                    #[default]
                     IGattServiceProviderTriggerDetails,
                 }
                 #[guid(0x610eca86_3480_41c9_a918_7ddadf207e00)]
@@ -151,18 +159,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RfcommConnectionTriggerDetails {
+                    #[default]
                     IRfcommConnectionTriggerDetails,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RfcommInboundConnectionInformation {
+                    #[default]
                     IRfcommInboundConnectionInformation,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RfcommOutboundConnectionInformation {
+                    #[default]
                     IRfcommOutboundConnectionInformation,
                 }
             }

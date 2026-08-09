@@ -8,6 +8,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class EnterpriseKeyCredentialRegistrationInfo {
+                    #[default]
                     IEnterpriseKeyCredentialRegistrationInfo,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -16,6 +17,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IEnterpriseKeyCredentialRegistrationManagerStatics, 196608, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class EnterpriseKeyCredentialRegistrationManager {
+                    #[default]
                     IEnterpriseKeyCredentialRegistrationManager,
                 }
                 #[guid(0x38321acc_672b_4823_b603_6b3c753daf97)]

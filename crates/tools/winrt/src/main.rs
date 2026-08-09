@@ -1,4 +1,6 @@
 use windows_clang::nuget_package;
+use windows_metadata as metadata;
+use windows_metadata::HasAttributes;
 use windows_metadata::merge;
 
 /// The committed, canonical WinRT winmd. Checked in as `windows-bindgen`'s default WinRT
@@ -55,10 +57,8 @@ fn main() {
 
     // Merge the per-contract winmds into one intermediate winmd, replacing the external
     // `mdmerge` tool with `windows-metadata`'s in-house merger (the same one `tool_win32`
-    // uses). The per-contract WinRT runtime-class methods and Property/Event tables
-    // are dropped by the merge; `windows-bindgen` reconstructs properties/events from the
-    // surviving `get_`/`put_`/`add_`/`remove_` accessor methods on the interfaces and never
-    // reads class methods.
+    // uses). The merge preserves runtime-class methods and Property/Event/MethodSemantics rows,
+    // including associations whose accessors belong to an interface rather than the class.
     std::fs::create_dir_all(OUT_DIR)
         .unwrap_or_else(|e| panic!("failed to create `{OUT_DIR}`: {e}"));
     let merged = format!("{OUT_DIR}/Windows.merged.winmd");
@@ -89,9 +89,245 @@ fn main() {
         .write()
         .unwrap_or_else(|e| panic!("failed to compile `{WINMD}` from `{RDL_DIR}`: {e}"));
 
+    // Keep this semantic rather than byte-for-byte: assembly identity and table ordering may differ
+    // while the authored API metadata remains identical.
+    assert_member_parity(&merged, WINMD);
+
     println!(
         "generated `{RDL_DIR}` and `{WINMD}` from {} contract winmd(s) in {:.2}s",
         inputs.len(),
         time.elapsed().as_secs_f32()
     );
+}
+
+fn assert_member_parity(expected: &str, actual: &str) {
+    let expected = member_facts(expected);
+    let actual = member_facts(actual);
+    if expected == actual {
+        return;
+    }
+
+    let missing: Vec<_> = expected.difference(&actual).take(10).collect();
+    let extra: Vec<_> = actual.difference(&expected).take(10).collect();
+    panic!(
+        "RDL member round trip changed metadata facts: expected {}, actual {}, missing {}, \
+         extra {}\nmissing sample: {missing:#?}\nextra sample: {extra:#?}",
+        expected.len(),
+        actual.len(),
+        expected.difference(&actual).count(),
+        actual.difference(&expected).count(),
+    );
+}
+
+fn member_facts(path: &str) -> std::collections::BTreeSet<String> {
+    let file = metadata::reader::File::read(path)
+        .unwrap_or_else(|| panic!("failed to read metadata facts from `{path}`"));
+    let index = metadata::reader::Index::new(vec![file]);
+    let mut types: Vec<_> = index.types().collect();
+    for ty in index.types() {
+        types.extend(index.nested_recursive(ty));
+    }
+
+    let mut facts = std::collections::BTreeSet::new();
+    for ty in types {
+        let owner = if ty.namespace().is_empty() {
+            ty.name().to_string()
+        } else {
+            format!("{}.{}", ty.namespace(), ty.name())
+        };
+        let generics: Vec<_> = ty
+            .generic_params()
+            .map(|param| metadata::Type::Generic(param.name().to_string(), param.sequence()))
+            .collect();
+
+        for method in ty.methods() {
+            let signature = method.signature(&generics);
+            let params = method.params_by_sequence(signature.types.len()).unwrap();
+            let params = signature
+                .types
+                .iter()
+                .enumerate()
+                .map(|(position, ty)| {
+                    let name = params.params()[position]
+                        .map_or_else(|| format!("p{}", position + 1), |param| param.name().into());
+                    format!("{name}: {}", type_name(ty))
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            facts.insert(format!(
+                "{owner}|method {}({params}) -> {}|flags={:#06x}|impl={:#06x}|call={:#04x}",
+                method.name(),
+                type_name(&signature.return_type),
+                method.flags().0,
+                method.impl_flags().0,
+                signature.flags.0,
+            ));
+        }
+
+        for property in ty.properties() {
+            let signature = property.signature(&generics);
+            facts.insert(format!(
+                "{owner}|property {}: {}|flags={:#06x}|call={:#04x}|indexes={:?}|constant={:?}|\
+                 attributes={}|semantics={}",
+                property.name(),
+                type_name(&signature.return_type),
+                property.flags(),
+                signature.flags.0,
+                signature.types.iter().map(type_name).collect::<Vec<_>>(),
+                property.constant().map(|constant| constant.value()),
+                attributes(property.attributes()),
+                semantics(property.semantics()),
+            ));
+        }
+
+        for event in ty.events() {
+            facts.insert(format!(
+                "{owner}|event {}: {}|flags={:#06x}|attributes={}|semantics={}",
+                event.name(),
+                type_name(&event.ty(&generics)),
+                event.flags(),
+                attributes(event.attributes()),
+                semantics(event.semantics()),
+            ));
+        }
+
+        for method_impl in ty.method_impls() {
+            facts.insert(format!(
+                "{owner}|method_impl {} -> {}",
+                method_target(method_impl.body(), &generics),
+                method_target(method_impl.declaration(), &generics),
+            ));
+        }
+    }
+    facts
+}
+
+fn method_target(
+    target: metadata::reader::MethodDefOrRef<'_>,
+    generics: &[metadata::Type],
+) -> String {
+    match target {
+        metadata::reader::MethodDefOrRef::MethodDef(method) => {
+            let parent = method.parent();
+            format!(
+                "{}.{}.{}{}",
+                parent.namespace(),
+                parent.name(),
+                method.name(),
+                signature_name(&method.signature(generics)),
+            )
+        }
+        metadata::reader::MethodDefOrRef::MemberRef(method) => {
+            let parent = match method.parent() {
+                metadata::reader::MemberRefParent::TypeDef(parent) => {
+                    format!("{}.{}", parent.namespace(), parent.name())
+                }
+                metadata::reader::MemberRefParent::TypeRef(parent) => {
+                    format!("{}.{}", parent.namespace(), parent.name())
+                }
+                metadata::reader::MemberRefParent::TypeSpec(parent) => {
+                    type_name(&parent.ty(generics))
+                }
+                metadata::reader::MemberRefParent::ModuleRef(parent) => {
+                    format!("module {}", parent.name())
+                }
+                metadata::reader::MemberRefParent::MethodDef(parent) => {
+                    format!("method {}", parent.name())
+                }
+            };
+            format!(
+                "{parent}.{}{}",
+                method.name(),
+                signature_name(&method.instantiated_signature(generics)),
+            )
+        }
+    }
+}
+
+fn signature_name(signature: &metadata::Signature) -> String {
+    format!(
+        "({}) -> {}|call={:#04x}",
+        signature
+            .types
+            .iter()
+            .map(type_name)
+            .collect::<Vec<_>>()
+            .join(", "),
+        type_name(&signature.return_type),
+        signature.flags.0,
+    )
+}
+
+fn attributes<'a>(rows: impl Iterator<Item = metadata::reader::Attribute<'a>>) -> String {
+    let mut rows: Vec<_> = rows
+        .map(|row| {
+            format!(
+                "{}.{}:{:02x?}",
+                row.namespace(),
+                row.name(),
+                row.value_blob()
+            )
+        })
+        .collect();
+    rows.sort();
+    format!("{rows:?}")
+}
+
+fn semantics<'a>(rows: impl Iterator<Item = metadata::reader::MethodSemantics<'a>>) -> String {
+    let mut rows: Vec<_> = rows
+        .map(|row| (row.semantics(), row.method().name().to_string()))
+        .collect();
+    rows.sort();
+    format!("{rows:?}")
+}
+
+fn type_name(ty: &metadata::Type) -> String {
+    match ty {
+        metadata::Type::Void => "void".into(),
+        metadata::Type::Bool => "bool".into(),
+        metadata::Type::Char => "char".into(),
+        metadata::Type::I8 => "i8".into(),
+        metadata::Type::U8 => "u8".into(),
+        metadata::Type::I16 => "i16".into(),
+        metadata::Type::U16 => "u16".into(),
+        metadata::Type::I32 => "i32".into(),
+        metadata::Type::U32 => "u32".into(),
+        metadata::Type::I64 => "i64".into(),
+        metadata::Type::U64 => "u64".into(),
+        metadata::Type::F32 => "f32".into(),
+        metadata::Type::F64 => "f64".into(),
+        metadata::Type::ISize => "isize".into(),
+        metadata::Type::USize => "usize".into(),
+        metadata::Type::String => "String".into(),
+        metadata::Type::Object => "Object".into(),
+        metadata::Type::ClassName(name) | metadata::Type::ValueName(name) => {
+            let mut result = if name.namespace.is_empty() {
+                name.name.clone()
+            } else {
+                format!("{}.{}", name.namespace, name.name)
+            };
+            if !name.generics.is_empty() {
+                result.push('<');
+                result.push_str(
+                    &name
+                        .generics
+                        .iter()
+                        .map(type_name)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+                result.push('>');
+            }
+            result
+        }
+        metadata::Type::Array(ty) => format!("[{}]", type_name(ty)),
+        metadata::Type::Generic(name, _) => name.clone(),
+        metadata::Type::RefMut(ty) => format!("&mut {}", type_name(ty)),
+        metadata::Type::RefConst(ty) => format!("&{}", type_name(ty)),
+        metadata::Type::PtrMut(ty, depth) => format!("{}{}", "*mut ".repeat(*depth), type_name(ty)),
+        metadata::Type::PtrConst(ty, depth) => {
+            format!("{}{}", "*const ".repeat(*depth), type_name(ty))
+        }
+        metadata::Type::ArrayFixed(ty, len) => format!("[{}; {len}]", type_name(ty)),
+    }
 }

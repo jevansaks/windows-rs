@@ -6,6 +6,7 @@ pub struct AttributeRef {
     pub args: Vec<(String, metadata::Value)>,
 }
 
+#[derive(Clone)]
 struct AttributeInfo {
     type_name: metadata::TypeName,
     constructors: Vec<Vec<metadata::Type>>,
@@ -15,6 +16,19 @@ struct AttributeInfo {
 struct SplitArgs<'a> {
     positional: Vec<&'a syn::Expr>,
     named: Vec<(String, &'a syn::Expr)>,
+}
+
+fn push_attribute_candidate<'a>(
+    candidates: &mut Vec<(&'a Import, AttributeInfo)>,
+    import: &'a Import,
+    info: AttributeInfo,
+) {
+    if !candidates
+        .iter()
+        .any(|(_, existing)| existing.type_name == info.type_name)
+    {
+        candidates.push((import, info));
+    }
 }
 
 fn collect_bitor_variants(expr: &syn::Expr) -> Option<Vec<String>> {
@@ -45,71 +59,192 @@ fn collect_bitor_variants_inner(expr: &syn::Expr, names: &mut Vec<String>) -> Op
     }
 }
 
-impl Encoder<'_> {
-    fn find_attribute_type(&self, path: &syn::Path) -> Option<AttributeInfo> {
-        let mut segments: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
+fn is_null(value: &syn::Expr) -> bool {
+    matches!(
+        value,
+        syn::Expr::Path(syn::ExprPath { path, .. })
+            if path.leading_colon.is_none()
+                && path.segments.len() == 1
+                && path.segments[0].ident == "null"
+    )
+}
 
-        let name = segments.pop()?;
-        let attr_name = format!("{name}Attribute");
-
-        let explicit_namespace = if segments.is_empty() {
-            None
-        } else {
-            Some(segments.join("."))
+impl Resolver<'_, '_> {
+    fn find_attribute_type(&self, path: &syn::Path) -> Result<Option<AttributeInfo>, Error> {
+        let mut segments: Vec<String> = path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.unraw_to_string())
+            .collect();
+        let Some(name) = segments.pop() else {
+            return Ok(None);
         };
 
-        let namespaces: Vec<String> = if let Some(ns) = explicit_namespace {
-            vec![ns]
-        } else {
-            let parts: Vec<&str> = self.namespace.split('.').collect();
-            let mut nss: Vec<String> = (1..=parts.len())
-                .rev()
-                .map(|len| parts[..len].join("."))
-                .collect();
-            for use_item in &self.file.uses {
-                if let Some(ns) = glob_use_namespace(use_item)
-                    && !nss.contains(&ns)
-                {
-                    nss.push(ns);
+        if !segments.is_empty() {
+            if segments.iter().any(|segment| segment == "super") {
+                let mut namespace = vec![];
+                for segment in &segments {
+                    if segment == "super" {
+                        if namespace.is_empty() {
+                            namespace.extend(self.namespace.split('.').map(str::to_string));
+                        }
+                        if namespace.pop().is_none() {
+                            return self.err(path, "too many leading `super` keywords");
+                        }
+                    } else {
+                        namespace.push(segment.clone());
+                    }
+                }
+                return Ok(self.find_attribute_in_namespace(&namespace.join("."), &name));
+            }
+
+            let namespace = segments.join(".");
+            if let Some(info) = self.find_attribute_in_namespace(&namespace, &name) {
+                self.mark_import_shadowed(&segments[0]);
+                return Ok(Some(info));
+            }
+
+            let relative = format!("{}.{}", self.namespace, namespace);
+            if let Some(info) = self.find_attribute_in_namespace(&relative, &name) {
+                self.mark_import_shadowed(&segments[0]);
+                return Ok(Some(info));
+            }
+
+            let mut imported = vec![];
+            for import in &self.file.imports {
+                if import.glob || import.local.as_deref() != Some(&segments[0]) {
+                    continue;
+                }
+                let target = import.path.join(".");
+                if !self.namespace_exists(&target) {
+                    continue;
+                }
+                let mut namespace = import.path.clone();
+                namespace.extend_from_slice(&segments[1..]);
+                if let Some(info) = self.find_attribute_in_namespace(&namespace.join("."), &name) {
+                    push_attribute_candidate(&mut imported, import, info);
                 }
             }
-            nss
-        };
+            return self.one_imported_attribute(path, &name, imported);
+        }
 
-        for ns in &namespaces {
-            if let Some(info) = self
-                .find_in_reference(ns, &attr_name)
-                .or_else(|| self.find_in_index(ns, &attr_name))
-            {
-                return Some(info);
+        let parts: Vec<&str> = self.namespace.split('.').collect();
+        for namespace in (1..=parts.len()).rev().map(|len| parts[..len].join(".")) {
+            if let Some(info) = self.find_attribute_in_namespace(&namespace, &name) {
+                self.mark_import_shadowed(&name);
+                return Ok(Some(info));
             }
         }
 
-        None
+        let mut imported = vec![];
+        for import in &self.file.imports {
+            if import.glob || import.local.as_deref() != Some(&name) {
+                continue;
+            }
+            let (target_name, target_namespace) = import.path.split_last().unwrap();
+            if let Some(info) =
+                self.find_attribute_in_namespace(&target_namespace.join("."), target_name)
+            {
+                push_attribute_candidate(&mut imported, import, info);
+            }
+        }
+        if let Some(info) = self.one_imported_attribute(path, &name, imported)? {
+            return Ok(Some(info));
+        }
+
+        let mut globbed = vec![];
+        for import in &self.file.imports {
+            if import.glob
+                && let Some(info) = self.find_attribute_in_namespace(&import.path.join("."), &name)
+            {
+                push_attribute_candidate(&mut globbed, import, info);
+            }
+        }
+        self.one_imported_attribute(path, &name, globbed)
+    }
+
+    fn find_attribute_in_namespace(&self, namespace: &str, name: &str) -> Option<AttributeInfo> {
+        let physical_name = if name.ends_with("Attribute") {
+            name.to_string()
+        } else {
+            format!("{name}Attribute")
+        };
+        self.find_in_index(namespace, &physical_name)
+            .or_else(|| self.find_in_reference(namespace, &physical_name))
+    }
+
+    fn one_imported_attribute(
+        &self,
+        path: &syn::Path,
+        name: &str,
+        candidates: Vec<(&Import, AttributeInfo)>,
+    ) -> Result<Option<AttributeInfo>, Error> {
+        match candidates.as_slice() {
+            [] => Ok(None),
+            [(import, info)] => {
+                import.used.set(true);
+                Ok(Some(info.clone()))
+            }
+            _ => {
+                let start = path.span().start();
+                let end = path.span().end();
+                let mut error = Error::new(
+                    &format!("attribute name `{name}` is ambiguous"),
+                    &self.file.source,
+                    start.line,
+                    start.column,
+                )
+                .with_source_id(self.file.source_id)
+                .with_code("RDL0004")
+                .with_primary_label(
+                    Label::primary(&self.file.source, start.line, start.column)
+                        .with_source_id(self.file.source_id)
+                        .with_end(end.line, end.column)
+                        .with_message("ambiguous attribute name"),
+                )
+                .with_help("use a qualified path or add an explicit named import");
+                for (import, info) in candidates {
+                    let import_start = import.span.start();
+                    let import_end = import.span.end();
+                    error = error.with_label(
+                        Label::secondary(
+                            &self.file.source,
+                            import_start.line,
+                            import_start.column,
+                            &format!(
+                                "candidate `{}.{}`",
+                                info.type_name.namespace, info.type_name.name
+                            ),
+                        )
+                        .with_source_id(self.file.source_id)
+                        .with_end(import_end.line, import_end.column),
+                    );
+                }
+                Err(error)
+            }
+        }
     }
 
     fn find_in_reference(&self, namespace: &str, attr_name: &str) -> Option<AttributeInfo> {
         let mut constructors = vec![];
         let mut properties = vec![];
 
-        if let Some(reference) = self.output.reference() {
-            for typedef in reference.get(namespace, attr_name) {
-                if typedef.category() == metadata::reader::TypeCategory::Attribute {
-                    for method in typedef.methods() {
-                        if method.name() == ".ctor" {
-                            let sig = method.signature(&[]);
-                            constructors.push(sig.types);
-                        }
+        for typedef in self.reference.get(namespace, attr_name) {
+            if typedef.category() == metadata::reader::TypeCategory::Attribute {
+                for method in typedef.methods() {
+                    if method.name() == ".ctor" {
+                        let sig = method.signature(&[]);
+                        constructors.push(sig.types);
                     }
-                    for field in typedef.fields() {
-                        let flags = field.flags();
-                        if flags.contains(metadata::FieldAttributes::Public)
-                            && !flags.contains(metadata::FieldAttributes::Static)
-                            && !flags.contains(metadata::FieldAttributes::Literal)
-                            && !flags.contains(metadata::FieldAttributes::SpecialName)
-                        {
-                            properties.push((field.name().to_string(), field.ty()));
-                        }
+                }
+                for field in typedef.fields() {
+                    let flags = field.flags();
+                    if flags.contains(metadata::FieldAttributes::Public)
+                        && !flags.contains(metadata::FieldAttributes::Static)
+                        && !flags.contains(metadata::FieldAttributes::Literal)
+                        && !flags.contains(metadata::FieldAttributes::SpecialName)
+                    {
+                        properties.push((field.name().to_string(), field.ty()));
                     }
                 }
             }
@@ -143,7 +278,7 @@ impl Encoder<'_> {
             let types: Result<Vec<_>, _> = method
                 .inputs
                 .iter()
-                .map(|arg| self.encode_type_in_attr_ns(namespace, &arg.ty))
+                .map(|arg| self.resolve_type_in_attr_ns(namespace, &arg.ty))
                 .collect();
             if let Ok(types) = types {
                 constructors.push(types);
@@ -152,7 +287,7 @@ impl Encoder<'_> {
 
         let mut properties = vec![];
         for (prop_name, prop_ty) in &attr_item.properties {
-            if let Ok(ty) = self.encode_type_in_attr_ns(namespace, prop_ty) {
+            if let Ok(ty) = self.resolve_type_in_attr_ns(namespace, prop_ty) {
                 properties.push((prop_name.to_string(), ty));
             }
         }
@@ -162,6 +297,12 @@ impl Encoder<'_> {
             constructors,
             properties,
         })
+    }
+}
+
+impl Encoder<'_> {
+    fn find_attribute_type(&self, path: &syn::Path) -> Result<Option<AttributeInfo>, Error> {
+        self.resolver().find_attribute_type(path)
     }
 
     fn split_args<'a>(&self, args: &'a [syn::Expr]) -> Result<SplitArgs<'a>, Error> {
@@ -256,6 +397,13 @@ impl Encoder<'_> {
         value: &syn::Expr,
     ) -> Result<metadata::Value, Error> {
         match ty {
+            metadata::Type::String | metadata::Type::ClassName(_)
+                if is_null(value)
+                    && (matches!(ty, metadata::Type::String)
+                        || matches!(ty, metadata::Type::ClassName(tn) if tn == ("System", "Type"))) =>
+            {
+                Ok(metadata::Value::Null(ty.clone()))
+            }
             metadata::Type::String => match value {
                 syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(s),
@@ -272,6 +420,41 @@ impl Encoder<'_> {
                 },
                 _ => self.err(value, "expected type path"),
             },
+            metadata::Type::Array(element) => {
+                if is_null(value) {
+                    return Ok(metadata::Value::Null(ty.clone()));
+                }
+                let syn::Expr::Array(array) = value else {
+                    return self.err(value, "expected array literal");
+                };
+                let mut values = Vec::with_capacity(array.elems.len());
+                for value in &array.elems {
+                    values.push(self.encode_attr_value(element, value)?);
+                }
+                Ok(metadata::Value::Array(element.as_ref().clone(), values))
+            }
+            metadata::Type::Object => {
+                if is_null(value) {
+                    return Ok(metadata::Value::Null(metadata::Type::Object));
+                }
+                let syn::Expr::Call(call) = value else {
+                    return self.err(value, "expected `boxed(type, value)`");
+                };
+                let syn::Expr::Path(function) = call.func.as_ref() else {
+                    return self.err(value, "expected `boxed(type, value)`");
+                };
+                if function.path.leading_colon.is_some()
+                    || function.path.segments.len() != 1
+                    || function.path.segments[0].ident != "boxed"
+                    || call.args.len() != 2
+                {
+                    return self.err(value, "expected `boxed(type, value)`");
+                }
+                let ty = self.encode_attr_type(&call.args[0])?;
+                let value = self.encode_attr_value(&ty, &call.args[1])?;
+                Ok(metadata::Value::Boxed(Box::new(value)))
+            }
+
             metadata::Type::ValueName(tn) | metadata::Type::ClassName(tn) => {
                 if let syn::Expr::Path(syn::ExprPath { path, .. }) = value
                     && path.leading_colon.is_none()
@@ -281,37 +464,46 @@ impl Encoder<'_> {
                     let inner = self.find_enum_variant_value(tn, &variant_name, value)?;
                     return Ok(metadata::Value::EnumValue(tn.clone(), Box::new(inner)));
                 }
+
                 if self.enum_is_flags(tn) {
                     if let Some(names) = collect_bitor_variants(value) {
-                        let mut combined: i32 = 0;
+                        let Some(underlying) = self.enum_underlying_type(tn) else {
+                            return self.err(value, "enum backing type not found");
+                        };
+                        let mut combined = 0;
                         for name in &names {
                             let inner = self.find_enum_variant_value(tn, name, value)?;
-                            let metadata::Value::I32(v) = inner else {
+                            let Some(bits) = inner.integer_bits() else {
                                 return self
                                     .err(value, &format!("expected `{}` variant name", tn.name));
                             };
-                            combined |= v;
+                            combined |= bits;
                         }
-                        return Ok(metadata::Value::EnumValue(
-                            tn.clone(),
-                            Box::new(metadata::Value::I32(combined)),
-                        ));
+                        let Some(combined) = metadata::Value::from_integer(&underlying, combined)
+                        else {
+                            return self.err(value, "invalid enum backing type");
+                        };
+                        return Ok(metadata::Value::EnumValue(tn.clone(), Box::new(combined)));
                     }
-                    if let syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Int(int),
-                        ..
-                    }) = value
-                        && let Ok(v) = int.base10_parse::<i32>()
+                    if let Some(underlying) = self.enum_underlying_type(tn)
+                        && let Ok(value) = self.encode_value(&underlying, value)
                     {
-                        return Ok(metadata::Value::EnumValue(
-                            tn.clone(),
-                            Box::new(metadata::Value::I32(v)),
-                        ));
+                        return Ok(metadata::Value::EnumValue(tn.clone(), Box::new(value)));
                     }
                 }
                 self.err(value, &format!("expected `{}` variant name", tn.name))
             }
             _ => self.encode_value(ty, value),
+        }
+    }
+
+    fn encode_attr_type(&self, value: &syn::Expr) -> Result<metadata::Type, Error> {
+        match value {
+            syn::Expr::Path(path) => self.encode_path(&path.path),
+            syn::Expr::Array(array) if array.elems.len() == 1 => Ok(metadata::Type::Array(
+                Box::new(self.encode_attr_type(&array.elems[0])?),
+            )),
+            _ => self.err(value, "expected boxed value type"),
         }
     }
 
@@ -338,6 +530,20 @@ impl Encoder<'_> {
         false
     }
 
+    fn enum_underlying_type(&self, tn: &metadata::TypeName) -> Option<metadata::Type> {
+        self.output
+            .reference()
+            .and_then(|reference| {
+                let mut definitions = reference.get(&tn.namespace, &tn.name);
+                let definition = definitions.next()?;
+                definitions
+                    .next()
+                    .is_none()
+                    .then(|| definition.underlying_type())?
+            })
+            .or_else(|| self.rdl_underlying_type(&tn.namespace, &tn.name))
+    }
+
     fn find_enum_variant_value(
         &self,
         tn: &metadata::TypeName,
@@ -352,16 +558,14 @@ impl Encoder<'_> {
                             && field.name() == variant_name
                             && let Some(constant) = field.constant()
                         {
-                            return Ok(match constant.value() {
-                                metadata::Value::I32(v) => metadata::Value::I32(v),
-                                metadata::Value::U32(v) => metadata::Value::I32(v as i32),
-                                other => {
-                                    return self.err(
-                                        spanned,
-                                        &format!("unsupported enum constant type: {other:?}"),
-                                    );
-                                }
-                            });
+                            let value = constant.value();
+                            if value.integer_bits().is_some() {
+                                return Ok(value);
+                            }
+                            return self.err(
+                                spanned,
+                                &format!("unsupported enum constant type: {value:?}"),
+                            );
                         }
                     }
                 }
@@ -376,16 +580,10 @@ impl Encoder<'_> {
                 if variant.ident == variant_name
                     && let Some((_, discriminant)) = &variant.discriminant
                 {
-                    let result = self
-                        .encode_value(&metadata::Type::I32, discriminant)
-                        .or_else(|_| {
-                            self.encode_value(&metadata::Type::U32, discriminant)
-                                .map(|v| match v {
-                                    metadata::Value::U32(n) => metadata::Value::I32(n as i32),
-                                    other => other,
-                                })
-                        });
-                    return result;
+                    let Some(underlying) = self.enum_underlying_type(tn) else {
+                        return self.err(spanned, "enum backing type not found");
+                    };
+                    return self.encode_value(&underlying, discriminant);
                 }
             }
         }
@@ -397,7 +595,7 @@ impl Encoder<'_> {
         let path = attr.path();
 
         let info = self
-            .find_attribute_type(path)
+            .find_attribute_type(path)?
             .ok_or_else(|| self.error(attr, "attribute type not found"))?;
 
         let raw_args: Vec<syn::Expr> = match &attr.meta {
@@ -409,6 +607,7 @@ impl Encoder<'_> {
                 .map_err(|e| {
                     let start = e.span().start();
                     Error::new(&e.to_string(), &self.file.source, start.line, start.column)
+                        .with_source_id(self.file.source_id)
                 })?
                 .into_iter()
                 .collect(),
@@ -425,6 +624,28 @@ impl Encoder<'_> {
             type_name: info.type_name,
             args,
         })
+    }
+
+    pub fn resolve_emitted_attribute_ref(
+        &self,
+        attr: &syn::Attribute,
+    ) -> Result<AttributeRef, Error> {
+        if let Some(pseudo) = attr
+            .path()
+            .get_ident()
+            .and_then(|ident| pseudo_by_short(&ident.to_string()))
+        {
+            if matches!(attr.meta, syn::Meta::Path(_)) {
+                Ok(AttributeRef {
+                    type_name: metadata::TypeName::named(METADATA_NAMESPACE, pseudo.metadata),
+                    args: vec![],
+                })
+            } else {
+                self.resolve_pseudo_attr_ref(attr, pseudo)
+            }
+        } else {
+            self.resolve_attribute_ref(attr)
+        }
     }
 
     pub fn encode_named_attribute(
@@ -491,9 +712,10 @@ impl Encoder<'_> {
         attr: &syn::Attribute,
         pseudo: &PseudoAttr,
     ) -> Result<AttributeRef, Error> {
-        let info = self
+        let resolver = self.resolver();
+        let info = resolver
             .find_in_reference(METADATA_NAMESPACE, pseudo.metadata)
-            .or_else(|| self.find_in_index(METADATA_NAMESPACE, pseudo.metadata))
+            .or_else(|| resolver.find_in_index(METADATA_NAMESPACE, pseudo.metadata))
             .ok_or_else(|| self.error(attr, "pseudo-attribute type not found"))?;
 
         let raw_args: Vec<syn::Expr> = match &attr.meta {
@@ -505,6 +727,7 @@ impl Encoder<'_> {
                 .map_err(|e| {
                     let start = e.span().start();
                     Error::new(&e.to_string(), &self.file.source, start.line, start.column)
+                        .with_source_id(self.file.source_id)
                 })?
                 .into_iter()
                 .collect(),
@@ -549,6 +772,25 @@ impl Encoder<'_> {
         self.encode_named_attribute(target, &attr_ref);
     }
 
+    pub fn emit_overload_attribute(&mut self, target: metadata::writer::HasAttribute, name: &str) {
+        let attr_ref = AttributeRef {
+            type_name: metadata::TypeName::named(WINRT_METADATA_NAMESPACE, "OverloadAttribute"),
+            args: vec![(String::new(), metadata::Value::Utf8(name.to_string()))],
+        };
+        self.encode_named_attribute(target, &attr_ref);
+    }
+
+    pub fn emit_default_overload_attribute(&mut self, target: metadata::writer::HasAttribute) {
+        let attr_ref = AttributeRef {
+            type_name: metadata::TypeName::named(
+                WINRT_METADATA_NAMESPACE,
+                "DefaultOverloadAttribute",
+            ),
+            args: vec![],
+        };
+        self.encode_named_attribute(target, &attr_ref);
+    }
+
     pub fn emit_bitfield_attribute(
         &mut self,
         target: metadata::writer::HasAttribute,
@@ -567,15 +809,33 @@ impl Encoder<'_> {
         self.encode_named_attribute(target, &attr_ref);
     }
 
-    pub fn is_guid_attribute(&self, attr: &syn::Attribute) -> bool {
-        self.find_attribute_type(attr.path())
-            .is_some_and(|info| &info.type_name == ("Windows.Foundation.Metadata", "GuidAttribute"))
+    pub fn is_guid_attribute(&self, attr: &syn::Attribute) -> Result<bool, Error> {
+        Ok(self.find_attribute_type(attr.path())?.is_some_and(|info| {
+            &info.type_name == ("Windows.Foundation.Metadata", "GuidAttribute")
+        }))
     }
 
-    pub fn is_exclusive_to_attribute(&self, attr: &syn::Attribute) -> bool {
-        self.find_attribute_type(attr.path()).is_some_and(|info| {
-            &info.type_name == ("Windows.Foundation.Metadata", "ExclusiveToAttribute")
-        })
+    pub fn is_exclusive_to_attribute(&self, attr: &syn::Attribute) -> Result<bool, Error> {
+        self.is_attribute_type(attr, "Windows.Foundation.Metadata", "ExclusiveToAttribute")
+    }
+
+    pub fn is_attribute_type(
+        &self,
+        attr: &syn::Attribute,
+        namespace: &str,
+        name: &str,
+    ) -> Result<bool, Error> {
+        if let Some(pseudo) = attr
+            .path()
+            .get_ident()
+            .and_then(|ident| pseudo_by_short(&ident.to_string()))
+        {
+            return Ok(namespace == METADATA_NAMESPACE && name == pseudo.metadata);
+        }
+
+        Ok(self
+            .find_attribute_type(attr.path())?
+            .is_some_and(|info| &info.type_name == (namespace, name)))
     }
 
     pub fn encode_guid_pseudo_attrs(
@@ -583,11 +843,12 @@ impl Encoder<'_> {
         target: metadata::writer::HasAttribute,
         attrs: &[syn::Attribute],
     ) -> Result<bool, Error> {
-        let already_has_guid = attrs.iter().any(|attr| {
-            self.is_guid_attribute(attr)
+        let mut already_has_guid = false;
+        for attr in attrs {
+            already_has_guid |= self.is_guid_attribute(attr)?
                 || attr.path().is_ident("guid")
-                || attr.path().is_ident("no_guid")
-        });
+                || attr.path().is_ident("no_guid");
+        }
 
         for attr in attrs {
             if attr.path().is_ident("guid") {
@@ -626,18 +887,29 @@ impl Encoder<'_> {
             // A naturalized pseudo-attribute (short SAL/IDL spelling) maps to its metadata
             // attribute via the shared table; the fully-qualified spelling still resolves
             // generically below.
-            if let Some(pseudo) = path
-                .get_ident()
-                .and_then(|i| pseudo_by_short(&i.to_string()))
-            {
-                self.emit_pseudo_attribute(has_attribute, pseudo, attr)?;
-                continue;
-            }
-
-            let attr_ref = self.resolve_attribute_ref(attr)?;
+            let attr_ref = self.resolve_emitted_attribute_ref(attr)?;
             self.encode_named_attribute(has_attribute, &attr_ref);
         }
 
+        Ok(())
+    }
+
+    pub fn encode_wrapped_attrs(
+        &mut self,
+        has_attribute: metadata::writer::HasAttribute,
+        attrs: &[syn::Attribute],
+        wrapper: &str,
+    ) -> Result<(), Error> {
+        for attr in attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident(wrapper) && matches!(attr.meta, syn::Meta::List(_)))
+        {
+            let meta: syn::Meta = attr
+                .parse_args()
+                .map_err(|_| self.error(attr, "invalid wrapped attribute"))?;
+            let nested: syn::Attribute = syn::parse_quote_spanned!(attr.span()=> #[#meta]);
+            self.encode_attrs(has_attribute, &[nested], &[])?;
+        }
         Ok(())
     }
 }

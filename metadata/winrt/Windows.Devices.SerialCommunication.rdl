@@ -6,6 +6,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ErrorReceivedEventArgs {
+                #[default]
                 IErrorReceivedEventArgs,
             }
             #[guid(0xfcc6bf59_1283_4d8a_bfdf_566b33ddb28f)]
@@ -54,17 +55,19 @@ mod Windows {
                 InputStream: super::super::Storage::Streams::IInputStream;
                 #[get]
                 OutputStream: super::super::Storage::Streams::IOutputStream;
+                #[add_name(reportHandler)]
                 event ErrorReceived: super::super::Foundation::TypedEventHandler<SerialDevice, ErrorReceivedEventArgs>;
+                #[add_name(reportHandler)]
                 event PinChanged: super::super::Foundation::TypedEventHandler<SerialDevice, PinChangedEventArgs>;
             }
             #[guid(0x058c4a70_0836_4993_ae1a_b61ae3be056b)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(SerialDevice)]
             interface ISerialDeviceStatics {
-                #[Windows::Foundation::Metadata::Overload("GetDeviceSelector")]
+                #[overload(GetDeviceSelector)]
                 fn GetDeviceSelector(&self) -> String;
-                #[Windows::Foundation::Metadata::Overload("GetDeviceSelectorFromPortName")]
-                fn GetDeviceSelector(&self, portName: String) -> String;
+                #[overload(GetDeviceSelector)]
+                fn GetDeviceSelectorFromPortName(&self, portName: String) -> String;
                 fn GetDeviceSelectorFromUsbVidPid(&self, vendorId: u16, productId: u16) -> String;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FromIdAsync(&self, deviceId: String) -> super::super::Foundation::IAsyncOperation<SerialDevice>;
@@ -73,6 +76,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PinChangedEventArgs {
+                #[default]
                 IPinChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -80,6 +84,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(ISerialDeviceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             class SerialDevice {
+                #[default]
                 ISerialDevice,
                 super::super::Foundation::IClosable,
             }

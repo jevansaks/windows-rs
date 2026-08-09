@@ -10,6 +10,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CoreIncrementalInkStroke {
+                        #[default]
                         ICoreIncrementalInkStroke,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -18,7 +19,9 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ICoreInkIndependentInputSourceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CoreInkIndependentInputSource {
+                        #[default]
                         ICoreInkIndependentInputSource,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                         ICoreInkIndependentInputSource2,
                     }
                     #[Windows::Foundation::Metadata::Activatable(327680, "Windows.Foundation.UniversalApiContract")]
@@ -27,6 +30,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CoreInkPresenterHost {
+                        #[default]
                         ICoreInkPresenterHost,
                     }
                     #[repr(i32)]
@@ -42,6 +46,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CoreWetStrokeUpdateEventArgs {
+                        #[default]
                         ICoreWetStrokeUpdateEventArgs,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -50,6 +55,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ICoreWetStrokeUpdateSourceStatics, 196608, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CoreWetStrokeUpdateSource {
+                        #[default]
                         ICoreWetStrokeUpdateSource,
                     }
                     #[guid(0xfda015d3_9d66_4f7d_a57f_cc70b9cfaa76)]
@@ -78,12 +84,19 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ExclusiveTo(CoreInkIndependentInputSource)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     interface ICoreInkIndependentInputSource {
+                        #[remove_name(cookie)]
                         event PointerEntering: super::super::super::super::Foundation::TypedEventHandler<CoreInkIndependentInputSource, super::super::super::Core::PointerEventArgs>;
+                        #[remove_name(cookie)]
                         event PointerHovering: super::super::super::super::Foundation::TypedEventHandler<CoreInkIndependentInputSource, super::super::super::Core::PointerEventArgs>;
+                        #[remove_name(cookie)]
                         event PointerExiting: super::super::super::super::Foundation::TypedEventHandler<CoreInkIndependentInputSource, super::super::super::Core::PointerEventArgs>;
+                        #[remove_name(cookie)]
                         event PointerPressing: super::super::super::super::Foundation::TypedEventHandler<CoreInkIndependentInputSource, super::super::super::Core::PointerEventArgs>;
+                        #[remove_name(cookie)]
                         event PointerMoving: super::super::super::super::Foundation::TypedEventHandler<CoreInkIndependentInputSource, super::super::super::Core::PointerEventArgs>;
+                        #[remove_name(cookie)]
                         event PointerReleasing: super::super::super::super::Foundation::TypedEventHandler<CoreInkIndependentInputSource, super::super::super::Core::PointerEventArgs>;
+                        #[remove_name(cookie)]
                         event PointerLost: super::super::super::super::Foundation::TypedEventHandler<CoreInkIndependentInputSource, super::super::super::Core::PointerEventArgs>;
                         #[get]
                         InkPresenter: super::InkPresenter;
@@ -127,10 +140,15 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ExclusiveTo(CoreWetStrokeUpdateSource)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     interface ICoreWetStrokeUpdateSource {
+                        #[remove_name(cookie)]
                         event WetStrokeStarting: super::super::super::super::Foundation::TypedEventHandler<CoreWetStrokeUpdateSource, CoreWetStrokeUpdateEventArgs>;
+                        #[remove_name(cookie)]
                         event WetStrokeContinuing: super::super::super::super::Foundation::TypedEventHandler<CoreWetStrokeUpdateSource, CoreWetStrokeUpdateEventArgs>;
+                        #[remove_name(cookie)]
                         event WetStrokeStopping: super::super::super::super::Foundation::TypedEventHandler<CoreWetStrokeUpdateSource, CoreWetStrokeUpdateEventArgs>;
+                        #[remove_name(cookie)]
                         event WetStrokeCompleted: super::super::super::super::Foundation::TypedEventHandler<CoreWetStrokeUpdateSource, CoreWetStrokeUpdateEventArgs>;
+                        #[remove_name(cookie)]
                         event WetStrokeCanceled: super::super::super::super::Foundation::TypedEventHandler<CoreWetStrokeUpdateSource, CoreWetStrokeUpdateEventArgs>;
                         #[get]
                         InkPresenter: super::InkPresenter;

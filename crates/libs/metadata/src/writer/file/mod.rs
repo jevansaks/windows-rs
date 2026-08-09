@@ -32,6 +32,14 @@ pub struct File {
     GenericParam: BTreeMap<TypeOrMethodDef, Vec<rec::GenericParam>>,
 }
 
+/// A finalized metadata image that can be validated or packaged as a `.winmd`.
+pub struct FinalizedFile {
+    metadata: std::sync::Arc<[u8]>,
+    tables_len: usize,
+    strings_len: usize,
+    reference: Option<reader::Index>,
+}
+
 impl File {
     pub fn new(name: &str) -> Self {
         let mut file = Self::default();
@@ -59,6 +67,21 @@ impl File {
         file.TypeDef("", "<Module>", TypeDefOrRef::default(), TypeAttributes(0));
 
         file
+    }
+
+    /// Finalizes this writer into a readable metadata file without writing it to disk.
+    pub fn finish(self) -> reader::File {
+        reader::File::new(self.into_stream()).unwrap()
+    }
+
+    /// Finalizes this writer and returns a queryable metadata index without writing a file.
+    pub fn into_index(self) -> reader::Index {
+        reader::Index::new(vec![self.finish()])
+    }
+
+    /// Finalizes this writer while returning the reference index used during encoding.
+    pub fn into_stream_and_reference(self) -> (Vec<u8>, Option<reader::Index>) {
+        self.finalize().into_stream_and_reference()
     }
 
     /// Sets the reference index used to resolve external `TypeRef` scopes.
@@ -250,6 +273,19 @@ impl File {
         }))
     }
 
+    pub fn MethodImpl(
+        &mut self,
+        class: TypeDef,
+        body: MethodDefOrRef,
+        declaration: MethodDefOrRef,
+    ) -> MethodImpl {
+        MethodImpl(self.records.MethodImpl.push_pos(rec::MethodImpl {
+            Class: class,
+            MethodBody: body,
+            MethodDeclaration: declaration,
+        }))
+    }
+
     pub fn MemberRef(
         &mut self,
         name: &str,
@@ -273,6 +309,18 @@ impl File {
         pos
     }
 
+    pub fn MemberRefType(&mut self, ty: &Type) -> MemberRefParent {
+        let (Type::ClassName(ty) | Type::ValueName(ty)) = ty else {
+            panic!("invalid member reference parent type");
+        };
+
+        if ty.generics.is_empty() {
+            MemberRefParent::TypeRef(self.TypeRef(&ty.namespace, &ty.name))
+        } else {
+            MemberRefParent::TypeSpec(self.TypeSpec(&ty.namespace, &ty.name, &ty.generics))
+        }
+    }
+
     /// Adds a `Param` row to the file, returning the row offset.
     pub fn Param(&mut self, name: &str, sequence: u16, flags: ParamAttributes) -> Param {
         Param(self.records.Param.push_pos(rec::Param {
@@ -284,10 +332,27 @@ impl File {
 
     /// Adds a `Property` row to the file, returning the row offset.
     pub fn Property(&mut self, name: &str, ty: &Type) -> Property {
-        let signature = self.PropertySig(ty);
+        self.PropertyWithSignature(
+            name,
+            &Signature {
+                flags: MethodCallAttributes::HASTHIS,
+                return_type: ty.clone(),
+                types: vec![],
+            },
+            0,
+        )
+    }
 
+    /// Adds a `Property` row with its exact signature and flags.
+    pub fn PropertyWithSignature(
+        &mut self,
+        name: &str,
+        signature: &Signature,
+        flags: u16,
+    ) -> Property {
+        let signature = self.PropertySig(signature);
         Property(self.records.Property.push_pos(rec::Property {
-            Flags: 0,
+            Flags: flags,
             Name: self.strings.insert(name),
             Type: signature,
         }))
@@ -304,13 +369,22 @@ impl File {
     /// Adds an `Event` row to the file, returning the row offset. `ty` is the event's
     /// handler delegate type.
     pub fn Event(&mut self, name: &str, ty: &Type) -> Event {
+        self.EventWithFlags(name, ty, 0)
+    }
+
+    /// Adds an `Event` row with its exact flags.
+    pub fn EventWithFlags(&mut self, name: &str, ty: &Type, flags: u16) -> Event {
         let Type::ClassName(ty) = ty else {
             panic!("invalid event type");
         };
-        let event_type = TypeDefOrRef::TypeRef(self.TypeRef(&ty.namespace, &ty.name));
+        let event_type = if ty.generics.is_empty() {
+            TypeDefOrRef::TypeRef(self.TypeRef(&ty.namespace, &ty.name))
+        } else {
+            TypeDefOrRef::TypeSpec(self.TypeSpec(&ty.namespace, &ty.name, &ty.generics))
+        };
 
         Event(self.records.Event.push_pos(rec::Event {
-            Flags: 0,
+            Flags: flags,
             Name: self.strings.insert(name),
             EventType: event_type,
         }))
@@ -357,6 +431,20 @@ impl File {
             });
     }
 
+    /// Adds an `Attribute` row using an already encoded custom-attribute value blob.
+    pub fn AttributeBlob(&mut self, parent: HasAttribute, ty: AttributeType, value: &[u8]) {
+        let value = self.blobs.insert(value);
+
+        self.Attribute
+            .entry(parent)
+            .or_default()
+            .push(rec::Attribute {
+                Parent: parent,
+                Type: ty,
+                Value: value,
+            });
+    }
+
     pub fn Constant(&mut self, parent: HasConstant, value: &Value) {
         let ty = value.ty().code();
         let value = self.ConstantValue(value);
@@ -389,19 +477,24 @@ impl File {
             });
     }
 
-    pub fn ClassLayout(&mut self, parent: TypeDef, packing_size: u16, class_size: u32) {
-        self.records.ClassLayout.push(rec::ClassLayout {
+    pub fn ClassLayout(
+        &mut self,
+        parent: TypeDef,
+        packing_size: u16,
+        class_size: u32,
+    ) -> ClassLayout {
+        ClassLayout(self.records.ClassLayout.push_pos(rec::ClassLayout {
             PackingSize: packing_size,
             ClassSize: class_size,
             Parent: parent.0,
-        });
+        }))
     }
 
-    pub fn FieldLayout(&mut self, field: Field, offset: u32) {
-        self.records.FieldLayout.push(rec::FieldLayout {
+    pub fn FieldLayout(&mut self, field: Field, offset: u32) -> FieldLayout {
+        FieldLayout(self.records.FieldLayout.push_pos(rec::FieldLayout {
             Offset: offset,
             Field: field.0,
-        });
+        }))
     }
 
     pub fn NestedClass(&mut self, inner: TypeDef, outer: TypeDef) {
@@ -558,10 +651,13 @@ impl File {
         self.blobs.insert(&buffer)
     }
 
-    fn PropertySig(&mut self, ty: &Type) -> BlobId {
-        let mut buffer = vec![0x28]; // HASTHIS | PROPERTY
-        buffer.write_compressed(0); // parameter count
-        self.Type(ty, &mut buffer);
+    fn PropertySig(&mut self, signature: &Signature) -> BlobId {
+        let mut buffer = vec![signature.flags.0 | 0x08]; // PROPERTY
+        buffer.write_compressed(signature.types.len());
+        self.Type(&signature.return_type, &mut buffer);
+        for ty in &signature.types {
+            self.Type(ty, &mut buffer);
+        }
         self.blobs.insert(&buffer)
     }
 
@@ -603,21 +699,7 @@ impl File {
 
         for (name, value) in &values[count..] {
             buffer.push(0x53); // field=0x53 property=0x54
-
-            if let Value::EnumValue(tn, _) = value {
-                // SERIALIZATION_TYPE_ENUM (ECMA-335 II.23.1.16): 0x55 followed by
-                // a SerString of the fully-qualified enum type name.
-                buffer.push(0x55);
-                let enum_name = if tn.namespace.is_empty() {
-                    tn.name.clone()
-                } else {
-                    format!("{}.{}", tn.namespace, tn.name)
-                };
-                buffer.write_compressed(enum_name.len());
-                buffer.extend_from_slice(enum_name.as_bytes());
-            } else {
-                buffer.push(value.ty().code());
-            }
+            buffer.write_serialization_type(value);
 
             buffer.write_compressed(name.len());
             buffer.extend_from_slice(name.as_bytes());
@@ -625,5 +707,57 @@ impl File {
         }
 
         self.blobs.insert(&buffer)
+    }
+}
+
+impl FinalizedFile {
+    fn file(&self) -> reader::File {
+        reader::File::from_metadata_streams(
+            self.metadata.clone(),
+            self.tables_len,
+            self.tables_len,
+            self.tables_len + self.strings_len,
+        )
+        .unwrap()
+    }
+
+    fn index(&self) -> reader::Index {
+        reader::Index::new(vec![self.file()])
+    }
+
+    /// Validates the finalized image directly against its encoding references.
+    pub fn validate(
+        &self,
+        profile: validator::ValidationProfile,
+    ) -> Vec<validator::ValidationError> {
+        let image = self.index();
+        self.validate_image(&image, profile)
+    }
+
+    /// Validates with the profile inferred from the finalized type flags.
+    pub fn validate_inferred(&self) -> Vec<validator::ValidationError> {
+        let image = self.index();
+        let profile = validator::ValidationProfile::infer(&image);
+        self.validate_image(&image, profile)
+    }
+
+    fn validate_image(
+        &self,
+        image: &reader::Index,
+        profile: validator::ValidationProfile,
+    ) -> Vec<validator::ValidationError> {
+        match self.reference.as_ref() {
+            Some(reference) => validator::Validator::new(image)
+                .references(reference)
+                .profile(profile)
+                .validate(),
+            None => validator::Validator::new(image).profile(profile).validate(),
+        }
+    }
+
+    /// Packages the finalized image and returns the references used during encoding.
+    pub fn into_stream_and_reference(mut self) -> (Vec<u8>, Option<reader::Index>) {
+        let reference = self.reference.take();
+        (self.into_stream(), reference)
     }
 }

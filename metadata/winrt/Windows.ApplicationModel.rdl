@@ -14,6 +14,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class AppDisplayInfo {
+            #[default]
             IAppDisplayInfo,
         }
         #[repr(i32)]
@@ -29,9 +30,13 @@ mod Windows {
         #[Windows::Foundation::Metadata::Static(IAppInfoStatics, 655360, "Windows.Foundation.UniversalApiContract")]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class AppInfo {
+            #[default]
             IAppInfo,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
             IAppInfo2,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
             IAppInfo3,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
             IAppInfo4,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 458752)]
@@ -39,7 +44,9 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class AppInstallerInfo {
+            #[default]
             IAppInstallerInfo,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
             IAppInstallerInfo2,
         }
         #[repr(i32)]
@@ -54,8 +61,10 @@ mod Windows {
         #[Windows::Foundation::Metadata::Threading(Both)]
         #[Windows::Foundation::Metadata::WebHostHidden]
         class AppInstance {
+            #[default]
             IAppInstance,
         }
+        #[static_only]
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 65536)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Static(IDesignModeStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -65,6 +74,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 196608)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class EnteredBackgroundEventArgs {
+            #[default]
             IEnteredBackgroundEventArgs,
         }
         #[Windows::Foundation::Metadata::Activatable(IFindRelatedPackagesOptionsFactory, 983040, "Windows.Foundation.UniversalApiContract")]
@@ -72,6 +82,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class FindRelatedPackagesOptions {
+            #[default]
             IFindRelatedPackagesOptions,
         }
         #[Windows::Foundation::Metadata::ApiContract]
@@ -88,8 +99,10 @@ mod Windows {
         #[Windows::Foundation::Metadata::ContractVersion(FullTrustAppContract, 131072)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class FullTrustProcessLaunchResult {
+            #[default]
             IFullTrustProcessLaunchResult,
         }
+        #[static_only]
         #[Windows::Foundation::Metadata::ContractVersion(FullTrustAppContract, 65536)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Static(IFullTrustProcessLauncherStatics, 65536, "Windows.ApplicationModel.FullTrustAppContract")]
@@ -262,18 +275,18 @@ mod Windows {
         #[Windows::Foundation::Metadata::ContractVersion(FullTrustAppContract, 65536)]
         #[Windows::Foundation::Metadata::ExclusiveTo(FullTrustProcessLauncher)]
         interface IFullTrustProcessLauncherStatics {
-            #[Windows::Foundation::Metadata::Overload("LaunchFullTrustProcessForCurrentAppAsync")]
+            #[overload(LaunchFullTrustProcessForCurrentAppAsync)]
             #[Windows::Foundation::Metadata::RemoteAsync]
             fn LaunchFullTrustProcessForCurrentAppAsync(&self) -> super::Foundation::IAsyncAction;
-            #[Windows::Foundation::Metadata::Overload("LaunchFullTrustProcessForCurrentAppWithParametersAsync")]
+            #[overload(LaunchFullTrustProcessForCurrentAppAsync)]
             #[Windows::Foundation::Metadata::RemoteAsync]
-            fn LaunchFullTrustProcessForCurrentAppAsync(&self, parameterGroupId: String) -> super::Foundation::IAsyncAction;
-            #[Windows::Foundation::Metadata::Overload("LaunchFullTrustProcessForAppAsync")]
+            fn LaunchFullTrustProcessForCurrentAppWithParametersAsync(&self, parameterGroupId: String) -> super::Foundation::IAsyncAction;
+            #[overload(LaunchFullTrustProcessForAppAsync)]
             #[Windows::Foundation::Metadata::RemoteAsync]
             fn LaunchFullTrustProcessForAppAsync(&self, fullTrustPackageRelativeAppId: String) -> super::Foundation::IAsyncAction;
-            #[Windows::Foundation::Metadata::Overload("LaunchFullTrustProcessForAppWithParametersAsync")]
+            #[overload(LaunchFullTrustProcessForAppAsync)]
             #[Windows::Foundation::Metadata::RemoteAsync]
-            fn LaunchFullTrustProcessForAppAsync(&self, fullTrustPackageRelativeAppId: String, parameterGroupId: String) -> super::Foundation::IAsyncAction;
+            fn LaunchFullTrustProcessForAppWithParametersAsync(&self, fullTrustPackageRelativeAppId: String, parameterGroupId: String) -> super::Foundation::IAsyncAction;
         }
         #[guid(0x8b8ed72f_b65c_56cf_a1a7_2bf77cbc6ea8)]
         #[Windows::Foundation::Metadata::ContractVersion(FullTrustAppContract, 131072)]
@@ -368,12 +381,12 @@ mod Windows {
             fn GetContentGroupsAsync(&self) -> super::Foundation::IAsyncOperation<super::Foundation::Collections::IVector<PackageContentGroup>>;
             #[Windows::Foundation::Metadata::RemoteAsync]
             fn GetContentGroupAsync(&self, name: String) -> super::Foundation::IAsyncOperation<PackageContentGroup>;
-            #[Windows::Foundation::Metadata::Overload("StageContentGroupsAsync")]
+            #[overload(StageContentGroupsAsync)]
             #[Windows::Foundation::Metadata::RemoteAsync]
             fn StageContentGroupsAsync(&self, names: super::Foundation::Collections::IIterable<String>) -> super::Foundation::IAsyncOperation<super::Foundation::Collections::IVector<PackageContentGroup>>;
-            #[Windows::Foundation::Metadata::Overload("StageContentGroupsWithPriorityAsync")]
+            #[overload(StageContentGroupsAsync)]
             #[Windows::Foundation::Metadata::RemoteAsync]
-            fn StageContentGroupsAsync(&self, names: super::Foundation::Collections::IIterable<String>, moveToHeadOfQueue: bool) -> super::Foundation::IAsyncOperation<super::Foundation::Collections::IVector<PackageContentGroup>>;
+            fn StageContentGroupsWithPriorityAsync(&self, names: super::Foundation::Collections::IIterable<String>, moveToHeadOfQueue: bool) -> super::Foundation::IAsyncOperation<super::Foundation::Collections::IVector<PackageContentGroup>>;
             #[Windows::Foundation::Metadata::RemoteAsync]
             fn SetInUseAsync(&self, inUse: bool) -> super::Foundation::IAsyncOperation<bool>;
         }
@@ -754,11 +767,13 @@ mod Windows {
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 196608)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class LeavingBackgroundEventArgs {
+            #[default]
             ILeavingBackgroundEventArgs,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 458752)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class LimitedAccessFeatureRequestResult {
+            #[default]
             ILimitedAccessFeatureRequestResult,
         }
         #[repr(i32)]
@@ -769,6 +784,7 @@ mod Windows {
             AvailableWithoutToken = 2,
             Unknown = 3,
         }
+        #[static_only]
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 458752)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Static(ILimitedAccessFeaturesStatics, 458752, "Windows.Foundation.UniversalApiContract")]
@@ -780,38 +796,55 @@ mod Windows {
         #[Windows::Foundation::Metadata::Static(IPackageStatics, 65536, "Windows.Foundation.UniversalApiContract")]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class Package {
+            #[default]
             IPackage,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
             IPackage2,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
             IPackage3,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
             IPackageWithMetadata,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
             IPackage4,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
             IPackage5,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
             IPackage6,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
             IPackage7,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
             IPackage8,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 983040)]
             IPackage9,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 196608)]
         #[Windows::Foundation::Metadata::Static(IPackageCatalogStatics, 196608, "Windows.Foundation.UniversalApiContract")]
         #[Windows::Foundation::Metadata::Static(IPackageCatalogStatics2, 983040, "Windows.Foundation.UniversalApiContract")]
         class PackageCatalog {
+            #[default]
             IPackageCatalog,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
             IPackageCatalog2,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
             IPackageCatalog3,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
             IPackageCatalog4,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 262144)]
         class PackageCatalogAddOptionalPackageResult {
+            #[default]
             IPackageCatalogAddOptionalPackageResult,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 393216)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageCatalogAddResourcePackageResult {
+            #[default]
             IPackageCatalogAddResourcePackageResult,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 327680)]
         class PackageCatalogRemoveOptionalPackagesResult {
+            #[default]
             IPackageCatalogRemoveOptionalPackagesResult,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 393216)]
@@ -819,6 +852,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageCatalogRemoveResourcePackagesResult {
+            #[default]
             IPackageCatalogRemoveResourcePackagesResult,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 262144)]
@@ -826,6 +860,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::Static(IPackageContentGroupStatics, 262144, "Windows.Foundation.UniversalApiContract")]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageContentGroup {
+            #[default]
             IPackageContentGroup,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 262144)]
@@ -833,6 +868,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageContentGroupStagingEventArgs {
+            #[default]
             IPackageContentGroupStagingEventArgs,
         }
         #[repr(i32)]
@@ -847,7 +883,9 @@ mod Windows {
         #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class PackageId {
+            #[default]
             IPackageId,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
             IPackageIdWithMetadata,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 393216)]
@@ -859,6 +897,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageInstallingEventArgs {
+            #[default]
             IPackageInstallingEventArgs,
         }
         #[repr(i32)]
@@ -882,13 +921,16 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageStagingEventArgs {
+            #[default]
             IPackageStagingEventArgs,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 65536)]
         #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class PackageStatus {
+            #[default]
             IPackageStatus,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
             IPackageStatus2,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 196608)]
@@ -896,6 +938,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageStatusChangedEventArgs {
+            #[default]
             IPackageStatusChangedEventArgs,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 196608)]
@@ -903,6 +946,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageUninstallingEventArgs {
+            #[default]
             IPackageUninstallingEventArgs,
         }
         #[repr(i32)]
@@ -918,6 +962,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageUpdateAvailabilityResult {
+            #[default]
             IPackageUpdateAvailabilityResult,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 196608)]
@@ -925,6 +970,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class PackageUpdatingEventArgs {
+            #[default]
             IPackageUpdatingEventArgs,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 65536)]
@@ -939,6 +985,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::Static(IStartupTaskStatics, 65536, "Windows.ApplicationModel.StartupTaskContract")]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class StartupTask {
+            #[default]
             IStartupTask,
         }
         #[Windows::Foundation::Metadata::ApiContract]
@@ -950,23 +997,28 @@ mod Windows {
             Disabled = 0,
             DisabledByUser = 1,
             Enabled = 2,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.StartupTaskContract", 131072)]
             DisabledByPolicy = 3,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.StartupTaskContract", 196608)]
             EnabledByPolicy = 4,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 65536)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class SuspendingDeferral {
+            #[default]
             ISuspendingDeferral,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 65536)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class SuspendingEventArgs {
+            #[default]
             ISuspendingEventArgs,
         }
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 65536)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Muse(Version = 100859904)]
         class SuspendingOperation {
+            #[default]
             ISuspendingOperation,
         }
     }

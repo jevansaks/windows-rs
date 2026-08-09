@@ -129,8 +129,9 @@ impl Writer {
         for file_name in &expand_input_files(&self.input, "winmd")? {
             let source = file_name.to_string_lossy();
             files.push(
-                metadata::reader::File::read(file_name)
-                    .ok_or_else(|| Error::new("invalid input", &source, 0, 0))?,
+                metadata::reader::File::try_read(file_name).map_err(|error| {
+                    Error::new(&metadata_error("invalid input", &error), &source, 0, 0)
+                })?,
             );
         }
 
@@ -144,12 +145,15 @@ impl Writer {
 
         for bytes in &self.input_bytes {
             files.push(
-                metadata::reader::File::new(bytes.clone())
-                    .ok_or_else(|| Error::new("invalid input", "<memory>", 0, 0))?,
+                metadata::reader::File::try_new(bytes.clone()).map_err(|error| {
+                    Error::new(&metadata_error("invalid input", &error), "<memory>", 0, 0)
+                })?,
             );
         }
 
         let index = metadata::reader::Index::new(files);
+        reject_unrepresentable_attribute_parents(&index)?;
+        reject_unrepresentable_method_impls(&index)?;
         let rules = resolve_filter(&self.filter, &index);
 
         if let Some(map) = &self.partition {
@@ -194,7 +198,7 @@ impl Writer {
                 path.push(&self.output);
                 path.push(format!("{stem}.rdl"));
 
-                write_to_file(path, formatter::format(&output))?;
+                write_to_file(path, formatter::format(&output)?)?;
             }
 
             return Ok(());
@@ -239,7 +243,7 @@ impl Writer {
                 path.push(&self.output);
                 path.push(format!("{namespace}.rdl"));
 
-                write_to_file(path, formatter::format(&output))?;
+                write_to_file(path, formatter::format(&output)?)?;
             }
         } else {
             let mut layout = Layout::new();
@@ -256,10 +260,185 @@ impl Writer {
             }
 
             let output = layout.to_string();
-            write_to_file(&self.output, formatter::format(&output))?;
+            write_to_file(&self.output, formatter::format(&output)?)?;
         }
 
         Ok(())
+    }
+}
+
+fn reject_unrepresentable_method_impls(index: &metadata::reader::Index) -> Result<(), Error> {
+    for ty in index.types() {
+        for method_impl in ty.method_impls() {
+            if !projected_method_impl(ty, method_impl) {
+                return Err(writer_err!(
+                    "type `{}.{}` has MethodImpl mapping `{}` -> `{}` with no RDL projection",
+                    ty.namespace(),
+                    ty.name(),
+                    method_target_name(method_impl.body()),
+                    method_target_name(method_impl.declaration()),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn projected_method_impl(
+    class: metadata::reader::TypeDef<'_>,
+    method_impl: metadata::reader::MethodImpl<'_>,
+) -> bool {
+    let metadata::reader::MethodDefOrRef::MethodDef(body) = method_impl.body() else {
+        return false;
+    };
+    let metadata::reader::MemberRefParent::TypeDef(owner) = body.parent() else {
+        return false;
+    };
+    if owner != class {
+        return false;
+    }
+    let metadata::reader::MethodDefOrRef::MemberRef(declaration) = method_impl.declaration() else {
+        return false;
+    };
+    if body.name() != declaration.name() {
+        return false;
+    }
+
+    let generics: Vec<_> = class
+        .generic_params()
+        .map(|param| metadata::Type::Generic(param.name().to_string(), param.sequence()))
+        .collect();
+    let Some(interface) = member_ref_parent_type(declaration.parent(), &generics) else {
+        return false;
+    };
+    let projected = class.interface_impls().any(|implementation| {
+        same_projected_type(&implementation.interface(&generics), &interface)
+    });
+    if !projected {
+        return false;
+    }
+
+    let mut body_signature = body.signature(&generics);
+    body_signature.flags |= metadata::MethodCallAttributes::HASTHIS;
+    body_signature == declaration.instantiated_signature(&generics)
+}
+
+fn same_projected_type(left: &metadata::Type, right: &metadata::Type) -> bool {
+    let ((metadata::Type::ClassName(left), metadata::Type::ClassName(right))
+    | (metadata::Type::ValueName(left), metadata::Type::ValueName(right))) = (left, right)
+    else {
+        return left == right;
+    };
+    left.namespace == right.namespace
+        && left
+            .name
+            .split_once('`')
+            .map_or(left.name.as_str(), |(name, _)| name)
+            == right
+                .name
+                .split_once('`')
+                .map_or(right.name.as_str(), |(name, _)| name)
+        && left.generics.len() == right.generics.len()
+        && left
+            .generics
+            .iter()
+            .zip(&right.generics)
+            .all(|(left, right)| same_projected_type(left, right))
+}
+
+fn member_ref_parent_type(
+    parent: metadata::reader::MemberRefParent<'_>,
+    generics: &[metadata::Type],
+) -> Option<metadata::Type> {
+    match parent {
+        metadata::reader::MemberRefParent::TypeDef(parent) => Some(metadata::Type::ClassName(
+            metadata::TypeName::named(parent.namespace(), parent.name()),
+        )),
+        metadata::reader::MemberRefParent::TypeRef(parent) => Some(metadata::Type::ClassName(
+            metadata::TypeName::named(parent.namespace(), parent.name()),
+        )),
+        metadata::reader::MemberRefParent::TypeSpec(parent) => Some(parent.ty(generics)),
+        metadata::reader::MemberRefParent::ModuleRef(_)
+        | metadata::reader::MemberRefParent::MethodDef(_) => None,
+    }
+}
+
+fn method_target_name(target: metadata::reader::MethodDefOrRef<'_>) -> String {
+    match target {
+        metadata::reader::MethodDefOrRef::MethodDef(method) => {
+            let parent = method.parent();
+            format!("{}.{}.{}", parent.namespace(), parent.name(), method.name())
+        }
+        metadata::reader::MethodDefOrRef::MemberRef(method) => {
+            let parent = match method.parent() {
+                metadata::reader::MemberRefParent::TypeDef(parent) => {
+                    format!("{}.{}", parent.namespace(), parent.name())
+                }
+                metadata::reader::MemberRefParent::TypeRef(parent) => {
+                    format!("{}.{}", parent.namespace(), parent.name())
+                }
+                metadata::reader::MemberRefParent::TypeSpec(parent) => {
+                    format!("{:?}", parent.ty(&[]))
+                }
+                metadata::reader::MemberRefParent::ModuleRef(parent) => {
+                    format!("module {}", parent.name())
+                }
+                metadata::reader::MemberRefParent::MethodDef(parent) => {
+                    format!("method {}", parent.name())
+                }
+            };
+            format!("{parent}.{}", method.name())
+        }
+    }
+}
+
+fn reject_unrepresentable_attribute_parents(index: &metadata::reader::Index) -> Result<(), Error> {
+    for attribute in index.attributes() {
+        let attribute_name = format!("{}.{}", attribute.namespace(), attribute.name());
+        match attribute.parent() {
+            metadata::reader::HasAttribute::TypeRef(parent) => {
+                return Err(writer_err!(
+                    "custom attribute `{attribute_name}` on type reference `{}.{}` has no RDL spelling",
+                    parent.namespace(),
+                    parent.name()
+                ));
+            }
+            metadata::reader::HasAttribute::MemberRef(parent) => {
+                return Err(writer_err!(
+                    "custom attribute `{attribute_name}` on member reference `{}` has no RDL spelling",
+                    member_ref_name(parent),
+                ));
+            }
+            metadata::reader::HasAttribute::TypeSpec(_) => {
+                return Err(writer_err!(
+                    "custom attribute `{attribute_name}` on a type specification has no RDL spelling"
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn member_ref_name(member: metadata::reader::MemberRef) -> String {
+    match member.parent() {
+        metadata::reader::MemberRefParent::TypeDef(parent) => {
+            format!("{}.{}", parent.name(), member.name())
+        }
+        metadata::reader::MemberRefParent::TypeRef(parent) => {
+            format!("{}.{}", parent.name(), member.name())
+        }
+        metadata::reader::MemberRefParent::ModuleRef(parent) => {
+            format!("module {}::{}", parent.name(), member.name())
+        }
+        metadata::reader::MemberRefParent::MethodDef(parent) => {
+            format!("method {}::{}", parent.name(), member.name())
+        }
+        metadata::reader::MemberRefParent::TypeSpec(_) => {
+            format!("type specification::{}", member.name())
+        }
     }
 }
 
@@ -385,9 +564,25 @@ fn write_type_def_items(
                 .fields()
                 .next()
                 .ok_or_else(|| writer_err!("typedef `{}` has no field", item.name()))?;
+            if field.attributes().next().is_some() {
+                return Err(writer_err!(
+                    "typedef `{}` has unrepresentable attributes on its value field",
+                    item.name()
+                ));
+            }
             let ty = write_type(namespace, &field.ty());
             let arch_attr = write_arch_attr(item.arches());
-            let tokens = quote! { #arch_attr type #name = #ty; };
+            let custom_attrs = write_custom_attributes_except(
+                item.attributes(),
+                namespace,
+                item.index(),
+                &["SupportedArchitectureAttribute"],
+            )?;
+            let tokens = quote! {
+                #arch_attr
+                #(#custom_attrs)*
+                type #name = #ty;
+            };
             return Ok(vec![(item.name().to_string(), tokens)]);
         }
         write_struct_items(item)
@@ -448,14 +643,21 @@ fn write_const_value(
     })
 }
 
-fn write_const_guid(
-    _namespace: &str,
-    item: &metadata::reader::Field,
-) -> Result<TokenStream, Error> {
+fn write_const_guid(namespace: &str, item: &metadata::reader::Field) -> Result<TokenStream, Error> {
     let name = write_ident(item.name());
     let arch_attr = write_arch_attr(item.arches());
     let literal = guid_attribute_literal(item)?;
-    Ok(quote! { #arch_attr const #name: GUID = #literal; })
+    let custom_attrs = write_custom_attributes_except(
+        item.attributes(),
+        namespace,
+        item.index(),
+        &["GuidAttribute", "SupportedArchitectureAttribute"],
+    )?;
+    Ok(quote! {
+        #arch_attr
+        #(#custom_attrs)*
+        const #name: GUID = #literal;
+    })
 }
 
 /// Recombines a property-key constant's `fmtid` and `pid` into RDL form.
@@ -471,7 +673,18 @@ fn write_const_property_key(
         .constant()
         .ok_or_else(|| writer_err!("property key constant `{}` has no `pid` value", item.name()))?;
     let pid = write_value(namespace, &constant.value());
-    Ok(quote! { #arch_attr #[guid(#guid)] const #name: #ty = #pid; })
+    let custom_attrs = write_custom_attributes_except(
+        item.attributes(),
+        namespace,
+        item.index(),
+        &["GuidAttribute", "SupportedArchitectureAttribute"],
+    )?;
+    Ok(quote! {
+        #arch_attr
+        #(#custom_attrs)*
+        #[guid(#guid)]
+        const #name: #ty = #pid;
+    })
 }
 
 /// Folds the 11-argument `GuidAttribute` into RDL's u128 GUID literal.
@@ -618,6 +831,16 @@ fn write_custom_attributes_except<'a>(
     index: &windows_metadata::reader::Index,
     exclude: &[&str],
 ) -> Result<Vec<TokenStream>, Error> {
+    write_custom_attributes_wrapped(attributes, item_namespace, index, exclude, None)
+}
+
+fn write_custom_attributes_wrapped<'a>(
+    attributes: impl Iterator<Item = windows_metadata::reader::Attribute<'a>>,
+    item_namespace: &str,
+    index: &windows_metadata::reader::Index,
+    exclude: &[&str],
+    wrapper: Option<&TokenStream>,
+) -> Result<Vec<TokenStream>, Error> {
     let mut rendered = attributes
         .filter(|attr| {
             !(namespace_starts_with(attr.namespace(), "System")
@@ -679,7 +902,13 @@ fn write_custom_attributes_except<'a>(
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
 
-            Ok(if args.is_empty() {
+            Ok(if let Some(wrapper) = wrapper {
+                if args.is_empty() {
+                    quote! { #[#wrapper(#name_ts)] }
+                } else {
+                    quote! { #[#wrapper(#name_ts(#(#args),*))] }
+                }
+            } else if args.is_empty() {
                 quote! { #[#name_ts] }
             } else {
                 quote! { #[#name_ts(#(#args),*)] }
@@ -699,29 +928,27 @@ fn write_enum_value(
     inner: &metadata::Value,
     index: &metadata::reader::Index,
 ) -> Result<TokenStream, Error> {
-    let inner_i32 = match inner {
-        metadata::Value::I32(n) => *n,
-        _ => return Ok(write_value(namespace, inner)),
+    let Some(inner_bits) = inner.integer_bits() else {
+        return Ok(write_value(namespace, inner));
     };
 
     let mut found_in_index = false;
     for typedef in index.get(&tn.namespace, &tn.name) {
         found_in_index = true;
         if typedef.category() == metadata::reader::TypeCategory::Enum {
+            let Some(width) = typedef.underlying_type().and_then(integer_width) else {
+                continue;
+            };
+            let target = mask_integer(inner_bits, width);
+
             for field in typedef.fields() {
                 if field.flags().contains(metadata::FieldAttributes::Literal)
                     && let Some(constant) = field.constant()
+                    && let Some(field_value) = constant.value().integer_bits()
+                    && mask_integer(field_value, width) == target
                 {
-                    let matches = match constant.value() {
-                        metadata::Value::I32(v) => v == inner_i32,
-                        // Attribute blobs carry enum values as signed integers.
-                        metadata::Value::U32(v) => v == inner_i32 as u32,
-                        _ => false,
-                    };
-                    if matches {
-                        let variant = write_ident(field.name());
-                        return Ok(quote! { #variant });
-                    }
+                    let variant = write_ident(field.name());
+                    return Ok(quote! { #variant });
                 }
             }
 
@@ -730,7 +957,7 @@ fn write_enum_value(
             });
 
             if has_flags
-                && let Some(flags_ts) = write_flags_combination(namespace, &typedef, inner_i32)
+                && let Some(flags_ts) = write_flags_combination(namespace, &typedef, target, width)
             {
                 return Ok(flags_ts);
             }
@@ -751,20 +978,17 @@ fn write_enum_value(
 fn write_flags_combination(
     _namespace: &str,
     typedef: &metadata::reader::TypeDef,
-    value: i32,
+    value: u64,
+    width: u32,
 ) -> Option<TokenStream> {
-    let mut fields: Vec<(String, i32)> = typedef
+    let mut fields: Vec<(String, u64)> = typedef
         .fields()
         .filter_map(|field| {
             if !field.flags().contains(metadata::FieldAttributes::Literal) {
                 return None;
             }
             let constant = field.constant()?;
-            let v = match constant.value() {
-                metadata::Value::I32(v) => v,
-                metadata::Value::U32(v) => v as i32,
-                _ => return None,
-            };
+            let v = mask_integer(constant.value().integer_bits()?, width);
             if v == 0 {
                 None
             } else {
@@ -774,7 +998,7 @@ fn write_flags_combination(
         .collect();
 
     // Prefer composite flags such as `All = 0xFFFFFFFF` over individual bits.
-    fields.sort_by_key(|b| std::cmp::Reverse(b.1 as u32));
+    fields.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     let mut remaining = value;
     let mut components: Vec<String> = Vec::new();
@@ -801,6 +1025,24 @@ fn write_flags_combination(
     });
 
     Some(result)
+}
+
+fn integer_width(ty: metadata::Type) -> Option<u32> {
+    match ty {
+        metadata::Type::I8 | metadata::Type::U8 => Some(8),
+        metadata::Type::I16 | metadata::Type::U16 => Some(16),
+        metadata::Type::I32 | metadata::Type::U32 => Some(32),
+        metadata::Type::I64 | metadata::Type::U64 => Some(64),
+        _ => None,
+    }
+}
+
+fn mask_integer(value: u64, width: u32) -> u64 {
+    if width == 64 {
+        value
+    } else {
+        value & ((1 << width) - 1)
+    }
 }
 
 /// Emits `#[arch(...)]` for a non-zero X86/X64/Arm64 bitmask.
@@ -965,7 +1207,28 @@ fn read_unmanaged_abi(item: &metadata::reader::TypeDef) -> Option<i32> {
         })
 }
 
-fn write_generic_params(item: &metadata::reader::TypeDef) -> (Vec<metadata::Type>, TokenStream) {
+fn write_generic_params(
+    item: &metadata::reader::TypeDef,
+) -> Result<(Vec<metadata::Type>, TokenStream), Error> {
+    if let Some(param) = item.generic_params().find(|param| {
+        param.flags() != metadata::GenericParamAttributes::None
+            || param.attributes().next().is_some()
+    }) {
+        if param.attributes().next().is_some() {
+            return Err(writer_err!(
+                "generic parameter `{}` on `{}` has unrepresentable custom attributes",
+                param.name(),
+                item.name()
+            ));
+        }
+        return Err(writer_err!(
+            "generic parameter `{}` on `{}` has unsupported flags {:?}",
+            param.name(),
+            item.name(),
+            param.flags()
+        ));
+    }
+
     let types: Vec<_> = item
         .generic_params()
         .map(|param| metadata::Type::Generic(param.name().to_string(), param.sequence()))
@@ -976,5 +1239,35 @@ fn write_generic_params(item: &metadata::reader::TypeDef) -> (Vec<metadata::Type
         let names = item.generic_params().map(|param| write_ident(param.name()));
         quote! { <#(#names),*> }
     };
-    (types, tokens)
+    Ok((types, tokens))
+}
+
+fn reject_method_generics(item: &metadata::reader::MethodDef) -> Result<(), Error> {
+    if let Some(param) = item.generic_params().next() {
+        Err(writer_err!(
+            "method `{}` has unrepresentable generic parameter `{}`",
+            item.name(),
+            param.name()
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn reject_variadic_method(
+    item: &metadata::reader::MethodDef,
+    signature: &metadata::Signature,
+    kind: &str,
+) -> Result<(), Error> {
+    if signature
+        .flags
+        .contains(metadata::MethodCallAttributes::VARARG)
+    {
+        Err(writer_err!(
+            "{kind} method `{}` has an unrepresentable variadic signature",
+            item.name()
+        ))
+    } else {
+        Ok(())
+    }
 }

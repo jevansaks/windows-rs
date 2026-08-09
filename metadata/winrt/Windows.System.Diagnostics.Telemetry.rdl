@@ -7,10 +7,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(PlatformTelemetryClient)]
                 interface IPlatformTelemetryClientStatics {
-                    #[Windows::Foundation::Metadata::Overload("Register")]
+                    #[overload(Register)]
                     fn Register(&self, id: String) -> PlatformTelemetryRegistrationResult;
-                    #[Windows::Foundation::Metadata::Overload("RegisterWithSettings")]
-                    fn Register(&self, id: String, settings: PlatformTelemetryRegistrationSettings) -> PlatformTelemetryRegistrationResult;
+                    #[overload(Register)]
+                    fn RegisterWithSettings(&self, id: String, settings: PlatformTelemetryRegistrationSettings) -> PlatformTelemetryRegistrationResult;
                 }
                 #[guid(0x4d8518ab_2292_49bd_a15a_3d71d2145112)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
@@ -26,6 +26,7 @@ mod Windows {
                     StorageSize: u32;
                     UploadQuotaSize: u32;
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772163)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -37,6 +38,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PlatformTelemetryRegistrationResult {
+                    #[default]
                     IPlatformTelemetryRegistrationResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Foundation.UniversalApiContract")]
@@ -45,6 +47,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PlatformTelemetryRegistrationSettings {
+                    #[default]
                     IPlatformTelemetryRegistrationSettings,
                 }
                 #[repr(i32)]

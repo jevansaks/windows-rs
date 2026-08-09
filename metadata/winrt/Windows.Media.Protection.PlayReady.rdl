@@ -8,36 +8,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(NDClient)]
                 interface INDClient {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn add_RegistrationCompleted(&self, handler: super::super::super::Foundation::TypedEventHandler<NDClient, INDRegistrationCompletedEventArgs>) -> super::super::super::Foundation::EventRegistrationToken;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn remove_RegistrationCompleted(&self, token: super::super::super::Foundation::EventRegistrationToken);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn add_ProximityDetectionCompleted(&self, handler: super::super::super::Foundation::TypedEventHandler<NDClient, INDProximityDetectionCompletedEventArgs>) -> super::super::super::Foundation::EventRegistrationToken;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn remove_ProximityDetectionCompleted(&self, token: super::super::super::Foundation::EventRegistrationToken);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn add_LicenseFetchCompleted(&self, handler: super::super::super::Foundation::TypedEventHandler<NDClient, INDLicenseFetchCompletedEventArgs>) -> super::super::super::Foundation::EventRegistrationToken;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn remove_LicenseFetchCompleted(&self, token: super::super::super::Foundation::EventRegistrationToken);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn add_ReRegistrationNeeded(&self, handler: super::super::super::Foundation::TypedEventHandler<NDClient, Object>) -> super::super::super::Foundation::EventRegistrationToken;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn remove_ReRegistrationNeeded(&self, token: super::super::super::Foundation::EventRegistrationToken);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn add_ClosedCaptionDataReceived(&self, handler: super::super::super::Foundation::TypedEventHandler<NDClient, INDClosedCaptionDataReceivedEventArgs>) -> super::super::super::Foundation::EventRegistrationToken;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn remove_ClosedCaptionDataReceived(&self, token: super::super::super::Foundation::EventRegistrationToken);
+                    #[add(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[remove(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    event RegistrationCompleted: super::super::super::Foundation::TypedEventHandler<NDClient, INDRegistrationCompletedEventArgs>;
+                    #[add(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[remove(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    event ProximityDetectionCompleted: super::super::super::Foundation::TypedEventHandler<NDClient, INDProximityDetectionCompletedEventArgs>;
+                    #[add(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[remove(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    event LicenseFetchCompleted: super::super::super::Foundation::TypedEventHandler<NDClient, INDLicenseFetchCompletedEventArgs>;
+                    #[add(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[remove(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    event ReRegistrationNeeded: super::super::super::Foundation::TypedEventHandler<NDClient, Object>;
+                    #[add(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[remove(Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    event ClosedCaptionDataReceived: super::super::super::Foundation::TypedEventHandler<NDClient, INDClosedCaptionDataReceivedEventArgs>;
                     #[Windows::Foundation::Metadata::Deprecated("INDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn StartAsync(&self, contentUrl: super::super::super::Foundation::Uri, startAsyncOptions: u32, registrationCustomData: INDCustomData, licenseFetchDescriptor: INDLicenseFetchDescriptor) -> super::super::super::Foundation::IAsyncOperation<INDStartResult>;
@@ -62,26 +47,26 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDClosedCaptionDataReceivedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDClosedCaptionDataReceivedEventArgs {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClosedCaptionDataReceivedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ClosedCaptionDataFormat(&self) -> NDClosedCaptionFormat;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClosedCaptionDataReceivedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_PresentationTimestamp(&self) -> i64;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDClosedCaptionDataReceivedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ClosedCaptionData(&self) -> [u8];
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDClosedCaptionDataReceivedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ClosedCaptionDataFormat: NDClosedCaptionFormat;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDClosedCaptionDataReceivedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    PresentationTimestamp: i64;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDClosedCaptionDataReceivedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ClosedCaptionData: [u8];
                 }
                 #[guid(0xf5cb0fdc_2d09_4f19_b5e1_76a0b3ee9267)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDCustomData is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDCustomData {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDCustomData is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_CustomDataTypeID(&self) -> [u8];
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDCustomData is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_CustomData(&self) -> [u8];
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDCustomData is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    CustomDataTypeID: [u8];
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDCustomData is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    CustomData: [u8];
                 }
                 #[guid(0xd65405ab_3424_4833_8c9a_af5fdeb22872)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -105,18 +90,18 @@ mod Windows {
                     fn Close(&self);
                     #[Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                     fn Seek(&self, startPosition: super::super::super::Foundation::TimeSpan);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_CanSeek(&self) -> bool;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_BufferFullMinThresholdInSamples(&self) -> u32;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_BufferFullMaxThresholdInSamples(&self) -> u32;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_Notifier(&self) -> NDDownloadEngineNotifier;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    CanSeek: bool;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    BufferFullMinThresholdInSamples: u32;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    BufferFullMaxThresholdInSamples: u32;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDDownloadEngine is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    Notifier: NDDownloadEngineNotifier;
                 }
                 #[guid(0xd720b4d4_f4b8_4530_a809_9193a571e7fc)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -139,26 +124,24 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDLicenseFetchCompletedEventArgs {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ResponseCustomData(&self) -> INDCustomData;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDLicenseFetchCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ResponseCustomData: INDCustomData;
                 }
                 #[guid(0x5498d33a_e686_4935_a567_7ca77ad20fa4)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDLicenseFetchDescriptor {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ContentIDType(&self) -> NDContentIDType;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ContentID(&self) -> [u8];
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_LicenseFetchChallengeCustomData(&self) -> INDCustomData;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn put_LicenseFetchChallengeCustomData(&self, licenseFetchChallengeCustomData: INDCustomData);
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ContentIDType: NDContentIDType;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ContentID: [u8];
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("INDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[set_name(licenseFetchChallengeCustomData)]
+                    LicenseFetchChallengeCustomData: INDCustomData;
                 }
                 #[guid(0xd0031202_cfac_4f00_ae6a_97af80b848f2)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -172,9 +155,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDLicenseFetchResult {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDLicenseFetchResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ResponseCustomData(&self) -> INDCustomData;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDLicenseFetchResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ResponseCustomData: INDCustomData;
                 }
                 #[guid(0xd42df95d_a75b_47bf_8249_bc83820da38a)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -197,42 +180,40 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDProximityDetectionCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDProximityDetectionCompletedEventArgs {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDProximityDetectionCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ProximityDetectionRetryCount(&self) -> u32;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDProximityDetectionCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ProximityDetectionRetryCount: u32;
                 }
                 #[guid(0x9e39b64d_ab5b_4905_acdc_787a77c6374d)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDRegistrationCompletedEventArgs {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ResponseCustomData(&self) -> INDCustomData;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_TransmitterProperties(&self) -> INDTransmitterProperties;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_TransmitterCertificateAccepted(&self) -> bool;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn put_TransmitterCertificateAccepted(&self, accept: bool);
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ResponseCustomData: INDCustomData;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    TransmitterProperties: INDTransmitterProperties;
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("INDRegistrationCompletedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[set_name(accept)]
+                    TransmitterCertificateAccepted: bool;
                 }
                 #[guid(0xe3685517_a584_479d_90b7_d689c7bf7c80)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDSendResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDSendResult {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDSendResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_Response(&self) -> [u8];
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDSendResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    Response: [u8];
                 }
                 #[guid(0x79f6e96e_f50f_4015_8ba4_c2bc344ebd4e)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDStartResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDStartResult {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDStartResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_MediaStreamSource(&self) -> super::super::Core::MediaStreamSource;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDStartResult is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    MediaStreamSource: super::super::Core::MediaStreamSource;
                 }
                 #[guid(0xd8f0bef8_91d2_4d47_a3f9_eaff4edb729f)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -253,9 +234,9 @@ mod Windows {
                     fn BeginOfStream(&self);
                     #[Windows::Foundation::Metadata::Deprecated("INDStreamParser is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                     fn EndOfStream(&self);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDStreamParser is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_Notifier(&self) -> NDStreamParserNotifier;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDStreamParser is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    Notifier: NDStreamParserNotifier;
                 }
                 #[guid(0xc167acd0_2ce6_426c_ace5_5e9275fea715)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -282,39 +263,39 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 interface INDTransmitterProperties {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_CertificateType(&self) -> NDCertificateType;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_PlatformIdentifier(&self) -> NDCertificatePlatformID;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_SupportedFeatures(&self) -> [NDCertificateFeature];
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_SecurityLevel(&self) -> u32;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_SecurityVersion(&self) -> u32;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ExpirationDate(&self) -> super::super::super::Foundation::DateTime;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ClientID(&self) -> [u8];
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ModelDigest(&self) -> [u8];
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ModelManufacturerName(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ModelName(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_ModelNumber(&self) -> String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    CertificateType: NDCertificateType;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    PlatformIdentifier: NDCertificatePlatformID;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    SupportedFeatures: [NDCertificateFeature];
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    SecurityLevel: u32;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    SecurityVersion: u32;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ExpirationDate: super::super::super::Foundation::DateTime;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ClientID: [u8];
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ModelDigest: [u8];
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ModelManufacturerName: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ModelName: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("INDTransmitterProperties is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    ModelNumber: String;
                 }
                 #[guid(0x9a438a6a_7f4c_452e_88bd_0148c6387a2c)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -497,6 +478,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(PlayReadyMeteringReportServiceRequest)]
                 interface IPlayReadyMeteringReportServiceRequest: IPlayReadyServiceRequest + super::IMediaProtectionServiceRequest {
+                    #[set_name(meteringCertBytes)]
                     MeteringCertificate: [u8];
                 }
                 #[guid(0x543d66ac_faf0_4560_84a5_0e4acec939e4)]
@@ -659,6 +641,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("NDClient is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class NDClient {
+                    #[default]
                     INDClient,
                 }
                 #[repr(i32)]
@@ -681,18 +664,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("NDCustomData is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class NDCustomData {
+                    #[default]
                     INDCustomData,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("NDDownloadEngineNotifier is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class NDDownloadEngineNotifier {
+                    #[default]
                     INDDownloadEngineNotifier,
                 }
                 #[Windows::Foundation::Metadata::Activatable(INDLicenseFetchDescriptorFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("NDLicenseFetchDescriptor is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class NDLicenseFetchDescriptor {
+                    #[default]
                     INDLicenseFetchDescriptor,
                 }
                 #[repr(i32)]
@@ -721,27 +707,33 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("NDStorageFileHelper is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class NDStorageFileHelper {
+                    #[default]
                     INDStorageFileHelper,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("NDStreamParserNotifier is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class NDStreamParserNotifier {
+                    #[default]
                     INDStreamParserNotifier,
                 }
                 #[Windows::Foundation::Metadata::Activatable(INDTCPMessengerFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("NDTCPMessenger is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class NDTCPMessenger {
+                    #[default]
                     INDMessenger,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IPlayReadyContentHeaderFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Activatable(IPlayReadyContentHeaderFactory2, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyContentHeader {
+                    #[default]
                     IPlayReadyContentHeader,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IPlayReadyContentHeader2,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Static(IPlayReadyContentResolver, 65536, "Windows.Foundation.UniversalApiContract")]
                 class PlayReadyContentResolver {}
@@ -753,20 +745,24 @@ mod Windows {
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyDomain {
+                    #[default]
                     IPlayReadyDomain,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IPlayReadyDomainIterableFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyDomainIterable {
+                    #[default]
                     super::super::super::Foundation::Collections::IIterable<IPlayReadyDomain>,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyDomainIterator {
+                    #[default]
                     super::super::super::Foundation::Collections::IIterator<IPlayReadyDomain>,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyDomainJoinServiceRequest {
+                    #[default]
                     IPlayReadyDomainJoinServiceRequest,
                     IPlayReadyServiceRequest,
                     super::IMediaProtectionServiceRequest,
@@ -774,6 +770,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyDomainLeaveServiceRequest {
+                    #[default]
                     IPlayReadyDomainLeaveServiceRequest,
                     IPlayReadyServiceRequest,
                     super::IMediaProtectionServiceRequest,
@@ -784,7 +781,9 @@ mod Windows {
                     Unprotected = 0,
                     Aes128Ctr = 1,
                     Cocktail = 4,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     Aes128Cbc = 5,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     Unspecified = 65535,
                     Uninitialized = 2147483647,
                 }
@@ -793,6 +792,7 @@ mod Windows {
                 enum PlayReadyHardwareDRMFeatures {
                     HardwareDRM = 1,
                     HEVC = 2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     Aes128Cbc = 3,
                 }
                 #[repr(i32)]
@@ -804,51 +804,64 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyITADataGenerator {
+                    #[default]
                     IPlayReadyITADataGenerator,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyIndividualizationServiceRequest {
+                    #[default]
                     IPlayReadyIndividualizationServiceRequest,
                     IPlayReadyServiceRequest,
                     super::IMediaProtectionServiceRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyLicense {
+                    #[default]
                     IPlayReadyLicense,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IPlayReadyLicense2,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyLicenseAcquisitionServiceRequest {
+                    #[default]
                     IPlayReadyLicenseAcquisitionServiceRequest,
                     IPlayReadyServiceRequest,
                     super::IMediaProtectionServiceRequest,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     IPlayReadyLicenseAcquisitionServiceRequest2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IPlayReadyLicenseAcquisitionServiceRequest3,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Activatable(IPlayReadyLicenseIterableFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyLicenseIterable {
+                    #[default]
                     super::super::super::Foundation::Collections::IIterable<IPlayReadyLicense>,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyLicenseIterator {
+                    #[default]
                     super::super::super::Foundation::Collections::IIterator<IPlayReadyLicense>,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Static(IPlayReadyLicenseManagement, 65536, "Windows.Foundation.UniversalApiContract")]
                 class PlayReadyLicenseManagement {}
                 #[Windows::Foundation::Metadata::Activatable(IPlayReadyLicenseSessionFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyLicenseSession {
+                    #[default]
                     IPlayReadyLicenseSession,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IPlayReadyLicenseSession2,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyMeteringReportServiceRequest {
+                    #[default]
                     IPlayReadyMeteringReportServiceRequest,
                     IPlayReadyServiceRequest,
                     super::IMediaProtectionServiceRequest,
@@ -856,6 +869,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadyRevocationServiceRequest {
+                    #[default]
                     IPlayReadyRevocationServiceRequest,
                     IPlayReadyServiceRequest,
                     super::IMediaProtectionServiceRequest,
@@ -863,23 +877,28 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Activatable(IPlayReadySecureStopIterableFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadySecureStopIterable {
+                    #[default]
                     super::super::super::Foundation::Collections::IIterable<IPlayReadySecureStopServiceRequest>,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadySecureStopIterator {
+                    #[default]
                     super::super::super::Foundation::Collections::IIterator<IPlayReadySecureStopServiceRequest>,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IPlayReadySecureStopServiceRequestFactory, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadySecureStopServiceRequest {
+                    #[default]
                     IPlayReadySecureStopServiceRequest,
                     IPlayReadyServiceRequest,
                     super::IMediaProtectionServiceRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PlayReadySoapMessage {
+                    #[default]
                     IPlayReadySoapMessage,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Static(IPlayReadyStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Static(IPlayReadyStatics2, 65536, "Windows.Foundation.UniversalApiContract")]

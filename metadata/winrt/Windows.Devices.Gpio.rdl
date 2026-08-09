@@ -12,6 +12,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772163)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GpioChangeCounter {
+                #[default]
                 IGpioChangeCounter,
                 super::super::Foundation::IClosable,
             }
@@ -27,6 +28,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772163)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GpioChangeReader {
+                #[default]
                 IGpioChangeReader,
                 super::super::Foundation::IClosable,
             }
@@ -41,6 +43,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IGpioControllerStatics, 65536, "Windows.Devices.DevicesLowLevelContract")]
             #[Windows::Foundation::Metadata::Static(IGpioControllerStatics2, 131072, "Windows.Devices.DevicesLowLevelContract")]
             class GpioController {
+                #[default]
                 IGpioController,
             }
             #[repr(i32)]
@@ -56,6 +59,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GpioPin {
+                #[default]
                 IGpioPin,
                 super::super::Foundation::IClosable,
             }
@@ -87,6 +91,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GpioPinValueChangedEventArgs {
+                #[default]
                 IGpioPinValueChangedEventArgs,
             }
             #[repr(i32)]
@@ -156,10 +161,10 @@ mod Windows {
             interface IGpioController {
                 #[get]
                 PinCount: i32;
-                #[Windows::Foundation::Metadata::Overload("OpenPin")]
+                #[overload(OpenPin)]
                 fn OpenPin(&self, pinNumber: i32) -> GpioPin;
-                #[Windows::Foundation::Metadata::Overload("OpenPinWithSharingMode")]
-                fn OpenPin(&self, pinNumber: i32, sharingMode: GpioSharingMode) -> GpioPin;
+                #[overload(OpenPin)]
+                fn OpenPinWithSharingMode(&self, pinNumber: i32, sharingMode: GpioSharingMode) -> GpioPin;
                 fn TryOpenPin(&self, pinNumber: i32, sharingMode: GpioSharingMode, pin: &mut GpioPin, openStatus: &mut GpioOpenStatus) -> bool;
             }
             #[guid(0x2ed6f42e_7af7_4116_9533_c43d99a1fb64)]

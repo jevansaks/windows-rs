@@ -2,31 +2,45 @@
 mod Windows {
     mod AI {
         mod Actions {
+            #[unsealed]
             #[Windows::Foundation::Metadata::Composable(IActionEntityFactory, Public, 65536, "Windows.AI.Actions.ActionsContract")]
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ActionEntity {
+                #[default]
                 IActionEntity,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 131072)]
                 IActionEntity2,
                 super::super::Foundation::IClosable,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ActionEntityDisplayInfo {
+                #[default]
                 IActionEntityDisplayInfo,
                 super::super::Foundation::IClosable,
             }
+            #[unsealed]
             #[Windows::Foundation::Metadata::Composable(IActionEntityFactoryFactory, Public, 65536, "Windows.AI.Actions.ActionsContract")]
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ActionEntityFactory {
+                #[default]
                 IActionEntityFactory2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 131072)]
                 IActionEntityFactory3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 196608)]
                 IActionEntityFactory4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 393216)]
+                #[Windows::Foundation::Metadata::Experimental]
                 IActionEntityFactory5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 458752)]
+                #[Windows::Foundation::Metadata::Experimental]
                 IActionEntityFactory6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 524288)]
+                #[Windows::Foundation::Metadata::Experimental]
                 IActionEntityFactory7,
                 super::super::Foundation::IClosable,
             }
@@ -38,14 +52,28 @@ mod Windows {
                 File = 2,
                 Photo = 3,
                 Text = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 131072)]
                 StreamingText = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 131072)]
                 RemoteFile = 6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 196608)]
                 Table = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 196608)]
                 Contact = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 393216)]
+                #[Windows::Foundation::Metadata::Experimental]
                 Uri = 9,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 393216)]
+                #[Windows::Foundation::Metadata::Experimental]
                 Array = 10,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 458752)]
+                #[Windows::Foundation::Metadata::Experimental]
                 Appointment = 11,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 458752)]
+                #[Windows::Foundation::Metadata::Experimental]
                 Date = 12,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 524288)]
+                #[Windows::Foundation::Metadata::Experimental]
                 CustomText = 13,
             }
             #[repr(i32)]
@@ -57,6 +85,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ActionFeedback {
+                #[default]
                 IActionFeedback,
                 super::super::Foundation::IClosable,
             }
@@ -69,14 +98,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ActionInvocationContext {
+                #[default]
                 IActionInvocationContext,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 131072)]
                 IActionInvocationContext2,
                 super::super::Foundation::IClosable,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
+            #[class_event(#[Windows::Foundation::Metadata::Experimental] Changed: super::super::Foundation::TypedEventHandler<ActionInvocationHelpDetails, Object>, add = add_Changed, remove = remove_Changed)]
             class ActionInvocationHelpDetails {
+                #[default]
                 IActionInvocationHelpDetails,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 524288)]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_event(Changed)]
                 IActionInvocationHelpDetails2,
                 super::super::Foundation::IClosable,
             }
@@ -95,16 +131,25 @@ mod Windows {
                 Unsupported = 2,
                 Unavailable = 3,
             }
+            #[unsealed]
             #[Windows::Foundation::Metadata::Composable(IActionRuntimeFactory, Public, 65536, "Windows.AI.Actions.ActionsContract")]
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IActionRuntimeStatics, 524288, "Windows.AI.Actions.ActionsContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] CustomEntityStore: CustomActionEntityStore, get = get_CustomEntityStore)]
             class ActionRuntime {
+                #[default]
                 IActionRuntime,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 131072)]
                 IActionRuntime2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 196608)]
                 IActionRuntime3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 327680)]
                 IActionRuntime4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 524288)]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(CustomEntityStore)]
                 IActionRuntime5,
                 super::super::Foundation::IClosable,
             }
@@ -115,29 +160,47 @@ mod Windows {
             #[Windows::Foundation::Metadata::Experimental]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] Appointment: super::super::ApplicationModel::Appointments::Appointment, get = get_Appointment)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] SourceId: String, get = get_SourceId)]
             class AppointmentActionEntity: ActionEntity {
+                #[default]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(Appointment)]
+                #[no_property(SourceId)]
                 IAppointmentActionEntity,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 393216)]
             #[Windows::Foundation::Metadata::Experimental]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] ElementKind: ActionEntityKind, get = get_ElementKind)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] CustomElementKind: String, get = get_CustomElementKind)]
             class ArrayActionEntity: ActionEntity {
+                #[default]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(ElementKind)]
                 IArrayActionEntity,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 524288)]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(CustomElementKind)]
                 IArrayActionEntity2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ContactActionEntity: ActionEntity {
+                #[default]
                 IContactActionEntity,
             }
+            #[unsealed]
             #[Windows::Foundation::Metadata::Composable(ICustomActionEntityStoreFactory, Public, 524288, "Windows.AI.Actions.ActionsContract")]
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 524288)]
             #[Windows::Foundation::Metadata::Experimental]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CustomActionEntityStore {
+                #[default]
+                #[Windows::Foundation::Metadata::Experimental]
                 ICustomActionEntityStore,
                 super::super::Foundation::IClosable,
             }
@@ -145,26 +208,40 @@ mod Windows {
             #[Windows::Foundation::Metadata::Experimental]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] CustomTextKind: String, get = get_CustomTextKind)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] KeyPhrase: String, get = get_KeyPhrase)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] Properties: super::super::Foundation::Collections::IMapView<String, Object>, get = get_Properties)]
             class CustomTextActionEntity: ActionEntity {
+                #[default]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(CustomTextKind)]
+                #[no_property(KeyPhrase)]
+                #[no_property(Properties)]
                 ICustomTextActionEntity,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 458752)]
             #[Windows::Foundation::Metadata::Experimental]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] DateTime: super::super::Foundation::DateTime, get = get_DateTime)]
             class DateTimeActionEntity: ActionEntity {
+                #[default]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(DateTime)]
                 IDateTimeActionEntity,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DocumentActionEntity: ActionEntity {
+                #[default]
                 IDocumentActionEntity,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class FileActionEntity: ActionEntity {
+                #[default]
                 IFileActionEntity,
             }
             #[guid(0x445e700f_2122_5668_9a16_4cab2982c5f4)]
@@ -207,8 +284,8 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(ActionEntityFactory)]
             interface IActionEntityFactory3 {
                 fn CreateRemoteFileEntity(&self, sourceId: String, fileKind: RemoteFileKind, sourceUri: super::super::Foundation::Uri, fileId: String, contentType: String, driveId: String, accountId: String, extension: String) -> RemoteFileActionEntity;
-                #[Windows::Foundation::Metadata::Overload("CreateTextEntityWithTextFormat")]
-                fn CreateTextEntity(&self, text: String, textFormat: ActionEntityTextFormat) -> TextActionEntity;
+                #[overload(CreateTextEntity)]
+                fn CreateTextEntityWithTextFormat(&self, text: String, textFormat: ActionEntityTextFormat) -> TextActionEntity;
                 fn CreateStreamingTextActionEntityWriter(&self, textFormat: ActionEntityTextFormat) -> StreamingTextActionEntityWriter;
             }
             #[guid(0x332eda05_de0e_5a58_b318_a2ad771f013d)]
@@ -543,6 +620,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class NamedActionEntity {
+                #[default]
                 INamedActionEntity,
                 super::super::Foundation::IClosable,
             }
@@ -550,13 +628,23 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhotoActionEntity: ActionEntity {
+                #[default]
                 IPhotoActionEntity,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] LastUpdatedTime: super::super::Foundation::IReference<super::super::Foundation::DateTime>, get = get_LastUpdatedTime, set = put_LastUpdatedTime)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] Filename: String, set = put_Filename, get = get_Filename)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] Creator: ContactActionEntity, set = put_Creator, get = get_Creator)]
             class RemoteFileActionEntity: ActionEntity {
+                #[default]
                 IRemoteFileActionEntity,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 458752)]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(Creator)]
+                #[no_property(Filename)]
+                #[no_property(LastUpdatedTime)]
                 IRemoteFileActionEntity2,
             }
             #[repr(i32)]
@@ -570,16 +658,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StreamingTextActionEntity: ActionEntity {
+                #[default]
                 IStreamingTextActionEntity,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamingTextActionEntityTextChangedArgs {
+                #[default]
                 IStreamingTextActionEntityTextChangedArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamingTextActionEntityWriter {
+                #[default]
                 IStreamingTextActionEntityWriter,
                 super::super::Foundation::IClosable,
             }
@@ -587,20 +678,27 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TableActionEntity: ActionEntity {
+                #[default]
                 ITableActionEntity,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TextActionEntity: ActionEntity {
+                #[default]
                 ITextActionEntity,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.AI.Actions.ActionsContract", 131072)]
                 ITextActionEntity2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ActionsContract, 393216)]
             #[Windows::Foundation::Metadata::Experimental]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
+            #[class_property(#[Windows::Foundation::Metadata::Experimental] Uri: super::super::Foundation::Uri, get = get_Uri)]
             class UriActionEntity: ActionEntity {
+                #[default]
+                #[Windows::Foundation::Metadata::Experimental]
+                #[no_property(Uri)]
                 IUriActionEntity,
             }
         }

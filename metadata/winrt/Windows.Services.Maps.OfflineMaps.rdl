@@ -7,6 +7,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(OfflineMapPackage)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[interface_event(StatusChanged: super::super::super::Foundation::TypedEventHandler<OfflineMapPackage, Object>, add = add_StatusChanged, remove = remove_StatusChanged)]
                 interface IOfflineMapPackage {
                     #[get]
                     Status: OfflineMapPackageStatus;
@@ -58,7 +59,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IOfflineMapPackageStatics, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[class_event(StatusChanged: super::super::super::Foundation::TypedEventHandler<OfflineMapPackage, Object>, add = add_StatusChanged, remove = remove_StatusChanged)]
                 class OfflineMapPackage {
+                    #[default]
                     IOfflineMapPackage,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
@@ -66,6 +69,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class OfflineMapPackageQueryResult {
+                    #[default]
                     IOfflineMapPackageQueryResult,
                 }
                 #[repr(i32)]
@@ -82,6 +86,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class OfflineMapPackageStartDownloadResult {
+                    #[default]
                     IOfflineMapPackageStartDownloadResult,
                 }
                 #[repr(i32)]

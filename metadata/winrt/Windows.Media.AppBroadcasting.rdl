@@ -11,6 +11,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastingMonitor {
+                #[default]
                 IAppBroadcastingMonitor,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastingContract, 65536)]
@@ -18,6 +19,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastingStatus {
+                #[default]
                 IAppBroadcastingStatus,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastingContract, 65536)]
@@ -25,6 +27,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastingStatusDetails {
+                #[default]
                 IAppBroadcastingStatusDetails,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastingContract, 65536)]
@@ -33,6 +36,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IAppBroadcastingUIStatics, 65536, "Windows.Media.AppBroadcasting.AppBroadcastingContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastingUI {
+                #[default]
                 IAppBroadcastingUI,
             }
             #[guid(0x00f95a68_8907_48a0_b8ef_24d208137542)]

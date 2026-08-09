@@ -10,6 +10,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class AddDeleteThemeTransition: Transition {
+                        #[default]
                         IAddDeleteThemeTransition,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -19,14 +20,17 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class BackEase: EasingFunctionBase {
+                        #[default]
                         IBackEase,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IBasicConnectedAnimationConfigurationFactory, Public, 458752, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 458752)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class BasicConnectedAnimationConfiguration: ConnectedAnimationConfiguration {
+                        #[default]
                         IBasicConnectedAnimationConfiguration,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -37,6 +41,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Storyboard")]
                     class BeginStoryboard: super::super::TriggerAction {
+                        #[default]
                         IBeginStoryboard,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -46,6 +51,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class BounceEase: EasingFunctionBase {
+                        #[default]
                         IBounceEase,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -54,6 +60,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CircleEase: EasingFunctionBase {
+                        #[default]
                         ICircleEase,
                     }
                     #[repr(i32)]
@@ -71,6 +78,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ColorAnimation: Timeline {
+                        #[default]
                         IColorAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -81,8 +89,10 @@ mod Windows {
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     #[Windows::UI::Xaml::Markup::ContentProperty(Name = "KeyFrames")]
                     class ColorAnimationUsingKeyFrames: Timeline {
+                        #[default]
                         IColorAnimationUsingKeyFrames,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IColorKeyFrameFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -90,6 +100,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ColorKeyFrame: super::super::DependencyObject {
+                        #[default]
                         IColorKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -98,6 +109,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ColorKeyFrameCollection {
+                        #[default]
                         super::super::super::super::Foundation::Collections::IVector<ColorKeyFrame>,
                         super::super::super::super::Foundation::Collections::IIterable<ColorKeyFrame>,
                     }
@@ -108,6 +120,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CommonNavigationTransitionInfo: NavigationTransitionInfo {
+                        #[default]
                         ICommonNavigationTransitionInfo,
                     }
                     #[Windows::Foundation::Metadata::AttributeName("conditionallyindependentlyanimatable")]
@@ -121,8 +134,11 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ConnectedAnimation {
+                        #[default]
                         IConnectedAnimation,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                         IConnectedAnimation2,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                         IConnectedAnimation3,
                     }
                     #[repr(i32)]
@@ -134,12 +150,14 @@ mod Windows {
                         CrossFade = 2,
                         Scale = 3,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IConnectedAnimationConfigurationFactory, Public, 458752, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 458752)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ConnectedAnimationConfiguration {
+                        #[default]
                         IConnectedAnimationConfiguration,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -148,6 +166,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ConnectedAnimationService {
+                        #[default]
                         IConnectedAnimationService,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -157,6 +176,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ContentThemeTransition: Transition {
+                        #[default]
                         IContentThemeTransition,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -166,6 +186,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ContinuumNavigationTransitionInfo: NavigationTransitionInfo {
+                        #[default]
                         IContinuumNavigationTransitionInfo,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -174,14 +195,17 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CubicEase: EasingFunctionBase {
+                        #[default]
                         ICubicEase,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IDirectConnectedAnimationConfigurationFactory, Public, 458752, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 458752)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DirectConnectedAnimationConfiguration: ConnectedAnimationConfiguration {
+                        #[default]
                         IDirectConnectedAnimationConfiguration,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -190,6 +214,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DiscreteColorKeyFrame: ColorKeyFrame {
+                        #[default]
                         IDiscreteColorKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -198,6 +223,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DiscreteDoubleKeyFrame: DoubleKeyFrame {
+                        #[default]
                         IDiscreteDoubleKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -206,6 +232,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DiscreteObjectKeyFrame: ObjectKeyFrame {
+                        #[default]
                         IDiscreteObjectKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -214,6 +241,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DiscretePointKeyFrame: PointKeyFrame {
+                        #[default]
                         IDiscretePointKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -222,7 +250,18 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IDoubleAnimationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IDoubleAnimationStatics, ByProperty)]
+                    #[no_static_property(IDoubleAnimationStatics, EasingFunctionProperty)]
+                    #[no_static_property(IDoubleAnimationStatics, EnableDependentAnimationProperty)]
+                    #[no_static_property(IDoubleAnimationStatics, FromProperty)]
+                    #[no_static_property(IDoubleAnimationStatics, ToProperty)]
                     class DoubleAnimation: Timeline {
+                        #[default]
+                        #[no_property(By)]
+                        #[no_property(EasingFunction)]
+                        #[no_property(EnableDependentAnimation)]
+                        #[no_property(From)]
+                        #[no_property(To)]
                         IDoubleAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -232,16 +271,36 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     #[Windows::UI::Xaml::Markup::ContentProperty(Name = "KeyFrames")]
+                    #[no_static_property(IDoubleAnimationUsingKeyFramesStatics, EnableDependentAnimationProperty)]
                     class DoubleAnimationUsingKeyFrames: Timeline {
+                        #[default]
+                        #[no_property(EnableDependentAnimation)]
+                        #[no_property(KeyFrames)]
                         IDoubleAnimationUsingKeyFrames,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IDoubleKeyFrameFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Static(IDoubleKeyFrameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IDoubleKeyFrameStatics, KeyTimeProperty)]
+                    #[no_static_property(IDoubleKeyFrameStatics, ValueProperty)]
+                    #[class_property(To: super::super::super::super::Foundation::IReference<f64>, get = DoubleAnimation::get_To, set = DoubleAnimation::put_To)]
+                    #[class_property(From: super::super::super::super::Foundation::IReference<f64>, set = DoubleAnimation::put_From, get = DoubleAnimation::get_From)]
+                    #[class_property(EnableDependentAnimation: bool, get = DoubleAnimation::get_EnableDependentAnimation, set = DoubleAnimation::put_EnableDependentAnimation)]
+                    #[class_property(EasingFunction: EasingFunctionBase, set = DoubleAnimation::put_EasingFunction, get = DoubleAnimation::get_EasingFunction)]
+                    #[class_property(By: super::super::super::super::Foundation::IReference<f64>, get = DoubleAnimation::get_By, set = DoubleAnimation::put_By)]
+                    #[class_property(static ByProperty: super::super::DependencyProperty, get = DoubleAnimation::get_ByProperty)]
+                    #[class_property(static EasingFunctionProperty: super::super::DependencyProperty, get = DoubleAnimation::get_EasingFunctionProperty)]
+                    #[class_property(static EnableDependentAnimationProperty: super::super::DependencyProperty, get = DoubleAnimation::get_EnableDependentAnimationProperty)]
+                    #[class_property(static FromProperty: super::super::DependencyProperty, get = DoubleAnimation::get_FromProperty)]
+                    #[class_property(static ToProperty: super::super::DependencyProperty, get = DoubleAnimation::get_ToProperty)]
                     class DoubleKeyFrame: super::super::DependencyObject {
+                        #[default]
+                        #[no_property(KeyTime)]
+                        #[no_property(Value)]
                         IDoubleKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -250,6 +309,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DoubleKeyFrameCollection {
+                        #[default]
                         super::super::super::super::Foundation::Collections::IVector<DoubleKeyFrame>,
                         super::super::super::super::Foundation::Collections::IIterable<DoubleKeyFrame>,
                     }
@@ -260,6 +320,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DragItemThemeAnimation: Timeline {
+                        #[default]
                         IDragItemThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -269,6 +330,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DragOverThemeAnimation: Timeline {
+                        #[default]
                         IDragOverThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -277,6 +339,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DrillInNavigationTransitionInfo: NavigationTransitionInfo {
+                        #[default]
                         IDrillInNavigationTransitionInfo,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -286,6 +349,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DrillInThemeAnimation: Timeline {
+                        #[default]
                         IDrillInThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -295,6 +359,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DrillOutThemeAnimation: Timeline {
+                        #[default]
                         IDrillOutThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -304,6 +369,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DropTargetItemThemeAnimation: Timeline {
+                        #[default]
                         IDropTargetItemThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -313,6 +379,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class EasingColorKeyFrame: ColorKeyFrame {
+                        #[default]
                         IEasingColorKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -321,16 +388,23 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IEasingDoubleKeyFrameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IEasingDoubleKeyFrameStatics, EasingFunctionProperty)]
                     class EasingDoubleKeyFrame: DoubleKeyFrame {
+                        #[default]
+                        #[no_property(EasingFunction)]
                         IEasingDoubleKeyFrame,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IEasingFunctionBaseFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Static(IEasingFunctionBaseStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IEasingFunctionBaseStatics, EasingModeProperty)]
                     class EasingFunctionBase: super::super::DependencyObject {
+                        #[default]
+                        #[no_property(EasingMode)]
                         IEasingFunctionBase,
                     }
                     #[repr(i32)]
@@ -348,6 +422,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class EasingPointKeyFrame: PointKeyFrame {
+                        #[default]
                         IEasingPointKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -357,6 +432,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class EdgeUIThemeTransition: Transition {
+                        #[default]
                         IEdgeUIThemeTransition,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -366,6 +442,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ElasticEase: EasingFunctionBase {
+                        #[default]
                         IElasticEase,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -375,6 +452,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class EntranceNavigationTransitionInfo: NavigationTransitionInfo {
+                        #[default]
                         IEntranceNavigationTransitionInfo,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -384,6 +462,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class EntranceThemeTransition: Transition {
+                        #[default]
                         IEntranceThemeTransition,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -393,6 +472,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ExponentialEase: EasingFunctionBase {
+                        #[default]
                         IExponentialEase,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -402,6 +482,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class FadeInThemeAnimation: Timeline {
+                        #[default]
                         IFadeInThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -411,6 +492,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class FadeOutThemeAnimation: Timeline {
+                        #[default]
                         IFadeOutThemeAnimation,
                     }
                     #[repr(i32)]
@@ -420,13 +502,16 @@ mod Windows {
                         HoldEnd = 0,
                         Stop = 1,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IGravityConnectedAnimationConfigurationFactory, Public, 458752, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 458752)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class GravityConnectedAnimationConfiguration: ConnectedAnimationConfiguration {
+                        #[default]
                         IGravityConnectedAnimationConfiguration,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                         IGravityConnectedAnimationConfiguration2,
                     }
                     #[guid(0xadec852e_4424_4dab_99c1_3a04e36a3c48)]
@@ -592,7 +677,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     interface IConnectedAnimation {
                         event Completed: super::super::super::super::Foundation::TypedEventHandler<ConnectedAnimation, Object>;
-                        #[Windows::Foundation::Metadata::Overload("TryStart")]
+                        #[overload(TryStart)]
                         fn TryStart(&self, destination: super::super::UIElement) -> bool;
                         fn Cancel(&self);
                     }
@@ -602,8 +687,8 @@ mod Windows {
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     interface IConnectedAnimation2 {
                         IsScaleAnimationEnabled: bool;
-                        #[Windows::Foundation::Metadata::Overload("TryStartWithCoordinatedElements")]
-                        fn TryStart(&self, destination: super::super::UIElement, coordinatedElements: super::super::super::super::Foundation::Collections::IIterable<super::super::UIElement>) -> bool;
+                        #[overload(TryStart)]
+                        fn TryStartWithCoordinatedElements(&self, destination: super::super::UIElement, coordinatedElements: super::super::super::super::Foundation::Collections::IIterable<super::super::UIElement>) -> bool;
                         fn SetAnimationComponent(&self, component: ConnectedAnimationComponent, animation: super::super::super::Composition::ICompositionAnimationBase);
                     }
                     #[guid(0x6e3040c6_0430_59c0_a80c_cceed2e778dd)]
@@ -1714,7 +1799,10 @@ mod Windows {
                         SpeedRatio: f64;
                         FillBehavior: FillBehavior;
                         RepeatBehavior: RepeatBehavior;
-                        event Completed: super::super::super::super::Foundation::EventHandler<Object>;
+                        #[special]
+                        fn add_Completed(&self, handler: super::super::super::super::Foundation::EventHandler<Object>) -> super::super::super::super::Foundation::EventRegistrationToken;
+                        #[special]
+                        fn remove_Completed(&self, token: super::super::super::super::Foundation::EventRegistrationToken);
                     }
                     #[guid(0x1d56bb07_bda4_478b_8ada_eb04d580cd5e)]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1765,6 +1853,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class KeySpline: super::super::DependencyObject {
+                        #[default]
                         IKeySpline,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1778,6 +1867,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class KeyTimeHelper {
+                        #[default]
                         IKeyTimeHelper,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1786,6 +1876,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class LinearColorKeyFrame: ColorKeyFrame {
+                        #[default]
                         ILinearColorKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1794,6 +1885,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class LinearDoubleKeyFrame: DoubleKeyFrame {
+                        #[default]
                         ILinearDoubleKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1802,6 +1894,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class LinearPointKeyFrame: PointKeyFrame {
+                        #[default]
                         ILinearPointKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1812,15 +1905,20 @@ mod Windows {
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     #[Windows::UI::Xaml::Markup::ContentProperty(Name = "DefaultNavigationTransitionInfo")]
                     class NavigationThemeTransition: Transition {
+                        #[default]
                         INavigationThemeTransition,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(INavigationTransitionInfoFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class NavigationTransitionInfo: super::super::DependencyObject {
+                        #[default]
                         INavigationTransitionInfo,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         INavigationTransitionInfoOverrides,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1831,15 +1929,22 @@ mod Windows {
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     #[Windows::UI::Xaml::Markup::ContentProperty(Name = "KeyFrames")]
                     class ObjectAnimationUsingKeyFrames: Timeline {
+                        #[default]
                         IObjectAnimationUsingKeyFrames,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IObjectKeyFrameFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Static(IObjectKeyFrameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IObjectKeyFrameStatics, KeyTimeProperty)]
+                    #[no_static_property(IObjectKeyFrameStatics, ValueProperty)]
                     class ObjectKeyFrame: super::super::DependencyObject {
+                        #[default]
+                        #[no_property(KeyTime)]
+                        #[no_property(Value)]
                         IObjectKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1848,6 +1953,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ObjectKeyFrameCollection {
+                        #[default]
                         super::super::super::super::Foundation::Collections::IVector<ObjectKeyFrame>,
                         super::super::super::super::Foundation::Collections::IIterable<ObjectKeyFrame>,
                     }
@@ -1858,6 +1964,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PaneThemeTransition: Transition {
+                        #[default]
                         IPaneThemeTransition,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1867,6 +1974,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PointAnimation: Timeline {
+                        #[default]
                         IPointAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1876,16 +1984,26 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     #[Windows::UI::Xaml::Markup::ContentProperty(Name = "KeyFrames")]
+                    #[no_static_property(IPointAnimationUsingKeyFramesStatics, EnableDependentAnimationProperty)]
                     class PointAnimationUsingKeyFrames: Timeline {
+                        #[default]
+                        #[no_property(EnableDependentAnimation)]
+                        #[no_property(KeyFrames)]
                         IPointAnimationUsingKeyFrames,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IPointKeyFrameFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Static(IPointKeyFrameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IPointKeyFrameStatics, KeyTimeProperty)]
+                    #[no_static_property(IPointKeyFrameStatics, ValueProperty)]
                     class PointKeyFrame: super::super::DependencyObject {
+                        #[default]
+                        #[no_property(KeyTime)]
+                        #[no_property(Value)]
                         IPointKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1894,6 +2012,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PointKeyFrameCollection {
+                        #[default]
                         super::super::super::super::Foundation::Collections::IVector<PointKeyFrame>,
                         super::super::super::super::Foundation::Collections::IIterable<PointKeyFrame>,
                     }
@@ -1904,6 +2023,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PointerDownThemeAnimation: Timeline {
+                        #[default]
                         IPointerDownThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1913,6 +2033,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PointerUpThemeAnimation: Timeline {
+                        #[default]
                         IPointerUpThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1922,6 +2043,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PopInThemeAnimation: Timeline {
+                        #[default]
                         IPopInThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1931,6 +2053,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PopOutThemeAnimation: Timeline {
+                        #[default]
                         IPopOutThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1939,7 +2062,12 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IPopupThemeTransitionStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IPopupThemeTransitionStatics, FromHorizontalOffsetProperty)]
+                    #[no_static_property(IPopupThemeTransitionStatics, FromVerticalOffsetProperty)]
                     class PopupThemeTransition: Transition {
+                        #[default]
+                        #[no_property(FromHorizontalOffset)]
+                        #[no_property(FromVerticalOffset)]
                         IPopupThemeTransition,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1948,7 +2076,10 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IPowerEaseStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IPowerEaseStatics, PowerProperty)]
                     class PowerEase: EasingFunctionBase {
+                        #[default]
+                        #[no_property(Power)]
                         IPowerEase,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1957,6 +2088,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class QuadraticEase: EasingFunctionBase {
+                        #[default]
                         IQuadraticEase,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1965,6 +2097,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class QuarticEase: EasingFunctionBase {
+                        #[default]
                         IQuarticEase,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1973,6 +2106,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class QuinticEase: EasingFunctionBase {
+                        #[default]
                         IQuinticEase,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1981,6 +2115,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ReorderThemeTransition: Transition {
+                        #[default]
                         IReorderThemeTransition,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1995,7 +2130,9 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IRepeatBehaviorHelperStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IRepeatBehaviorHelperStatics, Forever)]
                     class RepeatBehaviorHelper {
+                        #[default]
                         IRepeatBehaviorHelper,
                     }
                     #[repr(i32)]
@@ -2012,7 +2149,14 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IRepositionThemeAnimationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IRepositionThemeAnimationStatics, FromHorizontalOffsetProperty)]
+                    #[no_static_property(IRepositionThemeAnimationStatics, FromVerticalOffsetProperty)]
+                    #[no_static_property(IRepositionThemeAnimationStatics, TargetNameProperty)]
                     class RepositionThemeAnimation: Timeline {
+                        #[default]
+                        #[no_property(FromHorizontalOffset)]
+                        #[no_property(FromVerticalOffset)]
+                        #[no_property(TargetName)]
                         IRepositionThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2021,8 +2165,12 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IRepositionThemeTransitionStatics2, 196608, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IRepositionThemeTransitionStatics2, IsStaggeringEnabledProperty)]
                     class RepositionThemeTransition: Transition {
+                        #[default]
                         IRepositionThemeTransition,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
+                        #[no_property(IsStaggeringEnabled)]
                         IRepositionThemeTransition2,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2031,6 +2179,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SineEase: EasingFunctionBase {
+                        #[default]
                         ISineEase,
                     }
                     #[repr(i32)]
@@ -2047,8 +2196,12 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISlideNavigationTransitionInfoStatics2, 458752, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISlideNavigationTransitionInfoStatics2, EffectProperty)]
                     class SlideNavigationTransitionInfo: NavigationTransitionInfo {
+                        #[default]
                         ISlideNavigationTransitionInfo,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
+                        #[no_property(Effect)]
                         ISlideNavigationTransitionInfo2,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2057,7 +2210,10 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISplineColorKeyFrameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISplineColorKeyFrameStatics, KeySplineProperty)]
                     class SplineColorKeyFrame: ColorKeyFrame {
+                        #[default]
+                        #[no_property(KeySpline)]
                         ISplineColorKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2066,7 +2222,10 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISplineDoubleKeyFrameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISplineDoubleKeyFrameStatics, KeySplineProperty)]
                     class SplineDoubleKeyFrame: DoubleKeyFrame {
+                        #[default]
+                        #[no_property(KeySpline)]
                         ISplineDoubleKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2075,7 +2234,10 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISplinePointKeyFrameStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISplinePointKeyFrameStatics, KeySplineProperty)]
                     class SplinePointKeyFrame: PointKeyFrame {
+                        #[default]
+                        #[no_property(KeySpline)]
                         ISplinePointKeyFrame,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2084,7 +2246,30 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISplitCloseThemeAnimationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, ClosedLengthProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, ClosedTargetNameProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, ClosedTargetProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, ContentTargetNameProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, ContentTargetProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, ContentTranslationDirectionProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, ContentTranslationOffsetProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, OffsetFromCenterProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, OpenedLengthProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, OpenedTargetNameProperty)]
+                    #[no_static_property(ISplitCloseThemeAnimationStatics, OpenedTargetProperty)]
                     class SplitCloseThemeAnimation: Timeline {
+                        #[default]
+                        #[no_property(ClosedLength)]
+                        #[no_property(ClosedTarget)]
+                        #[no_property(ClosedTargetName)]
+                        #[no_property(ContentTarget)]
+                        #[no_property(ContentTargetName)]
+                        #[no_property(ContentTranslationDirection)]
+                        #[no_property(ContentTranslationOffset)]
+                        #[no_property(OffsetFromCenter)]
+                        #[no_property(OpenedLength)]
+                        #[no_property(OpenedTarget)]
+                        #[no_property(OpenedTargetName)]
                         ISplitCloseThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2093,7 +2278,30 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISplitOpenThemeAnimationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, ClosedLengthProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, ClosedTargetNameProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, ClosedTargetProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, ContentTargetNameProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, ContentTargetProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, ContentTranslationDirectionProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, ContentTranslationOffsetProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, OffsetFromCenterProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, OpenedLengthProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, OpenedTargetNameProperty)]
+                    #[no_static_property(ISplitOpenThemeAnimationStatics, OpenedTargetProperty)]
                     class SplitOpenThemeAnimation: Timeline {
+                        #[default]
+                        #[no_property(ClosedLength)]
+                        #[no_property(ClosedTarget)]
+                        #[no_property(ClosedTargetName)]
+                        #[no_property(ContentTarget)]
+                        #[no_property(ContentTargetName)]
+                        #[no_property(ContentTranslationDirection)]
+                        #[no_property(ContentTranslationOffset)]
+                        #[no_property(OffsetFromCenter)]
+                        #[no_property(OpenedLength)]
+                        #[no_property(OpenedTarget)]
+                        #[no_property(OpenedTargetName)]
                         ISplitOpenThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2103,7 +2311,11 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Children")]
+                    #[no_static_property(IStoryboardStatics, TargetNameProperty)]
+                    #[no_static_property(IStoryboardStatics, TargetPropertyProperty)]
                     class Storyboard: Timeline {
+                        #[default]
+                        #[no_property(Children)]
                         IStoryboard,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2112,6 +2324,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SuppressNavigationTransitionInfo: NavigationTransitionInfo {
+                        #[default]
                         ISuppressNavigationTransitionInfo,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2120,7 +2333,14 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISwipeBackThemeAnimationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISwipeBackThemeAnimationStatics, FromHorizontalOffsetProperty)]
+                    #[no_static_property(ISwipeBackThemeAnimationStatics, FromVerticalOffsetProperty)]
+                    #[no_static_property(ISwipeBackThemeAnimationStatics, TargetNameProperty)]
                     class SwipeBackThemeAnimation: Timeline {
+                        #[default]
+                        #[no_property(FromHorizontalOffset)]
+                        #[no_property(FromVerticalOffset)]
+                        #[no_property(TargetName)]
                         ISwipeBackThemeAnimation,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2129,16 +2349,38 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ISwipeHintThemeAnimationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ISwipeHintThemeAnimationStatics, TargetNameProperty)]
+                    #[no_static_property(ISwipeHintThemeAnimationStatics, ToHorizontalOffsetProperty)]
+                    #[no_static_property(ISwipeHintThemeAnimationStatics, ToVerticalOffsetProperty)]
                     class SwipeHintThemeAnimation: Timeline {
+                        #[default]
+                        #[no_property(TargetName)]
+                        #[no_property(ToHorizontalOffset)]
+                        #[no_property(ToVerticalOffset)]
                         ISwipeHintThemeAnimation,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITimelineFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Static(ITimelineStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ITimelineStatics, AllowDependentAnimations)]
+                    #[no_static_property(ITimelineStatics, AutoReverseProperty)]
+                    #[no_static_property(ITimelineStatics, BeginTimeProperty)]
+                    #[no_static_property(ITimelineStatics, DurationProperty)]
+                    #[no_static_property(ITimelineStatics, FillBehaviorProperty)]
+                    #[no_static_property(ITimelineStatics, RepeatBehaviorProperty)]
+                    #[no_static_property(ITimelineStatics, SpeedRatioProperty)]
                     class Timeline: super::super::DependencyObject {
+                        #[default]
+                        #[no_property(AutoReverse)]
+                        #[no_property(BeginTime)]
+                        #[no_property(Duration)]
+                        #[no_property(FillBehavior)]
+                        #[no_property(RepeatBehavior)]
+                        #[no_property(SpeedRatio)]
                         ITimeline,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2147,15 +2389,18 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TimelineCollection {
+                        #[default]
                         super::super::super::super::Foundation::Collections::IVector<Timeline>,
                         super::super::super::super::Foundation::Collections::IIterable<Timeline>,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITransitionFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class Transition: super::super::DependencyObject {
+                        #[default]
                         ITransition,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2164,6 +2409,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TransitionCollection {
+                        #[default]
                         super::super::super::super::Foundation::Collections::IVector<Transition>,
                         super::super::super::super::Foundation::Collections::IIterable<Transition>,
                     }

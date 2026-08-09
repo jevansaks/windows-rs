@@ -197,12 +197,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PrintTicketCapabilities {
+                    #[default]
                     IPrintTicketCapabilities,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PrintTicketFeature {
+                    #[default]
                     IPrintTicketFeature,
                 }
                 #[repr(i32)]
@@ -215,6 +217,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PrintTicketOption {
+                    #[default]
                     IPrintTicketOption,
                 }
                 #[repr(i32)]
@@ -228,18 +231,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PrintTicketParameterDefinition {
+                    #[default]
                     IPrintTicketParameterDefinition,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PrintTicketParameterInitializer {
+                    #[default]
                     IPrintTicketParameterInitializer,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PrintTicketValue {
+                    #[default]
                     IPrintTicketValue,
                 }
                 #[repr(i32)]
@@ -254,12 +260,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class WorkflowPrintTicket {
+                    #[default]
                     IWorkflowPrintTicket,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class WorkflowPrintTicketValidationResult {
+                    #[default]
                     IWorkflowPrintTicketValidationResult,
                 }
             }

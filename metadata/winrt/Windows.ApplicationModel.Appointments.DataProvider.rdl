@@ -7,84 +7,98 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarCancelMeetingRequest {
+                    #[default]
                     IAppointmentCalendarCancelMeetingRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarCancelMeetingRequestEventArgs {
+                    #[default]
                     IAppointmentCalendarCancelMeetingRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarCreateOrUpdateAppointmentRequest {
+                    #[default]
                     IAppointmentCalendarCreateOrUpdateAppointmentRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarCreateOrUpdateAppointmentRequestEventArgs {
+                    #[default]
                     IAppointmentCalendarCreateOrUpdateAppointmentRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarForwardMeetingRequest {
+                    #[default]
                     IAppointmentCalendarForwardMeetingRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarForwardMeetingRequestEventArgs {
+                    #[default]
                     IAppointmentCalendarForwardMeetingRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarProposeNewTimeForMeetingRequest {
+                    #[default]
                     IAppointmentCalendarProposeNewTimeForMeetingRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarProposeNewTimeForMeetingRequestEventArgs {
+                    #[default]
                     IAppointmentCalendarProposeNewTimeForMeetingRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarSyncManagerSyncRequest {
+                    #[default]
                     IAppointmentCalendarSyncManagerSyncRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarSyncManagerSyncRequestEventArgs {
+                    #[default]
                     IAppointmentCalendarSyncManagerSyncRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarUpdateMeetingResponseRequest {
+                    #[default]
                     IAppointmentCalendarUpdateMeetingResponseRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentCalendarUpdateMeetingResponseRequestEventArgs {
+                    #[default]
                     IAppointmentCalendarUpdateMeetingResponseRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentDataProviderConnection {
+                    #[default]
                     IAppointmentDataProviderConnection,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppointmentDataProviderTriggerDetails {
+                    #[default]
                     IAppointmentDataProviderTriggerDetails,
                 }
                 #[guid(0x49460f8d_6434_40d7_ad46_6297419314d1)]

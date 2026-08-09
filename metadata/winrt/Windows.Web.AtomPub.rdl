@@ -9,6 +9,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AtomPubClient {
+                #[default]
                 IAtomPubClient,
                 super::Syndication::ISyndicationClient,
             }
@@ -77,6 +78,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ResourceCollection {
+                #[default]
                 IResourceCollection,
                 super::Syndication::ISyndicationNode,
             }
@@ -84,6 +86,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ServiceDocument {
+                #[default]
                 IServiceDocument,
                 super::Syndication::ISyndicationNode,
             }
@@ -91,6 +94,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Workspace {
+                #[default]
                 IWorkspace,
                 super::Syndication::ISyndicationNode,
             }

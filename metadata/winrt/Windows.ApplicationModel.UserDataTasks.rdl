@@ -51,10 +51,10 @@ mod Windows {
                 SyncManager: UserDataTaskListSyncManager;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn RegisterSyncManagerAsync(&self) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("GetTaskReader")]
+                #[overload(GetTaskReader)]
                 fn GetTaskReader(&self) -> UserDataTaskReader;
-                #[Windows::Foundation::Metadata::Overload("GetTaskReaderWithOptions")]
-                fn GetTaskReader(&self, options: UserDataTaskQueryOptions) -> UserDataTaskReader;
+                #[overload(GetTaskReader)]
+                fn GetTaskReaderWithOptions(&self, options: UserDataTaskQueryOptions) -> UserDataTaskReader;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetTaskAsync(&self, userDataTask: String) -> super::super::Foundation::IAsyncOperation<UserDataTask>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -146,12 +146,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::ExclusiveTo(UserDataTaskStore)]
             interface IUserDataTaskStore {
-                #[Windows::Foundation::Metadata::Overload("CreateListAsync")]
+                #[overload(CreateListAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CreateListAsync(&self, name: String) -> super::super::Foundation::IAsyncOperation<UserDataTaskList>;
-                #[Windows::Foundation::Metadata::Overload("CreateListInAccountAsync")]
+                #[overload(CreateListAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn CreateListAsync(&self, name: String, userDataAccountId: String) -> super::super::Foundation::IAsyncOperation<UserDataTaskList>;
+                fn CreateListInAccountAsync(&self, name: String, userDataAccountId: String) -> super::super::Foundation::IAsyncOperation<UserDataTaskList>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FindListsAsync(&self) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<UserDataTaskList>>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -162,12 +162,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTask {
+                #[default]
                 IUserDataTask,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskBatch {
+                #[default]
                 IUserDataTaskBatch,
             }
             #[repr(u32)]
@@ -200,12 +202,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskList {
+                #[default]
                 IUserDataTaskList,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskListLimitedWriteOperations {
+                #[default]
                 IUserDataTaskListLimitedWriteOperations,
             }
             #[repr(i32)]
@@ -225,6 +229,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskListSyncManager {
+                #[default]
                 IUserDataTaskListSyncManager,
             }
             #[repr(i32)]
@@ -242,6 +247,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IUserDataTaskManagerStatics, 262144, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskManager {
+                #[default]
                 IUserDataTaskManager,
             }
             #[repr(i32)]
@@ -263,6 +269,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskQueryOptions {
+                #[default]
                 IUserDataTaskQueryOptions,
             }
             #[repr(i32)]
@@ -274,6 +281,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskReader {
+                #[default]
                 IUserDataTaskReader,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Foundation.UniversalApiContract")]
@@ -281,6 +289,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskRecurrenceProperties {
+                #[default]
                 IUserDataTaskRecurrenceProperties,
             }
             #[repr(i32)]
@@ -298,6 +307,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskRegenerationProperties {
+                #[default]
                 IUserDataTaskRegenerationProperties,
             }
             #[repr(i32)]
@@ -318,6 +328,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataTaskStore {
+                #[default]
                 IUserDataTaskStore,
             }
             #[repr(i32)]

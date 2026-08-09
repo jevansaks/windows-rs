@@ -6,12 +6,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceServicingDetails {
+                #[default]
                 IDeviceServicingDetails,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceUseDetails {
+                #[default]
                 IDeviceUseDetails,
             }
             #[guid(0x4aabee29_2344_4ac4_8527_4a8ef6905645)]

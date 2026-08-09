@@ -57,6 +57,8 @@ code! { HasAttribute(5)
     (MemberRef, 6)
     (TypeSpec, 13)
     (GenericParam, 19)
+    (Property, 9)
+    (Event, 10)
 }
 
 code! { AttributeType(3)
@@ -64,11 +66,16 @@ code! { AttributeType(3)
 }
 
 code! { MemberRefParent(3)
+    (TypeDef, 0)
     (TypeRef, 1)
+    (ModuleRef, 2)
+    (MethodDef, 3)
+    (TypeSpec, 4)
 }
 
 code! { HasConstant(2)
     (Field, 0)
+    (Property, 2)
 }
 
 code! { MemberForwarded(1)
@@ -77,6 +84,12 @@ code! { MemberForwarded(1)
 
 code! { TypeOrMethodDef(1)
     (TypeDef, 0)
+    (MethodDef, 1)
+}
+
+code! { MethodDefOrRef(1)
+    (MethodDef, 0)
+    (MemberRef, 1)
 }
 
 code! { HasSemantics(1)

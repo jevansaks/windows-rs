@@ -38,6 +38,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class SysStorageProviderEventReceivedEventArgs {
+                    #[default]
                     ISysStorageProviderEventReceivedEventArgs,
                 }
             }

@@ -3,12 +3,14 @@ mod Windows {
     mod UI {
         mod Xaml {
             mod Navigation {
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IFrameNavigationOptionsFactory, Public, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class FrameNavigationOptions {
+                    #[default]
                     IFrameNavigationOptions,
                 }
                 #[guid(0xb539ad2a_9fb7_520a_8f41_57a50c59cf92)]
@@ -120,7 +122,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class NavigatingCancelEventArgs {
+                    #[default]
                     INavigatingCancelEventArgs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     INavigatingCancelEventArgs2,
                 }
                 #[guid(0x75d6a78f_a302_4489_9898_24ea49182910)]
@@ -139,13 +143,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class NavigationEventArgs {
+                    #[default]
                     INavigationEventArgs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     INavigationEventArgs2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class NavigationFailedEventArgs {
+                    #[default]
                     INavigationFailedEventArgs,
                 }
                 #[guid(0x4dab4671_12b2_43c7_b892_9be2dcd3e88d)]
@@ -172,6 +179,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PageStackEntry: super::DependencyObject {
+                    #[default]
                     IPageStackEntry,
                 }
             }

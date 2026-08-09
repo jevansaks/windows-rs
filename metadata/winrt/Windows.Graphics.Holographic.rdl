@@ -11,33 +11,46 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicCamera {
+                #[default]
                 IHolographicCamera,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IHolographicCamera2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IHolographicCamera3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IHolographicCamera4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IHolographicCamera5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IHolographicCamera6,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicCameraPose {
+                #[default]
                 IHolographicCameraPose,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IHolographicCameraPose2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicCameraRenderingParameters {
+                #[default]
                 IHolographicCameraRenderingParameters,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IHolographicCameraRenderingParameters2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IHolographicCameraRenderingParameters3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
                 IHolographicCameraRenderingParameters4,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicCameraViewportParameters {
+                #[default]
                 IHolographicCameraViewportParameters,
             }
             #[repr(i32)]
@@ -51,16 +64,22 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IHolographicDisplayStatics, 262144, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicDisplay {
+                #[default]
                 IHolographicDisplay,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IHolographicDisplay2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IHolographicDisplay3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicFrame {
+                #[default]
                 IHolographicFrame,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IHolographicFrame2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IHolographicFrame3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
@@ -71,6 +90,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicFramePrediction {
+                #[default]
                 IHolographicFramePrediction,
             }
             #[repr(i32)]
@@ -89,6 +109,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Deprecated("Use HolographicFrameScanoutMonitor instead of HolographicFramePresentationMonitor. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HolographicFramePresentationMonitor {
+                #[default]
                 IHolographicFramePresentationMonitor,
                 super::super::Foundation::IClosable,
             }
@@ -96,22 +117,26 @@ mod Windows {
             #[Windows::Foundation::Metadata::Deprecated("Use HolographicFrameScanoutReport instead of HolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HolographicFramePresentationReport {
+                #[default]
                 IHolographicFramePresentationReport,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HolographicFrameRenderingReport {
+                #[default]
                 IHolographicFrameRenderingReport,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HolographicFrameScanoutMonitor {
+                #[default]
                 IHolographicFrameScanoutMonitor,
                 super::super::Foundation::IClosable,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HolographicFrameScanoutReport {
+                #[default]
                 IHolographicFrameScanoutReport,
             }
             #[Windows::Foundation::Metadata::Activatable(IHolographicQuadLayerFactory, 327680, "Windows.Foundation.UniversalApiContract")]
@@ -120,14 +145,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicQuadLayer {
-                IHolographicQuadLayer,
                 super::super::Foundation::IClosable,
+                #[default]
+                IHolographicQuadLayer,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicQuadLayerUpdateParameters {
+                #[default]
                 IHolographicQuadLayerUpdateParameters,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IHolographicQuadLayerUpdateParameters2,
             }
             #[repr(i32)]
@@ -144,20 +172,25 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IHolographicSpaceStatics3, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicSpace {
+                #[default]
                 IHolographicSpace,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IHolographicSpace2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IHolographicSpace3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicSpaceCameraAddedEventArgs {
+                #[default]
                 IHolographicSpaceCameraAddedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HolographicSpaceCameraRemovedEventArgs {
+                #[default]
                 IHolographicSpaceCameraRemovedEventArgs,
             }
             #[repr(i32)]
@@ -175,7 +208,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HolographicViewConfiguration {
+                #[default]
                 IHolographicViewConfiguration,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
                 IHolographicViewConfiguration2,
             }
             #[repr(i32)]
@@ -271,12 +306,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::ExclusiveTo(HolographicCameraRenderingParameters)]
             interface IHolographicCameraRenderingParameters {
-                #[Windows::Foundation::Metadata::Overload("SetFocusPoint")]
+                #[overload(SetFocusPoint)]
                 fn SetFocusPoint(&self, coordinateSystem: super::super::Perception::Spatial::SpatialCoordinateSystem, position: super::super::Foundation::Numerics::Vector3);
-                #[Windows::Foundation::Metadata::Overload("SetFocusPointWithNormal")]
-                fn SetFocusPoint(&self, coordinateSystem: super::super::Perception::Spatial::SpatialCoordinateSystem, position: super::super::Foundation::Numerics::Vector3, normal: super::super::Foundation::Numerics::Vector3);
-                #[Windows::Foundation::Metadata::Overload("SetFocusPointWithNormalLinearVelocity")]
-                fn SetFocusPoint(&self, coordinateSystem: super::super::Perception::Spatial::SpatialCoordinateSystem, position: super::super::Foundation::Numerics::Vector3, normal: super::super::Foundation::Numerics::Vector3, linearVelocity: super::super::Foundation::Numerics::Vector3);
+                #[overload(SetFocusPoint)]
+                fn SetFocusPointWithNormal(&self, coordinateSystem: super::super::Perception::Spatial::SpatialCoordinateSystem, position: super::super::Foundation::Numerics::Vector3, normal: super::super::Foundation::Numerics::Vector3);
+                #[overload(SetFocusPoint)]
+                fn SetFocusPointWithNormalLinearVelocity(&self, coordinateSystem: super::super::Perception::Spatial::SpatialCoordinateSystem, position: super::super::Foundation::Numerics::Vector3, normal: super::super::Foundation::Numerics::Vector3, linearVelocity: super::super::Foundation::Numerics::Vector3);
                 #[get]
                 Direct3D11Device: super::DirectX::Direct3D11::IDirect3DDevice;
                 #[get]
@@ -360,10 +395,10 @@ mod Windows {
                 #[get]
                 CurrentPrediction: HolographicFramePrediction;
                 fn UpdateCurrentPrediction(&self);
-                #[Windows::Foundation::Metadata::Overload("PresentUsingCurrentPrediction")]
+                #[overload(PresentUsingCurrentPrediction)]
                 fn PresentUsingCurrentPrediction(&self) -> HolographicFramePresentResult;
-                #[Windows::Foundation::Metadata::Overload("PresentUsingCurrentPredictionWithBehavior")]
-                fn PresentUsingCurrentPrediction(&self, waitBehavior: HolographicFramePresentWaitBehavior) -> HolographicFramePresentResult;
+                #[overload(PresentUsingCurrentPrediction)]
+                fn PresentUsingCurrentPredictionWithBehavior(&self, waitBehavior: HolographicFramePresentWaitBehavior) -> HolographicFramePresentResult;
                 fn WaitForFrameToFinish(&self);
             }
             #[guid(0x283f37bf_3bf2_5e91_6633_870574e6f217)]
@@ -401,21 +436,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::ExclusiveTo(HolographicFramePresentationReport)]
             interface IHolographicFramePresentationReport {
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
-                fn get_CompositorGpuDuration(&self) -> super::super::Foundation::TimeSpan;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
-                fn get_AppGpuDuration(&self) -> super::super::Foundation::TimeSpan;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
-                fn get_AppGpuOverrun(&self) -> super::super::Foundation::TimeSpan;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
-                fn get_MissedPresentationOpportunityCount(&self) -> u32;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
-                fn get_PresentationCount(&self) -> u32;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract"))]
+                CompositorGpuDuration: super::super::Foundation::TimeSpan;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract"))]
+                AppGpuDuration: super::super::Foundation::TimeSpan;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract"))]
+                AppGpuOverrun: super::super::Foundation::TimeSpan;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract"))]
+                MissedPresentationOpportunityCount: u32;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Use IHolographicFrameScanoutReport instead of IHolographicFramePresentationReport. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract"))]
+                PresentationCount: u32;
             }
             #[guid(0x05f32de4_e384_51b3_b934_f0d3a0f78606)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
@@ -495,7 +530,9 @@ mod Windows {
                 #[get]
                 PrimaryAdapterId: HolographicAdapterId;
                 fn SetDirect3D11Device(&self, value: super::DirectX::Direct3D11::IDirect3DDevice);
+                #[remove_name(cookie)]
                 event CameraAdded: super::super::Foundation::TypedEventHandler<HolographicSpace, HolographicSpaceCameraAddedEventArgs>;
+                #[remove_name(cookie)]
                 event CameraRemoved: super::super::Foundation::TypedEventHandler<HolographicSpace, HolographicSpaceCameraRemovedEventArgs>;
                 fn CreateNextFrame(&self) -> HolographicFrame;
             }

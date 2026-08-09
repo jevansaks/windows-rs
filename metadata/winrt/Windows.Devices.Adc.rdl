@@ -6,6 +6,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class AdcChannel {
+                #[default]
                 IAdcChannel,
                 super::super::Foundation::IClosable,
             }
@@ -21,6 +22,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IAdcControllerStatics, 65536, "Windows.Devices.DevicesLowLevelContract")]
             #[Windows::Foundation::Metadata::Static(IAdcControllerStatics2, 131072, "Windows.Devices.DevicesLowLevelContract")]
             class AdcController {
+                #[default]
                 IAdcController,
             }
             #[guid(0x040bf414_2588_4a56_abef_73a260acc60a)]

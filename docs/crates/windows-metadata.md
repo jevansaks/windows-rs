@@ -65,6 +65,10 @@ qualify: the explicit native-sized spelling is required as semantic evidence.
 The merge is deterministic: it stages through `BTreeMap`s and insertion-ordered `Vec`s, with no
 `HashMap` reaching the output.
 
+Custom-attribute null values use `Value::Null(Type)`, and boxed values use `Value::Boxed`, so their
+serialized types are preserved through reading and writing. `Value::Array` retains the element type
+for empty, null, named, and boxed arrays.
+
 The merger and namespace remapper accept strings, `Path`, or `PathBuf` for input and output paths
 and retain them as `PathBuf`. The remapper provides singular/plural `input`/`inputs`,
 `source`/`sources`, and `route`/`routes` methods.
@@ -89,6 +93,147 @@ their independent metadata facts. These helpers do not inspect pointer mutabilit
 for an unspecified direction, combine `ReservedAttribute` with `Optional`, or decide whether a
 parameter should become a language return value. Array and byte-count attributes remain available
 through `attributes()` because each projection validates different public-surface shapes.
+
+### Validation
+
+`validator::validate` checks a `reader::Index` independently of any source language. The current
+rules reject overlapping duplicate type, field, method, property, and event identities, malformed
+`Param.Sequence` associations, invalid method semantics, duplicate singleton accessors, malformed
+property/event ownership, invalid or duplicate layout rows, and duplicate custom attributes whose
+local definitions explicitly declare `AttributeUsageAttribute` without `AllowMultipleAttribute`.
+Custom-attribute constructors must be default-convention instance methods named `.ctor` that
+return `void`. `Attribute::try_value` checks the value blob without panicking and reports malformed
+prologs, truncation, Boolean values, compressed integers, UTF-8, named-argument tags and types, and
+trailing bytes with byte offsets. Valid serialization forms not yet represented by `Value` return
+an unsupported result rather than a metadata validity error. Constructor parameters are restricted
+to ECMA custom-attribute serialization types; pointer-sized integers, pointers, references, fixed
+arrays, generics, and arbitrary class types are rejected before value decoding.
+
+`Attribute::try_args` preserves positional arguments and the field/property tag on named
+arguments. The compatibility `value` and `try_value` methods continue returning `(name, value)`
+pairs. When an attribute definition is available, validation rejects missing named fields or
+properties, type mismatches, duplicate named arguments, fields that are not public writable
+instance fields, and properties without a matching public instance setter.
+Definitions without an explicit usage contract and referenced definitions outside the validated
+index have unknown multiplicity. `Validator::references` accepts a separate reference index for
+definition lookup without treating referenced types as authored output or reporting false
+duplicate types. `validator::validate` remains the context-free convenience entry point.
+Architecture-specific copies are allowed when their
+`SupportedArchitectureAttribute` masks do not overlap. Split property and event rows with
+complementary accessors are also valid WinMD.
+
+The public entry points delegate to one private validation context that owns the authored index,
+optional references, and collected errors. Rules are grouped by the metadata fact they inspect:
+
+| Module | Responsibility |
+| --- | --- |
+| `attributes` | Constructors, value blobs, named arguments, and multiplicity |
+| `members` | Field and implemented-interface identities |
+| `associations` | Properties, events, maps, ownership, and method semantics |
+| `methods` | Method identities, signatures, parameters, and overload groups |
+| `layouts` | Class and field layout rows |
+
+This keeps references and diagnostic collection shared without introducing a second metadata model
+or exposing rule modules through the public API.
+
+Field, method, and property signatures reject `void` values outside a method return or pointer
+target. Static methods must omit `HASTHIS`. Canonical WinRT metadata omits `HASTHIS` on many
+instance MethodDef signatures, so its absence is not a base validity error. A
+`NativeTypedefAttribute` wrapper may use its single `Value` field to represent a typedef of
+`void`, as established by Win32 metadata.
+
+Overload metadata is validated independently of RDL. Methods with `DefaultOverloadAttribute` must
+also have `OverloadAttribute`. Projected signatures must be unique within an overload group, and no
+more than one overlapping architecture variant may be the default. Metadata names may repeat when
+the signatures differ; this is common in Windows metadata. These rules are checked against the
+committed Windows metadata corpus.
+
+Every reader row exposes a `RowId` containing its file, ECMA-335 `TableId`, and row positions.
+Validation errors carry the primary row and an optional related row. Writer handles for tables
+whose positions survive finalization implement `RowHandle`, allowing metadata producers to map
+those identities to source locations without storing source paths or line numbers in the winmd.
+Sorted and deferred tables do not expose this conversion because their final row positions can
+change.
+
+`AttributeUsageAttribute` target masks are not base metadata validity rules. The committed Windows
+metadata applies `ApiContractAttribute` to structs despite its Enum target declaration and applies
+`ContractVersionAttribute` to API contracts despite excluding that target from its mask. Any
+target policy therefore needs an explicit Windows profile with rules for these established
+conventions. `Validator` is the configuration boundary for references and future explicit
+profiles; it does not merge those inputs into the authored index. The validator will grow to cover
+remaining table ownership, custom attribute structure, signatures, and profile rules. Merge,
+remap, and RDL lowering should use the same validator rather than maintaining separate
+interpretations of ECMA-335.
+
+`writer::File::finalize` orders deferred tables once and produces a `FinalizedFile` backed by the
+canonical table, string, and blob streams. `FinalizedFile::validate` queries those streams directly
+with the reference index used during encoding and an explicit profile;
+`validate_inferred` selects the profile from authored type flags. `into_stream` packages the same
+streams as a winmd. This keeps PE serialization at the output boundary and avoids parsing newly
+serialized output during validation. `into_stream_and_reference` remains available for metadata
+producers that need the finalized bytes and reference index separately.
+
+`Attribute::value_blob` and `writer::File::AttributeBlob` provide a raw copy path for
+metadata-to-metadata transformations. Merge and namespace remapping use this path so named
+custom-attribute arguments retain their field/property tag and exact serialized form.
+
+`Attribute::value` is the trusted convenience wrapper over the same decoder, and the validator
+uses the strict argument form. Merge and remap continue using the raw copy path. The remaining
+value-model work is to represent valid null strings, boxed values, and arrays. ECMA `Char` values
+are preserved as UTF-16 `u16` code units rather than converted to Rust Unicode scalars. Enum values
+resolve their backing type from the authored index or `Validator` reference index; unresolved
+definitions are classified as unsupported by `try_value` rather than assumed to be `i32`. The
+trusted `value` convenience retains its historical `i32` fallback for callers that do not carry
+reference
+metadata.
+
+### Property and event association
+
+The reader exposes Property, PropertyMap, Event, EventMap, and MethodSemantics rows. A `TypeDef`
+provides `properties()` and `events()` iterators, while each property or event provides its
+accessor semantics. Property signatures retain index parameters rather than reducing every
+property to a return type. The index also exposes complete table iterators so validation can find
+duplicate maps and rows with no owner rather than seeing only the first map attached to a type.
+
+Merge and namespace remapping copy these rows together with WinRT runtime-class methods. They also
+preserve property and event flags, custom attributes, property constants, and the association from
+each accessor to its property or event. Namespace remapping applies to event types and every type
+in a property signature.
+
+### Field layout
+
+`Field::layout()` exposes the optional ECMA-335 FieldLayout row and its byte offset. Merge and
+namespace remapping preserve these rows so explicit layouts do not collapse to declaration order.
+
+### Table support
+
+The reader has an exhaustive registry for all 45 standard ECMA-335 tables. Each table is classified
+as preserved, regenerated, unsupported, or irrelevant to Windows API metadata.
+
+`reader::File::read` and `reader::File::new` retain the compact `Option` API.
+`reader::File::try_read` and `reader::File::try_new` return structured errors that distinguish
+malformed metadata, I/O failure, and the first unsupported table with its row count.
+
+`MethodImpl` appears in MIDLRT and Windows App SDK metadata. The reader exposes each class, method
+body, and declaration mapping, and merge/remap preserve the table. RDL dump rejects these rows
+until the language has an explicit source spelling.
+
+### Validation profiles
+
+`validator::validate` and `Validator::new(...).validate()` apply common ECMA and identity checks.
+`Validator::profile` selects `Win32`, `WinRT`, or combined `Windows` policy without moving Windows
+assumptions into common validation. `ValidationProfile::infer` selects a profile from authored
+`WindowsRuntime` type flags and is used when compiling explicitly profiled RDL.
+
+WinRT policy checks type flags, abstract interface shape, conflicting default interfaces, and
+factory types referenced by `ActivatableAttribute`, `ComposableAttribute`, and `StaticAttribute`.
+It enforces attribute target masks, including WinRT's type-to-member and
+property/event-to-accessor propagation. API contracts must be structs with one nonzero contract
+version, and named contract-version targets must resolve to API contracts. Within one contract, a
+member or interface implementation cannot predate its owning type. Win32 policy checks type flags
+and requires `PInvokeImpl` and `ImplMap` to agree. P/Invoke methods must be static and select a
+supported calling convention; variadic imports must use `cdecl`. Native structs require one layout
+kind, and explicit unions must use either implicit zero offsets or complete field-layout rows.
 
 ### Determinism and the winmd writer
 
@@ -117,5 +262,8 @@ alignment, enum constant values, subset-present divergence) and `merge.rs` (nati
 reconciliation). `method_params.rs` authors metadata directly with `writer::File` and covers dense,
 absent, return, sparse, out-of-order, duplicate, and out-of-range parameter rows. It also covers all
 four raw directions and verifies that optional, reserved, retval, and count attributes remain
-independent facts. `remap.rs` covers explicit and fallback namespace routing, singular/plural
-builder methods, missing outputs, and invalid inputs.
+independent facts. `semantic_roundtrip.rs` authors runtime-class methods, an indexed property, an
+event, constants, flags, custom attributes, and accessor semantics directly with `writer::File`,
+then verifies merge and namespace remapping preserve them. It also verifies nonzero FieldLayout
+offsets. `remap.rs` covers explicit and fallback namespace routing, singular/plural builder methods,
+missing outputs, and invalid inputs.

@@ -8,6 +8,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ICustomDeviceStatics, 65536, "Windows.Devices.Custom.CustomDeviceContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CustomDevice {
+                #[default]
                 ICustomDevice,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -96,8 +97,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class IOControlCode {
+                #[default]
                 IIOControlCode,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CustomDeviceContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]

@@ -2,6 +2,7 @@
 mod Windows {
     mod UI {
         mod Shell {
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IAdaptiveCardBuilderStatics, 327680, "Windows.Foundation.UniversalApiContract")]
@@ -10,6 +11,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 983040)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class FocusSession {
+                #[default]
                 IFocusSession,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 983040)]
@@ -17,6 +19,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IFocusSessionManagerStatics, 983040, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class FocusSessionManager {
+                #[default]
                 IFocusSessionManager,
             }
             #[guid(0x72d0568c_a274_41cd_82a8_989d40b9b05e)]
@@ -44,10 +47,10 @@ mod Windows {
                 #[get]
                 IsFocusActive: bool;
                 fn GetSession(&self, id: String) -> FocusSession;
-                #[Windows::Foundation::Metadata::Overload("TryStartFocusSession")]
+                #[overload(TryStartFocusSession)]
                 fn TryStartFocusSession(&self) -> FocusSession;
-                #[Windows::Foundation::Metadata::Overload("TryStartFocusSession2")]
-                fn TryStartFocusSession(&self, endTime: super::super::Foundation::DateTime) -> FocusSession;
+                #[overload(TryStartFocusSession)]
+                fn TryStartFocusSession2(&self, endTime: super::super::Foundation::DateTime) -> FocusSession;
                 fn DeactivateFocus(&self);
                 event IsFocusActiveChanged: super::super::Foundation::TypedEventHandler<FocusSessionManager, Object>;
             }
@@ -168,10 +171,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(WindowTabIcon)]
             interface IWindowTabIconStatics {
-                #[Windows::Foundation::Metadata::Overload("CreateFromFontGlyph")]
+                #[overload(CreateFromFontGlyph)]
                 fn CreateFromFontGlyph(&self, glyph: String, fontFamily: String) -> WindowTabIcon;
-                #[Windows::Foundation::Metadata::Overload("CreateFromFontGlyphWithUri")]
-                fn CreateFromFontGlyph(&self, glyph: String, fontFamily: String, fontUri: super::super::Foundation::Uri) -> WindowTabIcon;
+                #[overload(CreateFromFontGlyph)]
+                fn CreateFromFontGlyphWithUri(&self, glyph: String, fontFamily: String, fontUri: super::super::Foundation::Uri) -> WindowTabIcon;
                 fn CreateFromImage(&self, image: super::super::Storage::Streams::IRandomAccessStreamReference) -> WindowTabIcon;
             }
             #[guid(0x97b3c697_f43a_43e7_b3a2_e889a9835599)]
@@ -233,6 +236,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SecurityAppManager {
+                #[default]
                 ISecurityAppManager,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -262,6 +266,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ShareWindowCommandEventArgs {
+                #[default]
                 IShareWindowCommandEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
@@ -269,6 +274,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IShareWindowCommandSourceStatics, 851968, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ShareWindowCommandSource {
+                #[default]
                 IShareWindowCommandSource,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
@@ -277,7 +283,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ITaskbarManagerStatics, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TaskbarManager {
+                #[default]
                 ITaskbarManager,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 ITaskbarManager2,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.UI.Shell.WindowTabManagerContract")]
@@ -285,16 +293,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowTab {
+                #[default]
                 IWindowTab,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowTabCloseRequestedEventArgs {
+                #[default]
                 IWindowTabCloseRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowTabCollection {
+                #[default]
                 IWindowTabCollection,
                 super::super::Foundation::Collections::IVector<WindowTab>,
                 super::super::Foundation::Collections::IIterable<WindowTab>,
@@ -304,6 +315,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowTabGroup {
+                #[default]
                 IWindowTabGroup,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
@@ -311,6 +323,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IWindowTabIconStatics, 65536, "Windows.UI.Shell.WindowTabManagerContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowTabIcon {
+                #[default]
                 IWindowTabIcon,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
@@ -318,6 +331,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IWindowTabManagerStatics, 65536, "Windows.UI.Shell.WindowTabManagerContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowTabManager {
+                #[default]
                 IWindowTabManager,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -326,16 +340,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowTabSwitchRequestedEventArgs {
+                #[default]
                 IWindowTabSwitchRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowTabTearOutRequestedEventArgs {
+                #[default]
                 IWindowTabTearOutRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowTabManagerContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowTabThumbnailRequestedEventArgs {
+                #[default]
                 IWindowTabThumbnailRequestedEventArgs,
             }
         }

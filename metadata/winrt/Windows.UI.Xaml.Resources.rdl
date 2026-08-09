@@ -3,6 +3,7 @@ mod Windows {
     mod UI {
         mod Xaml {
             mod Resources {
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ICustomXamlResourceLoaderFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -10,7 +11,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CustomXamlResourceLoader {
+                    #[default]
                     ICustomXamlResourceLoader,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                    #[Windows::Foundation::Metadata::Overridable]
                     ICustomXamlResourceLoaderOverrides,
                 }
                 #[guid(0x511a84ab_4a88_419f_852e_54083b90b078)]

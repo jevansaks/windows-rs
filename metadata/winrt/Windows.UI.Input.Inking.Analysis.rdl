@@ -140,6 +140,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisInkBullet {
+                        #[default]
                         IInkAnalysisInkBullet,
                         IInkAnalysisNode,
                     }
@@ -148,6 +149,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisInkDrawing {
+                        #[default]
                         IInkAnalysisInkDrawing,
                         IInkAnalysisNode,
                     }
@@ -156,6 +158,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisInkWord {
+                        #[default]
                         IInkAnalysisInkWord,
                         IInkAnalysisNode,
                     }
@@ -164,6 +167,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisLine {
+                        #[default]
                         IInkAnalysisLine,
                         IInkAnalysisNode,
                     }
@@ -172,6 +176,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisListItem {
+                        #[default]
                         IInkAnalysisListItem,
                         IInkAnalysisNode,
                     }
@@ -180,6 +185,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisNode {
+                        #[default]
                         IInkAnalysisNode,
                     }
                     #[repr(i32)]
@@ -200,6 +206,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisParagraph {
+                        #[default]
                         IInkAnalysisParagraph,
                         IInkAnalysisNode,
                     }
@@ -207,6 +214,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::DualApiPartition(version = 167772163)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class InkAnalysisResult {
+                        #[default]
                         IInkAnalysisResult,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 262144)]
@@ -214,6 +222,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisRoot {
+                        #[default]
                         IInkAnalysisRoot,
                         IInkAnalysisNode,
                     }
@@ -235,6 +244,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class InkAnalysisWritingRegion {
+                        #[default]
                         IInkAnalysisWritingRegion,
                         IInkAnalysisNode,
                     }
@@ -243,6 +253,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::DualApiPartition(version = 167772163)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class InkAnalyzer {
+                        #[default]
                         IInkAnalyzer,
                     }
                 }

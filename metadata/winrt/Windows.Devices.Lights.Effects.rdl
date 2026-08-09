@@ -133,12 +133,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class LampArrayBitmapEffect {
+                    #[default]
                     ILampArrayBitmapEffect,
                     ILampArrayEffect,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class LampArrayBitmapRequestedEventArgs {
+                    #[default]
                     ILampArrayBitmapRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::Activatable(ILampArrayBlinkEffectFactory, 458752, "Windows.Foundation.UniversalApiContract")]
@@ -146,6 +148,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class LampArrayBlinkEffect {
+                    #[default]
                     ILampArrayBlinkEffect,
                     ILampArrayEffect,
                 }
@@ -154,6 +157,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class LampArrayColorRampEffect {
+                    #[default]
                     ILampArrayColorRampEffect,
                     ILampArrayEffect,
                 }
@@ -162,6 +166,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class LampArrayCustomEffect {
+                    #[default]
                     ILampArrayCustomEffect,
                     ILampArrayEffect,
                 }
@@ -177,6 +182,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ILampArrayEffectPlaylistStatics, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class LampArrayEffectPlaylist {
+                    #[default]
                     ILampArrayEffectPlaylist,
                     super::super::super::Foundation::Collections::IVectorView<ILampArrayEffect>,
                     super::super::super::Foundation::Collections::IIterable<ILampArrayEffect>,
@@ -198,12 +204,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class LampArraySolidEffect {
+                    #[default]
                     ILampArraySolidEffect,
                     ILampArrayEffect,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class LampArrayUpdateRequestedEventArgs {
+                    #[default]
                     ILampArrayUpdateRequestedEventArgs,
                 }
             }

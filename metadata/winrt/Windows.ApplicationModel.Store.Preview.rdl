@@ -24,6 +24,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IDeliveryOptimizationSettingsStatics, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DeliveryOptimizationSettings {
+                    #[default]
                     IDeliveryOptimizationSettings,
                 }
                 #[guid(0x1810fda0_e853_565e_b874_7a8a7b9a0e0f)]
@@ -167,13 +168,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(WebAuthenticationCoreManagerHelper)]
                 interface IWebAuthenticationCoreManagerHelper {
-                    #[Windows::Foundation::Metadata::Overload("RequestTokenWithUIElementHostingAsync")]
+                    #[overload(RequestTokenWithUIElementHostingAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn RequestTokenWithUIElementHostingAsync(&self, request: super::super::super::Security::Authentication::Web::Core::WebTokenRequest, uiElement: super::super::super::UI::Xaml::UIElement) -> super::super::super::Foundation::IAsyncOperation<super::super::super::Security::Authentication::Web::Core::WebTokenRequestResult>;
-                    #[Windows::Foundation::Metadata::Overload("RequestTokenWithUIElementHostingAndWebAccountAsync")]
+                    #[overload(RequestTokenWithUIElementHostingAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
-                    fn RequestTokenWithUIElementHostingAsync(&self, request: super::super::super::Security::Authentication::Web::Core::WebTokenRequest, webAccount: super::super::super::Security::Credentials::WebAccount, uiElement: super::super::super::UI::Xaml::UIElement) -> super::super::super::Foundation::IAsyncOperation<super::super::super::Security::Authentication::Web::Core::WebTokenRequestResult>;
+                    fn RequestTokenWithUIElementHostingAndWebAccountAsync(&self, request: super::super::super::Security::Authentication::Web::Core::WebTokenRequest, webAccount: super::super::super::Security::Credentials::WebAccount, uiElement: super::super::super::UI::Xaml::UIElement) -> super::super::super::Foundation::IAsyncOperation<super::super::super::Security::Authentication::Web::Core::WebTokenRequestResult>;
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Static(IStoreConfigurationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Static(IStoreConfigurationStatics2, 131072, "Windows.Foundation.UniversalApiContract")]
@@ -185,6 +187,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class StoreHardwareManufacturerInfo {
+                    #[default]
                     IStoreHardwareManufacturerInfo,
                 }
                 #[repr(u32)]
@@ -194,6 +197,7 @@ mod Windows {
                     None = 0,
                     TryElevate = 1,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IStorePreview, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -203,6 +207,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class StorePreviewProductInfo {
+                    #[default]
                     IStorePreviewProductInfo,
                 }
                 #[repr(i32)]
@@ -217,12 +222,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class StorePreviewPurchaseResults {
+                    #[default]
                     IStorePreviewPurchaseResults,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class StorePreviewSkuInfo {
+                    #[default]
                     IStorePreviewSkuInfo,
                 }
                 #[repr(i32)]
@@ -252,18 +259,30 @@ mod Windows {
                     ResolutionWxga = 21,
                     ResolutionWvgaOrWxga = 22,
                     ResolutionWxgaOr720P = 23,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     Memory4GB = 24,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     Memory6GB = 25,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     Memory8GB = 26,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     Memory12GB = 27,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     Memory16GB = 28,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     Memory20GB = 29,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     VideoMemory2GB = 30,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     VideoMemory4GB = 31,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     VideoMemory6GB = 32,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     VideoMemory1GB = 33,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     ArchitectureArm64 = 34,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::Static(IWebAuthenticationCoreManagerHelper, 262144, "Windows.Foundation.UniversalApiContract")]
                 class WebAuthenticationCoreManagerHelper {}

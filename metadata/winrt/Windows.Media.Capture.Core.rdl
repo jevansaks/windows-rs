@@ -41,6 +41,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class VariablePhotoCapturedEventArgs {
+                    #[default]
                     IVariablePhotoCapturedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -48,7 +49,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class VariablePhotoSequenceCapture {
+                    #[default]
                     IVariablePhotoSequenceCapture,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IVariablePhotoSequenceCapture2,
                 }
             }

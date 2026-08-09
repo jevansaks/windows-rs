@@ -5,6 +5,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class ActivatedDeferral {
+                #[default]
                 IActivatedDeferral,
             }
             #[guid(0x50f1e730_c5d1_4b6b_9adb_8a11756be29c)]
@@ -13,11 +14,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class ActivatedOperation {
+                #[default]
                 IActivatedOperation,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class BackgroundActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IBackgroundActivatedEventArgs,
             }
             #[guid(0xedb19fbb_0761_47cc_9a77_24d7072965ca)]
@@ -26,6 +29,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class EnteredBackgroundEventArgs {
+                #[default]
                 super::super::ApplicationModel::IEnteredBackgroundEventArgs,
             }
             #[guid(0x2b09a173_b68e_4def_88c1_8de84e5aab2f)]
@@ -34,6 +38,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HtmlPrintDocumentSource {
+                #[default]
                 IHtmlPrintDocumentSource,
                 super::super::Graphics::Printing::IPrintDocumentSource,
                 super::super::Foundation::IClosable,
@@ -67,6 +72,7 @@ mod Windows {
                 BottomMargin: f32;
                 EnableHeaderFooter: bool;
                 ShrinkToFit: bool;
+                #[set_name(scalePercent)]
                 PercentScale: f32;
                 #[get]
                 PageRange: String;
@@ -120,6 +126,7 @@ mod Windows {
             #[guid(0x23f12c25_e2f7_4741_bc9c_394595de24dc)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             interface IWebUIBackgroundTaskInstance {
+                #[set_name(succeeded)]
                 Succeeded: bool;
             }
             #[guid(0x9c7a5291_19ae_4ca3_b94b_fe4ec744a740)]
@@ -161,16 +168,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::ExclusiveTo(WebUIView)]
             interface IWebUIViewStatics {
-                #[Windows::Foundation::Metadata::Overload("CreateAsync")]
+                #[overload(CreateAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CreateAsync(&self) -> super::super::Foundation::IAsyncOperation<WebUIView>;
-                #[Windows::Foundation::Metadata::Overload("CreateWithUriAsync")]
+                #[overload(CreateAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn CreateAsync(&self, uri: super::super::Foundation::Uri) -> super::super::Foundation::IAsyncOperation<WebUIView>;
+                fn CreateWithUriAsync(&self, uri: super::super::Foundation::Uri) -> super::super::Foundation::IAsyncOperation<WebUIView>;
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class LeavingBackgroundEventArgs {
+                #[default]
                 super::super::ApplicationModel::ILeavingBackgroundEventArgs,
             }
             #[guid(0x00b4ccd9_7a9c_4b6b_9ac4_13474f268bc4)]
@@ -182,6 +190,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class NewWebUIViewCreatedEventArgs {
+                #[default]
                 INewWebUIViewCreatedEventArgs,
             }
             #[repr(i32)]
@@ -198,11 +207,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class SuspendingDeferral {
+                #[default]
                 super::super::ApplicationModel::ISuspendingDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class SuspendingEventArgs {
+                #[default]
                 super::super::ApplicationModel::ISuspendingEventArgs,
             }
             #[guid(0x509c429c_78e2_4883_abc8_8960dcde1b5c)]
@@ -211,8 +222,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class SuspendingOperation {
+                #[default]
                 super::super::ApplicationModel::ISuspendingOperation,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Static(IWebUIActivationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -223,48 +236,59 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIAppointmentsProviderAddAppointmentActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IAppointmentsProviderAddAppointmentActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IAppointmentsProviderActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIAppointmentsProviderRemoveAppointmentActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IAppointmentsProviderRemoveAppointmentActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IAppointmentsProviderActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIAppointmentsProviderReplaceAppointmentActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IAppointmentsProviderReplaceAppointmentActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IAppointmentsProviderActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIAppointmentsProviderShowAppointmentDetailsActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IAppointmentsProviderShowAppointmentDetailsActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IAppointmentsProviderActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIAppointmentsProviderShowTimeFrameActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IAppointmentsProviderShowTimeFrameActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IAppointmentsProviderActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Static(IWebUIBackgroundTaskInstanceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -272,12 +296,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIBackgroundTaskInstanceRuntimeClass {
+                #[default]
                 IWebUIBackgroundTaskInstance,
                 super::super::ApplicationModel::Background::IBackgroundTaskInstance,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WebUIBarcodeScannerPreviewActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IBarcodeScannerPreviewActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
@@ -286,14 +312,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUICachedFileUpdaterActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::ICachedFileUpdaterActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ActivationCameraSettingsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUICameraSettingsActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::ICameraSettingsActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
@@ -301,6 +330,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WebUICommandLineActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::ICommandLineActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
@@ -309,6 +339,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ContactActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIContactCallActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IContactCallActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IContactActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
@@ -317,6 +348,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ContactActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIContactMapActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IContactMapActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IContactActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
@@ -325,6 +357,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ContactActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIContactMessageActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IContactMessageActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IContactActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
@@ -333,6 +366,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WebUIContactPanelActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IContactPanelActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
@@ -341,6 +375,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ContactActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIContactPickerActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IContactPickerActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
@@ -348,6 +383,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ContactActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIContactPostActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IContactPostActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IContactActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
@@ -356,6 +392,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ContactActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIContactVideoCallActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IContactVideoCallActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IContactActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
@@ -364,111 +401,142 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIDeviceActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IDeviceActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIDevicePairingActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IDevicePairingActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIDialReceiverActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IDialReceiverActivatedEventArgs,
                 super::super::ApplicationModel::Activation::ILaunchActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIFileActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IFileActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IFileActivatedEventArgsWithNeighboringFiles,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIFileOpenPickerActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IFileOpenPickerActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IFileOpenPickerActivatedEventArgs2,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::Deprecated("WebUIFileOpenPickerContinuationEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIFileOpenPickerContinuationEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IFileOpenPickerContinuationEventArgs,
                 super::super::ApplicationModel::Activation::IContinuationActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIFileSavePickerActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IFileSavePickerActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IFileSavePickerActivatedEventArgs2,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::Deprecated("WebUIFileSavePickerContinuationEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIFileSavePickerContinuationEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IFileSavePickerContinuationEventArgs,
                 super::super::ApplicationModel::Activation::IContinuationActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::Deprecated("WebUIFolderPickerContinuationEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 655360, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIFolderPickerContinuationEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IFolderPickerContinuationEventArgs,
                 super::super::ApplicationModel::Activation::IContinuationActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUILaunchActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::ILaunchActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IPrelaunchActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 super::super::ApplicationModel::Activation::ILaunchActivatedEventArgs2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUILockScreenActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::ILockScreenActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUILockScreenCallActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::ILockScreenCallActivatedEventArgs,
                 super::super::ApplicationModel::Activation::ILaunchActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
@@ -478,27 +546,32 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUILockScreenComponentActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUINavigatedDeferral {
+                #[default]
                 IWebUINavigatedDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUINavigatedEventArgs {
+                #[default]
                 IWebUINavigatedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUINavigatedOperation {
+                #[default]
                 IWebUINavigatedOperation,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WebUIPhoneCallActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IPhoneCallActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
@@ -507,6 +580,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIPrint3DWorkflowActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IPrint3DWorkflowActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
@@ -514,6 +588,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::ActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIPrintTaskSettingsActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IPrintTaskSettingsActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
@@ -521,58 +596,74 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIPrintWorkflowForegroundTaskActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIProtocolActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IProtocolActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IProtocolActivatedEventArgsWithCallerPackageFamilyNameAndData,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIProtocolForResultsActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IProtocolForResultsActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IProtocolActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IProtocolActivatedEventArgsWithCallerPackageFamilyNameAndData,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIRestrictedLaunchActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IRestrictedLaunchActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Activation::WebUISearchActivatedEventsContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUISearchActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::ISearchActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Activation.WebUISearchActivatedEventsContract", 65536)]
                 super::super::ApplicationModel::Activation::ISearchActivatedEventArgsWithLinguisticDetails,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Activation.WebUISearchActivatedEventsContract", 65536)]
                 super::super::ApplicationModel::Activation::IApplicationViewActivatedEventArgs,
                 IActivatedEventArgsDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIShareTargetActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IShareTargetActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WebUIStartupTaskActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IStartupTaskActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
@@ -581,14 +672,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIToastNotificationActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IToastNotificationActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIUserDataAccountProviderActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IUserDataAccountProviderActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
@@ -597,6 +691,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Static(IWebUIViewStatics, 458752, "Windows.Foundation.UniversalApiContract")]
             class WebUIView {
+                #[default]
                 IWebUIView,
                 super::super::Web::UI::IWebViewControl,
                 super::super::Web::UI::IWebViewControl2,
@@ -604,15 +699,18 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIVoiceCommandActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IVoiceCommandActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::ApplicationModel::Wallet::WalletContract, 65536)]
             #[Windows::Foundation::Metadata::Deprecated("WebUIWalletActionActivatedEventArgs is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 131072, "Windows.ApplicationModel.Wallet.WalletContract")]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIWalletActionActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IWalletActionActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
@@ -620,14 +718,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIWebAccountProviderActivatedEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IWebAccountProviderActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 IActivatedEventArgsDeferral,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebUIWebAuthenticationBrokerContinuationEventArgs {
+                #[default]
                 super::super::ApplicationModel::Activation::IWebAuthenticationBrokerContinuationEventArgs,
                 super::super::ApplicationModel::Activation::IContinuationActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,

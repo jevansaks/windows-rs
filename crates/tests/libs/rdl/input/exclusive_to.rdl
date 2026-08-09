@@ -8,6 +8,7 @@ mod Test {
         fn InternalMethod(&self) -> i32;
     }
     class Widget {
+        #[default]
         IWidget,
     }
 }

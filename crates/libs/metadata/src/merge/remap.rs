@@ -92,6 +92,7 @@ impl Remapper {
         let files = read_inputs(&self.input)?;
         let index = reader::Index::new(files);
         let mut file = writer::File::new(name);
+        let mut context = CopyContext::default();
 
         // Split source `Apis` containers after all regular types have been written.
         let mut apis: Vec<reader::TypeDef> = Vec::new();
@@ -102,14 +103,27 @@ impl Remapper {
             if self.is_source_apis(ty) {
                 apis.push(ty);
             } else {
-                self.write_type(&mut file, &index, ty, None);
+                copy::write_type(
+                    self,
+                    &mut file,
+                    &mut context,
+                    &index,
+                    ty,
+                    None,
+                    copy::TypeOptions {
+                        arch_override: None,
+                        invoke_signature: None,
+                    },
+                );
             }
         }
 
-        self.split_apis(&mut file, &apis);
+        self.split_apis(&mut file, &mut context, &apis);
 
-        let bytes = file.into_stream();
-        std::fs::write(&self.output, bytes)
+        context.finish(&mut file)?;
+        let file = file.finish();
+        validate_output(&file)?;
+        std::fs::write(&self.output, file.bytes())
             .map_err(|e| Error::new(format!("failed to write `{}`: {e}", self.output.display())))
     }
 
@@ -153,125 +167,13 @@ impl Remapper {
         }
     }
 
-    fn remap_signature(&self, sig: &Signature) -> Signature {
-        Signature {
-            flags: sig.flags,
-            return_type: self.remap_type(&sig.return_type),
-            types: sig.types.iter().map(|t| self.remap_type(t)).collect(),
-        }
-    }
-
-    fn remap_extends(&self, file: &mut writer::File, def: reader::TypeDef) -> writer::TypeDefOrRef {
-        def.extends()
-            .map(|extends| {
-                let namespace = self.target(extends.namespace(), extends.name());
-                writer::TypeDefOrRef::TypeRef(file.TypeRef(&namespace, extends.name()))
-            })
-            .unwrap_or_default()
-    }
-
-    /// Writes one non-`Apis` type while preserving ECMA-335 TypeDef field/method ranges.
-    fn write_type(
+    /// Splits flat `Apis` containers while preserving each TypeDef's contiguous member range.
+    fn split_apis(
         &self,
         file: &mut writer::File,
-        index: &reader::Index,
-        def: reader::TypeDef,
-        outer: Option<writer::TypeDef>,
+        context: &mut CopyContext,
+        apis: &[reader::TypeDef],
     ) {
-        let extends = self.remap_extends(file, def);
-        let namespace = if def.flags().is_nested() {
-            String::new()
-        } else {
-            self.target(def.namespace(), def.name())
-        };
-
-        let type_def = file.TypeDef(&namespace, def.name(), extends, def.flags());
-
-        if let Some(outer) = outer {
-            file.NestedClass(type_def, outer);
-        }
-
-        for field in def.fields() {
-            let field_def = file.Field(field.name(), &self.remap_type(&field.ty()), field.flags());
-            if let Some(constant) = field.constant() {
-                file.Constant(writer::HasConstant::Field(field_def), &constant.value());
-            }
-            write_attributes(file, writer::HasAttribute::Field(field_def), field);
-        }
-
-        let generics: Vec<_> = def
-            .generic_params()
-            .map(|param| Type::Generic(param.name().to_string(), param.sequence()))
-            .collect();
-
-        write_attributes(file, writer::HasAttribute::TypeDef(type_def), def);
-
-        for map in def.interface_impls() {
-            let interface = self.remap_type(&map.interface(&generics));
-            let interface_impl = file.InterfaceImpl(type_def, &interface);
-            write_attributes(
-                file,
-                writer::HasAttribute::InterfaceImpl(interface_impl),
-                map,
-            );
-        }
-
-        for generic in def.generic_params() {
-            file.GenericParam(
-                generic.name(),
-                writer::TypeOrMethodDef::TypeDef(type_def),
-                generic.sequence(),
-                generic.flags(),
-            );
-        }
-
-        let is_winrt_class = def.category() == reader::TypeCategory::Class
-            && def.flags().contains(TypeAttributes::WindowsRuntime);
-
-        if !is_winrt_class {
-            for method in def.methods() {
-                self.write_method(file, method, &generics);
-            }
-        }
-
-        if let Some(class_layout) = def.class_layout() {
-            file.ClassLayout(
-                type_def,
-                class_layout.packing_size(),
-                class_layout.class_size(),
-            );
-        }
-
-        for inner_def in index.nested(def) {
-            self.write_type(file, index, inner_def, Some(type_def));
-        }
-    }
-
-    fn write_method(&self, file: &mut writer::File, method: reader::MethodDef, generics: &[Type]) {
-        let signature = self.remap_signature(&method.signature(generics));
-        let method_def = file.MethodDef(
-            method.name(),
-            &signature,
-            method.flags(),
-            method.impl_flags(),
-        );
-        for param_def in method.params() {
-            let param = file.Param(param_def.name(), param_def.sequence(), param_def.flags());
-            write_attributes(file, writer::HasAttribute::Param(param), param_def);
-        }
-        write_attributes(file, writer::HasAttribute::MethodDef(method_def), method);
-        if let Some(impl_map) = method.impl_map() {
-            file.ImplMap(
-                method_def,
-                impl_map.flags(),
-                impl_map.import_name(),
-                impl_map.import_scope().name(),
-            );
-        }
-    }
-
-    /// Splits flat `Apis` containers while preserving each TypeDef's contiguous member range.
-    fn split_apis(&self, file: &mut writer::File, apis: &[reader::TypeDef]) {
         let mut namespaces: Vec<String> = Vec::new();
         let mut fields: HashMap<String, Vec<reader::Field>> = HashMap::new();
         let mut methods: HashMap<String, Vec<reader::MethodDef>> = HashMap::new();
@@ -302,23 +204,34 @@ impl Remapper {
         let Some(template) = template else { return };
 
         for namespace in &namespaces {
-            let extends = self.remap_extends(file, template);
+            let extends = template
+                .extends()
+                .map(|extends| {
+                    let namespace = self.target(extends.namespace(), extends.name());
+                    writer::TypeDefOrRef::TypeRef(file.TypeRef(&namespace, extends.name()))
+                })
+                .unwrap_or_default();
             let type_def = file.TypeDef(namespace, "Apis", extends, template.flags());
 
             for field in fields.get(namespace).into_iter().flatten() {
-                let field_def =
-                    file.Field(field.name(), &self.remap_type(&field.ty()), field.flags());
-                if let Some(constant) = field.constant() {
-                    file.Constant(writer::HasConstant::Field(field_def), &constant.value());
-                }
-                write_attributes(file, writer::HasAttribute::Field(field_def), *field);
+                copy::write_field(self, file, *field, None);
             }
 
             for method in methods.get(namespace).into_iter().flatten() {
-                self.write_method(file, *method, &[]);
+                copy::write_method(self, file, context, *method, &[], None, None);
             }
 
             write_attributes(file, writer::HasAttribute::TypeDef(type_def), template);
         }
+    }
+}
+
+impl copy::CopyPolicy for Remapper {
+    fn namespace(&self, def: reader::TypeDef) -> String {
+        self.target(def.namespace(), def.name())
+    }
+
+    fn ty(&self, ty: &Type) -> Type {
+        self.remap_type(ty)
     }
 }

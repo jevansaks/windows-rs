@@ -20,16 +20,16 @@ mod Windows {
                         fn GetSessionsAsync(&self, userAccountIdList: super::super::super::super::Foundation::Collections::IIterable<String>) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorGetSessionsResult>;
                         #[Windows::Foundation::Metadata::RemoteAsync]
                         fn GetSessionsAndUnregisteredAccountsAsync(&self, userAccountIdList: super::super::super::super::Foundation::Collections::IIterable<String>) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorUnregisteredAccountsAndSessionInfo>;
-                        #[Windows::Foundation::Metadata::Overload("ApproveSessionUsingAuthSessionInfoAsync")]
+                        #[overload(ApproveSessionAsync)]
                         #[Windows::Foundation::Metadata::RemoteAsync]
-                        fn ApproveSessionAsync(&self, sessionAuthentictionStatus: MicrosoftAccountMultiFactorSessionAuthenticationStatus, authenticationSessionInfo: MicrosoftAccountMultiFactorSessionInfo) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorServiceResponse>;
-                        #[Windows::Foundation::Metadata::Overload("ApproveSessionAsync")]
+                        fn ApproveSessionUsingAuthSessionInfoAsync(&self, sessionAuthentictionStatus: MicrosoftAccountMultiFactorSessionAuthenticationStatus, authenticationSessionInfo: MicrosoftAccountMultiFactorSessionInfo) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorServiceResponse>;
+                        #[overload(ApproveSessionAsync)]
                         #[Windows::Foundation::Metadata::RemoteAsync]
                         fn ApproveSessionAsync(&self, sessionAuthentictionStatus: MicrosoftAccountMultiFactorSessionAuthenticationStatus, userAccountId: String, sessionId: String, sessionAuthenticationType: MicrosoftAccountMultiFactorAuthenticationType) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorServiceResponse>;
-                        #[Windows::Foundation::Metadata::Overload("DenySessionUsingAuthSessionInfoAsync")]
+                        #[overload(DenySessionAsync)]
                         #[Windows::Foundation::Metadata::RemoteAsync]
-                        fn DenySessionAsync(&self, authenticationSessionInfo: MicrosoftAccountMultiFactorSessionInfo) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorServiceResponse>;
-                        #[Windows::Foundation::Metadata::Overload("DenySessionAsync")]
+                        fn DenySessionUsingAuthSessionInfoAsync(&self, authenticationSessionInfo: MicrosoftAccountMultiFactorSessionInfo) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorServiceResponse>;
+                        #[overload(DenySessionAsync)]
                         #[Windows::Foundation::Metadata::RemoteAsync]
                         fn DenySessionAsync(&self, userAccountId: String, sessionId: String, sessionAuthenticationType: MicrosoftAccountMultiFactorAuthenticationType) -> super::super::super::super::Foundation::IAsyncOperation<MicrosoftAccountMultiFactorServiceResponse>;
                     }
@@ -97,6 +97,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IMicrosoftAccountMultiFactorAuthenticatorStatics, 196608, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class MicrosoftAccountMultiFactorAuthenticationManager {
+                        #[default]
                         IMicrosoftAccountMultiFactorAuthenticationManager,
                     }
                     #[repr(i32)]
@@ -109,12 +110,14 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class MicrosoftAccountMultiFactorGetSessionsResult {
+                        #[default]
                         IMicrosoftAccountMultiFactorGetSessionsResult,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 196608)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class MicrosoftAccountMultiFactorOneTimeCodedInfo {
+                        #[default]
                         IMicrosoftAccountMultiFactorOneTimeCodedInfo,
                     }
                     #[repr(i32)]
@@ -160,12 +163,14 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class MicrosoftAccountMultiFactorSessionInfo {
+                        #[default]
                         IMicrosoftAccountMultiFactorSessionInfo,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 196608)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class MicrosoftAccountMultiFactorUnregisteredAccountsAndSessionInfo {
+                        #[default]
                         IMicrosoftAccountMultiFactorUnregisteredAccountsAndSessionInfo,
                     }
                 }

@@ -8,7 +8,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IDisplayAdapterStatics, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DisplayAdapter {
+                    #[default]
                     IDisplayAdapter,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                     IDisplayAdapter2,
                 }
                 #[repr(u32)]
@@ -26,8 +28,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayDevice {
+                    #[default]
                     IDisplayDevice,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IDisplayDevice2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                     IDisplayDeviceRenderAdapter,
                 }
                 #[repr(i32)]
@@ -38,6 +43,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayFence {
+                    #[default]
                     IDisplayFence,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
@@ -45,24 +51,30 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IDisplayManagerStatics, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DisplayManager {
+                    #[default]
                     IDisplayManager,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                     IDisplayManager2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                     IDisplayManager3,
                     super::super::super::Foundation::IClosable,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayManagerChangedEventArgs {
+                    #[default]
                     IDisplayManagerChangedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayManagerDisabledEventArgs {
+                    #[default]
                     IDisplayManagerDisabledEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayManagerEnabledEventArgs {
+                    #[default]
                     IDisplayManagerEnabledEventArgs,
                 }
                 #[repr(u32)]
@@ -71,11 +83,13 @@ mod Windows {
                 enum DisplayManagerOptions {
                     None = 0,
                     EnforceSourceOwnership = 1,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     VirtualRefreshRateAware = 2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayManagerPathsFailedOrInvalidatedEventArgs {
+                    #[default]
                     IDisplayManagerPathsFailedOrInvalidatedEventArgs,
                 }
                 #[repr(i32)]
@@ -90,12 +104,15 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayManagerResultWithState {
+                    #[default]
                     IDisplayManagerResultWithState,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayModeInfo {
+                    #[default]
                     IDisplayModeInfo,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IDisplayModeInfo2,
                 }
                 #[repr(u32)]
@@ -110,13 +127,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IDisplayMuxDeviceStatics, 1245184, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DisplayMuxDevice {
+                    #[default]
                     IDisplayMuxDevice,
                     super::super::super::Foundation::IClosable,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayPath {
+                    #[default]
                     IDisplayPath,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IDisplayPath2,
                 }
                 #[repr(i32)]
@@ -160,6 +180,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IDisplayPrimaryDescriptionStatics, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DisplayPrimaryDescription {
+                    #[default]
                     IDisplayPrimaryDescription,
                 }
                 #[repr(i32)]
@@ -173,6 +194,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayScanout {
+                    #[default]
                     IDisplayScanout,
                 }
                 #[repr(u32)]
@@ -180,12 +202,15 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 851968)]
                 enum DisplayScanoutOptions {
                     None = 0,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     AllowTearing = 2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplaySource {
+                    #[default]
                     IDisplaySource,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IDisplaySource2,
                 }
                 #[repr(i32)]
@@ -200,6 +225,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayState {
+                    #[default]
                     IDisplayState,
                 }
                 #[repr(u32)]
@@ -222,6 +248,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayStateOperationResult {
+                    #[default]
                     IDisplayStateOperationResult,
                 }
                 #[repr(i32)]
@@ -239,11 +266,13 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplaySurface {
+                    #[default]
                     IDisplaySurface,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayTarget {
+                    #[default]
                     IDisplayTarget,
                 }
                 #[repr(i32)]
@@ -257,29 +286,36 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayTask {
+                    #[default]
                     IDisplayTask,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IDisplayTask2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayTaskPool {
+                    #[default]
                     IDisplayTaskPool,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IDisplayTaskPool2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 851968)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayTaskResult {
+                    #[default]
                     IDisplayTaskResult,
                 }
                 #[repr(i32)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 enum DisplayTaskSignalKind {
                     OnPresentFlipAway = 0,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     OnPresentFlipTo = 1,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class DisplayView {
+                    #[default]
                     IDisplayView,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IDisplayWireFormatFactory, 458752, "Windows.Foundation.UniversalApiContract")]
@@ -288,6 +324,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IDisplayWireFormatStatics, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DisplayWireFormat {
+                    #[default]
                     IDisplayWireFormat,
                 }
                 #[repr(i32)]
@@ -614,11 +651,11 @@ mod Windows {
                     Views: super::super::super::Foundation::Collections::IVectorView<DisplayView>;
                     #[get]
                     Properties: super::super::super::Foundation::Collections::IMap<GUID, Object>;
-                    #[Windows::Foundation::Metadata::DefaultOverload]
-                    #[Windows::Foundation::Metadata::Overload("ConnectTarget")]
+                    #[overload(ConnectTarget)]
+                    #[default_overload]
                     fn ConnectTarget(&self, target: DisplayTarget) -> DisplayPath;
-                    #[Windows::Foundation::Metadata::Overload("ConnectTargetToView")]
-                    fn ConnectTarget(&self, target: DisplayTarget, view: DisplayView) -> DisplayPath;
+                    #[overload(ConnectTarget)]
+                    fn ConnectTargetToView(&self, target: DisplayTarget, view: DisplayView) -> DisplayPath;
                     fn CanConnectTargetToView(&self, target: DisplayTarget, view: DisplayView) -> bool;
                     fn GetViewForTarget(&self, target: DisplayTarget) -> DisplayView;
                     fn GetPathForTarget(&self, target: DisplayTarget) -> DisplayPath;

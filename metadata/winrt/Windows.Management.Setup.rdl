@@ -7,6 +7,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AgentProvisioningProgressReport {
+                #[default]
                 IAgentProvisioningProgressReport,
             }
             #[repr(i32)]
@@ -34,6 +35,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1048576)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class DeploymentSessionConnectionChangedEventArgs {
+                #[default]
                 IDeploymentSessionConnectionChangedEventArgs,
             }
             #[guid(0xc94a770b_5b05_4595_9e69_79070484377e)]
@@ -42,6 +44,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1048576)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class DeploymentSessionHeartbeatRequestedEventArgs {
+                #[default]
                 IDeploymentSessionHeartbeatRequestedEventArgs,
             }
             #[repr(i32)]
@@ -54,6 +57,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1048576)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class DeploymentSessionStateChangedEventArgs {
+                #[default]
                 IDeploymentSessionStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(IDeploymentWorkloadFactory, 1048576, "Windows.Foundation.UniversalApiContract")]
@@ -61,6 +65,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeploymentWorkload {
+                #[default]
                 IDeploymentWorkload,
             }
             #[Windows::Foundation::Metadata::Activatable(IDeploymentWorkloadBatchFactory, 1048576, "Windows.Foundation.UniversalApiContract")]
@@ -68,6 +73,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeploymentWorkloadBatch {
+                #[default]
                 IDeploymentWorkloadBatch,
             }
             #[repr(i32)]
@@ -85,6 +91,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1048576)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class DevicePreparationExecutionContext {
+                #[default]
                 IDevicePreparationExecutionContext,
             }
             #[guid(0x5097398a_70cc_5181_a7af_d31c167323d1)]
@@ -196,6 +203,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IMachineProvisioningProgressReporterStatics, 1048576, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MachineProvisioningProgressReporter {
+                #[default]
                 IMachineProvisioningProgressReporter,
             }
         }

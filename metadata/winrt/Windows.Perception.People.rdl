@@ -7,6 +7,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IEyesPoseStatics, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class EyesPose {
+                #[default]
                 IEyesPose,
             }
             #[repr(i32)]
@@ -42,6 +43,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HandMeshObserver {
+                #[default]
                 IHandMeshObserver,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
@@ -52,17 +54,20 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HandMeshVertexState {
+                #[default]
                 IHandMeshVertexState,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HandPose {
+                #[default]
                 IHandPose,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HeadPose {
+                #[default]
                 IHeadPose,
             }
             #[guid(0x682a9b23_8a1e_5b86_a060_906ffacb62a4)]

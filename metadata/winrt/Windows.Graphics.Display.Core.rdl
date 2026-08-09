@@ -32,6 +32,7 @@ mod Windows {
                     None = 0,
                     EotfSdr = 1,
                     Eotf2084 = 2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     DolbyVisionLowLatency = 3,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
@@ -40,6 +41,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHdmiDisplayInformationStatics, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HdmiDisplayInformation {
+                    #[default]
                     IHdmiDisplayInformation,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
@@ -47,7 +49,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HdmiDisplayMode {
+                    #[default]
                     IHdmiDisplayMode,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     IHdmiDisplayMode2,
                 }
                 #[repr(i32)]
@@ -66,15 +70,16 @@ mod Windows {
                     fn GetCurrentDisplayMode(&self) -> HdmiDisplayMode;
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn SetDefaultDisplayModeAsync(&self) -> super::super::super::Foundation::IAsyncAction;
-                    #[Windows::Foundation::Metadata::Overload("RequestSetCurrentDisplayModeAsync")]
+                    #[overload(RequestSetCurrentDisplayModeAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn RequestSetCurrentDisplayModeAsync(&self, mode: HdmiDisplayMode) -> super::super::super::Foundation::IAsyncOperation<bool>;
-                    #[Windows::Foundation::Metadata::Overload("RequestSetCurrentDisplayModeWithHdrAsync")]
+                    #[overload(RequestSetCurrentDisplayModeAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
-                    fn RequestSetCurrentDisplayModeAsync(&self, mode: HdmiDisplayMode, hdrOption: HdmiDisplayHdrOption) -> super::super::super::Foundation::IAsyncOperation<bool>;
-                    #[Windows::Foundation::Metadata::Overload("RequestSetCurrentDisplayModeWithHdrAndMetadataAsync")]
+                    fn RequestSetCurrentDisplayModeWithHdrAsync(&self, mode: HdmiDisplayMode, hdrOption: HdmiDisplayHdrOption) -> super::super::super::Foundation::IAsyncOperation<bool>;
+                    #[overload(RequestSetCurrentDisplayModeAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
-                    fn RequestSetCurrentDisplayModeAsync(&self, mode: HdmiDisplayMode, hdrOption: HdmiDisplayHdrOption, hdrMetadata: HdmiDisplayHdr2086Metadata) -> super::super::super::Foundation::IAsyncOperation<bool>;
+                    fn RequestSetCurrentDisplayModeWithHdrAndMetadataAsync(&self, mode: HdmiDisplayMode, hdrOption: HdmiDisplayHdrOption, hdrMetadata: HdmiDisplayHdr2086Metadata) -> super::super::super::Foundation::IAsyncOperation<bool>;
+                    #[add_name(value)]
                     event DisplayModesChanged: super::super::super::Foundation::TypedEventHandler<HdmiDisplayInformation, Object>;
                 }
                 #[guid(0x6ce6b260_f42a_4a15_914c_7b8e2a5a65df)]

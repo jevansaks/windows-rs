@@ -17,6 +17,15 @@ pub enum Item {
 }
 
 impl Item {
+    pub(super) fn take_syntax_errors(&mut self, errors: &mut Vec<syn::Error>) {
+        if let Self::Module(module) = self {
+            errors.append(&mut module.syntax_errors);
+            for item in &mut module.items {
+                item.take_syntax_errors(errors);
+            }
+        }
+    }
+
     fn replace_attrs(&mut self, new: Vec<syn::Attribute>) -> Vec<syn::Attribute> {
         match self {
             Self::Attribute(Attribute { attrs, .. })
@@ -31,6 +40,40 @@ impl Item {
             | Self::Struct(Struct { attrs, .. })
             | Self::Typedef(Typedef { attrs, .. })
             | Self::Union(Union { attrs, .. }) => std::mem::replace(attrs, new),
+        }
+    }
+
+    pub fn attrs(&self) -> &[syn::Attribute] {
+        match self {
+            Self::Attribute(item) => &item.attrs,
+            Self::Callback(item) => &item.attrs,
+            Self::Class(item) => &item.attrs,
+            Self::Const(item) => &item.attrs,
+            Self::Delegate(item) => &item.attrs,
+            Self::Enum(item) => &item.attrs,
+            Self::Fn(item) => &item.attrs,
+            Self::Interface(item) => &item.attrs,
+            Self::Module(item) => &item.attrs,
+            Self::Struct(item) => &item.attrs,
+            Self::Typedef(item) => &item.attrs,
+            Self::Union(item) => &item.attrs,
+        }
+    }
+
+    pub fn name_span(&self) -> Span {
+        match self {
+            Self::Attribute(item) => item.name.span(),
+            Self::Callback(item) => item.sig.ident.span(),
+            Self::Class(item) => item.name.span(),
+            Self::Const(item) => item.name.span(),
+            Self::Delegate(item) => item.sig.ident.span(),
+            Self::Enum(item) => item.name.span(),
+            Self::Fn(item) => item.sig.ident.span(),
+            Self::Interface(item) => item.name.span(),
+            Self::Module(item) => item.name.span(),
+            Self::Struct(item) => item.name.span(),
+            Self::Typedef(item) => item.name.span(),
+            Self::Union(item) => item.name.span(),
         }
     }
 }

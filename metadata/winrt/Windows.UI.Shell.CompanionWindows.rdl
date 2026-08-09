@@ -8,7 +8,13 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ICompanionWindowCoordinatorStatics, 65536, "Windows.UI.Shell.CompanionWindows.CompanionWindowsContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] CompanionWindowId: super::super::WindowId, get = get_CompanionWindowId)]
+                #[class_event(#[Windows::Foundation::Metadata::Experimental] Changed: super::super::super::Foundation::TypedEventHandler<CompanionWindowCoordinator, Object>, remove = remove_Changed, add = add_Changed)]
                 class CompanionWindowCoordinator {
+                    #[default]
+                    #[Windows::Foundation::Metadata::Experimental]
+                    #[no_event(Changed)]
+                    #[no_property(CompanionWindowId)]
                     ICompanionWindowCoordinator,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(CompanionWindowsContract, 65536)]
@@ -16,13 +22,27 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ICompanionWindowRequestStatics, 65536, "Windows.UI.Shell.CompanionWindows.CompanionWindowsContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] RequestingWindowId: super::super::WindowId, get = get_RequestingWindowId)]
                 class CompanionWindowRequest {
+                    #[default]
+                    #[Windows::Foundation::Metadata::Experimental]
+                    #[no_property(RequestingWindowId)]
                     ICompanionWindowRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(CompanionWindowsContract, 65536)]
                 #[Windows::Foundation::Metadata::Experimental]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] CompanionWindowId: super::super::WindowId, get = get_CompanionWindowId)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] ExtendedError: HRESULT, get = get_ExtendedError)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] Status: CompanionWindowRequestResultStatus, get = get_Status)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] Succeeded: bool, get = get_Succeeded)]
                 class CompanionWindowRequestResult {
+                    #[default]
+                    #[Windows::Foundation::Metadata::Experimental]
+                    #[no_property(CompanionWindowId)]
+                    #[no_property(ExtendedError)]
+                    #[no_property(Status)]
+                    #[no_property(Succeeded)]
                     ICompanionWindowRequestResult,
                 }
                 #[repr(i32)]

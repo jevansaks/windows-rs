@@ -43,6 +43,13 @@ code! { AttributeType(3)
 }
 
 impl<'a> AttributeType<'a> {
+    pub fn name(&self) -> &'a str {
+        match self {
+            Self::MethodDef(row) => row.name(),
+            Self::MemberRef(row) => row.name(),
+        }
+    }
+
     pub fn parent(&self) -> MemberRefParent<'a> {
         match self {
             Self::MethodDef(row) => row.parent(),
@@ -56,6 +63,21 @@ impl<'a> AttributeType<'a> {
             Self::MemberRef(row) => row.signature(generics),
         }
     }
+
+    pub fn instantiated_signature(&self) -> Signature {
+        let generics = self.parent().generic_arguments(&[]);
+        self.signature(&generics)
+    }
+}
+
+fn generic_placeholders(name: &str) -> Vec<Type> {
+    let count = name
+        .rsplit_once('`')
+        .and_then(|(_, count)| count.parse().ok())
+        .unwrap_or(0);
+    (0..count)
+        .map(|sequence| Type::Generic(String::new(), sequence))
+        .collect()
 }
 
 code! { HasAttribute(5)
@@ -68,10 +90,13 @@ code! { HasAttribute(5)
     (MemberRef, 6)
     (TypeSpec, 13)
     (GenericParam, 19)
+    (Property, 9)
+    (Event, 10)
 }
 
 code! { HasConstant(2)
     (Field, 0)
+    (Property, 2)
 }
 
 code! { MemberForwarded(1)
@@ -81,13 +106,32 @@ code! { MemberForwarded(1)
 code! { MemberRefParent(3)
     (TypeDef, 0)
     (TypeRef, 1)
+    (ModuleRef, 2)
+    (MethodDef, 3)
+    (TypeSpec, 4)
 }
 
 impl<'a> MemberRefParent<'a> {
+    pub fn generic_arguments(&self, enclosing: &[Type]) -> Vec<Type> {
+        match self {
+            Self::TypeDef(row) => row
+                .generic_params()
+                .map(|param| Type::Generic(param.name().to_string(), param.sequence()))
+                .collect(),
+            Self::TypeRef(row) => generic_placeholders(row.name()),
+            Self::TypeSpec(row) => match row.ty(enclosing) {
+                Type::ClassName(name) | Type::ValueName(name) => name.generics,
+                _ => vec![],
+            },
+            _ => vec![],
+        }
+    }
+
     pub fn namespace(&self) -> &'a str {
         match self {
             Self::TypeDef(row) => row.namespace(),
             Self::TypeRef(row) => row.namespace(),
+            rest => panic!("{rest:?}"),
         }
     }
 
@@ -95,6 +139,7 @@ impl<'a> MemberRefParent<'a> {
         match self {
             Self::TypeDef(row) => row.name(),
             Self::TypeRef(row) => row.name(),
+            rest => panic!("{rest:?}"),
         }
     }
 }
@@ -108,6 +153,16 @@ code! { TypeDefOrRef(2)
 code! { TypeOrMethodDef(1)
     (TypeDef, 0)
     (MethodDef, 1)
+}
+
+code! { MethodDefOrRef(1)
+    (MethodDef, 0)
+    (MemberRef, 1)
+}
+
+code! { HasSemantics(1)
+    (Event, 0)
+    (Property, 1)
 }
 
 impl<'a> TypeDefOrRef<'a> {

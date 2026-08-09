@@ -19,6 +19,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ApiContract]
             #[Windows::Foundation::Metadata::ContractVersion(65536)]
             struct PortableDeviceContract {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(PortableDeviceContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IServiceDeviceStatics, 65536, "Windows.Devices.Portable.PortableDeviceContract")]
@@ -35,6 +36,7 @@ mod Windows {
                 SmsService = 5,
                 TasksService = 6,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(PortableDeviceContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IStorageDeviceStatics, 65536, "Windows.Devices.Portable.PortableDeviceContract")]

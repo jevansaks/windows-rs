@@ -56,7 +56,7 @@ impl Encoder<'_> {
 
         let types = params.iter().map(|param| param.ty.clone()).collect();
 
-        let mut call_flags = metadata::MethodCallAttributes::default();
+        let mut call_flags = metadata::MethodCallAttributes(0);
 
         if item.sig.variadic.is_some() {
             call_flags |= metadata::MethodCallAttributes::VARARG;
@@ -73,6 +73,7 @@ impl Encoder<'_> {
         let method_def = self
             .output
             .MethodDef(&name, &signature, flags, Default::default());
+        self.origin(method_def, &item.sig.ident);
 
         self.encode_return_attrs(&item.return_attrs)?;
         self.encode_params(&params)?;

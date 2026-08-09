@@ -10,6 +10,7 @@ mod Windows {
                 LargeImage = 1,
                 Video = 2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Static(IAdvertisingManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -20,6 +21,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AdvertisingManagerForUser {
+                #[default]
                 IAdvertisingManagerForUser,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
@@ -27,6 +29,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IAssignedAccessSettingsStatics, 458752, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AssignedAccessSettings {
+                #[default]
                 IAssignedAccessSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -35,6 +38,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDiagnosticsSettingsStatics, 262144, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DiagnosticsSettings {
+                #[default]
                 IDiagnosticsSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -43,10 +47,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IFirstSignInSettingsStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class FirstSignInSettings {
+                #[default]
                 IFirstSignInSettings,
                 super::super::Foundation::Collections::IMapView<String, Object>,
                 super::super::Foundation::Collections::IIterable<super::super::Foundation::Collections::IKeyValuePair<String, Object>>,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -59,6 +65,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GlobalizationPreferencesForUser {
+                #[default]
                 IGlobalizationPreferencesForUser,
             }
             #[guid(0x928bf3d0_cf7c_4ab0_a7dc_6dc5bcd44252)]
@@ -201,12 +208,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
             #[Windows::Foundation::Metadata::ExclusiveTo(UserInformation)]
             interface IUserInformationStatics {
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
-                fn get_AccountPictureChangeEnabled(&self) -> bool;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
-                fn get_NameAccessAllowed(&self) -> bool;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract"))]
+                AccountPictureChangeEnabled: bool;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract"))]
+                NameAccessAllowed: bool;
                 #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
                 fn GetAccountPicture(&self, kind: AccountPictureKind) -> super::super::Storage::IStorageFile;
                 #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
@@ -217,12 +224,10 @@ mod Windows {
                 fn SetAccountPictureFromStreamAsync(&self, image: super::super::Storage::Streams::IRandomAccessStream) -> super::super::Foundation::IAsyncOperation<SetAccountPictureResult>;
                 #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
                 fn SetAccountPicturesFromStreamsAsync(&self, smallImage: super::super::Storage::Streams::IRandomAccessStream, largeImage: super::super::Storage::Streams::IRandomAccessStream, video: super::super::Storage::Streams::IRandomAccessStream) -> super::super::Foundation::IAsyncOperation<SetAccountPictureResult>;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
-                fn add_AccountPictureChanged(&self, changeHandler: super::super::Foundation::EventHandler<Object>) -> super::super::Foundation::EventRegistrationToken;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
-                fn remove_AccountPictureChanged(&self, token: super::super::Foundation::EventRegistrationToken);
+                #[add(Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract"))]
+                #[remove(Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract"))]
+                #[add_name(changeHandler)]
+                event AccountPictureChanged: super::super::Foundation::EventHandler<Object>;
                 #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetDisplayNameAsync(&self) -> super::super::Foundation::IAsyncOperation<String>;
@@ -259,6 +264,7 @@ mod Windows {
                 Current: UserProfilePersonalizationSettings;
                 fn IsSupported(&self) -> bool;
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(UserProfileLockScreenContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::Static(ILockScreenImageFeedStatics, 65536, "Windows.System.UserProfile.UserProfileLockScreenContract")]
@@ -282,6 +288,7 @@ mod Windows {
                 ChangeDisabled = 1,
                 UserCanceled = 2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(UserProfileContract, 65536)]
             #[Windows::Foundation::Metadata::Deprecated("Use User instead of UserInformation. For more info, see MSDN.", Deprecate, 131072, "Windows.System.UserProfile.UserProfileContract")]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
@@ -299,6 +306,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IUserProfilePersonalizationSettingsStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserProfilePersonalizationSettings {
+                #[default]
                 IUserProfilePersonalizationSettings,
             }
         }

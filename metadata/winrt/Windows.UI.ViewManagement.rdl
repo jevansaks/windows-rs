@@ -6,11 +6,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class AccessibilitySettings {
+                #[default]
                 IAccessibilitySettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ActivationViewSwitcher {
+                #[default]
                 IActivationViewSwitcher,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -24,12 +26,20 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IApplicationViewStatics4, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ApplicationView {
+                #[default]
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IApplicationView,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IApplicationView2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IApplicationView3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IApplicationView4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IApplicationView7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IApplicationView9,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IApplicationViewWithContext,
             }
             #[repr(i32)]
@@ -41,7 +51,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ApplicationViewConsolidatedEventArgs {
+                #[default]
                 IApplicationViewConsolidatedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IApplicationViewConsolidatedEventArgs2,
             }
             #[repr(i32)]
@@ -59,6 +71,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(ViewManagementViewScalingContract, 65536)]
             #[Windows::Foundation::Metadata::Static(IApplicationViewScalingStatics, 65536, "Windows.UI.ViewManagement.ViewManagementViewScalingContract")]
             class ApplicationViewScaling {
+                #[default]
                 IApplicationViewScaling,
             }
             #[repr(i32)]
@@ -70,6 +83,7 @@ mod Windows {
                 Snapped = 2,
                 FullScreenPortrait = 3,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Muse(Version = 100859904)]
@@ -89,12 +103,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ApplicationViewTitleBar {
+                #[default]
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IApplicationViewTitleBar,
             }
             #[Windows::Foundation::Metadata::Activatable(131072, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::Static(IApplicationViewTransferContextStatics, 131072, "Windows.Foundation.UniversalApiContract")]
             class ApplicationViewTransferContext {
+                #[default]
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 IApplicationViewTransferContext,
             }
             #[repr(i32)]
@@ -103,7 +121,9 @@ mod Windows {
                 Auto = 0,
                 PreferredLaunchViewSize = 1,
                 FullScreen = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 CompactOverlay = 3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 Maximized = 4,
             }
             #[repr(i32)]
@@ -126,18 +146,19 @@ mod Windows {
                 HighContrast: bool;
                 #[get]
                 HighContrastScheme: String;
+                #[remove_name(cookie)]
                 event HighContrastChanged: super::super::Foundation::TypedEventHandler<AccessibilitySettings, Object>;
             }
             #[guid(0xdca71bb6_7350_492b_aac7_c8a13d7224ad)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(ActivationViewSwitcher)]
             interface IActivationViewSwitcher {
-                #[Windows::Foundation::Metadata::Overload("ShowAsStandaloneAsync")]
+                #[overload(ShowAsStandaloneAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ShowAsStandaloneAsync(&self, viewId: i32) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("ShowAsStandaloneWithSizePreferenceAsync")]
+                #[overload(ShowAsStandaloneAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn ShowAsStandaloneAsync(&self, viewId: i32, sizePreference: ViewSizePreference) -> super::super::Foundation::IAsyncAction;
+                fn ShowAsStandaloneWithSizePreferenceAsync(&self, viewId: i32, sizePreference: ViewSizePreference) -> super::super::Foundation::IAsyncAction;
                 fn IsViewPresentedOnActivationVirtualDesktop(&self, viewId: i32) -> bool;
             }
             #[guid(0xd222d519_4361_451e_96c4_60f4f9742db0)]
@@ -150,9 +171,9 @@ mod Windows {
                 AdjacentToLeftDisplayEdge: bool;
                 #[get]
                 AdjacentToRightDisplayEdge: bool;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("To check full screen mode, use IsFullScreenMode. To check if the view is adjacent to both edges, use AdjacentToLeftDisplayEdge and AdjacentToRightDisplayEdge. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_IsFullScreen(&self) -> bool;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("To check full screen mode, use IsFullScreenMode. To check if the view is adjacent to both edges, use AdjacentToLeftDisplayEdge and AdjacentToRightDisplayEdge. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                IsFullScreen: bool;
                 #[get]
                 IsOnLockScreen: bool;
                 IsScreenCaptureEnabled: bool;
@@ -168,12 +189,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(ApplicationView)]
             interface IApplicationView2 {
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use the TryEnterFullScreen method and IsFullScreenMode property instead of SuppressSystemOverlays. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_SuppressSystemOverlays(&self) -> bool;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Use the TryEnterFullScreen method and IsFullScreenMode property instead of SuppressSystemOverlays. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn put_SuppressSystemOverlays(&self, value: bool);
+                #[get(Windows::Foundation::Metadata::Deprecated("Use the TryEnterFullScreen method and IsFullScreenMode property instead of SuppressSystemOverlays. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                #[set(Windows::Foundation::Metadata::Deprecated("Use the TryEnterFullScreen method and IsFullScreenMode property instead of SuppressSystemOverlays. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                SuppressSystemOverlays: bool;
                 #[get]
                 VisibleBounds: super::super::Foundation::Rect;
                 event VisibleBoundsChanged: super::super::Foundation::TypedEventHandler<ApplicationView, Object>;
@@ -203,12 +221,12 @@ mod Windows {
                 #[get]
                 ViewMode: ApplicationViewMode;
                 fn IsViewModeSupported(&self, viewMode: ApplicationViewMode) -> bool;
-                #[Windows::Foundation::Metadata::Overload("TryEnterViewModeAsync")]
+                #[overload(TryEnterViewModeAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryEnterViewModeAsync(&self, viewMode: ApplicationViewMode) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("TryEnterViewModeWithPreferencesAsync")]
+                #[overload(TryEnterViewModeAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryEnterViewModeAsync(&self, viewMode: ApplicationViewMode, viewModePreferences: ViewModePreferences) -> super::super::Foundation::IAsyncOperation<bool>;
+                fn TryEnterViewModeWithPreferencesAsync(&self, viewMode: ApplicationViewMode, viewModePreferences: ViewModePreferences) -> super::super::Foundation::IAsyncOperation<bool>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryConsolidateAsync(&self) -> super::super::Foundation::IAsyncOperation<bool>;
             }
@@ -274,9 +292,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Deprecated("ApplicationView static methods may be altered or unavailable for releases after Windows 8.1. Instead, use ApplicationView.GetForCurrentView to get an instance of ApplicationView.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::ExclusiveTo(ApplicationView)]
             interface IApplicationViewStatics {
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Value may be altered or unavailable for releases after Windows 8.1. Instead, query for window layout sizes directly.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_Value(&self) -> ApplicationViewState;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Value may be altered or unavailable for releases after Windows 8.1. Instead, query for window layout sizes directly.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                Value: ApplicationViewState;
                 #[Windows::Foundation::Metadata::Deprecated("TryUnsnap may be altered or unavailable for releases after Windows 8.1. Apps can be continuously resized, but cannot be snapped, starting in Windows 8.1.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                 fn TryUnsnap(&self) -> bool;
             }
@@ -307,24 +325,24 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(ApplicationViewSwitcher)]
             interface IApplicationViewSwitcherStatics {
                 fn DisableShowingMainViewOnActivation(&self);
-                #[Windows::Foundation::Metadata::Overload("TryShowAsStandaloneAsync")]
+                #[overload(TryShowAsStandaloneAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryShowAsStandaloneAsync(&self, viewId: i32) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("TryShowAsStandaloneWithSizePreferenceAsync")]
+                #[overload(TryShowAsStandaloneAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryShowAsStandaloneAsync(&self, viewId: i32, sizePreference: ViewSizePreference) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("TryShowAsStandaloneWithAnchorViewAndSizePreferenceAsync")]
+                fn TryShowAsStandaloneWithSizePreferenceAsync(&self, viewId: i32, sizePreference: ViewSizePreference) -> super::super::Foundation::IAsyncOperation<bool>;
+                #[overload(TryShowAsStandaloneAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryShowAsStandaloneAsync(&self, viewId: i32, sizePreference: ViewSizePreference, anchorViewId: i32, anchorSizePreference: ViewSizePreference) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("SwitchAsync")]
+                fn TryShowAsStandaloneWithAnchorViewAndSizePreferenceAsync(&self, viewId: i32, sizePreference: ViewSizePreference, anchorViewId: i32, anchorSizePreference: ViewSizePreference) -> super::super::Foundation::IAsyncOperation<bool>;
+                #[overload(SwitchAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn SwitchAsync(&self, viewId: i32) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("SwitchFromViewAsync")]
+                #[overload(SwitchAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn SwitchAsync(&self, toViewId: i32, fromViewId: i32) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("SwitchFromViewWithOptionsAsync")]
+                fn SwitchFromViewAsync(&self, toViewId: i32, fromViewId: i32) -> super::super::Foundation::IAsyncAction;
+                #[overload(SwitchAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn SwitchAsync(&self, toViewId: i32, fromViewId: i32, options: ApplicationViewSwitchingOptions) -> super::super::Foundation::IAsyncAction;
+                fn SwitchFromViewWithOptionsAsync(&self, toViewId: i32, fromViewId: i32, options: ApplicationViewSwitchingOptions) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn PrepareForCustomAnimatedSwitchAsync(&self, toViewId: i32, fromViewId: i32, options: ApplicationViewSwitchingOptions) -> super::super::Foundation::IAsyncOperation<bool>;
             }
@@ -338,12 +356,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::ExclusiveTo(ApplicationViewSwitcher)]
             interface IApplicationViewSwitcherStatics3 {
-                #[Windows::Foundation::Metadata::Overload("TryShowAsViewModeAsync")]
+                #[overload(TryShowAsViewModeAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryShowAsViewModeAsync(&self, viewId: i32, viewMode: ApplicationViewMode) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("TryShowAsViewModeWithPreferencesAsync")]
+                #[overload(TryShowAsViewModeAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryShowAsViewModeAsync(&self, viewId: i32, viewMode: ApplicationViewMode, viewModePreferences: ViewModePreferences) -> super::super::Foundation::IAsyncOperation<bool>;
+                fn TryShowAsViewModeWithPreferencesAsync(&self, viewId: i32, viewMode: ApplicationViewMode, viewModePreferences: ViewModePreferences) -> super::super::Foundation::IAsyncOperation<bool>;
             }
             #[guid(0x00924ac0_932b_4a6b_9c4b_dc38c82478ce)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -468,7 +486,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(ProjectionManager)]
             interface IProjectionManagerStatics {
-                #[Windows::Foundation::Metadata::Overload("StartProjectingAsync")]
+                #[overload(StartProjectingAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn StartProjectingAsync(&self, projectionViewId: i32, anchorViewId: i32) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -483,15 +501,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(ProjectionManager)]
             interface IProjectionManagerStatics2 {
-                #[Windows::Foundation::Metadata::Overload("StartProjectingWithDeviceInfoAsync")]
+                #[overload(StartProjectingAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn StartProjectingAsync(&self, projectionViewId: i32, anchorViewId: i32, displayDeviceInfo: super::super::Devices::Enumeration::DeviceInformation) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("RequestStartProjectingAsync")]
+                fn StartProjectingWithDeviceInfoAsync(&self, projectionViewId: i32, anchorViewId: i32, displayDeviceInfo: super::super::Devices::Enumeration::DeviceInformation) -> super::super::Foundation::IAsyncAction;
+                #[overload(RequestStartProjectingAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn RequestStartProjectingAsync(&self, projectionViewId: i32, anchorViewId: i32, selection: super::super::Foundation::Rect) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("RequestStartProjectingWithPlacementAsync")]
+                #[overload(RequestStartProjectingAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn RequestStartProjectingAsync(&self, projectionViewId: i32, anchorViewId: i32, selection: super::super::Foundation::Rect, prefferedPlacement: super::Popups::Placement) -> super::super::Foundation::IAsyncOperation<bool>;
+                fn RequestStartProjectingWithPlacementAsync(&self, projectionViewId: i32, anchorViewId: i32, selection: super::super::Foundation::Rect, prefferedPlacement: super::Popups::Placement) -> super::super::Foundation::IAsyncOperation<bool>;
                 fn GetDeviceSelector(&self) -> String;
             }
             #[guid(0x85361600_1c63_4627_bcb1_3a89e0bc9c55)]
@@ -530,6 +548,7 @@ mod Windows {
             interface IUISettings2 {
                 #[get]
                 TextScaleFactor: f64;
+                #[remove_name(cookie)]
                 event TextScaleFactorChanged: super::super::Foundation::TypedEventHandler<UISettings, Object>;
             }
             #[guid(0x03021be4_5254_4781_8194_5168f7d06d7b)]
@@ -537,6 +556,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(UISettings)]
             interface IUISettings3 {
                 fn GetColorValue(&self, desiredColor: UIColorType) -> super::Color;
+                #[remove_name(cookie)]
                 event ColorValuesChanged: super::super::Foundation::TypedEventHandler<UISettings, Object>;
             }
             #[guid(0x52bb3002_919b_4d6b_9b78_8dd66ff4b93b)]
@@ -545,6 +565,7 @@ mod Windows {
             interface IUISettings4 {
                 #[get]
                 AdvancedEffectsEnabled: bool;
+                #[remove_name(cookie)]
                 event AdvancedEffectsEnabledChanged: super::super::Foundation::TypedEventHandler<UISettings, Object>;
             }
             #[guid(0x5349d588_0cb5_5f05_bd34_706b3231f0bd)]
@@ -611,15 +632,20 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IInputPaneStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Static(IInputPaneStatics2, 524288, "Windows.Foundation.UniversalApiContract")]
             class InputPane {
+                #[default]
                 IInputPane,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IInputPane2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IInputPaneControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class InputPaneVisibilityEventArgs {
+                #[default]
                 IInputPaneVisibilityEventArgs,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IProjectionManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -662,44 +688,66 @@ mod Windows {
                 InactiveCaptionText = 10,
                 Window = 11,
                 WindowText = 12,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 AccentColor = 1000,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 TextHigh = 1001,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 TextMedium = 1002,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 TextLow = 1003,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 TextContrastWithHigh = 1004,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 NonTextHigh = 1005,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 NonTextMediumHigh = 1006,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 NonTextMedium = 1007,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 NonTextMediumLow = 1008,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 NonTextLow = 1009,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 PageBackground = 1010,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 PopupBackground = 1011,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 OverlayOutsidePopup = 1012,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UISettings {
+                #[default]
                 IUISettings,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IUISettings2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IUISettings3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IUISettings4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IUISettings5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IUISettings6,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UISettingsAnimationsEnabledChangedEventArgs {
+                #[default]
                 IUISettingsAnimationsEnabledChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UISettingsAutoHideScrollBarsChangedEventArgs {
+                #[default]
                 IUISettingsAutoHideScrollBarsChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UISettingsMessageDurationChangedEventArgs {
+                #[default]
                 IUISettingsMessageDurationChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -708,7 +756,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IUIViewSettingsStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UIViewSettings {
+                #[default]
                 IUIViewSettings,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 IUIViewSettingsPreferredInteractionMode,
             }
             #[repr(i32)]
@@ -723,6 +773,8 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::Static(IViewModePreferencesStatics, 262144, "Windows.Foundation.UniversalApiContract")]
             class ViewModePreferences {
+                #[default]
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IViewModePreferences,
             }
             #[repr(i32)]
@@ -734,6 +786,7 @@ mod Windows {
                 UseMore = 3,
                 UseMinimum = 4,
                 UseNone = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 Custom = 6,
             }
         }

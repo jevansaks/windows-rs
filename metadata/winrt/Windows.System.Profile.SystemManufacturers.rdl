@@ -60,8 +60,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class OemSupportInfo {
+                    #[default]
                     IOemSupportInfo,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(SystemManufacturersContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ISmbiosInformationStatics, 65536, "Windows.System.Profile.SystemManufacturers.SystemManufacturersContract")]
@@ -73,8 +75,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class SystemSupportDeviceInfo {
+                    #[default]
                     ISystemSupportDeviceInfo,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(SystemManufacturersContract, 131072)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772166)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]

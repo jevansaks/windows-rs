@@ -2,11 +2,13 @@
 mod Windows {
     mod ApplicationModel {
         mod CommunicationBlocking {
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CommunicationBlockingContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(ICommunicationBlockingAccessManagerStatics, 65536, "Windows.ApplicationModel.CommunicationBlocking.CommunicationBlockingContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CommunicationBlockingAccessManager {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CommunicationBlockingContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(ICommunicationBlockingAppManagerStatics, 65536, "Windows.ApplicationModel.CommunicationBlocking.CommunicationBlockingContract")]

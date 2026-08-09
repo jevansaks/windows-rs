@@ -10,7 +10,32 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ICompositeTransform3DStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(ICompositeTransform3DStatics, CenterXProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, CenterYProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, CenterZProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, RotationXProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, RotationYProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, RotationZProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, ScaleXProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, ScaleYProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, ScaleZProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, TranslateXProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, TranslateYProperty)]
+                    #[no_static_property(ICompositeTransform3DStatics, TranslateZProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterXProperty: super::super::DependencyProperty, get = get_CenterXProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterYProperty: super::super::DependencyProperty, get = get_CenterYProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterZProperty: super::super::DependencyProperty, get = get_CenterZProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static RotationXProperty: super::super::DependencyProperty, get = get_RotationXProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static RotationYProperty: super::super::DependencyProperty, get = get_RotationYProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static RotationZProperty: super::super::DependencyProperty, get = get_RotationZProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static ScaleXProperty: super::super::DependencyProperty, get = get_ScaleXProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static ScaleYProperty: super::super::DependencyProperty, get = get_ScaleYProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static ScaleZProperty: super::super::DependencyProperty, get = get_ScaleZProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static TranslateXProperty: super::super::DependencyProperty, get = get_TranslateXProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static TranslateYProperty: super::super::DependencyProperty, get = get_TranslateYProperty)]
+                    #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static TranslateZProperty: super::super::DependencyProperty, get = get_TranslateZProperty)]
                     class CompositeTransform3D: Transform3D {
+                        #[default]
                         ICompositeTransform3D,
                     }
                     #[guid(0x8977cb01_af8d_4af5_b084_c08eb9704abe)]
@@ -36,42 +61,54 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ExclusiveTo(CompositeTransform3D)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     interface ICompositeTransform3DStatics {
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_CenterXProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_CenterYProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_CenterZProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_RotationXProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_RotationYProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_RotationZProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_ScaleXProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_ScaleYProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_ScaleZProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_TranslateXProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_TranslateYProperty(&self) -> super::super::DependencyProperty;
-                        #[special]
-                        #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                        fn get_TranslateZProperty(&self) -> super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        CenterXProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        CenterYProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        CenterZProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        RotationXProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        RotationYProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        RotationZProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        ScaleXProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        ScaleYProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        ScaleZProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        TranslateXProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        TranslateYProperty: super::super::DependencyProperty;
+                        #[get]
+                        #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                        TranslateZProperty: super::super::DependencyProperty;
                     }
                     #[guid(0xe48c10ef_9927_4c9b_8213_07775512ba04)]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -150,6 +187,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class Matrix3DHelper {
+                        #[default]
                         IMatrix3DHelper,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -159,14 +197,17 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PerspectiveTransform3D: Transform3D {
+                        #[default]
                         IPerspectiveTransform3D,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITransform3DFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class Transform3D: super::super::DependencyObject {
+                        #[default]
                         ITransform3D,
                     }
                 }

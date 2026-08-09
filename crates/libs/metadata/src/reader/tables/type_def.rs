@@ -35,11 +35,33 @@ impl<'a> TypeDef<'a> {
         self.list(5)
     }
 
+    pub fn property_map(&self) -> Option<PropertyMap<'a>> {
+        self.equal_range(0, self.pos() + 1).next()
+    }
+
+    pub fn properties(&self) -> impl Iterator<Item = Property<'a>> {
+        self.property_map()
+            .into_iter()
+            .flat_map(|map| map.properties())
+    }
+
+    pub fn event_map(&self) -> Option<EventMap<'a>> {
+        self.equal_range(0, self.pos() + 1).next()
+    }
+
+    pub fn events(&self) -> impl Iterator<Item = Event<'a>> {
+        self.event_map().into_iter().flat_map(|map| map.events())
+    }
+
     pub fn generic_params(&self) -> RowIterator<'a, GenericParam<'a>> {
         self.equal_range(2, TypeOrMethodDef::TypeDef(*self).encode())
     }
 
     pub fn interface_impls(&self) -> RowIterator<'a, InterfaceImpl<'a>> {
+        self.equal_range(0, self.pos() + 1)
+    }
+
+    pub fn method_impls(&self) -> RowIterator<'a, MethodImpl<'a>> {
         self.equal_range(0, self.pos() + 1)
     }
 

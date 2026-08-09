@@ -27,6 +27,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IInstalledDesktopAppStatics, 393216, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class InstalledDesktopApp {
+                #[default]
                 IInstalledDesktopApp,
                 super::super::Foundation::IStringable,
             }

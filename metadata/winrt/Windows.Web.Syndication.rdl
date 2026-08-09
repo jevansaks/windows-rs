@@ -240,6 +240,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationAttribute {
+                #[default]
                 ISyndicationAttribute,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -249,6 +250,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationCategory {
+                #[default]
                 ISyndicationCategory,
                 ISyndicationNode,
             }
@@ -259,6 +261,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationClient {
+                #[default]
                 ISyndicationClient,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -268,10 +271,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationContent {
-                ISyndicationContent,
                 ISyndicationText,
                 ISyndicationNode,
+                #[default]
+                ISyndicationContent,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -295,6 +300,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationFeed {
+                #[default]
                 ISyndicationFeed,
                 ISyndicationNode,
             }
@@ -315,6 +321,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationGenerator {
+                #[default]
                 ISyndicationGenerator,
                 ISyndicationNode,
             }
@@ -325,6 +332,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationItem {
+                #[default]
                 ISyndicationItem,
                 ISyndicationNode,
             }
@@ -335,6 +343,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationLink {
+                #[default]
                 ISyndicationLink,
                 ISyndicationNode,
             }
@@ -345,6 +354,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationNode {
+                #[default]
                 ISyndicationNode,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -354,6 +364,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationPerson {
+                #[default]
                 ISyndicationPerson,
                 ISyndicationNode,
             }
@@ -364,6 +375,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SyndicationText {
+                #[default]
                 ISyndicationText,
                 ISyndicationNode,
             }

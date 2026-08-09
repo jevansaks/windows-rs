@@ -92,14 +92,18 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 class WebViewControl {
+                    #[default]
                     super::IWebViewControl,
                     IWebViewControlSite,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     super::IWebViewControl2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     IWebViewControlSite2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 class WebViewControlAcceleratorKeyPressedEventArgs {
+                    #[default]
                     IWebViewControlAcceleratorKeyPressedEventArgs,
                 }
                 #[repr(i32)]
@@ -118,6 +122,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 class WebViewControlMoveFocusRequestedEventArgs {
+                    #[default]
                     IWebViewControlMoveFocusRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::Activatable(393216, "Windows.Foundation.UniversalApiContract")]
@@ -125,6 +130,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 class WebViewControlProcess {
+                    #[default]
                     IWebViewControlProcess,
                 }
                 #[repr(i32)]
@@ -138,6 +144,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 class WebViewControlProcessOptions {
+                    #[default]
                     IWebViewControlProcessOptions,
                 }
             }

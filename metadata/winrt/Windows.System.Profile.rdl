@@ -2,6 +2,7 @@
 mod Windows {
     mod System {
         mod Profile {
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IAnalyticsInfoStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -12,18 +13,23 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AnalyticsVersionInfo {
+                #[default]
                 IAnalyticsVersionInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
                 IAnalyticsVersionInfo2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IAppApplicabilityStatics, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppApplicability {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IEducationSettingsStatics, 262144, "Windows.Foundation.UniversalApiContract")]
             class EducationSettings {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(ProfileHardwareTokenContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Static(IHardwareIdentificationStatics, 65536, "Windows.System.Profile.ProfileHardwareTokenContract")]
@@ -31,6 +37,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(ProfileHardwareTokenContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class HardwareToken {
+                #[default]
                 IHardwareToken,
             }
             #[guid(0x1d5ee066_188d_5ba9_4387_acaeb0e7e305)]
@@ -238,6 +245,7 @@ mod Windows {
                 IsDisableSupported: bool;
                 event PolicyChanged: super::super::Foundation::EventHandler<Object>;
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(ProfileRetailInfoContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IKnownRetailInfoPropertiesStatics, 65536, "Windows.System.Profile.ProfileRetailInfoContract")]
@@ -246,6 +254,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ApiContract]
             #[Windows::Foundation::Metadata::ContractVersion(65536)]
             struct PlatformAutomaticAppSignInContract {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(PlatformAutomaticAppSignInContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IPlatformAutomaticAppSignInManagerStatics, 65536, "Windows.System.Profile.PlatformAutomaticAppSignInContract")]
@@ -266,6 +275,7 @@ mod Windows {
                 Enhanced = 2,
                 Full = 3,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -281,22 +291,26 @@ mod Windows {
             #[Windows::Foundation::Metadata::ApiContract]
             #[Windows::Foundation::Metadata::ContractVersion(131072)]
             struct ProfileSharedModeContract {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(ProfileRetailInfoContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IRetailInfoStatics, 65536, "Windows.System.Profile.ProfileRetailInfoContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RetailInfo {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(ProfileSharedModeContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772163)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(ISharedModeSettingsStatics, 65536, "Windows.System.Profile.ProfileSharedModeContract")]
             #[Windows::Foundation::Metadata::Static(ISharedModeSettingsStatics2, 131072, "Windows.System.Profile.ProfileSharedModeContract")]
             class SharedModeSettings {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 983040)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(ISmartAppControlPolicyStatics, 983040, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SmartAppControlPolicy {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772162)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -307,6 +321,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SystemIdentificationInfo {
+                #[default]
                 ISystemIdentificationInfo,
             }
             #[repr(i32)]
@@ -315,6 +330,7 @@ mod Windows {
                 None = 0,
                 Tpm = 1,
                 Uefi = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 Registry = 3,
             }
             #[repr(i32)]
@@ -324,6 +340,7 @@ mod Windows {
                 InProgress = 1,
                 Completed = 2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -333,6 +350,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UnsupportedAppRequirement {
+                #[default]
                 IUnsupportedAppRequirement,
             }
             #[repr(u32)]
@@ -342,6 +360,7 @@ mod Windows {
                 Unknown = 0,
                 DeniedBySystem = 1,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IWindowsIntegrityPolicyStatics, 458752, "Windows.Foundation.UniversalApiContract")]

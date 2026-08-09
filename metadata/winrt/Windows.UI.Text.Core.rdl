@@ -6,27 +6,33 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextCompositionCompletedEventArgs {
+                    #[default]
                     ICoreTextCompositionCompletedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextCompositionSegment {
+                    #[default]
                     ICoreTextCompositionSegment,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextCompositionStartedEventArgs {
+                    #[default]
                     ICoreTextCompositionStartedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextEditContext {
+                    #[default]
                     ICoreTextEditContext,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                     ICoreTextEditContext2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextFormatUpdatingEventArgs {
+                    #[default]
                     ICoreTextFormatUpdatingEventArgs,
                 }
                 #[repr(i32)]
@@ -116,25 +122,33 @@ mod Windows {
                     Maps = 62,
                     PasswordNumeric = 63,
                     FormulaNumber = 67,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     ChatWithoutEmoji = 68,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     Digits = 28,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     PinNumeric = 64,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     PinAlphanumeric = 65,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextLayoutBounds {
+                    #[default]
                     ICoreTextLayoutBounds,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextLayoutRequest {
+                    #[default]
                     ICoreTextLayoutRequest,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     ICoreTextLayoutRequest2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextLayoutRequestedEventArgs {
+                    #[default]
                     ICoreTextLayoutRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -145,16 +159,19 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextSelectionRequest {
+                    #[default]
                     ICoreTextSelectionRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextSelectionRequestedEventArgs {
+                    #[default]
                     ICoreTextSelectionRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextSelectionUpdatingEventArgs {
+                    #[default]
                     ICoreTextSelectionUpdatingEventArgs,
                 }
                 #[repr(i32)]
@@ -163,6 +180,7 @@ mod Windows {
                     Succeeded = 0,
                     Failed = 1,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ICoreTextServicesStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -171,21 +189,25 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ICoreTextServicesManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 class CoreTextServicesManager {
+                    #[default]
                     ICoreTextServicesManager,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextTextRequest {
+                    #[default]
                     ICoreTextTextRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextTextRequestedEventArgs {
+                    #[default]
                     ICoreTextTextRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreTextTextUpdatingEventArgs {
+                    #[default]
                     ICoreTextTextUpdatingEventArgs,
                 }
                 #[repr(i32)]
@@ -229,14 +251,23 @@ mod Windows {
                     InputScope: CoreTextInputScope;
                     IsReadOnly: bool;
                     InputPaneDisplayPolicy: CoreTextInputPaneDisplayPolicy;
+                    #[remove_name(cookie)]
                     event TextRequested: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextTextRequestedEventArgs>;
+                    #[remove_name(cookie)]
                     event SelectionRequested: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextSelectionRequestedEventArgs>;
+                    #[remove_name(cookie)]
                     event LayoutRequested: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextLayoutRequestedEventArgs>;
+                    #[remove_name(cookie)]
                     event TextUpdating: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextTextUpdatingEventArgs>;
+                    #[remove_name(cookie)]
                     event SelectionUpdating: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextSelectionUpdatingEventArgs>;
+                    #[remove_name(cookie)]
                     event FormatUpdating: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextFormatUpdatingEventArgs>;
+                    #[remove_name(cookie)]
                     event CompositionStarted: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextCompositionStartedEventArgs>;
+                    #[remove_name(cookie)]
                     event CompositionCompleted: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, CoreTextCompositionCompletedEventArgs>;
+                    #[remove_name(cookie)]
                     event FocusRemoved: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, Object>;
                     fn NotifyFocusEnter(&self);
                     fn NotifyFocusLeave(&self);
@@ -248,6 +279,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 131072)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(CoreTextEditContext)]
                 interface ICoreTextEditContext2 {
+                    #[remove_name(cookie)]
                     event NotifyFocusLeaveCompleted: super::super::super::Foundation::TypedEventHandler<CoreTextEditContext, Object>;
                 }
                 #[guid(0x7310bd33_b4a8_43b1_b37b_0724d4aca7ab)]
@@ -337,6 +369,7 @@ mod Windows {
                 interface ICoreTextServicesManager {
                     #[get]
                     InputLanguage: super::super::super::Globalization::Language;
+                    #[remove_name(cookie)]
                     event InputLanguageChanged: super::super::super::Foundation::TypedEventHandler<CoreTextServicesManager, Object>;
                     fn CreateEditContext(&self) -> CoreTextEditContext;
                 }

@@ -9,6 +9,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class ConditionForceEffect {
+                    #[default]
                     IForceFeedbackEffect,
                     IConditionForceEffect,
                 }
@@ -26,6 +27,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class ConstantForceEffect {
+                    #[default]
                     IForceFeedbackEffect,
                     IConstantForceEffect,
                 }
@@ -58,6 +60,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class ForceFeedbackMotor {
+                    #[default]
                     IForceFeedbackMotor,
                 }
                 #[guid(0x32d1ea68_3695_4e69_85c0_cd1944189140)]
@@ -143,6 +146,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PeriodicForceEffect {
+                    #[default]
                     IForceFeedbackEffect,
                     IPeriodicForceEffect,
                 }
@@ -161,6 +165,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RampForceEffect {
+                    #[default]
                     IForceFeedbackEffect,
                     IRampForceEffect,
                 }

@@ -87,6 +87,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(PowerThermalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class PowerThermalChannelConfiguration {
+                    #[default]
                     IPowerThermalChannelConfiguration,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(PowerThermalApiContract, 65536)]
@@ -99,6 +100,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PowerThermalChannelDataConsumer {
+                    #[default]
                     IPowerThermalChannelDataConsumer,
                     super::super::super::Foundation::IClosable,
                 }
@@ -107,12 +109,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PowerThermalChannelDataProducer {
+                    #[default]
                     IPowerThermalChannelDataProducer,
                     super::super::super::Foundation::IClosable,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(PowerThermalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class PowerThermalChannelDataReceivedEventArgs {
+                    #[default]
                     IPowerThermalChannelDataReceivedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(PowerThermalApiContract, 65536)]
@@ -120,8 +124,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IPowerThermalChannelDiagnosticsStatics, 65536, "Windows.System.Power.Thermal.PowerThermalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PowerThermalChannelDiagnostics {
+                    #[default]
                     IPowerThermalChannelDiagnostics,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(PowerThermalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IPowerThermalChannelFinderStatics, 65536, "Windows.System.Power.Thermal.PowerThermalApiContract")]

@@ -27,9 +27,9 @@ mod Windows {
                     fn ReportStarted(&self);
                     fn ReportDataRetrieved(&self);
                     fn ReportSubmittedBackgroundTask(&self);
-                    #[Windows::Foundation::Metadata::Overload("ReportCompletedWithQuickLink")]
-                    fn ReportCompleted(&self, quicklink: QuickLink);
-                    #[Windows::Foundation::Metadata::Overload("ReportCompleted")]
+                    #[overload(ReportCompleted)]
+                    fn ReportCompletedWithQuickLink(&self, quicklink: QuickLink);
+                    #[overload(ReportCompleted)]
                     fn ReportCompleted(&self);
                     fn ReportError(&self, value: String);
                 }
@@ -51,13 +51,17 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class QuickLink {
+                    #[default]
                     IQuickLink,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 class ShareOperation {
+                    #[default]
                     IShareOperation,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IShareOperation2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     IShareOperation3,
                 }
             }

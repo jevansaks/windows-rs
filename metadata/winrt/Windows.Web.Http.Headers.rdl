@@ -7,6 +7,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpCacheDirectiveHeaderValueCollection {
+                    #[default]
                     IHttpCacheDirectiveHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpNameValueHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpNameValueHeaderValue>,
@@ -19,6 +20,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpChallengeHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpChallengeHeaderValue {
+                    #[default]
                     IHttpChallengeHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -26,6 +28,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpChallengeHeaderValueCollection {
+                    #[default]
                     IHttpChallengeHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpChallengeHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpChallengeHeaderValue>,
@@ -38,6 +41,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpConnectionOptionHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpConnectionOptionHeaderValue {
+                    #[default]
                     IHttpConnectionOptionHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -45,6 +49,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpConnectionOptionHeaderValueCollection {
+                    #[default]
                     IHttpConnectionOptionHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpConnectionOptionHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpConnectionOptionHeaderValue>,
@@ -57,6 +62,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpContentCodingHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpContentCodingHeaderValue {
+                    #[default]
                     IHttpContentCodingHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -64,6 +70,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpContentCodingHeaderValueCollection {
+                    #[default]
                     IHttpContentCodingHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpContentCodingHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpContentCodingHeaderValue>,
@@ -76,6 +83,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpContentCodingWithQualityHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpContentCodingWithQualityHeaderValue {
+                    #[default]
                     IHttpContentCodingWithQualityHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -83,6 +91,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpContentCodingWithQualityHeaderValueCollection {
+                    #[default]
                     IHttpContentCodingWithQualityHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpContentCodingWithQualityHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpContentCodingWithQualityHeaderValue>,
@@ -95,6 +104,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpContentDispositionHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpContentDispositionHeaderValue {
+                    #[default]
                     IHttpContentDispositionHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -104,6 +114,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpContentHeaderCollection {
+                    #[default]
                     IHttpContentHeaderCollection,
                     super::super::super::Foundation::Collections::IMap<String, String>,
                     super::super::super::Foundation::Collections::IIterable<super::super::super::Foundation::Collections::IKeyValuePair<String, String>>,
@@ -116,6 +127,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpContentRangeHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpContentRangeHeaderValue {
+                    #[default]
                     IHttpContentRangeHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -126,6 +138,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpCookiePairHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpCookiePairHeaderValue {
+                    #[default]
                     IHttpCookiePairHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -133,6 +146,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpCookiePairHeaderValueCollection {
+                    #[default]
                     IHttpCookiePairHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpCookiePairHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpCookiePairHeaderValue>,
@@ -145,6 +159,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpCredentialsHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpCredentialsHeaderValue {
+                    #[default]
                     IHttpCredentialsHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -154,6 +169,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpDateOrDeltaHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpDateOrDeltaHeaderValue {
+                    #[default]
                     IHttpDateOrDeltaHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -164,6 +180,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpExpectationHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpExpectationHeaderValue {
+                    #[default]
                     IHttpExpectationHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -171,6 +188,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpExpectationHeaderValueCollection {
+                    #[default]
                     IHttpExpectationHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpExpectationHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpExpectationHeaderValue>,
@@ -180,6 +198,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpLanguageHeaderValueCollection {
+                    #[default]
                     IHttpLanguageHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<super::super::super::Globalization::Language>,
                     super::super::super::Foundation::Collections::IIterable<super::super::super::Globalization::Language>,
@@ -192,6 +211,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpLanguageRangeWithQualityHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpLanguageRangeWithQualityHeaderValue {
+                    #[default]
                     IHttpLanguageRangeWithQualityHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -199,6 +219,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpLanguageRangeWithQualityHeaderValueCollection {
+                    #[default]
                     IHttpLanguageRangeWithQualityHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpLanguageRangeWithQualityHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpLanguageRangeWithQualityHeaderValue>,
@@ -211,6 +232,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpMediaTypeHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpMediaTypeHeaderValue {
+                    #[default]
                     IHttpMediaTypeHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -221,6 +243,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpMediaTypeWithQualityHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpMediaTypeWithQualityHeaderValue {
+                    #[default]
                     IHttpMediaTypeWithQualityHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -228,6 +251,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpMediaTypeWithQualityHeaderValueCollection {
+                    #[default]
                     IHttpMediaTypeWithQualityHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpMediaTypeWithQualityHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpMediaTypeWithQualityHeaderValue>,
@@ -237,6 +261,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpMethodHeaderValueCollection {
+                    #[default]
                     IHttpMethodHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<super::HttpMethod>,
                     super::super::super::Foundation::Collections::IIterable<super::HttpMethod>,
@@ -249,6 +274,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpNameValueHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpNameValueHeaderValue {
+                    #[default]
                     IHttpNameValueHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -259,6 +285,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpProductHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpProductHeaderValue {
+                    #[default]
                     IHttpProductHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -269,6 +296,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpProductInfoHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpProductInfoHeaderValue {
+                    #[default]
                     IHttpProductInfoHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -276,6 +304,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpProductInfoHeaderValueCollection {
+                    #[default]
                     IHttpProductInfoHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpProductInfoHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpProductInfoHeaderValue>,
@@ -285,6 +314,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpRequestHeaderCollection {
+                    #[default]
                     IHttpRequestHeaderCollection,
                     super::super::super::Foundation::Collections::IMap<String, String>,
                     super::super::super::Foundation::Collections::IIterable<super::super::super::Foundation::Collections::IKeyValuePair<String, String>>,
@@ -294,6 +324,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpResponseHeaderCollection {
+                    #[default]
                     IHttpResponseHeaderCollection,
                     super::super::super::Foundation::Collections::IMap<String, String>,
                     super::super::super::Foundation::Collections::IIterable<super::super::super::Foundation::Collections::IKeyValuePair<String, String>>,
@@ -306,6 +337,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IHttpTransferCodingHeaderValueStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HttpTransferCodingHeaderValue {
+                    #[default]
                     IHttpTransferCodingHeaderValue,
                     super::super::super::Foundation::IStringable,
                 }
@@ -313,6 +345,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class HttpTransferCodingHeaderValueCollection {
+                    #[default]
                     IHttpTransferCodingHeaderValueCollection,
                     super::super::super::Foundation::Collections::IVector<HttpTransferCodingHeaderValue>,
                     super::super::super::Foundation::Collections::IIterable<HttpTransferCodingHeaderValue>,

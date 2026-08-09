@@ -17,8 +17,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class ControlChannelTrigger {
+                #[default]
                 IControlChannelTrigger,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Networking.Sockets.ControlChannelTriggerContract", 131072)]
                 IControlChannelTrigger2,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -30,7 +32,9 @@ mod Windows {
             enum ControlChannelTriggerResetReason {
                 FastUserSwitched = 0,
                 LowPowerExit = 1,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Networking.Sockets.ControlChannelTriggerContract", 65536)]
                 QuietHoursExit = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Networking.Sockets.ControlChannelTriggerContract", 65536)]
                 ApplicationRestart = 3,
             }
             #[repr(i32)]
@@ -60,23 +64,30 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDatagramSocketStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DatagramSocket {
+                #[default]
                 IDatagramSocket,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDatagramSocket2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDatagramSocket3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DatagramSocketControl {
+                #[default]
                 IDatagramSocketControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDatagramSocketControl2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDatagramSocketControl3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DatagramSocketInformation {
+                #[default]
                 IDatagramSocketInformation,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -84,6 +95,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::GCPressure(amount = Medium)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DatagramSocketMessageReceivedEventArgs {
+                #[default]
                 IDatagramSocketMessageReceivedEventArgs,
             }
             #[guid(0x7d1431a7_ee96_40e8_a199_8703cd969ec3)]
@@ -150,31 +162,33 @@ mod Windows {
                 Information: DatagramSocketInformation;
                 #[get]
                 OutputStream: super::super::Storage::Streams::IOutputStream;
-                #[Windows::Foundation::Metadata::Overload("ConnectAsync")]
+                #[overload(ConnectAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ConnectAsync(&self, remoteHostName: super::HostName, remoteServiceName: String) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("ConnectWithEndpointPairAsync")]
-                fn ConnectAsync(&self, endpointPair: super::EndpointPair) -> super::super::Foundation::IAsyncAction;
+                #[overload(ConnectAsync)]
+                fn ConnectWithEndpointPairAsync(&self, endpointPair: super::EndpointPair) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn BindServiceNameAsync(&self, localServiceName: String) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn BindEndpointAsync(&self, localHostName: super::HostName, localServiceName: String) -> super::super::Foundation::IAsyncAction;
                 fn JoinMulticastGroup(&self, host: super::HostName);
-                #[Windows::Foundation::Metadata::Overload("GetOutputStreamAsync")]
+                #[overload(GetOutputStreamAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetOutputStreamAsync(&self, remoteHostName: super::HostName, remoteServiceName: String) -> super::super::Foundation::IAsyncOperation<super::super::Storage::Streams::IOutputStream>;
-                #[Windows::Foundation::Metadata::Overload("GetOutputStreamWithEndpointPairAsync")]
+                #[overload(GetOutputStreamAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetOutputStreamAsync(&self, endpointPair: super::EndpointPair) -> super::super::Foundation::IAsyncOperation<super::super::Storage::Streams::IOutputStream>;
+                fn GetOutputStreamWithEndpointPairAsync(&self, endpointPair: super::EndpointPair) -> super::super::Foundation::IAsyncOperation<super::super::Storage::Streams::IOutputStream>;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event MessageReceived: super::super::Foundation::TypedEventHandler<DatagramSocket, DatagramSocketMessageReceivedEventArgs>;
             }
             #[guid(0xd83ba354_9a9d_4185_a20a_1424c9c2a7cd)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DatagramSocket)]
             interface IDatagramSocket2: super::super::Foundation::IClosable {
-                #[Windows::Foundation::Metadata::Overload("BindServiceNameAndAdapterAsync")]
+                #[overload(BindServiceNameAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn BindServiceNameAsync(&self, localServiceName: String, adapter: super::Connectivity::NetworkAdapter) -> super::super::Foundation::IAsyncAction;
+                fn BindServiceNameAndAdapterAsync(&self, localServiceName: String, adapter: super::Connectivity::NetworkAdapter) -> super::super::Foundation::IAsyncAction;
             }
             #[guid(0x37544f09_ab92_4306_9ac1_0c381283d9c6)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -182,16 +196,16 @@ mod Windows {
             interface IDatagramSocket3 {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CancelIOAsync(&self) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("EnableTransferOwnership")]
+                #[overload(EnableTransferOwnership)]
                 fn EnableTransferOwnership(&self, taskId: GUID);
-                #[Windows::Foundation::Metadata::Overload("EnableTransferOwnershipWithConnectedStandbyAction")]
-                fn EnableTransferOwnership(&self, taskId: GUID, connectedStandbyAction: SocketActivityConnectedStandbyAction);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnership")]
+                #[overload(EnableTransferOwnership)]
+                fn EnableTransferOwnershipWithConnectedStandbyAction(&self, taskId: GUID, connectedStandbyAction: SocketActivityConnectedStandbyAction);
+                #[overload(TransferOwnership)]
                 fn TransferOwnership(&self, socketId: String);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnershipWithContext")]
-                fn TransferOwnership(&self, socketId: String, data: SocketActivityContext);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnershipWithContextAndKeepAliveTime")]
-                fn TransferOwnership(&self, socketId: String, data: SocketActivityContext, keepAliveTime: super::super::Foundation::TimeSpan);
+                #[overload(TransferOwnership)]
+                fn TransferOwnershipWithContext(&self, socketId: String, data: SocketActivityContext);
+                #[overload(TransferOwnership)]
+                fn TransferOwnershipWithContextAndKeepAliveTime(&self, socketId: String, data: SocketActivityContext, keepAliveTime: super::super::Foundation::TimeSpan);
             }
             #[guid(0x52ac3f2e_349a_4135_bb58_b79b2647d390)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -243,12 +257,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DatagramSocket)]
             interface IDatagramSocketStatics {
-                #[Windows::Foundation::Metadata::Overload("GetEndpointPairsAsync")]
+                #[overload(GetEndpointPairsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetEndpointPairsAsync(&self, remoteHostName: super::HostName, remoteServiceName: String) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<super::EndpointPair>>;
-                #[Windows::Foundation::Metadata::Overload("GetEndpointPairsWithSortOptionsAsync")]
+                #[overload(GetEndpointPairsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetEndpointPairsAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, sortOptions: super::HostNameSortOptions) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<super::EndpointPair>>;
+                fn GetEndpointPairsWithSortOptionsAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, sortOptions: super::HostNameSortOptions) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<super::EndpointPair>>;
             }
             #[guid(0x33727d08_34d5_4746_ad7b_8dde5bc2ef88)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -258,12 +272,16 @@ mod Windows {
                 Control: MessageWebSocketControl;
                 #[get]
                 Information: MessageWebSocketInformation;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event MessageReceived: super::super::Foundation::TypedEventHandler<MessageWebSocket, MessageWebSocketMessageReceivedEventArgs>;
             }
             #[guid(0xbed0cee7_f9c8_440a_9ad5_737281d9742e)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::ExclusiveTo(MessageWebSocket)]
             interface IMessageWebSocket2: IMessageWebSocket + IWebSocket + super::super::Foundation::IClosable {
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event ServerCustomValidationRequested: super::super::Foundation::TypedEventHandler<MessageWebSocket, WebSocketServerCustomValidationRequestedEventArgs>;
             }
             #[guid(0x59d9defb_71af_4349_8487_911fcf681597)]
@@ -312,6 +330,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::ExclusiveTo(ServerMessageWebSocket)]
             interface IServerMessageWebSocket: super::super::Foundation::IClosable {
+                #[add_name(value)]
                 event MessageReceived: super::super::Foundation::TypedEventHandler<ServerMessageWebSocket, MessageWebSocketMessageReceivedEventArgs>;
                 #[get]
                 Control: ServerMessageWebSocketControl;
@@ -319,9 +338,10 @@ mod Windows {
                 Information: ServerMessageWebSocketInformation;
                 #[get]
                 OutputStream: super::super::Storage::Streams::IOutputStream;
+                #[add_name(value)]
                 event Closed: super::super::Foundation::TypedEventHandler<ServerMessageWebSocket, WebSocketClosedEventArgs>;
-                #[Windows::Foundation::Metadata::Overload("CloseWithStatus")]
-                fn Close(&self, code: u16, reason: String);
+                #[overload(Close)]
+                fn CloseWithStatus(&self, code: u16, reason: String);
             }
             #[guid(0x69c2f051_1c1f_587a_4519_2181610192b7)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
@@ -350,9 +370,10 @@ mod Windows {
                 InputStream: super::super::Storage::Streams::IInputStream;
                 #[get]
                 OutputStream: super::super::Storage::Streams::IOutputStream;
+                #[add_name(value)]
                 event Closed: super::super::Foundation::TypedEventHandler<ServerStreamWebSocket, WebSocketClosedEventArgs>;
-                #[Windows::Foundation::Metadata::Overload("CloseWithStatus")]
-                fn Close(&self, code: u16, reason: String);
+                #[overload(Close)]
+                fn CloseWithStatus(&self, code: u16, reason: String);
             }
             #[guid(0xfc32b45f_4448_5505_6cc9_09aba8915f5d)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
@@ -431,17 +452,17 @@ mod Windows {
                 InputStream: super::super::Storage::Streams::IInputStream;
                 #[get]
                 OutputStream: super::super::Storage::Streams::IOutputStream;
-                #[Windows::Foundation::Metadata::Overload("ConnectWithEndpointPairAsync")]
-                fn ConnectAsync(&self, endpointPair: super::EndpointPair) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::DefaultOverload]
-                #[Windows::Foundation::Metadata::Overload("ConnectAsync")]
+                #[overload(ConnectAsync)]
+                fn ConnectWithEndpointPairAsync(&self, endpointPair: super::EndpointPair) -> super::super::Foundation::IAsyncAction;
+                #[overload(ConnectAsync)]
+                #[default_overload]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ConnectAsync(&self, remoteHostName: super::HostName, remoteServiceName: String) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("ConnectWithEndpointPairAndProtectionLevelAsync")]
-                fn ConnectAsync(&self, endpointPair: super::EndpointPair, protectionLevel: SocketProtectionLevel) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("ConnectWithProtectionLevelAsync")]
+                #[overload(ConnectAsync)]
+                fn ConnectWithEndpointPairAndProtectionLevelAsync(&self, endpointPair: super::EndpointPair, protectionLevel: SocketProtectionLevel) -> super::super::Foundation::IAsyncAction;
+                #[overload(ConnectAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn ConnectAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, protectionLevel: SocketProtectionLevel) -> super::super::Foundation::IAsyncAction;
+                fn ConnectWithProtectionLevelAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, protectionLevel: SocketProtectionLevel) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn UpgradeToSslAsync(&self, protectionLevel: SocketProtectionLevel, validationHostName: super::HostName) -> super::super::Foundation::IAsyncAction;
             }
@@ -449,9 +470,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(StreamSocket)]
             interface IStreamSocket2: super::super::Foundation::IClosable {
-                #[Windows::Foundation::Metadata::Overload("ConnectWithProtectionLevelAndAdapterAsync")]
+                #[overload(ConnectAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn ConnectAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, protectionLevel: SocketProtectionLevel, adapter: super::Connectivity::NetworkAdapter) -> super::super::Foundation::IAsyncAction;
+                fn ConnectWithProtectionLevelAndAdapterAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, protectionLevel: SocketProtectionLevel, adapter: super::Connectivity::NetworkAdapter) -> super::super::Foundation::IAsyncAction;
             }
             #[guid(0x3f430b00_9d28_4854_bac3_2301941ec223)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -459,16 +480,16 @@ mod Windows {
             interface IStreamSocket3 {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CancelIOAsync(&self) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("EnableTransferOwnership")]
+                #[overload(EnableTransferOwnership)]
                 fn EnableTransferOwnership(&self, taskId: GUID);
-                #[Windows::Foundation::Metadata::Overload("EnableTransferOwnershipWithConnectedStandbyAction")]
-                fn EnableTransferOwnership(&self, taskId: GUID, connectedStandbyAction: SocketActivityConnectedStandbyAction);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnership")]
+                #[overload(EnableTransferOwnership)]
+                fn EnableTransferOwnershipWithConnectedStandbyAction(&self, taskId: GUID, connectedStandbyAction: SocketActivityConnectedStandbyAction);
+                #[overload(TransferOwnership)]
                 fn TransferOwnership(&self, socketId: String);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnershipWithContext")]
-                fn TransferOwnership(&self, socketId: String, data: SocketActivityContext);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnershipWithContextAndKeepAliveTime")]
-                fn TransferOwnership(&self, socketId: String, data: SocketActivityContext, keepAliveTime: super::super::Foundation::TimeSpan);
+                #[overload(TransferOwnership)]
+                fn TransferOwnershipWithContext(&self, socketId: String, data: SocketActivityContext);
+                #[overload(TransferOwnership)]
+                fn TransferOwnershipWithContextAndKeepAliveTime(&self, socketId: String, data: SocketActivityContext, keepAliveTime: super::super::Foundation::TimeSpan);
             }
             #[guid(0xfe25adf1_92ab_4af3_9992_0f4c85e36cc4)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -550,18 +571,20 @@ mod Windows {
                 fn BindServiceNameAsync(&self, localServiceName: String) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn BindEndpointAsync(&self, localHostName: super::HostName, localServiceName: String) -> super::super::Foundation::IAsyncAction;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event ConnectionReceived: super::super::Foundation::TypedEventHandler<StreamSocketListener, StreamSocketListenerConnectionReceivedEventArgs>;
             }
             #[guid(0x658dc13e_bb3e_4458_b232_ed1088694b98)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(StreamSocketListener)]
             interface IStreamSocketListener2: super::super::Foundation::IClosable {
-                #[Windows::Foundation::Metadata::Overload("BindServiceNameWithProtectionLevelAsync")]
+                #[overload(BindServiceNameAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn BindServiceNameAsync(&self, localServiceName: String, protectionLevel: SocketProtectionLevel) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("BindServiceNameWithProtectionLevelAndAdapterAsync")]
+                fn BindServiceNameWithProtectionLevelAsync(&self, localServiceName: String, protectionLevel: SocketProtectionLevel) -> super::super::Foundation::IAsyncAction;
+                #[overload(BindServiceNameAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn BindServiceNameAsync(&self, localServiceName: String, protectionLevel: SocketProtectionLevel, adapter: super::Connectivity::NetworkAdapter) -> super::super::Foundation::IAsyncAction;
+                fn BindServiceNameWithProtectionLevelAndAdapterAsync(&self, localServiceName: String, protectionLevel: SocketProtectionLevel, adapter: super::Connectivity::NetworkAdapter) -> super::super::Foundation::IAsyncAction;
             }
             #[guid(0x4798201c_bdf8_4919_8542_28d450e74507)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -569,14 +592,14 @@ mod Windows {
             interface IStreamSocketListener3 {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CancelIOAsync(&self) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("EnableTransferOwnership")]
+                #[overload(EnableTransferOwnership)]
                 fn EnableTransferOwnership(&self, taskId: GUID);
-                #[Windows::Foundation::Metadata::Overload("EnableTransferOwnershipWithConnectedStandbyAction")]
-                fn EnableTransferOwnership(&self, taskId: GUID, connectedStandbyAction: SocketActivityConnectedStandbyAction);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnership")]
+                #[overload(EnableTransferOwnership)]
+                fn EnableTransferOwnershipWithConnectedStandbyAction(&self, taskId: GUID, connectedStandbyAction: SocketActivityConnectedStandbyAction);
+                #[overload(TransferOwnership)]
                 fn TransferOwnership(&self, socketId: String);
-                #[Windows::Foundation::Metadata::Overload("TransferOwnershipWithContext")]
-                fn TransferOwnership(&self, socketId: String, data: SocketActivityContext);
+                #[overload(TransferOwnership)]
+                fn TransferOwnershipWithContext(&self, socketId: String, data: SocketActivityContext);
             }
             #[guid(0x0c472ea9_373f_447b_85b1_ddd4548803ba)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -611,12 +634,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::ExclusiveTo(StreamSocket)]
             interface IStreamSocketStatics {
-                #[Windows::Foundation::Metadata::Overload("GetEndpointPairsAsync")]
+                #[overload(GetEndpointPairsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetEndpointPairsAsync(&self, remoteHostName: super::HostName, remoteServiceName: String) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<super::EndpointPair>>;
-                #[Windows::Foundation::Metadata::Overload("GetEndpointPairsWithSortOptionsAsync")]
+                #[overload(GetEndpointPairsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetEndpointPairsAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, sortOptions: super::HostNameSortOptions) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<super::EndpointPair>>;
+                fn GetEndpointPairsWithSortOptionsAsync(&self, remoteHostName: super::HostName, remoteServiceName: String, sortOptions: super::HostNameSortOptions) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<super::EndpointPair>>;
             }
             #[guid(0xbd4a49d8_b289_45bb_97eb_c7525205a843)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -633,6 +656,8 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::ExclusiveTo(StreamWebSocket)]
             interface IStreamWebSocket2: IStreamWebSocket + IWebSocket + super::super::Foundation::IClosable {
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event ServerCustomValidationRequested: super::super::Foundation::TypedEventHandler<StreamWebSocket, WebSocketServerCustomValidationRequestedEventArgs>;
             }
             #[guid(0xb4f478b1_a45a_48db_953a_645b7d964c07)]
@@ -658,9 +683,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ConnectAsync(&self, uri: super::super::Foundation::Uri) -> super::super::Foundation::IAsyncAction;
                 fn SetRequestHeader(&self, headerName: String, headerValue: String);
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event Closed: super::super::Foundation::TypedEventHandler<IWebSocket, WebSocketClosedEventArgs>;
-                #[Windows::Foundation::Metadata::Overload("CloseWithStatus")]
-                fn Close(&self, code: u16, reason: String);
+                #[overload(Close)]
+                fn CloseWithStatus(&self, code: u16, reason: String);
             }
             #[guid(0xceb78d07_d0a8_4703_a091_c8c2c0915bc3)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -735,26 +762,34 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MessageWebSocket {
+                #[default]
                 IMessageWebSocket,
                 IWebSocket,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IMessageWebSocket2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IMessageWebSocket3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MessageWebSocketControl {
+                #[default]
                 IMessageWebSocketControl,
                 IWebSocketControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IWebSocketControl2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IMessageWebSocketControl2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MessageWebSocketInformation {
+                #[default]
                 IWebSocketInformation,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IWebSocketInformation2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -762,7 +797,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::GCPressure(amount = Medium)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MessageWebSocketMessageReceivedEventArgs {
+                #[default]
                 IMessageWebSocketMessageReceivedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IMessageWebSocketMessageReceivedEventArgs2,
             }
             #[repr(i32)]
@@ -782,6 +819,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ServerMessageWebSocket {
+                #[default]
                 IServerMessageWebSocket,
                 super::super::Foundation::IClosable,
             }
@@ -789,18 +827,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ServerMessageWebSocketControl {
+                #[default]
                 IServerMessageWebSocketControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ServerMessageWebSocketInformation {
+                #[default]
                 IServerMessageWebSocketInformation,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ServerStreamWebSocket {
+                #[default]
                 IServerStreamWebSocket,
                 super::super::Foundation::IClosable,
             }
@@ -808,6 +849,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ServerStreamWebSocketInformation {
+                #[default]
                 IServerStreamWebSocketInformation,
             }
             #[repr(i32)]
@@ -821,6 +863,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SocketActivityContext {
+                #[default]
                 ISocketActivityContext,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -828,6 +871,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ISocketActivityInformationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SocketActivityInformation {
+                #[default]
                 ISocketActivityInformation,
             }
             #[repr(i32)]
@@ -842,6 +886,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SocketActivityTriggerDetails {
+                #[default]
                 ISocketActivityTriggerDetails,
             }
             #[repr(i32)]
@@ -853,6 +898,7 @@ mod Windows {
                 KeepAliveTimerExpired = 3,
                 SocketClosed = 4,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -904,15 +950,25 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             enum SocketProtectionLevel {
                 PlainSocket = 0,
+                #[Windows::Foundation::Metadata::Deprecated("Ssl may result in insecure connections and may be altered or unavailable for releases after Windows 8.1. Instead, use one of the TLS SocketProtectionLevel values.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                 Ssl = 1,
                 SslAllowNullEncryption = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 BluetoothEncryptionAllowNullAuthentication = 3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 BluetoothEncryptionWithAuthentication = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                #[Windows::Foundation::Metadata::Deprecated("Ssl3AllowWeakEncryption may result in insecure connections and may be altered or unavailable for releases after Windows 8.1. Instead, use one of the TLS SocketProtectionLevel values.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                 Ssl3AllowWeakEncryption = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Tls10 = 6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Tls11 = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Tls12 = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 Unspecified = 9,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1048576)]
                 Tls13 = 10,
             }
             #[repr(i32)]
@@ -935,25 +991,34 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IStreamSocketStatics, 196608, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StreamSocket {
+                #[default]
                 IStreamSocket,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocket2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocket3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamSocketControl {
+                #[default]
                 IStreamSocketControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocketControl2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocketControl3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IStreamSocketControl4,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamSocketInformation {
+                #[default]
                 IStreamSocketInformation,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocketInformation2,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -962,28 +1027,35 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StreamSocketListener {
+                #[default]
                 IStreamSocketListener,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocketListener2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocketListener3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamSocketListenerConnectionReceivedEventArgs {
+                #[default]
                 IStreamSocketListenerConnectionReceivedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamSocketListenerControl {
+                #[default]
                 IStreamSocketListenerControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IStreamSocketListenerControl2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamSocketListenerInformation {
+                #[default]
                 IStreamSocketListenerInformation,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -992,33 +1064,42 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StreamWebSocket {
+                #[default]
                 IStreamWebSocket,
                 IWebSocket,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IStreamWebSocket2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamWebSocketControl {
+                #[default]
                 IStreamWebSocketControl,
                 IWebSocketControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IWebSocketControl2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IStreamWebSocketControl2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StreamWebSocketInformation {
+                #[default]
                 IWebSocketInformation,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IWebSocketInformation2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WebSocketClosedEventArgs {
+                #[default]
                 IWebSocketClosedEventArgs,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -1031,12 +1112,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class WebSocketKeepAlive {
+                #[default]
                 super::super::ApplicationModel::Background::IBackgroundTask,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WebSocketServerCustomValidationRequestedEventArgs {
+                #[default]
                 IWebSocketServerCustomValidationRequestedEventArgs,
             }
         }

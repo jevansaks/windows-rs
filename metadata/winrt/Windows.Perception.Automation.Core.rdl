@@ -3,6 +3,7 @@ mod Windows {
     mod Perception {
         mod Automation {
             mod Core {
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(PerceptionAutomationCoreContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]

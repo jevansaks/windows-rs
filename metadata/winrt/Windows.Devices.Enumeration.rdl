@@ -6,8 +6,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100859904)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DeviceAccessChangedEventArgs {
+                #[default]
                 IDeviceAccessChangedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IDeviceAccessChangedEventArgs2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 IDeviceAccessChangedEventArgs3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -15,7 +18,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDeviceAccessInformationStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceAccessInformation {
+                #[default]
                 IDeviceAccessInformation,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 IDeviceAccessInformation2,
             }
             #[repr(i32)]
@@ -34,13 +39,16 @@ mod Windows {
                 AudioRender = 2,
                 PortableStorageDevice = 3,
                 VideoCapture = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ImageScanner = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Location = 6,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceConnectionChangeTriggerDetails {
+                #[default]
                 IDeviceConnectionChangeTriggerDetails,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -48,6 +56,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceDisconnectButtonClickedEventArgs {
+                #[default]
                 IDeviceDisconnectButtonClickedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -58,13 +67,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDeviceInformationStatics3, 1245184, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceInformation {
+                #[default]
                 IDeviceInformation,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDeviceInformation2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DeviceInformationCollection {
+                #[default]
                 super::super::Foundation::Collections::IVectorView<DeviceInformation>,
                 super::super::Foundation::Collections::IIterable<DeviceInformation>,
             }
@@ -72,7 +84,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceInformationCustomPairing {
+                #[default]
                 IDeviceInformationCustomPairing,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 IDeviceInformationCustomPairing2,
             }
             #[repr(i32)]
@@ -86,7 +100,9 @@ mod Windows {
                 AssociationEndpoint = 5,
                 AssociationEndpointContainer = 6,
                 AssociationEndpointService = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 DevicePanel = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 AssociationEndpointProtocol = 9,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -95,14 +111,18 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDeviceInformationPairingStatics2, 458752, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceInformationPairing {
+                #[default]
                 IDeviceInformationPairing,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 IDeviceInformationPairing2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DeviceInformationUpdate {
+                #[default]
                 IDeviceInformationUpdate,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDeviceInformationUpdate2,
             }
             #[repr(i32)]
@@ -124,7 +144,9 @@ mod Windows {
                 DisplayPin = 2,
                 ProvidePin = 4,
                 ConfirmPinMatch = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 ProvidePasswordCredential = 16,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 ProvideAddress = 32,
             }
             #[repr(i32)]
@@ -139,14 +161,18 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DevicePairingRequestedEventArgs {
+                #[default]
                 IDevicePairingRequestedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IDevicePairingRequestedEventArgs2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 IDevicePairingRequestedEventArgs3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DevicePairingResult {
+                #[default]
                 IDevicePairingResult,
             }
             #[repr(i32)]
@@ -166,16 +192,23 @@ mod Windows {
                 ProtectionLevelCouldNotBeMet = 11,
                 AccessDenied = 12,
                 InvalidCeremonyData = 13,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 PairingCanceled = 14,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 OperationAlreadyInProgress = 15,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 RequiredHandlerNotRegistered = 16,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 RejectedByHandler = 17,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 RemoteDeviceHasAssociation = 18,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 Failed = 19,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1245184)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DevicePairingSetMembersRequestedEventArgs {
+                #[default]
                 IDevicePairingSetMembersRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -184,6 +217,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DevicePicker {
+                #[default]
                 IDevicePicker,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -191,6 +225,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DevicePickerAppearance {
+                #[default]
                 IDevicePickerAppearance,
             }
             #[repr(u32)]
@@ -207,6 +242,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DevicePickerFilter {
+                #[default]
                 IDevicePickerFilter,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -214,12 +250,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceSelectedEventArgs {
+                #[default]
                 IDeviceSelectedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DeviceThumbnail {
+                #[default]
                 super::super::Storage::Streams::IRandomAccessStreamWithContentType,
                 super::super::Storage::Streams::IContentTypeProvider,
                 super::super::Storage::Streams::IRandomAccessStream,
@@ -231,6 +269,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceUnpairingResult {
+                #[default]
                 IDeviceUnpairingResult,
             }
             #[repr(i32)]
@@ -246,12 +285,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DeviceWatcher {
+                #[default]
                 IDeviceWatcher,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDeviceWatcher2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DeviceWatcherEvent {
+                #[default]
                 IDeviceWatcherEvent,
             }
             #[repr(i32)]
@@ -275,13 +317,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DeviceWatcherTriggerDetails {
+                #[default]
                 IDeviceWatcherTriggerDetails,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class EnclosureLocation {
+                #[default]
                 IEnclosureLocation,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IEnclosureLocation2,
             }
             #[guid(0xdeda0bcc_4f9d_4f58_9dba_a9bc800408d5)]
@@ -309,6 +354,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DeviceAccessInformation)]
             interface IDeviceAccessInformation {
+                #[remove_name(cookie)]
                 event AccessChanged: super::super::Foundation::TypedEventHandler<DeviceAccessInformation, DeviceAccessChangedEventArgs>;
                 #[get]
                 CurrentStatus: DeviceAccessStatus;
@@ -380,15 +426,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DeviceInformationCustomPairing)]
             interface IDeviceInformationCustomPairing {
-                #[Windows::Foundation::Metadata::Overload("PairAsync")]
+                #[overload(PairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn PairAsync(&self, pairingKindsSupported: DevicePairingKinds) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
-                #[Windows::Foundation::Metadata::Overload("PairWithProtectionLevelAsync")]
+                #[overload(PairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn PairAsync(&self, pairingKindsSupported: DevicePairingKinds, minProtectionLevel: DevicePairingProtectionLevel) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
-                #[Windows::Foundation::Metadata::Overload("PairWithProtectionLevelAndSettingsAsync")]
+                fn PairWithProtectionLevelAsync(&self, pairingKindsSupported: DevicePairingKinds, minProtectionLevel: DevicePairingProtectionLevel) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
+                #[overload(PairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn PairAsync(&self, pairingKindsSupported: DevicePairingKinds, minProtectionLevel: DevicePairingProtectionLevel, devicePairingSettings: IDevicePairingSettings) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
+                fn PairWithProtectionLevelAndSettingsAsync(&self, pairingKindsSupported: DevicePairingKinds, minProtectionLevel: DevicePairingProtectionLevel, devicePairingSettings: IDevicePairingSettings) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
                 event PairingRequested: super::super::Foundation::TypedEventHandler<DeviceInformationCustomPairing, DevicePairingRequestedEventArgs>;
             }
             #[guid(0x0ebda662_e696_5fa9_8f72_80cfebcd851d)]
@@ -406,12 +452,12 @@ mod Windows {
                 IsPaired: bool;
                 #[get]
                 CanPair: bool;
-                #[Windows::Foundation::Metadata::Overload("PairAsync")]
+                #[overload(PairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn PairAsync(&self) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
-                #[Windows::Foundation::Metadata::Overload("PairWithProtectionLevelAsync")]
+                #[overload(PairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn PairAsync(&self, minProtectionLevel: DevicePairingProtectionLevel) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
+                fn PairWithProtectionLevelAsync(&self, minProtectionLevel: DevicePairingProtectionLevel) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
             }
             #[guid(0xf68612fd_0aee_4328_85cc_1c742bb1790d)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
@@ -421,10 +467,10 @@ mod Windows {
                 ProtectionLevel: DevicePairingProtectionLevel;
                 #[get]
                 Custom: DeviceInformationCustomPairing;
-                #[Windows::Foundation::Metadata::Overload("PairWithProtectionLevelAndSettingsAsync")]
+                #[overload(PairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn PairAsync(&self, minProtectionLevel: DevicePairingProtectionLevel, devicePairingSettings: IDevicePairingSettings) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
-                #[Windows::Foundation::Metadata::Overload("UnpairAsync")]
+                fn PairWithProtectionLevelAndSettingsAsync(&self, minProtectionLevel: DevicePairingProtectionLevel, devicePairingSettings: IDevicePairingSettings) -> super::super::Foundation::IAsyncOperation<DevicePairingResult>;
+                #[overload(UnpairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn UnpairAsync(&self) -> super::super::Foundation::IAsyncOperation<DeviceUnpairingResult>;
             }
@@ -444,55 +490,55 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DeviceInformation)]
             interface IDeviceInformationStatics {
-                #[Windows::Foundation::Metadata::Overload("CreateFromIdAsync")]
+                #[overload(CreateFromIdAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CreateFromIdAsync(&self, deviceId: String) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
-                #[Windows::Foundation::Metadata::Overload("CreateFromIdAsyncAdditionalProperties")]
-                fn CreateFromIdAsync(&self, deviceId: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
-                #[Windows::Foundation::Metadata::Overload("FindAllAsync")]
+                #[overload(CreateFromIdAsync)]
+                fn CreateFromIdAsyncAdditionalProperties(&self, deviceId: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
+                #[overload(FindAllAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FindAllAsync(&self) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
-                #[Windows::Foundation::Metadata::DefaultOverload]
-                #[Windows::Foundation::Metadata::Overload("FindAllAsyncDeviceClass")]
+                #[overload(FindAllAsync)]
+                #[default_overload]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn FindAllAsync(&self, deviceClass: DeviceClass) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
-                #[Windows::Foundation::Metadata::Overload("FindAllAsyncAqsFilter")]
+                fn FindAllAsyncDeviceClass(&self, deviceClass: DeviceClass) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
+                #[overload(FindAllAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn FindAllAsync(&self, aqsFilter: String) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
-                #[Windows::Foundation::Metadata::Overload("FindAllAsyncAqsFilterAndAdditionalProperties")]
-                fn FindAllAsync(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcher")]
+                fn FindAllAsyncAqsFilter(&self, aqsFilter: String) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
+                #[overload(FindAllAsync)]
+                fn FindAllAsyncAqsFilterAndAdditionalProperties(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
+                #[overload(CreateWatcher)]
                 fn CreateWatcher(&self) -> DeviceWatcher;
-                #[Windows::Foundation::Metadata::DefaultOverload]
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherDeviceClass")]
-                fn CreateWatcher(&self, deviceClass: DeviceClass) -> DeviceWatcher;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherAqsFilter")]
-                fn CreateWatcher(&self, aqsFilter: String) -> DeviceWatcher;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherAqsFilterAndAdditionalProperties")]
-                fn CreateWatcher(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>) -> DeviceWatcher;
+                #[overload(CreateWatcher)]
+                #[default_overload]
+                fn CreateWatcherDeviceClass(&self, deviceClass: DeviceClass) -> DeviceWatcher;
+                #[overload(CreateWatcher)]
+                fn CreateWatcherAqsFilter(&self, aqsFilter: String) -> DeviceWatcher;
+                #[overload(CreateWatcher)]
+                fn CreateWatcherAqsFilterAndAdditionalProperties(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>) -> DeviceWatcher;
             }
             #[guid(0x493b4f34_a84f_45fd_9167_15d1cb1bd1f9)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DeviceInformation)]
             interface IDeviceInformationStatics2 {
                 fn GetAqsFilterFromDeviceClass(&self, deviceClass: DeviceClass) -> String;
-                #[Windows::Foundation::Metadata::Overload("CreateFromIdAsyncWithKindAndAdditionalProperties")]
-                fn CreateFromIdAsync(&self, deviceId: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
-                #[Windows::Foundation::Metadata::Overload("FindAllAsyncWithKindAqsFilterAndAdditionalProperties")]
-                fn FindAllAsync(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherWithKindAqsFilterAndAdditionalProperties")]
-                fn CreateWatcher(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind) -> DeviceWatcher;
+                #[overload(CreateFromIdAsync)]
+                fn CreateFromIdAsyncWithKindAndAdditionalProperties(&self, deviceId: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
+                #[overload(FindAllAsync)]
+                fn FindAllAsyncWithKindAqsFilterAndAdditionalProperties(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
+                #[overload(CreateWatcher)]
+                fn CreateWatcherWithKindAqsFilterAndAdditionalProperties(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind) -> DeviceWatcher;
             }
             #[guid(0x25f06279_9364_5a6c_8a54_5d4a6d3d922a)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1245184)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DeviceInformation)]
             interface IDeviceInformationStatics3 {
-                #[Windows::Foundation::Metadata::Overload("CreateFromIdAsyncWithAdditionalPropertiesKindAndSettings")]
-                fn CreateFromIdAsync(&self, deviceId: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind, settings: IDeviceEnumerationSettings) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
-                #[Windows::Foundation::Metadata::Overload("FindAllAsyncWithAqsFilterAdditionalPropertiesKindAndSettings")]
-                fn FindAllAsync(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind, settings: IDeviceEnumerationSettings) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherWithAqsFilterAdditionalPropertiesKindAndSettings")]
-                fn CreateWatcher(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind, settings: IDeviceEnumerationSettings) -> DeviceWatcher;
+                #[overload(CreateFromIdAsync)]
+                fn CreateFromIdAsyncWithAdditionalPropertiesKindAndSettings(&self, deviceId: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind, settings: IDeviceEnumerationSettings) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
+                #[overload(FindAllAsync)]
+                fn FindAllAsyncWithAqsFilterAdditionalPropertiesKindAndSettings(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind, settings: IDeviceEnumerationSettings) -> super::super::Foundation::IAsyncOperation<DeviceInformationCollection>;
+                #[overload(CreateWatcher)]
+                fn CreateWatcherWithAqsFilterAdditionalPropertiesKindAndSettings(&self, aqsFilter: String, additionalProperties: super::super::Foundation::Collections::IIterable<String>, kind: DeviceInformationKind, settings: IDeviceEnumerationSettings) -> DeviceWatcher;
             }
             #[guid(0x8f315305_d972_44b7_a37e_9e822c78213b)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -520,10 +566,10 @@ mod Windows {
                 PairingKind: DevicePairingKinds;
                 #[get]
                 Pin: String;
-                #[Windows::Foundation::Metadata::Overload("Accept")]
+                #[overload(Accept)]
                 fn Accept(&self);
-                #[Windows::Foundation::Metadata::Overload("AcceptWithPin")]
-                fn Accept(&self, pin: String);
+                #[overload(Accept)]
+                fn AcceptWithPin(&self, pin: String);
                 fn GetDeferral(&self) -> super::super::Foundation::Deferral;
             }
             #[guid(0xc83752d9_e4d3_4db0_a360_a105e437dbdc)]
@@ -574,14 +620,14 @@ mod Windows {
                 event DeviceSelected: super::super::Foundation::TypedEventHandler<DevicePicker, DeviceSelectedEventArgs>;
                 event DisconnectButtonClicked: super::super::Foundation::TypedEventHandler<DevicePicker, DeviceDisconnectButtonClickedEventArgs>;
                 event DevicePickerDismissed: super::super::Foundation::TypedEventHandler<DevicePicker, Object>;
-                #[Windows::Foundation::Metadata::Overload("Show")]
+                #[overload(Show)]
                 fn Show(&self, selection: super::super::Foundation::Rect);
-                #[Windows::Foundation::Metadata::Overload("ShowWithPlacement")]
-                fn Show(&self, selection: super::super::Foundation::Rect, placement: super::super::UI::Popups::Placement);
-                #[Windows::Foundation::Metadata::Overload("PickSingleDeviceAsync")]
+                #[overload(Show)]
+                fn ShowWithPlacement(&self, selection: super::super::Foundation::Rect, placement: super::super::UI::Popups::Placement);
+                #[overload(PickSingleDeviceAsync)]
                 fn PickSingleDeviceAsync(&self, selection: super::super::Foundation::Rect) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
-                #[Windows::Foundation::Metadata::Overload("PickSingleDeviceAsyncWithPlacement")]
-                fn PickSingleDeviceAsync(&self, selection: super::super::Foundation::Rect, placement: super::super::UI::Popups::Placement) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
+                #[overload(PickSingleDeviceAsync)]
+                fn PickSingleDeviceAsyncWithPlacement(&self, selection: super::super::Foundation::Rect, placement: super::super::UI::Popups::Placement) -> super::super::Foundation::IAsyncOperation<DeviceInformation>;
                 fn Hide(&self);
                 fn SetDisplayStatus(&self, device: DeviceInformation, status: String, options: DevicePickerDisplayStatusOptions);
             }

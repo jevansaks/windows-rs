@@ -15,7 +15,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DeviceAccountConfiguration {
+                    #[default]
                     IDeviceAccountConfiguration,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     IDeviceAccountConfiguration2,
                 }
                 #[repr(i32)]
@@ -131,6 +133,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn GetDeviceAccountConfigurationAsync(&self, accountId: String) -> super::super::super::Foundation::IAsyncOperation<DeviceAccountConfiguration>;
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IUserDataAccountSystemAccessManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]

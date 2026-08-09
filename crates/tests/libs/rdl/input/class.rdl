@@ -4,6 +4,7 @@ mod Test {
         fn Name(&self) -> String;
     }
     class Widget {
+        #[default]
         IWidget,
     }
 }

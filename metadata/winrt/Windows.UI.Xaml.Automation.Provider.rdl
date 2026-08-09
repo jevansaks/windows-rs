@@ -144,6 +144,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class IRawElementProviderSimple: super::super::DependencyObject {
+                        #[default]
                         IIRawElementProviderSimple,
                     }
                     #[guid(0x9a3ec090_5d2c_4e42_9ee6_9d58db100b55)]

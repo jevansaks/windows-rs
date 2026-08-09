@@ -20,7 +20,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(VpnChannel)]
             interface IVpnChannel {
                 fn AssociateTransport(&self, mainOuterTunnelTransport: Object, optionalOuterTunnelTransport: Object);
-                #[Windows::Foundation::Metadata::Overload("Start")]
+                #[overload(Start)]
                 fn Start(&self, assignedClientIPv4list: super::super::Foundation::Collections::IVectorView<super::HostName>, assignedClientIPv6list: super::super::Foundation::Collections::IVectorView<super::HostName>, vpnInterfaceId: VpnInterfaceId, routeScope: VpnRouteAssignment, namespaceScope: VpnNamespaceAssignment, mtuSize: u32, maxFrameSize: u32, optimizeForLowCostNetwork: bool, mainOuterTunnelTransport: Object, optionalOuterTunnelTransport: Object);
                 fn Stop(&self);
                 fn RequestCredentials(&self, credType: VpnCredentialType, isRetry: bool, isSingleSignOnCredential: bool, certificate: super::super::Security::Cryptography::Certificates::Certificate) -> VpnPickedCredential;
@@ -52,17 +52,17 @@ mod Windows {
                 fn GetVpnReceivePacketBuffer(&self) -> VpnPacketBuffer;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn RequestCustomPromptAsync(&self, customPromptElement: super::super::Foundation::Collections::IVectorView<IVpnCustomPromptElement>) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("RequestCredentialsWithCertificateAsync")]
+                #[overload(RequestCredentialsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn RequestCredentialsAsync(&self, credType: VpnCredentialType, credOptions: u32, certificate: super::super::Security::Cryptography::Certificates::Certificate) -> super::super::Foundation::IAsyncOperation<VpnCredential>;
-                #[Windows::Foundation::Metadata::Overload("RequestCredentialsWithOptionsAsync")]
+                fn RequestCredentialsWithCertificateAsync(&self, credType: VpnCredentialType, credOptions: u32, certificate: super::super::Security::Cryptography::Certificates::Certificate) -> super::super::Foundation::IAsyncOperation<VpnCredential>;
+                #[overload(RequestCredentialsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn RequestCredentialsAsync(&self, credType: VpnCredentialType, credOptions: u32) -> super::super::Foundation::IAsyncOperation<VpnCredential>;
-                #[Windows::Foundation::Metadata::Overload("RequestCredentialsSimpleAsync")]
+                fn RequestCredentialsWithOptionsAsync(&self, credType: VpnCredentialType, credOptions: u32) -> super::super::Foundation::IAsyncOperation<VpnCredential>;
+                #[overload(RequestCredentialsAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn RequestCredentialsAsync(&self, credType: VpnCredentialType) -> super::super::Foundation::IAsyncOperation<VpnCredential>;
+                fn RequestCredentialsSimpleAsync(&self, credType: VpnCredentialType) -> super::super::Foundation::IAsyncOperation<VpnCredential>;
                 fn TerminateConnection(&self, message: String);
-                #[Windows::Foundation::Metadata::Overload("StartWithTrafficFilter")]
+                #[overload(StartWithTrafficFilter)]
                 fn StartWithTrafficFilter(&self, assignedClientIpv4List: super::super::Foundation::Collections::IVectorView<super::HostName>, assignedClientIpv6List: super::super::Foundation::Collections::IVectorView<super::HostName>, vpnInterfaceId: VpnInterfaceId, assignedRoutes: VpnRouteAssignment, assignedNamespace: VpnDomainNameAssignment, mtuSize: u32, maxFrameSize: u32, reserved: bool, mainOuterTunnelTransport: Object, optionalOuterTunnelTransport: Object, assignedTrafficFilters: VpnTrafficFilterAssignment);
             }
             #[guid(0xd7266ede_2937_419d_9570_486aebb81803)]
@@ -70,8 +70,8 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(VpnChannel)]
             interface IVpnChannel4 {
                 fn AddAndAssociateTransport(&self, transport: Object, context: Object);
-                #[Windows::Foundation::Metadata::Overload("StartWithMultipleTransports")]
-                fn StartWithTrafficFilter(&self, assignedClientIpv4Addresses: super::super::Foundation::Collections::IIterable<super::HostName>, assignedClientIpv6Addresses: super::super::Foundation::Collections::IIterable<super::HostName>, vpninterfaceId: VpnInterfaceId, assignedRoutes: VpnRouteAssignment, assignedNamespace: VpnDomainNameAssignment, mtuSize: u32, maxFrameSize: u32, reserved: bool, transports: super::super::Foundation::Collections::IIterable<Object>, assignedTrafficFilters: VpnTrafficFilterAssignment);
+                #[overload(StartWithTrafficFilter)]
+                fn StartWithMultipleTransports(&self, assignedClientIpv4Addresses: super::super::Foundation::Collections::IIterable<super::HostName>, assignedClientIpv6Addresses: super::super::Foundation::Collections::IIterable<super::HostName>, vpninterfaceId: VpnInterfaceId, assignedRoutes: VpnRouteAssignment, assignedNamespace: VpnDomainNameAssignment, mtuSize: u32, maxFrameSize: u32, reserved: bool, transports: super::super::Foundation::Collections::IIterable<Object>, assignedTrafficFilters: VpnTrafficFilterAssignment);
                 fn ReplaceAndAssociateTransport(&self, transport: Object, context: Object);
                 fn StartReconnectingTransport(&self, transport: Object, context: Object);
                 fn GetSlotTypeForTransportContext(&self, context: Object) -> super::Sockets::ControlChannelTriggerStatus;
@@ -621,6 +621,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnAppId {
+                #[default]
                 IVpnAppId,
             }
             #[repr(i32)]
@@ -644,10 +645,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnChannel {
+                #[default]
                 IVpnChannel,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IVpnChannel2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IVpnChannel4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 IVpnChannel5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IVpnChannel6,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -655,6 +661,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnChannelActivityEventArgs {
+                #[default]
                 IVpnChannelActivityEventArgs,
             }
             #[repr(i32)]
@@ -668,6 +675,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnChannelActivityStateChangedArgs {
+                #[default]
                 IVpnChannelActivityStateChangedArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -675,7 +683,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnChannelConfiguration {
+                #[default]
                 IVpnChannelConfiguration,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IVpnChannelConfiguration2,
             }
             #[repr(u32)]
@@ -691,6 +701,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCredential {
+                #[default]
                 IVpnCredential,
             }
             #[repr(i32)]
@@ -710,6 +721,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomCheckBox {
+                #[default]
                 IVpnCustomCheckBox,
                 IVpnCustomPrompt,
             }
@@ -719,6 +731,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomComboBox {
+                #[default]
                 IVpnCustomComboBox,
                 IVpnCustomPrompt,
             }
@@ -728,6 +741,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomEditBox {
+                #[default]
                 IVpnCustomEditBox,
                 IVpnCustomPrompt,
             }
@@ -737,6 +751,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomErrorBox {
+                #[default]
                 IVpnCustomErrorBox,
                 IVpnCustomPrompt,
             }
@@ -746,6 +761,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomPromptBooleanInput {
+                #[default]
                 IVpnCustomPromptBooleanInput,
                 IVpnCustomPromptElement,
             }
@@ -755,6 +771,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomPromptOptionSelector {
+                #[default]
                 IVpnCustomPromptOptionSelector,
                 IVpnCustomPromptElement,
             }
@@ -764,6 +781,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomPromptText {
+                #[default]
                 IVpnCustomPromptText,
                 IVpnCustomPromptElement,
             }
@@ -773,6 +791,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomPromptTextInput {
+                #[default]
                 IVpnCustomPromptTextInput,
                 IVpnCustomPromptElement,
             }
@@ -782,6 +801,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnCustomTextBox {
+                #[default]
                 IVpnCustomTextBox,
                 IVpnCustomPrompt,
             }
@@ -797,6 +817,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnDomainNameAssignment {
+                #[default]
                 IVpnDomainNameAssignment,
             }
             #[Windows::Foundation::Metadata::Activatable(IVpnDomainNameInfoFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -805,7 +826,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnDomainNameInfo {
+                #[default]
                 IVpnDomainNameInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IVpnDomainNameInfo2,
             }
             #[repr(i32)]
@@ -818,6 +841,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class VpnForegroundActivatedEventArgs {
+                #[default]
                 IVpnForegroundActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgs,
                 super::super::ApplicationModel::Activation::IActivatedEventArgsWithUser,
@@ -825,6 +849,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class VpnForegroundActivationOperation {
+                #[default]
                 IVpnForegroundActivationOperation,
             }
             #[repr(i32)]
@@ -844,6 +869,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnInterfaceId {
+                #[default]
                 IVpnInterfaceId,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -852,6 +878,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnManagementAgent {
+                #[default]
                 IVpnManagementAgent,
             }
             #[repr(i32)]
@@ -871,18 +898,31 @@ mod Windows {
                 ProfileNameTooLong = 3,
                 ProfileInvalidAppId = 4,
                 AccessDenied = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 CannotFindProfile = 6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 AlreadyDisconnecting = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 AlreadyConnected = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 GeneralAuthenticationFailure = 9,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 EapFailure = 10,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 SmartCardFailure = 11,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 CertificateFailure = 12,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 ServerConfiguration = 13,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 NoConnection = 14,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 ServerConnection = 15,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 UserNamePassword = 16,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 DnsNotResolvable = 17,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 InvalidIP = 18,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -891,6 +931,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnNamespaceAssignment {
+                #[default]
                 IVpnNamespaceAssignment,
             }
             #[Windows::Foundation::Metadata::Activatable(IVpnNamespaceInfoFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -899,6 +940,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnNamespaceInfo {
+                #[default]
                 IVpnNamespaceInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -907,8 +949,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnNativeProfile {
+                #[default]
                 IVpnNativeProfile,
                 IVpnProfile,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IVpnNativeProfile2,
             }
             #[repr(i32)]
@@ -924,8 +968,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnPacketBuffer {
+                #[default]
                 IVpnPacketBuffer,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IVpnPacketBuffer2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IVpnPacketBuffer3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -933,6 +980,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnPacketBufferList {
+                #[default]
                 IVpnPacketBufferList,
                 super::super::Foundation::Collections::IIterable<VpnPacketBuffer>,
             }
@@ -947,6 +995,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnPickedCredential {
+                #[default]
                 IVpnPickedCredential,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -955,8 +1004,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnPlugInProfile {
+                #[default]
                 IVpnPlugInProfile,
                 IVpnProfile,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IVpnPlugInProfile2,
             }
             #[Windows::Foundation::Metadata::Activatable(IVpnRouteFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -965,6 +1016,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnRoute {
+                #[default]
                 IVpnRoute,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -973,6 +1025,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnRouteAssignment {
+                #[default]
                 IVpnRouteAssignment,
             }
             #[repr(i32)]
@@ -986,6 +1039,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnSystemHealth {
+                #[default]
                 IVpnSystemHealth,
             }
             #[Windows::Foundation::Metadata::Activatable(IVpnTrafficFilterFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -994,6 +1048,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnTrafficFilter {
+                #[default]
                 IVpnTrafficFilter,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1002,6 +1057,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(MTA)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VpnTrafficFilterAssignment {
+                #[default]
                 IVpnTrafficFilterAssignment,
             }
         }

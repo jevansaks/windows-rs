@@ -8,6 +8,51 @@ impl std::fmt::Debug for Attribute<'_> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AttributeValueError {
+    offset: usize,
+    message: &'static str,
+    unsupported: bool,
+}
+
+impl AttributeValueError {
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn message(&self) -> &str {
+        self.message
+    }
+
+    pub fn is_unsupported(&self) -> bool {
+        self.unsupported
+    }
+}
+
+impl std::fmt::Display for AttributeValueError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{} at byte {}", self.message, self.offset)
+    }
+}
+
+impl std::error::Error for AttributeValueError {}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum AttributeArgKind {
+    Field,
+    Property,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AttributeArg {
+    Fixed(Value),
+    Named {
+        kind: AttributeArgKind,
+        name: String,
+        value: Value,
+    },
+}
+
 impl<'a> Attribute<'a> {
     pub fn name(&self) -> &'a str {
         self.ctor().parent().name()
@@ -25,64 +70,361 @@ impl<'a> Attribute<'a> {
         self.decode(1)
     }
 
+    /// Returns the encoded custom-attribute value blob.
+    pub fn value_blob(&self) -> &'a [u8] {
+        self.file().blob(self.pos(), Self::TABLE, 2)
+    }
+
     pub fn value(&self) -> Vec<(String, Value)> {
-        let signature = self.ctor().signature(&[]);
-        debug_assert_eq!(signature.flags, MethodCallAttributes::HASTHIS);
-        debug_assert_eq!(signature.return_type, Type::Void);
+        flatten_args(self.try_args_impl(None, true).unwrap())
+    }
 
+    pub fn try_value(&self) -> Result<Vec<(String, Value)>, AttributeValueError> {
+        self.try_args().map(flatten_args)
+    }
+
+    pub fn try_value_with_references(
+        &self,
+        references: &Index,
+    ) -> Result<Vec<(String, Value)>, AttributeValueError> {
+        self.try_args_with_references(references).map(flatten_args)
+    }
+
+    pub fn args(&self) -> Vec<AttributeArg> {
+        self.try_args_impl(None, true).unwrap()
+    }
+
+    pub fn try_args(&self) -> Result<Vec<AttributeArg>, AttributeValueError> {
+        self.try_args_impl(None, false)
+    }
+
+    pub fn try_args_with_references(
+        &self,
+        references: &Index,
+    ) -> Result<Vec<AttributeArg>, AttributeValueError> {
+        self.try_args_impl(Some(references), false)
+    }
+
+    fn try_args_impl(
+        &self,
+        references: Option<&Index>,
+        assume_i32_enums: bool,
+    ) -> Result<Vec<AttributeArg>, AttributeValueError> {
+        let signature = self.ctor().instantiated_signature();
         let mut values = Vec::with_capacity(signature.types.len());
-        let mut blob = self.blob(2);
-        let prolog = blob.read_u16();
-        debug_assert_eq!(prolog, 1);
+        let mut blob = AttributeBlob::new(
+            self.value_blob(),
+            self.to_row().index,
+            references,
+            assume_i32_enums,
+        );
 
-        for ty in &signature.types {
-            let value = read_value(&mut blob, ty);
-            values.push((String::new(), value));
+        if blob.read_u16()? != 1 {
+            return Err(blob.invalid_at(0, "invalid custom-attribute prolog"));
         }
 
-        let named_arg_count = blob.read_u16();
+        for ty in &signature.types {
+            let value = blob.read_value(ty)?;
+            values.push(AttributeArg::Fixed(value));
+        }
+
+        let named_arg_count = blob.read_u16()?;
         values.reserve(named_arg_count as usize);
 
         for _ in 0..named_arg_count {
-            let _id = blob.read_u8();
-            // Per ECMA-335 II.23.3, this byte is 0x53 (FIELD) or 0x54 (PROPERTY),
-            // indicating whether the named argument targets a field or a property.
-            let ty = blob.read_type_code(&[]);
-            let name = blob.read_utf8();
-            let value = read_value(&mut blob, &ty);
-            values.push((name, value));
+            let offset = blob.offset;
+            let kind = match blob.read_u8()? {
+                0x53 => AttributeArgKind::Field,
+                0x54 => AttributeArgKind::Property,
+                _ => return Err(blob.invalid_at(offset, "invalid named-argument tag")),
+            };
+            let ty = blob.read_type()?;
+            let name = blob.read_required_string("null named-argument name")?;
+            let value = blob.read_value(&ty)?;
+            values.push(AttributeArg::Named { kind, name, value });
         }
 
-        debug_assert_eq!(blob.len(), 0);
-        values
+        if blob.offset != blob.bytes.len() {
+            return Err(blob.invalid("trailing custom-attribute data"));
+        }
+
+        Ok(values)
     }
 }
 
-fn read_value(blob: &mut Blob, ty: &Type) -> Value {
-    match ty {
-        Type::Bool => Value::Bool(blob.read_bool()),
-        Type::I8 => Value::I8(blob.read_i8()),
-        Type::U8 => Value::U8(blob.read_u8()),
-        Type::I16 => Value::I16(blob.read_i16()),
-        Type::U16 => Value::U16(blob.read_u16()),
-        Type::I32 => Value::I32(blob.read_i32()),
-        Type::U32 => Value::U32(blob.read_u32()),
-        Type::I64 => Value::I64(blob.read_i64()),
-        Type::U64 => Value::U64(blob.read_u64()),
-        Type::F32 => Value::F32(blob.read_f32()),
-        Type::F64 => Value::F64(blob.read_f64()),
-        Type::String => Value::Utf8(blob.read_utf8()),
-        Type::ClassName(tn) if tn == ("System", "Type") => {
-            let s = blob.read_utf8();
-            if let Some(dot) = s.rfind('.') {
-                Value::TypeName(TypeName::named(&s[..dot], &s[dot + 1..]))
-            } else {
-                Value::TypeName(TypeName::named("", &s))
-            }
+fn flatten_args(args: Vec<AttributeArg>) -> Vec<(String, Value)> {
+    args.into_iter()
+        .map(|arg| match arg {
+            AttributeArg::Fixed(value) => (String::new(), value),
+            AttributeArg::Named { name, value, .. } => (name, value),
+        })
+        .collect()
+}
+
+struct AttributeBlob<'a, 'r> {
+    bytes: &'a [u8],
+    index: &'a Index,
+    references: Option<&'r Index>,
+    assume_i32_enums: bool,
+    offset: usize,
+}
+
+impl<'a, 'r> AttributeBlob<'a, 'r> {
+    fn new(
+        bytes: &'a [u8],
+        index: &'a Index,
+        references: Option<&'r Index>,
+        assume_i32_enums: bool,
+    ) -> Self {
+        Self {
+            bytes,
+            index,
+            references,
+            assume_i32_enums,
+            offset: 0,
         }
-        Type::ValueName(tn) | Type::ClassName(tn) => {
-            Value::EnumValue(tn.clone(), Box::new(Value::I32(blob.read_i32())))
-        }
-        rest => panic!("{rest:?}"),
     }
+
+    fn invalid(&self, message: &'static str) -> AttributeValueError {
+        self.invalid_at(self.offset, message)
+    }
+
+    fn invalid_at(&self, offset: usize, message: &'static str) -> AttributeValueError {
+        AttributeValueError {
+            offset,
+            message,
+            unsupported: false,
+        }
+    }
+
+    fn unsupported(&self, message: &'static str) -> AttributeValueError {
+        AttributeValueError {
+            offset: self.offset,
+            message,
+            unsupported: true,
+        }
+    }
+
+    fn read<const N: usize>(&mut self) -> Result<[u8; N], AttributeValueError> {
+        let Some(bytes) = self.bytes.get(self.offset..self.offset + N) else {
+            return Err(self.invalid("truncated custom-attribute value"));
+        };
+        self.offset += N;
+        Ok(bytes.try_into().unwrap())
+    }
+
+    fn read_u8(&mut self) -> Result<u8, AttributeValueError> {
+        Ok(u8::from_le_bytes(self.read()?))
+    }
+
+    fn read_i8(&mut self) -> Result<i8, AttributeValueError> {
+        Ok(i8::from_le_bytes(self.read()?))
+    }
+
+    fn read_u16(&mut self) -> Result<u16, AttributeValueError> {
+        Ok(u16::from_le_bytes(self.read()?))
+    }
+
+    fn read_i16(&mut self) -> Result<i16, AttributeValueError> {
+        Ok(i16::from_le_bytes(self.read()?))
+    }
+
+    fn read_u32(&mut self) -> Result<u32, AttributeValueError> {
+        Ok(u32::from_le_bytes(self.read()?))
+    }
+
+    fn read_i32(&mut self) -> Result<i32, AttributeValueError> {
+        Ok(i32::from_le_bytes(self.read()?))
+    }
+
+    fn read_u64(&mut self) -> Result<u64, AttributeValueError> {
+        Ok(u64::from_le_bytes(self.read()?))
+    }
+
+    fn read_i64(&mut self) -> Result<i64, AttributeValueError> {
+        Ok(i64::from_le_bytes(self.read()?))
+    }
+
+    fn read_f32(&mut self) -> Result<f32, AttributeValueError> {
+        Ok(f32::from_le_bytes(self.read()?))
+    }
+
+    fn read_f64(&mut self) -> Result<f64, AttributeValueError> {
+        Ok(f64::from_le_bytes(self.read()?))
+    }
+
+    fn read_compressed(&mut self) -> Result<Option<usize>, AttributeValueError> {
+        let first = self.read_u8()?;
+        if first == 0xff {
+            return Ok(None);
+        }
+        if first & 0x80 == 0 {
+            return Ok(Some(first.into()));
+        }
+        if first & 0xc0 == 0x80 {
+            let second = self.read_u8()?;
+            return Ok(Some((((first & 0x3f) as usize) << 8) | second as usize));
+        }
+        if first & 0xe0 == 0xc0 {
+            let rest = self.read::<3>()?;
+            return Ok(Some(
+                (((first & 0x1f) as usize) << 24)
+                    | ((rest[0] as usize) << 16)
+                    | ((rest[1] as usize) << 8)
+                    | rest[2] as usize,
+            ));
+        }
+        Err(self.invalid_at(self.offset - 1, "invalid compressed integer"))
+    }
+
+    fn read_string(&mut self) -> Result<Option<String>, AttributeValueError> {
+        let offset = self.offset;
+        let Some(len) = self.read_compressed()? else {
+            return Ok(None);
+        };
+        let Some(bytes) = self.bytes.get(self.offset..self.offset + len) else {
+            return Err(self.invalid("truncated custom-attribute string"));
+        };
+        let value = std::str::from_utf8(bytes)
+            .map_err(|_| self.invalid_at(offset, "invalid UTF-8 string"))?
+            .to_string();
+        self.offset += len;
+        Ok(Some(value))
+    }
+
+    fn read_required_string(&mut self, null: &'static str) -> Result<String, AttributeValueError> {
+        self.read_string()?.ok_or_else(|| self.invalid(null))
+    }
+
+    fn read_type(&mut self) -> Result<Type, AttributeValueError> {
+        let offset = self.offset;
+        let code = self.read_u8()?;
+        self.read_type_code(code, offset)
+    }
+
+    fn read_type_code(&mut self, code: u8, offset: usize) -> Result<Type, AttributeValueError> {
+        Ok(match code {
+            ELEMENT_TYPE_BOOLEAN => Type::Bool,
+            ELEMENT_TYPE_CHAR => Type::Char,
+            ELEMENT_TYPE_I1 => Type::I8,
+            ELEMENT_TYPE_U1 => Type::U8,
+            ELEMENT_TYPE_I2 => Type::I16,
+            ELEMENT_TYPE_U2 => Type::U16,
+            ELEMENT_TYPE_I4 => Type::I32,
+            ELEMENT_TYPE_U4 => Type::U32,
+            ELEMENT_TYPE_I8 => Type::I64,
+            ELEMENT_TYPE_U8 => Type::U64,
+            ELEMENT_TYPE_R4 => Type::F32,
+            ELEMENT_TYPE_R8 => Type::F64,
+            ELEMENT_TYPE_STRING => Type::String,
+            ELEMENT_TYPE_OBJECT => Type::Object,
+            ELEMENT_TYPE_SZARRAY => Type::Array(Box::new(self.read_type()?)),
+            0x50 => Type::ClassName(TypeName::named("System", "Type")),
+            0x55 => {
+                let name = self.read_required_string("null enum type name")?;
+                Type::ValueName(Self::simple_type_name(&name))
+            }
+            _ => return Err(self.invalid_at(offset, "invalid named-argument type")),
+        })
+    }
+
+    fn simple_type_name(name: &str) -> TypeName {
+        if let Some(dot) = name.rfind('.') {
+            TypeName::named(&name[..dot], &name[dot + 1..])
+        } else {
+            TypeName::named("", name)
+        }
+    }
+
+    fn read_value(&mut self, ty: &Type) -> Result<Value, AttributeValueError> {
+        match ty {
+            Type::Bool => match self.read_u8()? {
+                0 => Ok(Value::Bool(false)),
+                1 => Ok(Value::Bool(true)),
+                _ => Err(self.invalid_at(self.offset - 1, "invalid Boolean value")),
+            },
+            Type::Char => Ok(Value::Char(self.read_u16()?)),
+            Type::I8 => Ok(Value::I8(self.read_i8()?)),
+            Type::U8 => Ok(Value::U8(self.read_u8()?)),
+            Type::I16 => Ok(Value::I16(self.read_i16()?)),
+            Type::U16 => Ok(Value::U16(self.read_u16()?)),
+            Type::I32 => Ok(Value::I32(self.read_i32()?)),
+            Type::U32 => Ok(Value::U32(self.read_u32()?)),
+            Type::I64 => Ok(Value::I64(self.read_i64()?)),
+            Type::U64 => Ok(Value::U64(self.read_u64()?)),
+            Type::F32 => Ok(Value::F32(self.read_f32()?)),
+            Type::F64 => Ok(Value::F64(self.read_f64()?)),
+            Type::String => match self.read_string()? {
+                Some(value) => Ok(Value::Utf8(value)),
+                None => Ok(Value::Null(Type::String)),
+            },
+            Type::ClassName(tn) if tn == ("System", "Type") => match self.read_string()? {
+                Some(value) => TypeName::from_serialized_name(&value)
+                    .map(Value::TypeName)
+                    .ok_or_else(|| self.invalid("invalid serialized type name")),
+                None => Ok(Value::Null(ty.clone())),
+            },
+            Type::ValueName(tn) | Type::ClassName(tn) => {
+                let ty = if let Some(ty) = self.enum_underlying_type(tn) {
+                    ty
+                } else if self.assume_i32_enums {
+                    Type::I32
+                } else {
+                    return Err(self.unsupported("enum backing type is unavailable"));
+                };
+                let value = match ty {
+                    Type::I8 => Value::I8(self.read_i8()?),
+                    Type::U8 => Value::U8(self.read_u8()?),
+                    Type::I16 => Value::I16(self.read_i16()?),
+                    Type::U16 => Value::U16(self.read_u16()?),
+                    Type::I32 => Value::I32(self.read_i32()?),
+                    Type::U32 => Value::U32(self.read_u32()?),
+                    Type::I64 => Value::I64(self.read_i64()?),
+                    Type::U64 => Value::U64(self.read_u64()?),
+                    _ => return Err(self.invalid("invalid enum backing type")),
+                };
+                Ok(Value::EnumValue(tn.clone(), Box::new(value)))
+            }
+            Type::Object => {
+                let offset = self.offset;
+                let code = self.read_u8()?;
+                if code == 0xff {
+                    Ok(Value::Null(Type::Object))
+                } else {
+                    let ty = self.read_type_code(code, offset)?;
+                    Ok(Value::Boxed(Box::new(self.read_value(&ty)?)))
+                }
+            }
+            Type::Array(element) => {
+                let count = self.read_u32()?;
+                if count == u32::MAX {
+                    return Ok(Value::Null(ty.clone()));
+                }
+                let count: usize = count.try_into().unwrap();
+                if count > self.bytes.len() - self.offset {
+                    return Err(self.invalid("array element count exceeds remaining data"));
+                }
+                let mut values = Vec::with_capacity(count);
+                for _ in 0..count {
+                    values.push(self.read_value(element)?);
+                }
+                Ok(Value::Array(element.as_ref().clone(), values))
+            }
+            _ => Err(self.invalid("invalid custom-attribute parameter type")),
+        }
+    }
+
+    fn enum_underlying_type(&self, name: &TypeName) -> Option<Type> {
+        enum_underlying_type(self.index, name)
+            .or_else(|| enum_underlying_type(self.references?, name))
+    }
+}
+
+fn enum_underlying_type(index: &Index, name: &TypeName) -> Option<Type> {
+    let mut definitions = index.get(&name.namespace, &name.name);
+    let definition = definitions.next()?;
+    definitions
+        .next()
+        .is_none()
+        .then(|| definition.underlying_type())?
 }

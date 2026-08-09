@@ -5,6 +5,7 @@ mod Windows {
             #[guid(0x3f921316_bc70_4bda_9136_c94370899fab)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             interface IWebViewControl {
+                #[set_name(source)]
                 Source: super::super::Foundation::Uri;
                 #[get]
                 DocumentTitle: String;
@@ -215,47 +216,57 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlContentLoadingEventArgs {
+                #[default]
                 IWebViewControlContentLoadingEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlDOMContentLoadedEventArgs {
+                #[default]
                 IWebViewControlDOMContentLoadedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlDeferredPermissionRequest {
+                #[default]
                 IWebViewControlDeferredPermissionRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlLongRunningScriptDetectedEventArgs {
+                #[default]
                 IWebViewControlLongRunningScriptDetectedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlNavigationCompletedEventArgs {
+                #[default]
                 IWebViewControlNavigationCompletedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlNavigationStartingEventArgs {
+                #[default]
                 IWebViewControlNavigationStartingEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlNewWindowRequestedEventArgs {
+                #[default]
                 IWebViewControlNewWindowRequestedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IWebViewControlNewWindowRequestedEventArgs2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlPermissionRequest {
+                #[default]
                 IWebViewControlPermissionRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlPermissionRequestedEventArgs {
+                #[default]
                 IWebViewControlPermissionRequestedEventArgs,
             }
             #[repr(i32)]
@@ -275,31 +286,37 @@ mod Windows {
                 PointerLock = 3,
                 WebNotifications = 4,
                 Screen = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 ImmersiveView = 6,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlScriptNotifyEventArgs {
+                #[default]
                 IWebViewControlScriptNotifyEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlSettings {
+                #[default]
                 IWebViewControlSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlUnsupportedUriSchemeIdentifiedEventArgs {
+                #[default]
                 IWebViewControlUnsupportedUriSchemeIdentifiedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlUnviewableContentIdentifiedEventArgs {
+                #[default]
                 IWebViewControlUnviewableContentIdentifiedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             class WebViewControlWebResourceRequestedEventArgs {
+                #[default]
                 IWebViewControlWebResourceRequestedEventArgs,
             }
         }

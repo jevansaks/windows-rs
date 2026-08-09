@@ -142,7 +142,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::ExclusiveTo(RemoteSystemConnectionInfo)]
             interface IRemoteSystemConnectionInfoStatics {
-                #[Windows::Foundation::Metadata::Overload("TryCreateFromAppServiceConnection")]
+                #[overload(TryCreateFromAppServiceConnection)]
                 fn TryCreateFromAppServiceConnection(&self, connection: super::super::ApplicationModel::AppService::AppServiceConnection) -> RemoteSystemConnectionInfo;
             }
             #[guid(0x84ed4104_8d5e_4d72_8238_7621576c7a67)]
@@ -287,10 +287,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::ExclusiveTo(RemoteSystemSessionController)]
             interface IRemoteSystemSessionControllerFactory {
-                #[Windows::Foundation::Metadata::Overload("CreateController")]
+                #[overload(CreateController)]
                 fn CreateController(&self, displayName: String) -> RemoteSystemSessionController;
-                #[Windows::Foundation::Metadata::Overload("CreateControllerWithSessionOptions")]
-                fn CreateController(&self, displayName: String, options: RemoteSystemSessionOptions) -> RemoteSystemSessionController;
+                #[overload(CreateController)]
+                fn CreateControllerWithSessionOptions(&self, displayName: String, options: RemoteSystemSessionOptions) -> RemoteSystemSessionController;
             }
             #[guid(0xa79812c2_37de_448c_8b83_a30aa3c4ead6)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -384,10 +384,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::ExclusiveTo(RemoteSystemSessionMessageChannel)]
             interface IRemoteSystemSessionMessageChannelFactory {
-                #[Windows::Foundation::Metadata::Overload("Create")]
+                #[overload(Create)]
                 fn Create(&self, session: RemoteSystemSession, channelName: String) -> RemoteSystemSessionMessageChannel;
-                #[Windows::Foundation::Metadata::Overload("CreateWithReliability")]
-                fn Create(&self, session: RemoteSystemSession, channelName: String, reliability: RemoteSystemSessionMessageChannelReliability) -> RemoteSystemSessionMessageChannel;
+                #[overload(Create)]
+                fn CreateWithReliability(&self, session: RemoteSystemSession, channelName: String, reliability: RemoteSystemSessionMessageChannelReliability) -> RemoteSystemSessionMessageChannel;
             }
             #[guid(0x740ed755_8418_4f01_9353_e21c9ecc6cfc)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -476,10 +476,10 @@ mod Windows {
             interface IRemoteSystemStatics {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FindByHostNameAsync(&self, hostName: super::super::Networking::HostName) -> super::super::Foundation::IAsyncOperation<RemoteSystem>;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcher")]
+                #[overload(CreateWatcher)]
                 fn CreateWatcher(&self) -> RemoteSystemWatcher;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherWithFilters")]
-                fn CreateWatcher(&self, filters: super::super::Foundation::Collections::IIterable<IRemoteSystemFilter>) -> RemoteSystemWatcher;
+                #[overload(CreateWatcher)]
+                fn CreateWatcherWithFilters(&self, filters: super::super::Foundation::Collections::IIterable<IRemoteSystemFilter>) -> RemoteSystemWatcher;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn RequestAccessAsync(&self) -> super::super::Foundation::IAsyncOperation<RemoteSystemAccessStatus>;
             }
@@ -493,10 +493,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::ExclusiveTo(RemoteSystem)]
             interface IRemoteSystemStatics3 {
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherForUser")]
+                #[overload(CreateWatcherForUser)]
                 fn CreateWatcherForUser(&self, user: super::User) -> RemoteSystemWatcher;
-                #[Windows::Foundation::Metadata::Overload("CreateWatcherWithFiltersForUser")]
-                fn CreateWatcherForUser(&self, user: super::User, filters: super::super::Foundation::Collections::IIterable<IRemoteSystemFilter>) -> RemoteSystemWatcher;
+                #[overload(CreateWatcherForUser)]
+                fn CreateWatcherWithFiltersForUser(&self, user: super::User, filters: super::super::Foundation::Collections::IIterable<IRemoteSystemFilter>) -> RemoteSystemWatcher;
             }
             #[guid(0x0c39514e_cbb6_4777_8534_2e0c521affa2)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
@@ -562,6 +562,7 @@ mod Windows {
             interface IRemoteSystemWebAccountFilterFactory {
                 fn Create(&self, account: super::super::Security::Credentials::WebAccount) -> RemoteSystemWebAccountFilter;
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IKnownRemoteSystemCapabilitiesStatics, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -574,11 +575,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IRemoteSystemStatics3, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystem {
+                #[default]
                 IRemoteSystem,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IRemoteSystem2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IRemoteSystem3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IRemoteSystem4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IRemoteSystem5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IRemoteSystem6,
             }
             #[repr(i32)]
@@ -592,12 +599,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemAddedEventArgs {
+                #[default]
                 IRemoteSystemAddedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemApp {
+                #[default]
                 IRemoteSystemApp,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IRemoteSystemApp2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
@@ -605,6 +615,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IRemoteSystemAppRegistrationStatics, 458752, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemAppRegistration {
+                #[default]
                 IRemoteSystemAppRegistration,
             }
             #[repr(i32)]
@@ -619,6 +630,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemAuthorizationKindFilter {
+                #[default]
                 IRemoteSystemAuthorizationKindFilter,
                 IRemoteSystemFilter,
             }
@@ -627,6 +639,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IRemoteSystemConnectionInfoStatics, 458752, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemConnectionInfo {
+                #[default]
                 IRemoteSystemConnectionInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(IRemoteSystemConnectionRequestFactory, 196608, "Windows.Foundation.UniversalApiContract")]
@@ -636,8 +649,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IRemoteSystemConnectionRequestStatics2, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemConnectionRequest {
+                #[default]
                 IRemoteSystemConnectionRequest,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IRemoteSystemConnectionRequest2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IRemoteSystemConnectionRequest3,
             }
             #[repr(i32)]
@@ -646,6 +662,7 @@ mod Windows {
                 Any = 0,
                 Proximal = 1,
                 Cloud = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 SpatiallyProximal = 3,
             }
             #[Windows::Foundation::Metadata::Activatable(IRemoteSystemDiscoveryTypeFilterFactory, 196608, "Windows.Foundation.UniversalApiContract")]
@@ -653,12 +670,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemDiscoveryTypeFilter {
+                #[default]
                 IRemoteSystemDiscoveryTypeFilter,
                 IRemoteSystemFilter,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemEnumerationCompletedEventArgs {
+                #[default]
                 IRemoteSystemEnumerationCompletedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(IRemoteSystemKindFilterFactory, 196608, "Windows.Foundation.UniversalApiContract")]
@@ -666,9 +685,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemKindFilter {
+                #[default]
                 IRemoteSystemKindFilter,
                 IRemoteSystemFilter,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IRemoteSystemKindStatics, 196608, "Windows.Foundation.UniversalApiContract")]
@@ -687,6 +708,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemRemovedEventArgs {
+                #[default]
                 IRemoteSystemRemovedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -694,12 +716,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IRemoteSystemSessionStatics, 262144, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemSession {
+                #[default]
                 IRemoteSystemSession,
                 super::super::Foundation::IClosable,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionAddedEventArgs {
+                #[default]
                 IRemoteSystemSessionAddedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(IRemoteSystemSessionControllerFactory, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -707,11 +731,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemSessionController {
+                #[default]
                 IRemoteSystemSessionController,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionCreationResult {
+                #[default]
                 IRemoteSystemSessionCreationResult,
             }
             #[repr(i32)]
@@ -724,6 +750,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionDisconnectedEventArgs {
+                #[default]
                 IRemoteSystemSessionDisconnectedEventArgs,
             }
             #[repr(i32)]
@@ -736,11 +763,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionInfo {
+                #[default]
                 IRemoteSystemSessionInfo,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionInvitation {
+                #[default]
                 IRemoteSystemSessionInvitation,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Foundation.UniversalApiContract")]
@@ -748,26 +777,31 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemSessionInvitationListener {
+                #[default]
                 IRemoteSystemSessionInvitationListener,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionInvitationReceivedEventArgs {
+                #[default]
                 IRemoteSystemSessionInvitationReceivedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionJoinRequest {
+                #[default]
                 IRemoteSystemSessionJoinRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionJoinRequestedEventArgs {
+                #[default]
                 IRemoteSystemSessionJoinRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionJoinResult {
+                #[default]
                 IRemoteSystemSessionJoinResult,
             }
             #[repr(i32)]
@@ -784,6 +818,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemSessionMessageChannel {
+                #[default]
                 IRemoteSystemSessionMessageChannel,
             }
             #[repr(i32)]
@@ -797,26 +832,31 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemSessionOptions {
+                #[default]
                 IRemoteSystemSessionOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionParticipant {
+                #[default]
                 IRemoteSystemSessionParticipant,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionParticipantAddedEventArgs {
+                #[default]
                 IRemoteSystemSessionParticipantAddedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionParticipantRemovedEventArgs {
+                #[default]
                 IRemoteSystemSessionParticipantRemovedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionParticipantWatcher {
+                #[default]
                 IRemoteSystemSessionParticipantWatcher,
             }
             #[repr(i32)]
@@ -832,21 +872,25 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionRemovedEventArgs {
+                #[default]
                 IRemoteSystemSessionRemovedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionUpdatedEventArgs {
+                #[default]
                 IRemoteSystemSessionUpdatedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionValueSetReceivedEventArgs {
+                #[default]
                 IRemoteSystemSessionValueSetReceivedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemSessionWatcher {
+                #[default]
                 IRemoteSystemSessionWatcher,
             }
             #[repr(i32)]
@@ -878,19 +922,24 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemStatusTypeFilter {
+                #[default]
                 IRemoteSystemStatusTypeFilter,
                 IRemoteSystemFilter,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemUpdatedEventArgs {
+                #[default]
                 IRemoteSystemUpdatedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemWatcher {
+                #[default]
                 IRemoteSystemWatcher,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IRemoteSystemWatcher2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IRemoteSystemWatcher3,
             }
             #[repr(i32)]
@@ -903,6 +952,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RemoteSystemWatcherErrorOccurredEventArgs {
+                #[default]
                 IRemoteSystemWatcherErrorOccurredEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(IRemoteSystemWebAccountFilterFactory, 458752, "Windows.Foundation.UniversalApiContract")]
@@ -910,6 +960,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RemoteSystemWebAccountFilter {
+                #[default]
                 IRemoteSystemWebAccountFilter,
                 IRemoteSystemFilter,
             }

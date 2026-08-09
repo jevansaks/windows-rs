@@ -13,15 +13,18 @@ mod Windows {
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class FileOpenPickerUI {
+                    #[default]
                     IFileOpenPickerUI,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 class FileRemovedEventArgs {
+                    #[default]
                     IFileRemovedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class FileSavePickerUI {
+                    #[default]
                     IFileSavePickerUI,
                 }
                 #[repr(i32)]
@@ -45,12 +48,9 @@ mod Windows {
                     #[get]
                     SettingsIdentifier: String;
                     Title: String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn add_FileRemoved(&self, handler: super::super::super::Foundation::TypedEventHandler<FileOpenPickerUI, FileRemovedEventArgs>) -> super::super::super::Foundation::EventRegistrationToken;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn remove_FileRemoved(&self, token: super::super::super::Foundation::EventRegistrationToken);
+                    #[add(Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    #[remove(Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    event FileRemoved: super::super::super::Foundation::TypedEventHandler<FileOpenPickerUI, FileRemovedEventArgs>;
                     event Closing: super::super::super::Foundation::TypedEventHandler<FileOpenPickerUI, PickerClosingEventArgs>;
                 }
                 #[guid(0x13043da7_7fca_4c2b_9eca_6890f9f00185)]
@@ -58,9 +58,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(FileRemovedEventArgs)]
                 interface IFileRemovedEventArgs {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract")]
-                    fn get_Id(&self) -> String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Since Windows 10, only apps can remove files, not end users so the FileRemoved event will not be raised.", Deprecate, 196608, "Windows.Foundation.UniversalApiContract"))]
+                    Id: String;
                 }
                 #[guid(0x9656c1e7_3e56_43cc_8a39_33c73d9d542b)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -122,14 +122,17 @@ mod Windows {
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PickerClosingDeferral {
+                    #[default]
                     IPickerClosingDeferral,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PickerClosingEventArgs {
+                    #[default]
                     IPickerClosingEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class PickerClosingOperation {
+                    #[default]
                     IPickerClosingOperation,
                 }
                 #[repr(i32)]
@@ -141,14 +144,17 @@ mod Windows {
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class TargetFileRequest {
+                    #[default]
                     ITargetFileRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class TargetFileRequestDeferral {
+                    #[default]
                     ITargetFileRequestDeferral,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 class TargetFileRequestedEventArgs {
+                    #[default]
                     ITargetFileRequestedEventArgs,
                 }
             }

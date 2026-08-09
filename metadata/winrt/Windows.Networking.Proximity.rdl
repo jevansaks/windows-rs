@@ -5,6 +5,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ConnectionRequestedEventArgs {
+                #[default]
                 IConnectionRequestedEventArgs,
             }
             #[guid(0xefa9da69_f6e1_49c9_a49e_8e0fc58fb911)]
@@ -32,12 +33,14 @@ mod Windows {
                 SupportedDiscoveryTypes: PeerDiscoveryTypes;
                 #[get]
                 AlternateIdentities: super::super::Foundation::Collections::IMap<String, String>;
-                #[Windows::Foundation::Metadata::Overload("Start")]
+                #[overload(Start)]
                 fn Start(&self);
-                #[Windows::Foundation::Metadata::Overload("StartWithMessage")]
-                fn Start(&self, peerMessage: String);
+                #[overload(Start)]
+                fn StartWithMessage(&self, peerMessage: String);
                 fn Stop(&self);
+                #[remove_name(cookie)]
                 event TriggeredConnectionStateChanged: super::super::Foundation::TypedEventHandler<Object, TriggeredConnectionStateChangedEventArgs>;
+                #[remove_name(cookie)]
                 event ConnectionRequested: super::super::Foundation::TypedEventHandler<Object, ConnectionRequestedEventArgs>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FindAllPeersAsync(&self) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<PeerInformation>>;
@@ -96,21 +99,25 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(ProximityDevice)]
             interface IProximityDevice {
                 fn SubscribeForMessage(&self, messageType: String, messageReceivedHandler: MessageReceivedHandler) -> i64;
-                #[Windows::Foundation::Metadata::Overload("PublishMessage")]
+                #[overload(PublishMessage)]
                 fn PublishMessage(&self, messageType: String, message: String) -> i64;
-                #[Windows::Foundation::Metadata::Overload("PublishMessageWithCallback")]
-                fn PublishMessage(&self, messageType: String, message: String, messageTransmittedHandler: MessageTransmittedHandler) -> i64;
-                #[Windows::Foundation::Metadata::Overload("PublishBinaryMessage")]
+                #[overload(PublishMessage)]
+                fn PublishMessageWithCallback(&self, messageType: String, message: String, messageTransmittedHandler: MessageTransmittedHandler) -> i64;
+                #[overload(PublishBinaryMessage)]
                 fn PublishBinaryMessage(&self, messageType: String, message: super::super::Storage::Streams::IBuffer) -> i64;
-                #[Windows::Foundation::Metadata::Overload("PublishBinaryMessageWithCallback")]
-                fn PublishBinaryMessage(&self, messageType: String, message: super::super::Storage::Streams::IBuffer, messageTransmittedHandler: MessageTransmittedHandler) -> i64;
-                #[Windows::Foundation::Metadata::Overload("PublishUriMessage")]
+                #[overload(PublishBinaryMessage)]
+                fn PublishBinaryMessageWithCallback(&self, messageType: String, message: super::super::Storage::Streams::IBuffer, messageTransmittedHandler: MessageTransmittedHandler) -> i64;
+                #[overload(PublishUriMessage)]
                 fn PublishUriMessage(&self, message: super::super::Foundation::Uri) -> i64;
-                #[Windows::Foundation::Metadata::Overload("PublishUriMessageWithCallback")]
-                fn PublishUriMessage(&self, message: super::super::Foundation::Uri, messageTransmittedHandler: MessageTransmittedHandler) -> i64;
+                #[overload(PublishUriMessage)]
+                fn PublishUriMessageWithCallback(&self, message: super::super::Foundation::Uri, messageTransmittedHandler: MessageTransmittedHandler) -> i64;
                 fn StopSubscribingForMessage(&self, subscriptionId: i64);
                 fn StopPublishingMessage(&self, messageId: i64);
+                #[add_name(arrivedHandler)]
+                #[remove_name(cookie)]
                 event DeviceArrived: DeviceArrivedEventHandler;
+                #[add_name(departedHandler)]
+                #[remove_name(cookie)]
                 event DeviceDeparted: DeviceDepartedEventHandler;
                 #[get]
                 MaxMessageBytes: u32;
@@ -165,6 +172,7 @@ mod Windows {
                 Browse = 1,
                 Triggered = 2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IPeerFinderStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -174,8 +182,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PeerInformation {
+                #[default]
                 IPeerInformation,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IPeerInformation3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IPeerInformationWithHostAndService,
             }
             #[repr(i32)]
@@ -189,6 +200,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PeerWatcher {
+                #[default]
                 IPeerWatcher,
             }
             #[repr(i32)]
@@ -207,12 +219,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IProximityDeviceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProximityDevice {
+                #[default]
                 IProximityDevice,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ProximityMessage {
+                #[default]
                 IProximityMessage,
             }
             #[repr(i32)]
@@ -228,6 +242,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class TriggeredConnectionStateChangedEventArgs {
+                #[default]
                 ITriggeredConnectionStateChangedEventArgs,
             }
         }

@@ -1,0 +1,6 @@
+#[win32]
+mod Fuzz {
+    struct Value {
+        field: i32,
+    }
+}

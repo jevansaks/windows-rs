@@ -18,4 +18,9 @@ impl<'a> MemberRef<'a> {
     pub fn signature(&self, generics: &[Type]) -> Signature {
         self.blob(2).read_method_signature(generics)
     }
+
+    pub fn instantiated_signature(&self, enclosing: &[Type]) -> Signature {
+        let generics = self.parent().generic_arguments(enclosing);
+        self.signature(&generics)
+    }
 }

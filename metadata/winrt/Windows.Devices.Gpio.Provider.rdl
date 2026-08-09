@@ -9,6 +9,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class GpioPinProviderValueChangedEventArgs {
+                    #[default]
                     IGpioPinProviderValueChangedEventArgs,
                 }
                 #[guid(0xad11cec7_19ea_4b21_874f_b91aed4a25db)]

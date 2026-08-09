@@ -7,6 +7,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CastingConnection {
+                #[default]
                 ICastingConnection,
                 super::super::Foundation::IClosable,
             }
@@ -15,6 +16,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CastingConnectionErrorOccurredEventArgs {
+                #[default]
                 ICastingConnectionErrorOccurredEventArgs,
             }
             #[repr(i32)]
@@ -43,6 +45,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ICastingDeviceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CastingDevice {
+                #[default]
                 ICastingDevice,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -51,6 +54,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CastingDevicePicker {
+                #[default]
                 ICastingDevicePicker,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -58,6 +62,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CastingDevicePickerFilter {
+                #[default]
                 ICastingDevicePickerFilter,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -65,6 +70,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CastingDeviceSelectedEventArgs {
+                #[default]
                 ICastingDeviceSelectedEventArgs,
             }
             #[repr(u32)]
@@ -81,6 +87,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CastingSource {
+                #[default]
                 ICastingSource,
             }
             #[guid(0xcd951653_c2f1_4498_8b78_5fb4cd3640dd)]
@@ -132,10 +139,10 @@ mod Windows {
                 Appearance: super::super::Devices::Enumeration::DevicePickerAppearance;
                 event CastingDeviceSelected: super::super::Foundation::TypedEventHandler<CastingDevicePicker, CastingDeviceSelectedEventArgs>;
                 event CastingDevicePickerDismissed: super::super::Foundation::TypedEventHandler<CastingDevicePicker, Object>;
-                #[Windows::Foundation::Metadata::Overload("Show")]
+                #[overload(Show)]
                 fn Show(&self, selection: super::super::Foundation::Rect);
-                #[Windows::Foundation::Metadata::Overload("ShowWithPlacement")]
-                fn Show(&self, selection: super::super::Foundation::Rect, preferredPlacement: super::super::UI::Popups::Placement);
+                #[overload(Show)]
+                fn ShowWithPlacement(&self, selection: super::super::Foundation::Rect, preferredPlacement: super::super::UI::Popups::Placement);
                 fn Hide(&self);
             }
             #[guid(0xbe8c619c_b563_4354_ae33_9fdaad8c6291)]

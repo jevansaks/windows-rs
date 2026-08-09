@@ -2,6 +2,7 @@
 mod Windows {
     mod ApplicationModel {
         mod DataTransfer {
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
@@ -14,21 +15,25 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ClipboardContentOptions {
+                #[default]
                 IClipboardContentOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ClipboardHistoryChangedEventArgs {
+                #[default]
                 IClipboardHistoryChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ClipboardHistoryItem {
+                #[default]
                 IClipboardHistoryItem,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ClipboardHistoryItemsResult {
+                #[default]
                 IClipboardHistoryItemsResult,
             }
             #[repr(i32)]
@@ -44,9 +49,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DataPackage {
+                #[default]
                 IDataPackage,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDataPackage2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IDataPackage3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IDataPackage4,
             }
             #[repr(u32)]
@@ -57,28 +66,39 @@ mod Windows {
                 Copy = 1,
                 Move = 2,
                 Link = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 NewTarget = 1073741824,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 BackgroundTarget = 536870912,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataPackagePropertySet {
+                #[default]
                 IDataPackagePropertySet,
                 super::super::Foundation::Collections::IMap<String, Object>,
                 super::super::Foundation::Collections::IIterable<super::super::Foundation::Collections::IKeyValuePair<String, Object>>,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDataPackagePropertySet2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDataPackagePropertySet3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IDataPackagePropertySet4,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataPackagePropertySetView {
+                #[default]
                 IDataPackagePropertySetView,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDataPackagePropertySetView2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDataPackagePropertySetView3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IDataPackagePropertySetView4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IDataPackagePropertySetView5,
                 super::super::Foundation::Collections::IMapView<String, Object>,
                 super::super::Foundation::Collections::IIterable<super::super::Foundation::Collections::IKeyValuePair<String, Object>>,
@@ -87,15 +107,20 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataPackageView {
+                #[default]
                 IDataPackageView,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDataPackageView2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDataPackageView3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 IDataPackageView4,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataProviderDeferral {
+                #[default]
                 IDataProviderDeferral,
             }
             #[guid(0xe7ecd720_f2f4_4a2d_920e_170a2f482a27)]
@@ -105,21 +130,25 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataProviderRequest {
+                #[default]
                 IDataProviderRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataRequest {
+                #[default]
                 IDataRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataRequestDeferral {
+                #[default]
                 IDataRequestDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DataRequestedEventArgs {
+                #[default]
                 IDataRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -129,9 +158,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDataTransferManagerStatics3, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DataTransferManager {
+                #[default]
                 IDataTransferManager,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IDataTransferManager2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -217,9 +249,9 @@ mod Windows {
                 ResourceMap: super::super::Foundation::Collections::IMap<String, super::super::Storage::Streams::RandomAccessStreamReference>;
                 fn SetRtf(&self, value: String);
                 fn SetBitmap(&self, value: super::super::Storage::Streams::RandomAccessStreamReference);
-                #[Windows::Foundation::Metadata::Overload("SetStorageItemsReadOnly")]
-                fn SetStorageItems(&self, value: super::super::Foundation::Collections::IIterable<super::super::Storage::IStorageItem>);
-                #[Windows::Foundation::Metadata::Overload("SetStorageItems")]
+                #[overload(SetStorageItems)]
+                fn SetStorageItemsReadOnly(&self, value: super::super::Foundation::Collections::IIterable<super::super::Storage::IStorageItem>);
+                #[overload(SetStorageItems)]
                 fn SetStorageItems(&self, value: super::super::Foundation::Collections::IIterable<super::super::Storage::IStorageItem>, readOnly: bool);
             }
             #[guid(0x041c1fe9_2409_45e1_a538_4c53eeee04a7)]
@@ -344,12 +376,12 @@ mod Windows {
                 fn Contains(&self, formatId: String) -> bool;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetDataAsync(&self, formatId: String) -> #[Windows::Foundation::Metadata::HasVariant] super::super::Foundation::IAsyncOperation<Object>;
-                #[Windows::Foundation::Metadata::Overload("GetTextAsync")]
+                #[overload(GetTextAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetTextAsync(&self) -> super::super::Foundation::IAsyncOperation<String>;
-                #[Windows::Foundation::Metadata::Overload("GetCustomTextAsync")]
+                #[overload(GetTextAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetTextAsync(&self, formatId: String) -> super::super::Foundation::IAsyncOperation<String>;
+                fn GetCustomTextAsync(&self, formatId: String) -> super::super::Foundation::IAsyncOperation<String>;
                 #[Windows::Foundation::Metadata::Deprecated("GetUriAsync may be altered or unavailable for releases after Windows 8.1. Instead, use GetWebLinkAsync or GetApplicationLinkAsync.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetUriAsync(&self) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Uri>;
@@ -377,10 +409,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DataPackageView)]
             interface IDataPackageView3 {
-                #[Windows::Foundation::Metadata::Overload("RequestAccessAsync")]
+                #[overload(RequestAccessAsync)]
                 fn RequestAccessAsync(&self) -> super::super::Foundation::IAsyncOperation<super::super::Security::EnterpriseData::ProtectionPolicyEvaluationResult>;
-                #[Windows::Foundation::Metadata::Overload("RequestAccessWithEnterpriseIdAsync")]
-                fn RequestAccessAsync(&self, enterpriseId: String) -> super::super::Foundation::IAsyncOperation<super::super::Security::EnterpriseData::ProtectionPolicyEvaluationResult>;
+                #[overload(RequestAccessAsync)]
+                fn RequestAccessWithEnterpriseIdAsync(&self, enterpriseId: String) -> super::super::Foundation::IAsyncOperation<super::super::Security::EnterpriseData::ProtectionPolicyEvaluationResult>;
                 fn UnlockAndAssumeEnterpriseIdentity(&self) -> super::super::Security::EnterpriseData::ProtectionPolicyEvaluationResult;
             }
             #[guid(0xdfe96f1f_e042_4433_a09f_26d6ffda8b85)]
@@ -459,8 +491,8 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DataTransferManager)]
             interface IDataTransferManagerStatics3 {
-                #[Windows::Foundation::Metadata::Overload("ShowShareUIWithOptions")]
-                fn ShowShareUI(&self, options: ShareUIOptions);
+                #[overload(ShowShareUI)]
+                fn ShowShareUIWithOptions(&self, options: ShareUIOptions);
             }
             #[guid(0xe22e7749_dd70_446f_aefc_61cee59f655e)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -559,9 +591,9 @@ mod Windows {
             interface IStandardDataFormatsStatics {
                 #[get]
                 Text: String;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Uri may be altered or unavailable for releases after Windows Phone 'OSVersion' (TBD). Instead, use WebLink or ApplicationLink.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_Uri(&self) -> String;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Uri may be altered or unavailable for releases after Windows Phone 'OSVersion' (TBD). Instead, use WebLink or ApplicationLink.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                Uri: String;
                 #[get]
                 Html: String;
                 #[get]
@@ -668,7 +700,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class OperationCompletedEventArgs {
+                #[default]
                 IOperationCompletedEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                 IOperationCompletedEventArgs2,
             }
             #[repr(i32)]
@@ -681,12 +715,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ShareCompletedEventArgs {
+                #[default]
                 IShareCompletedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(IShareProviderFactory, 262144, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ShareProvider {
+                #[default]
                 IShareProvider,
             }
             #[guid(0xe7f9d9ba_e1ba_4e4d_bd65_d43845d3212f)]
@@ -695,16 +731,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ShareProviderOperation {
+                #[default]
                 IShareProviderOperation,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ShareProvidersRequestedEventArgs {
+                #[default]
                 IShareProvidersRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ShareTargetInfo {
+                #[default]
                 IShareTargetInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(327680, "Windows.Foundation.UniversalApiContract")]
@@ -713,6 +752,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ShareUIOptions {
+                #[default]
                 IShareUIOptions,
             }
             #[repr(i32)]
@@ -722,9 +762,11 @@ mod Windows {
                 Light = 1,
                 Dark = 2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::Static(ISharedStorageAccessManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             class SharedStorageAccessManager {}
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -735,6 +777,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class TargetApplicationChosenEventArgs {
+                #[default]
                 ITargetApplicationChosenEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1245184)]
@@ -742,11 +785,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ITransferTargetStatics, 1245184, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TransferTarget {
+                #[default]
                 ITransferTarget,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1245184)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class TransferTargetChangedEventArgs {
+                #[default]
                 ITransferTargetChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(ITransferTargetDiscoveryOptionsFactory, 1245184, "Windows.Foundation.UniversalApiContract")]
@@ -754,11 +799,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TransferTargetDiscoveryOptions {
+                #[default]
                 ITransferTargetDiscoveryOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1245184)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class TransferTargetInvokeResult {
+                #[default]
                 ITransferTargetInvokeResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 1245184)]
@@ -766,6 +813,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ITransferTargetWatcherStatics, 1245184, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TransferTargetWatcher {
+                #[default]
                 ITransferTargetWatcher,
             }
         }

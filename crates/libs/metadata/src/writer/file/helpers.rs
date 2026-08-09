@@ -24,6 +24,8 @@ pub trait Write {
     fn write_code(&mut self, value: u32, size: usize);
     fn write_index(&mut self, index: u32, len: usize);
     fn write_compressed(&mut self, value: usize);
+    fn write_serialization_type_name(&mut self, ty: &Type);
+    fn write_serialization_type(&mut self, value: &Value);
     fn write_value(&mut self, value: &Value);
 }
 
@@ -87,6 +89,32 @@ impl Write for Vec<u8> {
         }
     }
 
+    fn write_serialization_type_name(&mut self, ty: &Type) {
+        match ty {
+            Type::ClassName(tn) if tn == ("System", "Type") => self.push(0x50),
+            Type::ValueName(tn) | Type::ClassName(tn) => {
+                self.push(0x55);
+                let name = if tn.namespace.is_empty() {
+                    tn.name.clone()
+                } else {
+                    format!("{}.{}", tn.namespace, tn.name)
+                };
+                self.write_compressed(name.len());
+                self.extend_from_slice(name.as_bytes());
+            }
+            Type::Array(element) => {
+                self.push(ELEMENT_TYPE_SZARRAY);
+                self.write_serialization_type_name(element);
+            }
+            Type::Object => self.push(ELEMENT_TYPE_OBJECT),
+            _ => self.push(ty.code()),
+        }
+    }
+
+    fn write_serialization_type(&mut self, value: &Value) {
+        self.write_serialization_type_name(&value.ty());
+    }
+
     fn write_value(&mut self, value: &Value) {
         match value {
             Value::Bool(value) => {
@@ -96,6 +124,7 @@ impl Write for Vec<u8> {
                     self.push(0);
                 }
             }
+            Value::Char(value) => self.extend_from_slice(&value.to_le_bytes()),
             Value::U8(value) => self.extend_from_slice(&value.to_le_bytes()),
             Value::I8(value) => self.extend_from_slice(&value.to_le_bytes()),
             Value::U16(value) => self.extend_from_slice(&value.to_le_bytes()),
@@ -113,7 +142,7 @@ impl Write for Vec<u8> {
                 self.extend_from_slice(value.as_bytes());
             }
             Value::TypeName(tn) => {
-                let value = format!("{}.{}", tn.namespace, tn.name);
+                let value = tn.serialized_name();
                 self.write_compressed(value.len());
                 self.extend_from_slice(value.as_bytes());
             }
@@ -121,6 +150,25 @@ impl Write for Vec<u8> {
                 self.extend(value.encode_utf16().flat_map(|value| value.to_le_bytes()));
             }
             Value::EnumValue(_, inner) => self.write_value(inner),
+            Value::Boxed(inner) => {
+                self.write_serialization_type(inner);
+                self.write_value(inner);
+            }
+            Value::Array(ty, values) => {
+                assert!(
+                    values.iter().all(|value| value.ty() == *ty),
+                    "custom-attribute array element type mismatch"
+                );
+                self.write_u32(values.len().try_into().unwrap());
+                for value in values {
+                    self.write_value(value);
+                }
+            }
+            Value::Null(Type::String) => self.push(0xff),
+            Value::Null(Type::ClassName(tn)) if tn == ("System", "Type") => self.push(0xff),
+            Value::Null(Type::Object) => self.push(0xff),
+            Value::Null(Type::Array(_)) => self.write_u32(u32::MAX),
+            Value::Null(ty) => panic!("invalid null custom-attribute type `{ty:?}`"),
         }
     }
 }

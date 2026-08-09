@@ -6,12 +6,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class CurrentSessionChangedEventArgs {
+                #[default]
                 ICurrentSessionChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GlobalSystemMediaTransportControlsSession {
+                #[default]
                 IGlobalSystemMediaTransportControlsSession,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
@@ -20,24 +22,28 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IGlobalSystemMediaTransportControlsSessionManagerStatics, 458752, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GlobalSystemMediaTransportControlsSessionManager {
+                #[default]
                 IGlobalSystemMediaTransportControlsSessionManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GlobalSystemMediaTransportControlsSessionMediaProperties {
+                #[default]
                 IGlobalSystemMediaTransportControlsSessionMediaProperties,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GlobalSystemMediaTransportControlsSessionPlaybackControls {
+                #[default]
                 IGlobalSystemMediaTransportControlsSessionPlaybackControls,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GlobalSystemMediaTransportControlsSessionPlaybackInfo {
+                #[default]
                 IGlobalSystemMediaTransportControlsSessionPlaybackInfo,
             }
             #[repr(i32)]
@@ -54,6 +60,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class GlobalSystemMediaTransportControlsSessionTimelineProperties {
+                #[default]
                 IGlobalSystemMediaTransportControlsSessionTimelineProperties,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
@@ -229,24 +236,28 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MediaPropertiesChangedEventArgs {
+                #[default]
                 IMediaPropertiesChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PlaybackInfoChangedEventArgs {
+                #[default]
                 IPlaybackInfoChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class SessionsChangedEventArgs {
+                #[default]
                 ISessionsChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 458752)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class TimelinePropertiesChangedEventArgs {
+                #[default]
                 ITimelinePropertiesChangedEventArgs,
             }
         }

@@ -8,7 +8,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IAppTaskContentStatics, 65536, "Windows.UI.Shell.Tasks.AppTaskContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
+                #[no_static_property(IAppTaskContentStatics, MaxButtons)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] static MaxButtons: u32, get = get_MaxButtons)]
                 class AppTaskContent {
+                    #[default]
+                    #[Windows::Foundation::Metadata::Experimental]
                     IAppTaskContent,
                 }
                 #[Windows::Foundation::Metadata::ApiContract]
@@ -19,8 +23,30 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IAppTaskInfoStatics, 65536, "Windows.UI.Shell.Tasks.AppTaskContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] DeepLink: super::super::super::Foundation::Uri, get = get_DeepLink)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] EndTime: super::super::super::Foundation::IReference<super::super::super::Foundation::DateTime>, get = get_EndTime)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] IconUri: super::super::super::Foundation::Uri, get = get_IconUri)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] StartTime: super::super::super::Foundation::DateTime, get = get_StartTime)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] State: AppTaskState, get = get_State)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] Subtitle: String, get = get_Subtitle)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] Title: String, get = get_Title)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] HiddenByUser: bool, get = get_HiddenByUser)]
+                #[class_property(#[Windows::Foundation::Metadata::Experimental] Id: String, get = get_Id)]
                 class AppTaskInfo {
+                    #[default]
+                    #[Windows::Foundation::Metadata::Experimental]
+                    #[no_property(DeepLink)]
+                    #[no_property(EndTime)]
+                    #[no_property(IconUri)]
+                    #[no_property(StartTime)]
+                    #[no_property(State)]
+                    #[no_property(Subtitle)]
+                    #[no_property(Title)]
                     IAppTaskInfo,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.UI.Shell.Tasks.AppTaskContract", 131072)]
+                    #[Windows::Foundation::Metadata::Experimental]
+                    #[no_property(HiddenByUser)]
+                    #[no_property(Id)]
                     IAppTaskInfo2,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IAppTaskResultAssetFactory, 65536, "Windows.UI.Shell.Tasks.AppTaskContract")]
@@ -29,6 +55,8 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AppTaskResultAsset {
+                    #[default]
+                    #[Windows::Foundation::Metadata::Experimental]
                     IAppTaskResultAsset,
                 }
                 #[repr(i32)]

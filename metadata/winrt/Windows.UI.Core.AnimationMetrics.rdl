@@ -8,6 +8,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class AnimationDescription {
+                    #[default]
                     IAnimationDescription,
                 }
                 #[repr(i32)]
@@ -140,6 +141,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class OpacityAnimation {
+                    #[default]
                     IOpacityAnimation,
                     IPropertyAnimation,
                 }
@@ -147,6 +149,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class PropertyAnimation {
+                    #[default]
                     IPropertyAnimation,
                 }
                 #[repr(i32)]
@@ -160,6 +163,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class ScaleAnimation {
+                    #[default]
                     IScaleAnimation,
                     IPropertyAnimation,
                 }
@@ -167,6 +171,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class TranslationAnimation {
+                    #[default]
                     IPropertyAnimation,
                 }
             }

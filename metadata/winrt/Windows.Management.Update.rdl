@@ -649,12 +649,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPreviewBuildsManagerStatics, 393216, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PreviewBuildsManager {
+                #[default]
                 IPreviewBuildsManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PreviewBuildsState {
+                #[default]
                 IPreviewBuildsState,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -662,6 +664,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdate {
+                #[default]
                 IWindowsSoftwareUpdate,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateActionInfoFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -669,11 +672,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateActionInfo {
+                #[default]
                 IWindowsSoftwareUpdateActionInfo,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsSoftwareUpdateActionProgress {
+                #[default]
                 IWindowsSoftwareUpdateActionProgress,
             }
             #[repr(i32)]
@@ -688,6 +693,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsSoftwareUpdateActionResultInfo {
+                #[default]
                 IWindowsSoftwareUpdateActionResultInfo,
             }
             #[repr(i32)]
@@ -704,6 +710,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateAppPackageInfo {
+                #[default]
                 IWindowsSoftwareUpdateAppPackageInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateApprovalInfoFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -711,6 +718,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateApprovalInfo {
+                #[default]
                 IWindowsSoftwareUpdateApprovalInfo,
             }
             #[repr(i32)]
@@ -727,6 +735,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateExecutionInfo {
+                #[default]
                 IWindowsSoftwareUpdateExecutionInfo,
             }
             #[repr(i32)]
@@ -742,6 +751,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateLocalizationInfo {
+                #[default]
                 IWindowsSoftwareUpdateLocalizationInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateOptionalActionInfoFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -749,6 +759,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateOptionalActionInfo {
+                #[default]
                 IWindowsSoftwareUpdateOptionalActionInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateOptionalInfoFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -756,6 +767,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateOptionalInfo {
+                #[default]
                 IWindowsSoftwareUpdateOptionalInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateProviderFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -763,6 +775,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateProvider {
+                #[default]
                 IWindowsSoftwareUpdateProvider,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateProviderActionResultFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -770,11 +783,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateProviderActionResult {
+                #[default]
                 IWindowsSoftwareUpdateProviderActionResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsSoftwareUpdateProviderPayloadFileInfo {
+                #[default]
                 IWindowsSoftwareUpdateProviderPayloadFileInfo,
             }
             #[repr(i32)]
@@ -792,6 +807,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateProviderStatus {
+                #[default]
                 IWindowsSoftwareUpdateProviderStatus,
             }
             #[repr(i32)]
@@ -821,6 +837,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateResult {
+                #[default]
                 IWindowsSoftwareUpdateResult,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateScanResultFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -828,6 +845,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateScanResult {
+                #[default]
                 IWindowsSoftwareUpdateScanResult,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsSoftwareUpdateVersionFactory, 131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -835,26 +853,31 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsSoftwareUpdateVersion {
+                #[default]
                 IWindowsSoftwareUpdateVersion,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdate {
+                #[default]
                 IWindowsUpdate,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateActionCompletedEventArgs {
+                #[default]
                 IWindowsUpdateActionCompletedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateActionProgress {
+                #[default]
                 IWindowsUpdateActionProgress,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateActionResult {
+                #[default]
                 IWindowsUpdateActionResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
@@ -862,6 +885,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IWindowsUpdateAdministratorStatics, 65536, "Windows.Management.Update.WindowsUpdateContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsUpdateAdministrator {
+                #[default]
                 IWindowsUpdateAdministrator,
             }
             #[repr(u32)]
@@ -885,11 +909,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsUpdateApprovalData {
+                #[default]
                 IWindowsUpdateApprovalData,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateAttentionRequiredInfo {
+                #[default]
                 IWindowsUpdateAttentionRequiredInfo,
             }
             #[repr(i32)]
@@ -928,13 +954,16 @@ mod Windows {
                 BlockedByOobe = 30,
                 DeferredDuringOobe = 31,
                 DeferredForSustainableTime = 32,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Management.Update.WindowsUpdateContract", 131072)]
                 BlockedByAppClose = 33,
                 BlockedByAppRestart = 34,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Management.Update.WindowsUpdateContract", 131073)]
                 OtherUpdateReverting = 35,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateAttentionRequiredReasonChangedEventArgs {
+                #[default]
                 IWindowsUpdateAttentionRequiredReasonChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -943,11 +972,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateGetAdministratorResult {
+                #[default]
                 IWindowsUpdateGetAdministratorResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateItem {
+                #[default]
                 IWindowsUpdateItem,
             }
             #[Windows::Foundation::Metadata::Activatable(IWindowsUpdateManagerFactory, 65536, "Windows.Management.Update.WindowsUpdateContract")]
@@ -956,7 +987,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsUpdateManager {
+                #[default]
                 IWindowsUpdateManager,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Management.Update.WindowsUpdateContract", 131072)]
                 IWindowsUpdateManager2,
             }
             #[Windows::Foundation::Metadata::Activatable(131072, "Windows.Management.Update.WindowsUpdateContract")]
@@ -965,11 +998,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsUpdateManagerScanOptions {
+                #[default]
                 IWindowsUpdateManagerScanOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateProgressChangedEventArgs {
+                #[default]
                 IWindowsUpdateProgressChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Management.Update.WindowsUpdateContract")]
@@ -978,11 +1013,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WindowsUpdateRestartRequestOptions {
+                #[default]
                 IWindowsUpdateRestartRequestOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(WindowsUpdateContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WindowsUpdateScanCompletedEventArgs {
+                #[default]
                 IWindowsUpdateScanCompletedEventArgs,
             }
         }

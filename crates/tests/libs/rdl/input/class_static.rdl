@@ -8,6 +8,7 @@ mod Test {
     }
     #[Windows::Foundation::Metadata::Static(IWidgetStatics, 1)]
     class Widget {
+        #[default]
         IWidget,
     }
 }

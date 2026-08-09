@@ -29,6 +29,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IUserNotificationListenerStatics, 196608, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class UserNotificationListener {
+                    #[default]
                     IUserNotificationListener,
                 }
                 #[repr(i32)]

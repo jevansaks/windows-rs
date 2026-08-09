@@ -7,11 +7,13 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class ConversionModeChangedEventArgs {
+                        #[default]
                         IConversionModeChangedEventArgs,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class FocusEnteredEventArgs {
+                        #[default]
                         IFocusEnteredEventArgs,
                     }
                     #[guid(0xb49761f9_5b21_513c_b6c0_78f27d26b010)]
@@ -227,6 +229,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class InputDelegationModeChangedEventArgs {
+                        #[default]
                         IInputDelegationModeChangedEventArgs,
                     }
                     #[repr(i32)]
@@ -241,11 +244,13 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class KeyEventReceivedEventArgs {
+                        #[default]
                         IKeyEventReceivedEventArgs,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class KeyboardInputProcessor {
+                        #[default]
                         IKeyboardInputProcessor,
                     }
                     #[repr(i32)]
@@ -265,6 +270,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class ReconversionRequestedEventArgs {
+                        #[default]
                         IReconversionRequestedEventArgs,
                     }
                     #[repr(i32)]
@@ -279,6 +285,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class TextBoxContentChangedEventArgs {
+                        #[default]
                         ITextBoxContentChangedEventArgs,
                     }
                     #[repr(u32)]
@@ -297,11 +304,13 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class TextBoxInfo {
+                        #[default]
                         ITextBoxInfo,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class TextBoxInfoChangedEventArgs {
+                        #[default]
                         ITextBoxInfoChangedEventArgs,
                     }
                     #[repr(u32)]
@@ -328,11 +337,13 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class TextComposition {
+                        #[default]
                         ITextComposition,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class TextCompositionSegment {
+                        #[default]
                         ITextCompositionSegment,
                     }
                     #[repr(i32)]
@@ -354,11 +365,13 @@ mod Windows {
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class TextEditSession {
+                        #[default]
                         ITextEditSession,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     class TextInputProvider {
+                        #[default]
                         ITextInputProvider,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]
@@ -366,6 +379,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(ITextInputServiceStatics, 65536, "Windows.UI.Input.Preview.Text.PreviewTextContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     class TextInputService {
+                        #[default]
                         ITextInputService,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(PreviewTextContract, 65536)]

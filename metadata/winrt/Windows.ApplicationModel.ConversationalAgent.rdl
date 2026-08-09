@@ -5,13 +5,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ActivationSignalDetectionConfiguration {
+                #[default]
                 IActivationSignalDetectionConfiguration,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IActivationSignalDetectionConfiguration2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ActivationSignalDetectionConfigurationCreationResult {
+                #[default]
                 IActivationSignalDetectionConfigurationCreationResult,
             }
             #[repr(i32)]
@@ -71,7 +75,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ActivationSignalDetector {
+                #[default]
                 IActivationSignalDetector,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IActivationSignalDetector2,
             }
             #[repr(i32)]
@@ -107,7 +113,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IConversationalAgentDetectorManagerStatics, 655360, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ConversationalAgentDetectorManager {
+                #[default]
                 IConversationalAgentDetectorManager,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IConversationalAgentDetectorManager2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
@@ -115,13 +123,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IConversationalAgentSessionStatics, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ConversationalAgentSession {
+                #[default]
                 IConversationalAgentSession,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IConversationalAgentSession2,
                 super::super::Foundation::IClosable,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ConversationalAgentSessionInterruptedEventArgs {
+                #[default]
                 IConversationalAgentSessionInterruptedEventArgs,
             }
             #[repr(i32)]
@@ -133,12 +144,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ConversationalAgentSignal {
+                #[default]
                 IConversationalAgentSignal,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IConversationalAgentSignal2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ConversationalAgentSignalDetectedEventArgs {
+                #[default]
                 IConversationalAgentSignalDetectedEventArgs,
             }
             #[repr(i32)]
@@ -162,6 +176,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class ConversationalAgentSystemStateChangedEventArgs {
+                #[default]
                 IConversationalAgentSystemStateChangedEventArgs,
             }
             #[repr(i32)]
@@ -184,12 +199,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DetectionConfigurationAvailabilityChangedEventArgs {
+                #[default]
                 IDetectionConfigurationAvailabilityChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 655360)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DetectionConfigurationAvailabilityInfo {
+                #[default]
                 IDetectionConfigurationAvailabilityInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IDetectionConfigurationAvailabilityInfo2,
             }
             #[repr(i32)]
@@ -203,7 +221,9 @@ mod Windows {
                 VoiceTooSlow = 5,
                 VoiceQualityProblem = 6,
                 TrainingSystemInternalError = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 TrainingTimedOut = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 ConfigurationNotFound = 9,
             }
             #[guid(0x40d8be16_5217_581c_9ab2_ce9b2f2e8e00)]

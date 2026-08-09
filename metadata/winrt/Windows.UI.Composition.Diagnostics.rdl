@@ -8,6 +8,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CompositionDebugHeatMaps {
+                    #[default]
                     ICompositionDebugHeatMaps,
                 }
                 #[repr(u32)]
@@ -32,6 +33,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CompositionDebugSettings {
+                    #[default]
                     ICompositionDebugSettings,
                 }
                 #[guid(0xe49c90ac_2ff3_5805_718c_b725ee07650f)]

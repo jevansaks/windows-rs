@@ -17,7 +17,9 @@ use std::path::{Path, PathBuf};
 use syn::spanned::Spanned;
 use windows_metadata as metadata;
 
-pub use error::Error;
+pub use error::{
+    Diagnostic, DiagnosticReport, Error, Label, LabelStyle, Position, Severity, SourceId,
+};
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 pub use reader::Reader;
@@ -25,6 +27,14 @@ pub use writer::Writer;
 
 /// The metadata namespace that owns the Win32 attribute vocabulary.
 pub(crate) const METADATA_NAMESPACE: &str = "Windows.Win32.Metadata";
+pub(crate) const WINRT_METADATA_NAMESPACE: &str = "Windows.Foundation.Metadata";
+
+pub(crate) fn metadata_error(role: &str, error: &metadata::reader::FileError) -> String {
+    match error {
+        metadata::reader::FileError::Invalid => role.to_string(),
+        _ => format!("{role}: {error}"),
+    }
+}
 
 /// Short RDL attribute spelling and the metadata attribute it maps to.
 pub(crate) struct PseudoAttr {

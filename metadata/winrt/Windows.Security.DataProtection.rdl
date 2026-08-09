@@ -57,12 +57,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataAvailabilityStateChangedEventArgs {
+                #[default]
                 IUserDataAvailabilityStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataBufferUnprotectResult {
+                #[default]
                 IUserDataBufferUnprotectResult,
             }
             #[repr(i32)]
@@ -76,12 +78,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IUserDataProtectionManagerStatics, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataProtectionManager {
+                #[default]
                 IUserDataProtectionManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserDataStorageItemProtectionInfo {
+                #[default]
                 IUserDataStorageItemProtectionInfo,
             }
             #[repr(i32)]

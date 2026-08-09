@@ -6,6 +6,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(Print3DManager)]
             interface IPrint3DManager {
+                #[add_name(eventHandler)]
                 event TaskRequested: super::super::Foundation::TypedEventHandler<Print3DManager, Print3DTaskRequestedEventArgs>;
             }
             #[guid(0x0ef1cafe_a9ad_4c08_a917_1d1f863eabcb)]
@@ -22,8 +23,14 @@ mod Windows {
             interface IPrint3DTask {
                 #[get]
                 Source: Printing3D3MFPackage;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event Submitting: super::super::Foundation::TypedEventHandler<Print3DTask, Object>;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event Completed: super::super::Foundation::TypedEventHandler<Print3DTask, Print3DTaskCompletedEventArgs>;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event SourceChanged: super::super::Foundation::TypedEventHandler<Print3DTask, Print3DTaskSourceChangedEventArgs>;
             }
             #[guid(0xcc1914af_2614_4f1d_accc_d6fc4fda5455)]
@@ -282,21 +289,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 196608)]
             #[Windows::Foundation::Metadata::ExclusiveTo(Printing3DModel)]
             interface IPrinting3DModel2 {
-                #[Windows::Foundation::Metadata::Overload("TryPartialRepairAsync")]
+                #[overload(TryPartialRepairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryPartialRepairAsync(&self) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("TryPartialRepairWithTimeAsync")]
+                #[overload(TryPartialRepairAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryPartialRepairAsync(&self, maxWaitTime: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperation<bool>;
-                #[Windows::Foundation::Metadata::Overload("TryReduceFacesAsync")]
+                fn TryPartialRepairWithTimeAsync(&self, maxWaitTime: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperation<bool>;
+                #[overload(TryReduceFacesAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn TryReduceFacesAsync(&self) -> super::super::Foundation::IAsyncOperationWithProgress<bool, f64>;
-                #[Windows::Foundation::Metadata::Overload("TryReduceFacesWithOptionsAsync")]
+                #[overload(TryReduceFacesAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryReduceFacesAsync(&self, printing3DFaceReductionOptions: Printing3DFaceReductionOptions) -> super::super::Foundation::IAsyncOperationWithProgress<bool, f64>;
-                #[Windows::Foundation::Metadata::Overload("TryReduceFacesWithOptionsAndTimeAsync")]
+                fn TryReduceFacesWithOptionsAsync(&self, printing3DFaceReductionOptions: Printing3DFaceReductionOptions) -> super::super::Foundation::IAsyncOperationWithProgress<bool, f64>;
+                #[overload(TryReduceFacesAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn TryReduceFacesAsync(&self, printing3DFaceReductionOptions: Printing3DFaceReductionOptions, maxWait: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperationWithProgress<bool, f64>;
+                fn TryReduceFacesWithOptionsAndTimeAsync(&self, printing3DFaceReductionOptions: Printing3DFaceReductionOptions, maxWait: super::super::Foundation::TimeSpan) -> super::super::Foundation::IAsyncOperationWithProgress<bool, f64>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn RepairWithProgressAsync(&self) -> super::super::Foundation::IAsyncOperationWithProgress<bool, f64>;
             }
@@ -374,6 +381,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPrint3DManagerStatics, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Print3DManager {
+                #[default]
                 IPrint3DManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 65536)]
@@ -382,6 +390,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 167772160)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Print3DTask {
+                #[default]
                 IPrint3DTask,
             }
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 65536)]
@@ -389,6 +398,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Print3DTaskCompletedEventArgs {
+                #[default]
                 IPrint3DTaskCompletedEventArgs,
             }
             #[repr(i32)]
@@ -417,11 +427,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 167772160)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Print3DTaskRequest {
+                #[default]
                 IPrint3DTaskRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Print3DTaskRequestedEventArgs {
+                #[default]
                 IPrint3DTaskRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 65536)]
@@ -429,6 +441,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Print3DTaskSourceChangedEventArgs {
+                #[default]
                 IPrint3DTaskSourceChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 65536)]
@@ -437,6 +450,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 167772160)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Print3DTaskSourceRequestedArgs {
+                #[default]
                 IPrint3DTaskSourceRequestedArgs,
             }
             #[guid(0xe9175e70_c917_46de_bb51_d9a94db3711f)]
@@ -449,7 +463,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPrinting3D3MFPackageStatics, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3D3MFPackage {
+                #[default]
                 IPrinting3D3MFPackage,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Graphics.Printing3D.Printing3DContract", 262144)]
                 IPrinting3D3MFPackage2,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -459,6 +475,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPrinting3DBaseMaterialStatics, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DBaseMaterial {
+                #[default]
                 IPrinting3DBaseMaterial,
             }
             #[Windows::Foundation::Metadata::Activatable(IPrinting3DBaseMaterialGroupFactory, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -467,6 +484,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DBaseMaterialGroup {
+                #[default]
                 IPrinting3DBaseMaterialGroup,
             }
             #[Windows::Foundation::Metadata::ContractVersion(Printing3DContract, 65536)]
@@ -482,7 +500,9 @@ mod Windows {
                 R32G32B32A32UInt = 3,
                 R32G32B32Float = 6,
                 R32G32B32UInt = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Graphics.Printing3D.Printing3DContract", 131072)]
                 Printing3DDouble = 500,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Graphics.Printing3D.Printing3DContract", 131072)]
                 Printing3DUInt = 501,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -491,7 +511,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DColorMaterial {
+                #[default]
                 IPrinting3DColorMaterial,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Graphics.Printing3D.Printing3DContract", 131072)]
                 IPrinting3DColorMaterial2,
             }
             #[Windows::Foundation::Metadata::Activatable(IPrinting3DColorMaterialGroupFactory, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -500,6 +522,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DColorMaterialGroup {
+                #[default]
                 IPrinting3DColorMaterialGroup,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -508,6 +531,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DComponent {
+                #[default]
                 IPrinting3DComponent,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -516,6 +540,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DComponentWithMatrix {
+                #[default]
                 IPrinting3DComponentWithMatrix,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -524,6 +549,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DCompositeMaterial {
+                #[default]
                 IPrinting3DCompositeMaterial,
             }
             #[Windows::Foundation::Metadata::Activatable(IPrinting3DCompositeMaterialGroupFactory, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -532,7 +558,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DCompositeMaterialGroup {
+                #[default]
                 IPrinting3DCompositeMaterialGroup,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Graphics.Printing3D.Printing3DContract", 196608)]
                 IPrinting3DCompositeMaterialGroup2,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -544,6 +572,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DFaceReductionOptions {
+                #[default]
                 IPrinting3DFaceReductionOptions,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -552,6 +581,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DMaterial {
+                #[default]
                 IPrinting3DMaterial,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -560,6 +590,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DMesh {
+                #[default]
                 IPrinting3DMesh,
             }
             #[repr(i32)]
@@ -573,6 +604,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DMeshVerificationResult {
+                #[default]
                 IPrinting3DMeshVerificationResult,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -581,7 +613,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DModel {
+                #[default]
                 IPrinting3DModel,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Graphics.Printing3D.Printing3DContract", 196608)]
                 IPrinting3DModel2,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -590,6 +624,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DModelTexture {
+                #[default]
                 IPrinting3DModelTexture,
             }
             #[repr(i32)]
@@ -608,6 +643,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DMultiplePropertyMaterial {
+                #[default]
                 IPrinting3DMultiplePropertyMaterial,
             }
             #[Windows::Foundation::Metadata::Activatable(IPrinting3DMultiplePropertyMaterialGroupFactory, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -616,6 +652,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DMultiplePropertyMaterialGroup {
+                #[default]
                 IPrinting3DMultiplePropertyMaterialGroup,
             }
             #[repr(i32)]
@@ -638,6 +675,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DTexture2CoordMaterial {
+                #[default]
                 IPrinting3DTexture2CoordMaterial,
             }
             #[Windows::Foundation::Metadata::Activatable(IPrinting3DTexture2CoordMaterialGroupFactory, 65536, "Windows.Graphics.Printing3D.Printing3DContract")]
@@ -646,7 +684,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DTexture2CoordMaterialGroup {
+                #[default]
                 IPrinting3DTexture2CoordMaterialGroup,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Graphics.Printing3D.Printing3DContract", 131072)]
                 IPrinting3DTexture2CoordMaterialGroup2,
             }
             #[repr(i32)]
@@ -663,6 +703,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Printing3DTextureResource {
+                #[default]
                 IPrinting3DTextureResource,
             }
         }

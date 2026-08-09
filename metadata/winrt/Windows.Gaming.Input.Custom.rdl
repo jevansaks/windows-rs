@@ -3,6 +3,7 @@ mod Windows {
     mod Gaming {
         mod Input {
             mod Custom {
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772162)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -28,6 +29,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class GipFirmwareUpdateResult {
+                    #[default]
                     IGipFirmwareUpdateResult,
                 }
                 #[repr(i32)]
@@ -42,6 +44,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class GipGameControllerProvider {
+                    #[default]
                     IGipGameControllerProvider,
                     IGameControllerProvider,
                 }
@@ -57,6 +60,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class HidGameControllerProvider {
+                    #[default]
                     IHidGameControllerProvider,
                     IGameControllerProvider,
                 }
@@ -190,6 +194,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class XusbGameControllerProvider {
+                    #[default]
                     IXusbGameControllerProvider,
                     IGameControllerProvider,
                 }

@@ -13,6 +13,7 @@ mod Windows {
         interface IWebErrorStatics {
             fn GetStatus(&self, hresult: i32) -> WebErrorStatus;
         }
+        #[static_only]
         #[Windows::Foundation::Metadata::ContractVersion(super::Foundation::UniversalApiContract, 65536)]
         #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -44,7 +45,9 @@ mod Windows {
             UnexpectedRedirection = 19,
             UnexpectedClientError = 20,
             UnexpectedServerError = 21,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
             InsufficientRangeSupport = 22,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
             MissingContentLengthSupport = 23,
             MultipleChoices = 300,
             MovedPermanently = 301,

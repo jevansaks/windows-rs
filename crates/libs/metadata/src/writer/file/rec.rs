@@ -14,6 +14,7 @@ pub struct Records {
     pub InterfaceImpl: Vec<InterfaceImpl>,
     pub MemberRef: Vec<MemberRef>,
     pub MethodDef: Vec<MethodDef>,
+    pub MethodImpl: Vec<MethodImpl>,
     pub MethodSemantics: Vec<MethodSemantics>,
     pub Module: Vec<Module>,
     pub ModuleRef: Vec<ModuleRef>,
@@ -67,6 +68,12 @@ pub struct MethodSemantics {
     pub Semantics: u16,
     pub Method: id::MethodDef,
     pub Association: HasSemantics,
+}
+
+pub struct MethodImpl {
+    pub Class: id::TypeDef,
+    pub MethodBody: MethodDefOrRef,
+    pub MethodDeclaration: MethodDefOrRef,
 }
 
 #[derive(Default)]
@@ -199,6 +206,7 @@ impl Records {
         // their `Association` coded index or strict readers (cswinrt, System.Reflection.
         // Metadata) reject the winmd.
         self.MethodSemantics.sort_by_key(|r| r.Association.encode());
+        self.MethodImpl.sort_by_key(|r| r.Class);
 
         let resolution_scope = coded_index_size(&[
             self.Module.len(),
@@ -208,7 +216,8 @@ impl Records {
         ]);
         let type_def_or_ref =
             coded_index_size(&[self.TypeDef.len(), self.TypeRef.len(), self.TypeSpec.len()]);
-        let has_constant = coded_index_size(&[self.Field.len(), self.Param.len(), 0]);
+        let has_constant =
+            coded_index_size(&[self.Field.len(), self.Param.len(), self.Property.len()]);
 
         let type_or_method_def = coded_index_size(&[self.TypeDef.len(), self.MethodDef.len()]);
 
@@ -231,11 +240,12 @@ impl Records {
             self.MemberRef.len(),
             self.Module.len(),
             0,
-            0,
+            self.Property.len(),
+            self.Event.len(),
             0,
             self.ModuleRef.len(),
             self.TypeSpec.len(),
-            0,
+            self.Assembly.len(),
             self.AssemblyRef.len(),
             0,
             0,
@@ -246,6 +256,7 @@ impl Records {
         ]);
 
         let member_forwarded = coded_index_size(&[self.Field.len(), self.MethodDef.len()]);
+        let method_def_or_ref = coded_index_size(&[self.MethodDef.len(), self.MemberRef.len()]);
 
         // HasSemantics coded index: tag 0 = Event, tag 1 = Property.
         let has_semantics = coded_index_size(&[self.Event.len(), self.Property.len()]);
@@ -287,6 +298,9 @@ impl Records {
         if !self.MethodSemantics.is_empty() {
             valid_tables |= 1 << 0x18; // MethodSemantics
         }
+        if !self.MethodImpl.is_empty() {
+            valid_tables |= 1 << 0x19; // MethodImpl
+        }
 
         // The table stream header.
 
@@ -300,6 +314,9 @@ impl Records {
         let mut sorted_tables: u64 = 0;
         if !self.MethodSemantics.is_empty() {
             sorted_tables |= 1 << 0x18; // MethodSemantics
+        }
+        if !self.MethodImpl.is_empty() {
+            sorted_tables |= 1 << 0x19; // MethodImpl
         }
         buffer.write_u64(sorted_tables); // Sorted
 
@@ -331,6 +348,9 @@ impl Records {
         }
         if !self.MethodSemantics.is_empty() {
             buffer.write_u32(self.MethodSemantics.len().try_into().unwrap());
+        }
+        if !self.MethodImpl.is_empty() {
+            buffer.write_u32(self.MethodImpl.len().try_into().unwrap());
         }
         buffer.write_u32(self.ModuleRef.len().try_into().unwrap());
         buffer.write_u32(self.TypeSpec.len().try_into().unwrap());
@@ -447,6 +467,12 @@ impl Records {
             buffer.write_u16(r.Semantics);
             buffer.write_index(r.Method.0, self.MethodDef.len());
             buffer.write_code(r.Association.encode(), has_semantics);
+        }
+
+        for r in &self.MethodImpl {
+            buffer.write_index(r.Class.0, self.TypeDef.len());
+            buffer.write_code(r.MethodBody.encode(), method_def_or_ref);
+            buffer.write_code(r.MethodDeclaration.encode(), method_def_or_ref);
         }
 
         for r in &self.ModuleRef {

@@ -29,63 +29,48 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Deprecated("Use IImageFeatureDescriptor instead of IImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(ImageVariableDescriptorPreview)]
                 interface IImageVariableDescriptorPreview: ILearningModelVariableDescriptorPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use IImageFeatureDescriptor instead of IImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_BitmapPixelFormat(&self) -> super::super::super::Graphics::Imaging::BitmapPixelFormat;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use IImageFeatureDescriptor instead of IImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Width(&self) -> u32;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use IImageFeatureDescriptor instead of IImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Height(&self) -> u32;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use IImageFeatureDescriptor instead of IImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    BitmapPixelFormat: super::super::super::Graphics::Imaging::BitmapPixelFormat;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use IImageFeatureDescriptor instead of IImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Width: u32;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use IImageFeatureDescriptor instead of IImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Height: u32;
                 }
                 #[guid(0x47bc8205_4d36_47a9_8f68_ffcb339dd0fc)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(InferencingOptionsPreview)]
                 interface IInferencingOptionsPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_PreferredDeviceKind(&self) -> LearningModelDeviceKindPreview;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn put_PreferredDeviceKind(&self, value: LearningModelDeviceKindPreview);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_IsTracingEnabled(&self) -> bool;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn put_IsTracingEnabled(&self, value: bool);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_MaxBatchSize(&self) -> i32;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn put_MaxBatchSize(&self, value: i32);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_MinimizeMemoryAllocation(&self) -> bool;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn put_MinimizeMemoryAllocation(&self, value: bool);
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_ReclaimMemoryAfterEvaluation(&self) -> bool;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn put_ReclaimMemoryAfterEvaluation(&self, value: bool);
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    PreferredDeviceKind: LearningModelDeviceKindPreview;
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    IsTracingEnabled: bool;
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    MaxBatchSize: i32;
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    MinimizeMemoryAllocation: bool;
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of IInferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    ReclaimMemoryAfterEvaluation: bool;
                 }
                 #[guid(0x93c901e8_6c78_4b4f_aec1_a6bb9e691624)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelBinding instead of ILearningModelBindingPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(LearningModelBindingPreview)]
                 interface ILearningModelBindingPreview: super::super::super::Foundation::Collections::IMapView<String, Object> + super::super::super::Foundation::Collections::IIterable<super::super::super::Foundation::Collections::IKeyValuePair<String, Object>> {
+                    #[overload(Bind)]
                     #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelBinding instead of ILearningModelBindingPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    #[Windows::Foundation::Metadata::Overload("Bind")]
                     fn Bind(&self, name: String, value: Object);
+                    #[overload(Bind)]
                     #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelBinding instead of ILearningModelBindingPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    #[Windows::Foundation::Metadata::Overload("BindWithProperties")]
-                    fn Bind(&self, name: String, value: Object, metadata: super::super::super::Foundation::Collections::IPropertySet);
+                    fn BindWithProperties(&self, name: String, value: Object, metadata: super::super::super::Foundation::Collections::IPropertySet);
                     #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelBinding instead of ILearningModelBindingPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                     fn Clear(&self);
                 }
@@ -102,42 +87,42 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(LearningModelDescriptionPreview)]
                 interface ILearningModelDescriptionPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Author(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Name(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Domain(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Description(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Version(&self) -> i64;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Metadata(&self) -> super::super::super::Foundation::Collections::IMapView<String, String>;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_InputFeatures(&self) -> super::super::super::Foundation::Collections::IIterable<ILearningModelVariableDescriptorPreview>;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_OutputFeatures(&self) -> super::super::super::Foundation::Collections::IIterable<ILearningModelVariableDescriptorPreview>;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Author: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Name: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Domain: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Description: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Version: i64;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Metadata: super::super::super::Foundation::Collections::IMapView<String, String>;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    InputFeatures: super::super::super::Foundation::Collections::IIterable<ILearningModelVariableDescriptorPreview>;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    OutputFeatures: super::super::super::Foundation::Collections::IIterable<ILearningModelVariableDescriptorPreview>;
                 }
                 #[guid(0xdf25ea9f_9863_4088_8498_87a1f4686f92)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelEvaluationResult instead of ILearningModelEvaluationResultPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(LearningModelEvaluationResultPreview)]
                 interface ILearningModelEvaluationResultPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelEvaluationResult instead of ILearningModelEvaluationResultPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_CorrelationId(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelEvaluationResult instead of ILearningModelEvaluationResultPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Outputs(&self) -> super::super::super::Foundation::Collections::IMapView<String, Object>;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModelEvaluationResult instead of ILearningModelEvaluationResultPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    CorrelationId: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModelEvaluationResult instead of ILearningModelEvaluationResultPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Outputs: super::super::super::Foundation::Collections::IMapView<String, Object>;
                 }
                 #[guid(0x049c266a_93b4_478c_aeb8_70157bf0ff94)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
@@ -150,15 +135,12 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn EvaluateFeaturesAsync(&self, features: super::super::super::Foundation::Collections::IMap<String, Object>, correlationId: String) -> super::super::super::Foundation::IAsyncOperation<LearningModelEvaluationResultPreview>;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Description(&self) -> LearningModelDescriptionPreview;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_InferencingOptions(&self) -> InferencingOptionsPreview;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn put_InferencingOptions(&self, value: InferencingOptionsPreview);
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Description: LearningModelDescriptionPreview;
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    #[set(Windows::Foundation::Metadata::Deprecated("Use ILearningModel instead of ILearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    InferencingOptions: InferencingOptionsPreview;
                 }
                 #[guid(0x164bbb60_8465_4786_8b93_2c16a89289d7)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
@@ -176,73 +158,76 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 interface ILearningModelVariableDescriptorPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Name(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Description(&self) -> String;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_ModelFeatureKind(&self) -> LearningModelFeatureKindPreview;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_IsRequired(&self) -> bool;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Name: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Description: String;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    ModelFeatureKind: LearningModelFeatureKindPreview;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of ILearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    IsRequired: bool;
                 }
                 #[guid(0x3cb38370_c02b_4236_b3e8_6bdca49c3129)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(MapVariableDescriptorPreview)]
                 interface IMapVariableDescriptorPreview: ILearningModelVariableDescriptorPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_KeyKind(&self) -> FeatureElementKindPreview;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_ValidStringKeys(&self) -> super::super::super::Foundation::Collections::IIterable<String>;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_ValidIntegerKeys(&self) -> super::super::super::Foundation::Collections::IIterable<i64>;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Fields(&self) -> ILearningModelVariableDescriptorPreview;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    KeyKind: FeatureElementKindPreview;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    ValidStringKeys: super::super::super::Foundation::Collections::IIterable<String>;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    ValidIntegerKeys: super::super::super::Foundation::Collections::IIterable<i64>;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use IMapFeatureDescriptor instead of IMapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Fields: ILearningModelVariableDescriptorPreview;
                 }
                 #[guid(0x9cd8f292_98b2_4530_a1b6_2ded5fecbc26)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use ISequenceFeatureDescriptor instead of ISequenceVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(SequenceVariableDescriptorPreview)]
                 interface ISequenceVariableDescriptorPreview: ILearningModelVariableDescriptorPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ISequenceFeatureDescriptor instead of ISequenceVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_ElementType(&self) -> ILearningModelVariableDescriptorPreview;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ISequenceFeatureDescriptor instead of ISequenceVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    ElementType: ILearningModelVariableDescriptorPreview;
                 }
                 #[guid(0xa80f501a_9aac_4233_9784_aceaf92510b5)]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use ITensorFeatureDescriptor instead of ITensorVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ExclusiveTo(TensorVariableDescriptorPreview)]
                 interface ITensorVariableDescriptorPreview: ILearningModelVariableDescriptorPreview {
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ITensorFeatureDescriptor instead of ITensorVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_DataType(&self) -> FeatureElementKindPreview;
-                    #[special]
-                    #[Windows::Foundation::Metadata::Deprecated("Use ITensorFeatureDescriptor instead of ITensorVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
-                    fn get_Shape(&self) -> super::super::super::Foundation::Collections::IIterable<i64>;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ITensorFeatureDescriptor instead of ITensorVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    DataType: FeatureElementKindPreview;
+                    #[get]
+                    #[get(Windows::Foundation::Metadata::Deprecated("Use ITensorFeatureDescriptor instead of ITensorVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract"))]
+                    Shape: super::super::super::Foundation::Collections::IIterable<i64>;
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use ImageFeatureDescriptor instead of ImageVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class ImageVariableDescriptorPreview {
+                    #[default]
                     IImageVariableDescriptorPreview,
                     ILearningModelVariableDescriptorPreview,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use LearningModelSession instead of InferencingOptionsPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class InferencingOptionsPreview {
+                    #[default]
                     IInferencingOptionsPreview,
                 }
                 #[Windows::Foundation::Metadata::Activatable(ILearningModelBindingPreviewFactory, 65536, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use LearningModelBinding instead of LearningModelBindingPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class LearningModelBindingPreview {
+                    #[default]
                     ILearningModelBindingPreview,
                     super::super::super::Foundation::Collections::IMapView<String, Object>,
                     super::super::super::Foundation::Collections::IIterable<super::super::super::Foundation::Collections::IKeyValuePair<String, Object>>,
@@ -250,6 +235,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of LearningModelDescriptionPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class LearningModelDescriptionPreview {
+                    #[default]
                     ILearningModelDescriptionPreview,
                 }
                 #[repr(i32)]
@@ -266,6 +252,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use LearningModelEvaluationResult instead of LearningModelEvaluationResultPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class LearningModelEvaluationResultPreview {
+                    #[default]
                     ILearningModelEvaluationResultPreview,
                 }
                 #[repr(i32)]
@@ -282,11 +269,13 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Deprecated("Use LearningModel instead of LearningModelPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 #[Windows::Foundation::Metadata::Static(ILearningModelPreviewStatics, 65536, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class LearningModelPreview {
+                    #[default]
                     ILearningModelPreview,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use ILearningModelFeatureDescriptor instead of LearningModelVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class LearningModelVariableDescriptorPreview {
+                    #[default]
                     ILearningModelVariableDescriptorPreview,
                 }
                 #[Windows::Foundation::Metadata::ApiContract]
@@ -295,18 +284,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use MapFeatureDescriptor instead of MapVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class MapVariableDescriptorPreview {
+                    #[default]
                     IMapVariableDescriptorPreview,
                     ILearningModelVariableDescriptorPreview,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use SequenceFeatureDescriptor instead of SequenceVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class SequenceVariableDescriptorPreview {
+                    #[default]
                     ISequenceVariableDescriptorPreview,
                     ILearningModelVariableDescriptorPreview,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(MachineLearningPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::Deprecated("Use TensorFeatureDescriptor instead of TensorVariableDescriptorPreview. For more info, see MSDN.", Deprecate, 131072, "Windows.AI.MachineLearning.Preview.MachineLearningPreviewContract")]
                 class TensorVariableDescriptorPreview {
+                    #[default]
                     ITensorVariableDescriptorPreview,
                     ILearningModelVariableDescriptorPreview,
                 }

@@ -128,72 +128,84 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskDataProviderConnection {
+                    #[default]
                     IUserDataTaskDataProviderConnection,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskDataProviderTriggerDetails {
+                    #[default]
                     IUserDataTaskDataProviderTriggerDetails,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListCompleteTaskRequest {
+                    #[default]
                     IUserDataTaskListCompleteTaskRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListCompleteTaskRequestEventArgs {
+                    #[default]
                     IUserDataTaskListCompleteTaskRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListCreateOrUpdateTaskRequest {
+                    #[default]
                     IUserDataTaskListCreateOrUpdateTaskRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListCreateOrUpdateTaskRequestEventArgs {
+                    #[default]
                     IUserDataTaskListCreateOrUpdateTaskRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListDeleteTaskRequest {
+                    #[default]
                     IUserDataTaskListDeleteTaskRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListDeleteTaskRequestEventArgs {
+                    #[default]
                     IUserDataTaskListDeleteTaskRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListSkipOccurrenceRequest {
+                    #[default]
                     IUserDataTaskListSkipOccurrenceRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListSkipOccurrenceRequestEventArgs {
+                    #[default]
                     IUserDataTaskListSkipOccurrenceRequestEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListSyncManagerSyncRequest {
+                    #[default]
                     IUserDataTaskListSyncManagerSyncRequest,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UserDataTaskListSyncManagerSyncRequestEventArgs {
+                    #[default]
                     IUserDataTaskListSyncManagerSyncRequestEventArgs,
                 }
             }

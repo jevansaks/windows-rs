@@ -4,11 +4,27 @@ pub fn write_interface(item: &metadata::reader::TypeDef) -> Result<TokenStream, 
     let namespace = item.namespace();
     let name = write_ident(item.name());
 
-    let (generics, generics_tokens) = write_generic_params(item);
+    let (generics, generics_tokens) = write_generic_params(item)?;
 
     let is_winrt = item
         .flags()
         .contains(metadata::TypeAttributes::WindowsRuntime);
+    let method_impls: Vec<_> = item.methods().map(|method| method.impl_flags()).collect();
+    let runtime_count = method_impls
+        .iter()
+        .filter(|flags| **flags == metadata::MethodImplAttributes::Runtime)
+        .count();
+    if runtime_count != 0 && runtime_count != method_impls.len() {
+        return Err(writer_err!(
+            "interface `{}` mixes runtime and non-runtime methods",
+            item.name()
+        ));
+    }
+    let runtime_attr = if runtime_count != 0 {
+        quote! { #[runtime] }
+    } else {
+        quote! {}
+    };
     let members = write_members(namespace, item, &generics, is_winrt)?;
 
     let requires: Vec<_> = item.interface_impls().collect();
@@ -37,15 +53,43 @@ pub fn write_interface(item: &metadata::reader::TypeDef) -> Result<TokenStream, 
         item.index(),
         &["GuidAttribute", "SupportedArchitectureAttribute"],
     )?;
+    let association_attrs = write_interface_association_attrs(namespace, item);
 
     Ok(quote! {
         #guid_token
         #arch_attr
+        #runtime_attr
         #(#custom_attrs)*
+        #(#association_attrs)*
         interface #name #generics_tokens #requires_tokens {
             #(#members)*
         }
     })
+}
+
+fn write_interface_association_attrs(
+    namespace: &str,
+    item: &metadata::reader::TypeDef,
+) -> Vec<TokenStream> {
+    item.events()
+        .filter(|event| !event_projects_from_shorthand(event))
+        .map(|event| {
+            let name = write_ident(event.name());
+            let ty = write_type(namespace, &event.ty(&[]));
+            let accessors = event.semantics().map(|semantics| {
+                let kind = match semantics.semantics() {
+                    0x0008 => quote! { add },
+                    0x0010 => quote! { remove },
+                    _ => unreachable!("event semantics were preflighted"),
+                };
+                let method = write_ident(semantics.method().name());
+                quote! { #kind = #method }
+            });
+            quote! {
+                #[interface_event(#name: #ty, #(#accessors),*)]
+            }
+        })
+        .collect()
 }
 
 fn write_members(
@@ -54,7 +98,14 @@ fn write_members(
     generics: &[metadata::Type],
     is_winrt: bool,
 ) -> Result<Vec<TokenStream>, Error> {
+    validate_property_event_rows(item)?;
+
     let methods: Vec<_> = item.methods().collect();
+    for method in &methods {
+        reject_method_generics(method)?;
+        let signature = method.signature(generics);
+        reject_variadic_method(method, &signature, "interface")?;
+    }
     let count = methods.len();
     let mut consumed = vec![false; count];
     let mut tokens = Vec::with_capacity(count);
@@ -76,63 +127,166 @@ fn write_members(
             let name = method.name();
 
             if let Some(prop_name) = name.strip_prefix("get_") {
+                let Some(row) = item
+                    .properties()
+                    .find(|property| property.name() == prop_name)
+                else {
+                    consumed[i] = true;
+                    tokens.push(write_method(namespace, method, generics)?);
+                    continue;
+                };
                 let put_name = format!("put_{prop_name}");
                 let j = find_unconsumed(&methods, &consumed, i, &put_name);
 
                 let sig = method.signature(generics);
-
-                let no_attrs = method.attributes().next().is_none();
+                let property = quote! { property };
+                let property_attrs = write_custom_attributes_wrapped(
+                    row.attributes(),
+                    namespace,
+                    item.index(),
+                    &[],
+                    Some(&property),
+                )?;
+                let get = quote! { get };
+                let get_attrs = write_custom_attributes_wrapped(
+                    method.attributes(),
+                    namespace,
+                    item.index(),
+                    &[],
+                    Some(&get),
+                )?;
 
                 if let Some(j) = j {
-                    let put_no_attrs = methods[j].attributes().next().is_none();
                     // Combine only adjacent get_/put_ pairs with matching types.
                     let put_sig = methods[j].signature(generics);
                     let types_match = put_sig.types.first() == Some(&sig.return_type);
-                    if no_attrs && put_no_attrs && types_match && (i + 1..j).all(|k| consumed[k]) {
+                    if types_match && (i + 1..j).all(|k| consumed[k]) {
+                        let set = quote! { set };
+                        let set_attrs = write_custom_attributes_wrapped(
+                            methods[j].attributes(),
+                            namespace,
+                            item.index(),
+                            &[],
+                            Some(&set),
+                        )?;
+                        let set_name_attr = write_accessor_name(&methods[j], "set_name", "value")?;
                         let ty = write_type(namespace, &sig.return_type);
                         let prop_ident = write_ident(prop_name);
                         consumed[i] = true;
                         consumed[j] = true;
-                        tokens.push(quote! { #prop_ident: #ty; });
+                        tokens.push(quote! {
+                            #(#property_attrs)*
+                            #(#get_attrs)*
+                            #(#set_attrs)*
+                            #set_name_attr
+                            #prop_ident: #ty;
+                        });
                         continue;
                     }
                 }
-                if no_attrs {
-                    let ty = write_type(namespace, &sig.return_type);
+                let ty = write_type(namespace, &sig.return_type);
+                let prop_ident = write_ident(prop_name);
+                consumed[i] = true;
+                tokens.push(quote! {
+                    #[get]
+                    #(#property_attrs)*
+                    #(#get_attrs)*
+                    #prop_ident: #ty;
+                });
+                continue;
+            } else if let Some(prop_name) = name.strip_prefix("put_") {
+                let Some(row) = item
+                    .properties()
+                    .find(|property| property.name() == prop_name)
+                else {
+                    consumed[i] = true;
+                    tokens.push(write_method(namespace, method, generics)?);
+                    continue;
+                };
+                let sig = method.signature(generics);
+                if let Some(ty) = sig.types.first() {
+                    let property = quote! { property };
+                    let property_attrs = write_custom_attributes_wrapped(
+                        row.attributes(),
+                        namespace,
+                        item.index(),
+                        &[],
+                        Some(&property),
+                    )?;
+                    let set = quote! { set };
+                    let set_attrs = write_custom_attributes_wrapped(
+                        method.attributes(),
+                        namespace,
+                        item.index(),
+                        &[],
+                        Some(&set),
+                    )?;
+                    let set_name_attr = write_accessor_name(method, "set_name", "value")?;
+                    let ty = write_type(namespace, ty);
                     let prop_ident = write_ident(prop_name);
                     consumed[i] = true;
-                    tokens.push(quote! { #[get] #prop_ident: #ty; });
+                    tokens.push(quote! {
+                        #[set]
+                        #(#property_attrs)*
+                        #(#set_attrs)*
+                        #set_name_attr
+                        #prop_ident: #ty;
+                    });
                     continue;
                 }
-            } else if let Some(prop_name) = name.strip_prefix("put_") {
-                let no_attrs = method.attributes().next().is_none();
-                if no_attrs {
-                    let sig = method.signature(generics);
-                    if let Some(ty) = sig.types.first() {
-                        let ty = write_type(namespace, ty);
-                        let prop_ident = write_ident(prop_name);
-                        consumed[i] = true;
-                        tokens.push(quote! { #[set] #prop_ident: #ty; });
-                        continue;
-                    }
-                }
             } else if let Some(event_name) = name.strip_prefix("add_") {
+                let Some(row) = item.events().find(|event| event.name() == event_name) else {
+                    consumed[i] = true;
+                    tokens.push(write_method(namespace, method, generics)?);
+                    continue;
+                };
                 let remove_name = format!("remove_{event_name}");
                 let j = find_unconsumed(&methods, &consumed, i, &remove_name);
 
-                let no_attrs = method.attributes().next().is_none();
-
                 if let Some(j) = j {
-                    let remove_no_attrs = methods[j].attributes().next().is_none();
                     // Event shorthand requires adjacent add_/remove_ methods.
-                    if no_attrs && remove_no_attrs && (i + 1..j).all(|k| consumed[k]) {
+                    if (i + 1..j).all(|k| consumed[k]) {
                         let sig = method.signature(generics);
                         if let Some(handler_ty) = sig.types.first() {
+                            let event = quote! { event };
+                            let event_attrs = write_custom_attributes_wrapped(
+                                row.attributes(),
+                                namespace,
+                                item.index(),
+                                &[],
+                                Some(&event),
+                            )?;
+                            let add = quote! { add };
+                            let add_attrs = write_custom_attributes_wrapped(
+                                method.attributes(),
+                                namespace,
+                                item.index(),
+                                &[],
+                                Some(&add),
+                            )?;
+                            let remove = quote! { remove };
+                            let remove_attrs = write_custom_attributes_wrapped(
+                                methods[j].attributes(),
+                                namespace,
+                                item.index(),
+                                &[],
+                                Some(&remove),
+                            )?;
+                            let add_name_attr = write_accessor_name(method, "add_name", "handler")?;
+                            let remove_name_attr =
+                                write_accessor_name(&methods[j], "remove_name", "token")?;
                             let handler_ty = write_type(namespace, handler_ty);
                             let event_ident = write_ident(event_name);
                             consumed[i] = true;
                             consumed[j] = true;
-                            tokens.push(quote! { #event_kw #event_ident: #handler_ty; });
+                            tokens.push(quote! {
+                                #(#event_attrs)*
+                                #(#add_attrs)*
+                                #(#remove_attrs)*
+                                #add_name_attr
+                                #remove_name_attr
+                                #event_kw #event_ident: #handler_ty;
+                            });
                             continue;
                         }
                     }
@@ -147,6 +301,142 @@ fn write_members(
     Ok(tokens)
 }
 
+fn validate_property_event_rows(item: &metadata::reader::TypeDef) -> Result<(), Error> {
+    for property in item.properties() {
+        if property.flags() != 0 {
+            return Err(writer_err!(
+                "property `{}` has unsupported flags {}",
+                property.name(),
+                property.flags()
+            ));
+        }
+        if property.constant().is_some() {
+            return Err(writer_err!(
+                "property `{}` has an unrepresentable constant",
+                property.name()
+            ));
+        }
+        let mut getter = false;
+        let mut setter = false;
+        for semantics in property.semantics() {
+            let method = semantics.method();
+            let expected_name = match semantics.semantics() {
+                0x0001 if !setter => {
+                    setter = true;
+                    format!("put_{}", property.name())
+                }
+                0x0002 if !getter => {
+                    getter = true;
+                    format!("get_{}", property.name())
+                }
+                0x0001 | 0x0002 => {
+                    return Err(writer_err!(
+                        "property `{}` has duplicate accessor semantics {:#x}",
+                        property.name(),
+                        semantics.semantics()
+                    ));
+                }
+                _ => {
+                    return Err(writer_err!(
+                        "property `{}` has unsupported method semantics {:#x}",
+                        property.name(),
+                        semantics.semantics()
+                    ));
+                }
+            };
+            if method.name() != expected_name {
+                return Err(writer_err!(
+                    "property `{}` accessor `{}` does not match `{}`",
+                    property.name(),
+                    method.name(),
+                    expected_name
+                ));
+            }
+            if !method
+                .flags()
+                .contains(metadata::MethodAttributes::SpecialName)
+            {
+                return Err(writer_err!(
+                    "property `{}` accessor `{}` is not marked special",
+                    property.name(),
+                    method.name()
+                ));
+            }
+        }
+        if !getter && !setter {
+            return Err(writer_err!(
+                "property `{}` has no accessor semantics",
+                property.name()
+            ));
+        }
+    }
+
+    for event in item.events() {
+        if event.flags() != 0 {
+            return Err(writer_err!(
+                "event `{}` has unsupported flags {}",
+                event.name(),
+                event.flags()
+            ));
+        }
+        let mut add = false;
+        let mut remove = false;
+        for semantics in event.semantics() {
+            let method = semantics.method();
+            let expected_name = match semantics.semantics() {
+                0x0008 if !add => {
+                    add = true;
+                    format!("add_{}", event.name())
+                }
+                0x0010 if !remove => {
+                    remove = true;
+                    format!("remove_{}", event.name())
+                }
+                0x0008 | 0x0010 => {
+                    return Err(writer_err!(
+                        "event `{}` has duplicate accessor semantics {:#x}",
+                        event.name(),
+                        semantics.semantics()
+                    ));
+                }
+                _ => {
+                    return Err(writer_err!(
+                        "event `{}` has unsupported method semantics {:#x}",
+                        event.name(),
+                        semantics.semantics()
+                    ));
+                }
+            };
+            if method.name() != expected_name {
+                return Err(writer_err!(
+                    "event `{}` accessor `{}` does not match `{}`",
+                    event.name(),
+                    method.name(),
+                    expected_name
+                ));
+            }
+            if !method
+                .flags()
+                .contains(metadata::MethodAttributes::SpecialName)
+            {
+                return Err(writer_err!(
+                    "event `{}` accessor `{}` is not marked special",
+                    event.name(),
+                    method.name()
+                ));
+            }
+        }
+        if !add || !remove {
+            return Err(writer_err!(
+                "event `{}` requires add and remove semantics",
+                event.name()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn find_unconsumed(
     methods: &[metadata::reader::MethodDef],
     consumed: &[bool],
@@ -159,12 +449,46 @@ fn find_unconsumed(
         .find(|&j| !consumed[j] && methods[j].name() == name)
 }
 
+fn write_accessor_name(
+    method: &metadata::reader::MethodDef,
+    wrapper: &str,
+    default: &str,
+) -> Result<TokenStream, Error> {
+    let params = method.params_by_sequence(1).map_err(|error| {
+        writer_err!(
+            "accessor `{}` has invalid parameters: {error}",
+            method.name()
+        )
+    })?;
+    let name =
+        params.params()[0].map_or_else(|| default.to_string(), |param| param.name().to_string());
+    if name == default {
+        Ok(quote! {})
+    } else {
+        let wrapper = proc_macro2::Ident::new(wrapper, Span::call_site());
+        let name = write_ident(&name);
+        Ok(quote! { #[#wrapper(#name)] })
+    }
+}
+
 fn write_method(
     namespace: &str,
     item: &metadata::reader::MethodDef,
     generics: &[metadata::Type],
 ) -> Result<TokenStream, Error> {
-    let name = write_ident(item.name());
+    let overload = item.attributes().find(|attribute| {
+        attribute.namespace() == WINRT_METADATA_NAMESPACE && attribute.name() == "OverloadAttribute"
+    });
+    let public_name = overload.as_ref().and_then(|attribute| {
+        attribute.value().into_iter().find_map(|(_, value)| {
+            if let metadata::Value::Utf8(name) = value {
+                Some(name)
+            } else {
+                None
+            }
+        })
+    });
+    let name = write_ident(public_name.as_deref().unwrap_or_else(|| item.name()));
     let signature = item.signature(generics);
 
     let return_type = write_return_type(namespace, item, &signature)?;
@@ -176,7 +500,31 @@ fn write_method(
         )
         .collect::<Result<Vec<_>, Error>>()?;
 
-    let method_attrs = write_custom_attributes(item.attributes(), namespace, item.index())?;
+    let method_attrs = write_custom_attributes(
+        item.attributes().filter(|attribute| {
+            attribute.namespace() != WINRT_METADATA_NAMESPACE
+                || !matches!(
+                    attribute.name(),
+                    "OverloadAttribute" | "DefaultOverloadAttribute"
+                )
+        }),
+        namespace,
+        item.index(),
+    )?;
+    let overload_attr = if overload.is_some() {
+        let metadata_name = write_ident(item.name());
+        quote! { #[overload(#metadata_name)] }
+    } else {
+        quote! {}
+    };
+    let default_overload_attr = if item.attributes().any(|attribute| {
+        attribute.namespace() == WINRT_METADATA_NAMESPACE
+            && attribute.name() == "DefaultOverloadAttribute"
+    }) {
+        quote! { #[default_overload] }
+    } else {
+        quote! {}
+    };
 
     // Preserve property/event methods with the built-in `#[special]` pseudo.
     let special_attr = if item
@@ -190,6 +538,8 @@ fn write_method(
 
     Ok(quote! {
         #special_attr
+        #overload_attr
+        #default_overload_attr
         #(#method_attrs)*
         fn #name(#(#params),*) #return_type;
     })

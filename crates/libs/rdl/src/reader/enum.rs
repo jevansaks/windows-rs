@@ -49,6 +49,7 @@ impl Encoder<'_> {
             metadata::writer::TypeDefOrRef::TypeRef(value_type),
             flags,
         );
+        self.origin(enum_type, &item.name);
 
         let Some(attribute) = item
             .attrs
@@ -114,13 +115,14 @@ impl Encoder<'_> {
             );
         }
 
-        self.output.Field(
+        let value_field = self.output.Field(
             "value__",
             &ty,
             metadata::FieldAttributes::Private
                 | metadata::FieldAttributes::SpecialName
                 | metadata::FieldAttributes::RTSpecialName,
         );
+        self.origin(value_field, &item.name);
 
         let type_name = metadata::Type::value_named(self.namespace, self.name);
 
@@ -132,8 +134,16 @@ impl Encoder<'_> {
                 &type_name,
                 metadata::FieldAttributes::Public
                     | metadata::FieldAttributes::Static
-                    | metadata::FieldAttributes::Literal,
+                    | metadata::FieldAttributes::Literal
+                    | metadata::FieldAttributes::HasDefault,
             );
+            self.origin(field, &variant.ident);
+
+            self.encode_attrs(
+                metadata::writer::HasAttribute::Field(field),
+                &variant.attrs,
+                &[],
+            )?;
 
             let Some((_, value)) = &variant.discriminant else {
                 return self.err(variant, "variant value not found");

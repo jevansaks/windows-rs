@@ -6,6 +6,7 @@ pub struct Module {
     pub token: syn::Token![mod],
     pub name: syn::Ident,
     pub items: Vec<Item>,
+    pub syntax_errors: Vec<syn::Error>,
 }
 
 impl syn::parse::Parse for Module {
@@ -17,9 +18,12 @@ impl syn::parse::Parse for Module {
         let content;
         syn::braced!(content in input);
         let mut items = vec![];
+        let mut syntax_errors = vec![];
 
         while !content.is_empty() {
-            items.push(content.parse()?);
+            if let Some(item) = parse_recovering::<Item>(&content, &mut syntax_errors) {
+                items.push(item);
+            }
         }
 
         Ok(Self {
@@ -27,6 +31,7 @@ impl syn::parse::Parse for Module {
             token,
             name,
             items,
+            syntax_errors,
         })
     }
 }

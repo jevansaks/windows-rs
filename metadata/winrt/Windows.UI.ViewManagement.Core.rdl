@@ -9,18 +9,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ICoreFrameworkInputViewStatics, 851968, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class CoreFrameworkInputView {
+                    #[default]
                     ICoreFrameworkInputView,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 851968)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreFrameworkInputViewAnimationStartingEventArgs {
+                    #[default]
                     ICoreFrameworkInputViewAnimationStartingEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 851968)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreFrameworkInputViewOcclusionsChangedEventArgs {
+                    #[default]
                     ICoreFrameworkInputViewOcclusionsChangedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
@@ -30,22 +33,29 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ICoreInputViewStatics2, 524288, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class CoreInputView {
+                    #[default]
                     ICoreInputView,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     ICoreInputView2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     ICoreInputView3,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                     ICoreInputView4,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     ICoreInputView5,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 851968)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreInputViewAnimationStartingEventArgs {
+                    #[default]
                     ICoreInputViewAnimationStartingEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 655360)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreInputViewHidingEventArgs {
+                    #[default]
                     ICoreInputViewHidingEventArgs,
                 }
                 #[repr(i32)]
@@ -55,15 +65,20 @@ mod Windows {
                     Keyboard = 1,
                     Handwriting = 2,
                     Emoji = 3,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                     Symbols = 4,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
                     Clipboard = 5,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     Dictation = 6,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 983040)]
                     Gamepad = 7,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreInputViewOcclusion {
+                    #[default]
                     ICoreInputViewOcclusion,
                 }
                 #[repr(i32)]
@@ -77,18 +92,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreInputViewOcclusionsChangedEventArgs {
+                    #[default]
                     ICoreInputViewOcclusionsChangedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 655360)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreInputViewShowingEventArgs {
+                    #[default]
                     ICoreInputViewShowingEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class CoreInputViewTransferringXYFocusEventArgs {
+                    #[default]
                     ICoreInputViewTransferringXYFocusEventArgs,
                 }
                 #[repr(i32)]
@@ -154,10 +172,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(CoreInputView)]
                 interface ICoreInputView3 {
-                    #[Windows::Foundation::Metadata::Overload("TryShow")]
+                    #[overload(TryShow)]
                     fn TryShow(&self) -> bool;
-                    #[Windows::Foundation::Metadata::Overload("TryShowWithKind")]
-                    fn TryShow(&self, r#type: CoreInputViewKind) -> bool;
+                    #[overload(TryShow)]
+                    fn TryShowWithKind(&self, r#type: CoreInputViewKind) -> bool;
                     fn TryHide(&self) -> bool;
                 }
                 #[guid(0x002863d6_d9ef_57eb_8cef_77f6ce1b7ee7)]
@@ -265,6 +283,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IUISettingsControllerStatics, 655360, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UISettingsController {
+                    #[default]
                     IUISettingsController,
                 }
             }

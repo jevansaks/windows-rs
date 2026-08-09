@@ -10,6 +10,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DataProtectionProvider {
+                    #[default]
                     IDataProtectionProvider,
                 }
                 #[guid(0x09639948_ed22_4270_bd1c_6d72c00f8787)]

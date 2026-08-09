@@ -23,6 +23,8 @@ mod Windows {
                 fn GetInt32(&self) -> i32;
                 fn GetInt64(&self) -> i64;
                 fn GetString(&self) -> String;
+                #[add_name(changedHandler)]
+                #[remove_name(cookie)]
                 event Changed: super::super::Foundation::TypedEventHandler<NamedPolicyData, Object>;
             }
             #[guid(0x7f793be7_76c4_4058_8cad_67662cd05f0d)]
@@ -32,6 +34,7 @@ mod Windows {
                 fn GetPolicyFromPath(&self, area: String, name: String) -> NamedPolicyData;
                 fn GetPolicyFromPathForUser(&self, user: super::super::System::User, area: String, name: String) -> NamedPolicyData;
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -43,6 +46,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class NamedPolicyData {
+                #[default]
                 INamedPolicyData,
             }
             #[repr(i32)]

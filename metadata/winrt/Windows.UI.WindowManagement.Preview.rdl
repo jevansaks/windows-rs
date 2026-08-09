@@ -20,6 +20,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class WindowManagementPreview {
+                    #[default]
                     IWindowManagementPreview,
                 }
             }

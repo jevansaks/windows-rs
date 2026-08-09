@@ -10,37 +10,46 @@ mod Windows {
                 attribute BindableAttribute {
                     fn();
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IBindingFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Binding: BindingBase {
+                    #[default]
                     IBinding,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IBinding2,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IBindingBaseFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BindingBase: super::DependencyObject {
+                    #[default]
                     IBindingBase,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IBindingExpressionFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BindingExpression: BindingExpressionBase {
+                    #[default]
                     IBindingExpression,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IBindingExpressionBaseFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BindingExpressionBase {
+                    #[default]
                     IBindingExpressionBase,
                 }
                 #[repr(i32)]
@@ -57,6 +66,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BindingOperations {
+                    #[default]
                     IBindingOperations,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -66,14 +76,17 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CollectionViewSource: super::DependencyObject {
+                    #[default]
                     ICollectionViewSource,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ICurrentChangingEventArgsFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CurrentChangingEventArgs {
+                    #[default]
                     ICurrentChangingEventArgs,
                 }
                 #[guid(0xf3888db8_139f_4dce_8dc9_f7f1444d1185)]
@@ -356,12 +369,14 @@ mod Windows {
                     fn Convert(&self, value: Object, targetType: super::Interop::TypeName, parameter: Object, language: String) -> Object;
                     fn ConvertBack(&self, value: Object, targetType: super::Interop::TypeName, parameter: Object, language: String) -> Object;
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IItemIndexRangeFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ItemIndexRange {
+                    #[default]
                     IItemIndexRange,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -369,24 +384,28 @@ mod Windows {
                 struct LoadMoreItemsResult {
                     Count: u32,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IPropertyChangedEventArgsFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PropertyChangedEventArgs {
+                    #[default]
                     IPropertyChangedEventArgs,
                 }
                 #[guid(0x50f19c16_0a22_4d8e_a089_1ea9951657d2)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 delegate fn PropertyChangedEventHandler(sender: Object, e: PropertyChangedEventArgs);
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IRelativeSourceFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RelativeSource: super::DependencyObject {
+                    #[default]
                     IRelativeSource,
                 }
                 #[repr(i32)]
@@ -404,6 +423,7 @@ mod Windows {
                     Default = 0,
                     PropertyChanged = 1,
                     Explicit = 2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     LostFocus = 3,
                 }
             }

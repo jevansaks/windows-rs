@@ -9,6 +9,8 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(PrintManager)]
             interface IPrintManager {
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event PrintTaskRequested: super::super::Foundation::TypedEventHandler<PrintManager, PrintTaskRequestedEventArgs>;
             }
             #[guid(0x58185dcd_e634_4654_84f0_e0152a8217ac)]
@@ -94,9 +96,17 @@ mod Windows {
                 Source: IPrintDocumentSource;
                 #[get]
                 Options: PrintTaskOptions;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event Previewing: super::super::Foundation::TypedEventHandler<PrintTask, Object>;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event Submitting: super::super::Foundation::TypedEventHandler<PrintTask, Object>;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event Progressing: super::super::Foundation::TypedEventHandler<PrintTask, PrintTaskProgressingEventArgs>;
+                #[add_name(eventHandler)]
+                #[remove_name(eventCookie)]
                 event Completed: super::super::Foundation::TypedEventHandler<PrintTask, PrintTaskCompletedEventArgs>;
             }
             #[guid(0x36234877_3e53_4d9d_8f5e_316ac8dedae1)]
@@ -347,6 +357,7 @@ mod Windows {
                 Color = 3,
                 Grayscale = 4,
                 Monochrome = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1048576)]
                 AutoSelect = 6,
             }
             #[repr(i32)]
@@ -377,6 +388,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPrintManagerStatic, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Static(IPrintManagerStatic2, 196608, "Windows.Foundation.UniversalApiContract")]
             class PrintManager {
+                #[default]
                 IPrintManager,
             }
             #[repr(i32)]
@@ -618,6 +630,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class PrintPageInfo {
+                #[default]
                 IPrintPageInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(IPrintPageRangeFactory, 393216, "Windows.Foundation.UniversalApiContract")]
@@ -626,11 +639,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PrintPageRange {
+                #[default]
                 IPrintPageRange,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PrintPageRangeOptions {
+                #[default]
                 IPrintPageRangeOptions,
             }
             #[repr(i32)]
@@ -668,13 +683,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             class PrintTask {
+                #[default]
                 IPrintTask,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IPrintTaskTargetDeviceSupport,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IPrintTask2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PrintTaskCompletedEventArgs {
+                #[default]
                 IPrintTaskCompletedEventArgs,
             }
             #[repr(i32)]
@@ -689,47 +708,57 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             class PrintTaskOptions {
+                #[default]
                 IPrintTaskOptionsCore,
                 IPrintTaskOptionsCoreProperties,
                 IPrintTaskOptionsCoreUIConfiguration,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IPrintTaskOptions,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IPrintTaskOptions2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PrintTaskProgressingEventArgs {
+                #[default]
                 IPrintTaskProgressingEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             class PrintTaskRequest {
+                #[default]
                 IPrintTaskRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PrintTaskRequestedDeferral {
+                #[default]
                 IPrintTaskRequestedDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PrintTaskRequestedEventArgs {
+                #[default]
                 IPrintTaskRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             class PrintTaskSourceRequestedArgs {
+                #[default]
                 IPrintTaskSourceRequestedArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PrintTaskSourceRequestedDeferral {
+                #[default]
                 IPrintTaskSourceRequestedDeferral,
             }
             #[guid(0x6c109fa8_5cb6_4b3a_8663_f39cb02dc9b4)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             delegate fn PrintTaskSourceRequestedHandler(args: PrintTaskSourceRequestedArgs);
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]

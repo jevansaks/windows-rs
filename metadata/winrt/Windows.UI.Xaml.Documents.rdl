@@ -3,6 +3,7 @@ mod Windows {
     mod UI {
         mod Xaml {
             mod Documents {
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IBlockFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -11,13 +12,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Block: TextElement {
+                    #[default]
                     IBlock,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     IBlock2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BlockCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<Block>,
                     super::super::super::Foundation::Collections::IIterable<Block>,
                 }
@@ -27,6 +31,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Bold: Span {
+                    #[default]
                     IBold,
                 }
                 #[Windows::Foundation::Metadata::Activatable(393216, "Windows.Foundation.UniversalApiContract")]
@@ -35,6 +40,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ContactContentLinkProvider: ContentLinkProvider {
+                    #[default]
                     IContactContentLinkProvider,
                 }
                 #[Windows::Foundation::Metadata::Activatable(393216, "Windows.Foundation.UniversalApiContract")]
@@ -44,20 +50,24 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ContentLink: Inline {
+                    #[default]
                     IContentLink,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ContentLinkInvokedEventArgs {
+                    #[default]
                     IContentLinkInvokedEventArgs,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IContentLinkProviderFactory, Protected, 393216, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ContentLinkProvider: super::DependencyObject {
+                    #[default]
                     IContentLinkProvider,
                 }
                 #[Windows::Foundation::Metadata::Activatable(393216, "Windows.Foundation.UniversalApiContract")]
@@ -66,8 +76,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ContentLinkProviderCollection {
+                    #[default]
                     IContentLinkProviderCollection,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     super::super::super::Foundation::Collections::IVector<ContentLinkProvider>,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     super::super::super::Foundation::Collections::IIterable<ContentLinkProvider>,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -78,7 +91,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Glyphs: super::FrameworkElement {
+                    #[default]
                     IGlyphs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IGlyphs2,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -92,10 +107,15 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Hyperlink: Span {
+                    #[default]
                     IHyperlink,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IHyperlink2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     IHyperlink3,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IHyperlink4,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     IHyperlink5,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -103,6 +123,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class HyperlinkClickEventArgs: super::RoutedEventArgs {
+                    #[default]
                     IHyperlinkClickEventArgs,
                 }
                 #[guid(0x4bce0016_dd47_4350_8cb0_e171600ac896)]
@@ -661,24 +682,24 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(TextHighlighter)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ITextHighlighterStatics {
-                    #[get]
-                    ForegroundProperty: super::DependencyProperty;
-                    #[get]
-                    BackgroundProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_ForegroundProperty(&self) -> super::DependencyProperty;
+                    #[special]
+                    fn get_BackgroundProperty(&self) -> super::DependencyProperty;
                 }
                 #[guid(0xac687aa1_6a41_43ff_851e_45348aa2cf7b)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(TextPointer)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ITextPointer {
-                    #[get]
-                    Parent: super::DependencyObject;
-                    #[get]
-                    VisualParent: super::FrameworkElement;
-                    #[get]
-                    LogicalDirection: LogicalDirection;
-                    #[get]
-                    Offset: i32;
+                    #[special]
+                    fn get_Parent(&self) -> super::DependencyObject;
+                    #[special]
+                    fn get_VisualParent(&self) -> super::FrameworkElement;
+                    #[special]
+                    fn get_LogicalDirection(&self) -> LogicalDirection;
+                    #[special]
+                    fn get_Offset(&self) -> i32;
                     fn GetCharacterRect(&self, direction: LogicalDirection) -> super::super::super::Foundation::Rect;
                     fn GetPositionAtOffset(&self, offset: i32, direction: LogicalDirection) -> TextPointer;
                 }
@@ -692,176 +713,176 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(Typography)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ITypographyStatics {
-                    #[get]
-                    AnnotationAlternatesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_AnnotationAlternatesProperty(&self) -> super::DependencyProperty;
                     fn GetAnnotationAlternates(&self, element: super::DependencyObject) -> i32;
                     fn SetAnnotationAlternates(&self, element: super::DependencyObject, value: i32);
-                    #[get]
-                    EastAsianExpertFormsProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_EastAsianExpertFormsProperty(&self) -> super::DependencyProperty;
                     fn GetEastAsianExpertForms(&self, element: super::DependencyObject) -> bool;
                     fn SetEastAsianExpertForms(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    EastAsianLanguageProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_EastAsianLanguageProperty(&self) -> super::DependencyProperty;
                     fn GetEastAsianLanguage(&self, element: super::DependencyObject) -> super::FontEastAsianLanguage;
                     fn SetEastAsianLanguage(&self, element: super::DependencyObject, value: super::FontEastAsianLanguage);
-                    #[get]
-                    EastAsianWidthsProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_EastAsianWidthsProperty(&self) -> super::DependencyProperty;
                     fn GetEastAsianWidths(&self, element: super::DependencyObject) -> super::FontEastAsianWidths;
                     fn SetEastAsianWidths(&self, element: super::DependencyObject, value: super::FontEastAsianWidths);
-                    #[get]
-                    StandardLigaturesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_StandardLigaturesProperty(&self) -> super::DependencyProperty;
                     fn GetStandardLigatures(&self, element: super::DependencyObject) -> bool;
                     fn SetStandardLigatures(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    ContextualLigaturesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_ContextualLigaturesProperty(&self) -> super::DependencyProperty;
                     fn GetContextualLigatures(&self, element: super::DependencyObject) -> bool;
                     fn SetContextualLigatures(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    DiscretionaryLigaturesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_DiscretionaryLigaturesProperty(&self) -> super::DependencyProperty;
                     fn GetDiscretionaryLigatures(&self, element: super::DependencyObject) -> bool;
                     fn SetDiscretionaryLigatures(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    HistoricalLigaturesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_HistoricalLigaturesProperty(&self) -> super::DependencyProperty;
                     fn GetHistoricalLigatures(&self, element: super::DependencyObject) -> bool;
                     fn SetHistoricalLigatures(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StandardSwashesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_StandardSwashesProperty(&self) -> super::DependencyProperty;
                     fn GetStandardSwashes(&self, element: super::DependencyObject) -> i32;
                     fn SetStandardSwashes(&self, element: super::DependencyObject, value: i32);
-                    #[get]
-                    ContextualSwashesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_ContextualSwashesProperty(&self) -> super::DependencyProperty;
                     fn GetContextualSwashes(&self, element: super::DependencyObject) -> i32;
                     fn SetContextualSwashes(&self, element: super::DependencyObject, value: i32);
-                    #[get]
-                    ContextualAlternatesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_ContextualAlternatesProperty(&self) -> super::DependencyProperty;
                     fn GetContextualAlternates(&self, element: super::DependencyObject) -> bool;
                     fn SetContextualAlternates(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticAlternatesProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticAlternatesProperty(&self) -> super::DependencyProperty;
                     fn GetStylisticAlternates(&self, element: super::DependencyObject) -> i32;
                     fn SetStylisticAlternates(&self, element: super::DependencyObject, value: i32);
-                    #[get]
-                    StylisticSet1Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet1Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet1(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet1(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet2Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet2Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet2(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet2(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet3Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet3Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet3(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet3(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet4Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet4Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet4(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet4(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet5Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet5Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet5(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet5(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet6Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet6Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet6(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet6(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet7Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet7Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet7(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet7(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet8Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet8Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet8(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet8(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet9Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet9Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet9(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet9(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet10Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet10Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet10(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet10(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet11Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet11Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet11(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet11(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet12Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet12Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet12(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet12(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet13Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet13Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet13(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet13(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet14Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet14Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet14(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet14(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet15Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet15Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet15(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet15(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet16Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet16Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet16(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet16(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet17Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet17Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet17(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet17(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet18Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet18Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet18(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet18(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet19Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet19Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet19(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet19(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    StylisticSet20Property: super::DependencyProperty;
+                    #[special]
+                    fn get_StylisticSet20Property(&self) -> super::DependencyProperty;
                     fn GetStylisticSet20(&self, element: super::DependencyObject) -> bool;
                     fn SetStylisticSet20(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    CapitalsProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_CapitalsProperty(&self) -> super::DependencyProperty;
                     fn GetCapitals(&self, element: super::DependencyObject) -> super::FontCapitals;
                     fn SetCapitals(&self, element: super::DependencyObject, value: super::FontCapitals);
-                    #[get]
-                    CapitalSpacingProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_CapitalSpacingProperty(&self) -> super::DependencyProperty;
                     fn GetCapitalSpacing(&self, element: super::DependencyObject) -> bool;
                     fn SetCapitalSpacing(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    KerningProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_KerningProperty(&self) -> super::DependencyProperty;
                     fn GetKerning(&self, element: super::DependencyObject) -> bool;
                     fn SetKerning(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    CaseSensitiveFormsProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_CaseSensitiveFormsProperty(&self) -> super::DependencyProperty;
                     fn GetCaseSensitiveForms(&self, element: super::DependencyObject) -> bool;
                     fn SetCaseSensitiveForms(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    HistoricalFormsProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_HistoricalFormsProperty(&self) -> super::DependencyProperty;
                     fn GetHistoricalForms(&self, element: super::DependencyObject) -> bool;
                     fn SetHistoricalForms(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    FractionProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_FractionProperty(&self) -> super::DependencyProperty;
                     fn GetFraction(&self, element: super::DependencyObject) -> super::FontFraction;
                     fn SetFraction(&self, element: super::DependencyObject, value: super::FontFraction);
-                    #[get]
-                    NumeralStyleProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_NumeralStyleProperty(&self) -> super::DependencyProperty;
                     fn GetNumeralStyle(&self, element: super::DependencyObject) -> super::FontNumeralStyle;
                     fn SetNumeralStyle(&self, element: super::DependencyObject, value: super::FontNumeralStyle);
-                    #[get]
-                    NumeralAlignmentProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_NumeralAlignmentProperty(&self) -> super::DependencyProperty;
                     fn GetNumeralAlignment(&self, element: super::DependencyObject) -> super::FontNumeralAlignment;
                     fn SetNumeralAlignment(&self, element: super::DependencyObject, value: super::FontNumeralAlignment);
-                    #[get]
-                    SlashedZeroProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_SlashedZeroProperty(&self) -> super::DependencyProperty;
                     fn GetSlashedZero(&self, element: super::DependencyObject) -> bool;
                     fn SetSlashedZero(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    MathematicalGreekProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_MathematicalGreekProperty(&self) -> super::DependencyProperty;
                     fn GetMathematicalGreek(&self, element: super::DependencyObject) -> bool;
                     fn SetMathematicalGreek(&self, element: super::DependencyObject, value: bool);
-                    #[get]
-                    VariantsProperty: super::DependencyProperty;
+                    #[special]
+                    fn get_VariantsProperty(&self) -> super::DependencyProperty;
                     fn GetVariants(&self, element: super::DependencyObject) -> super::FontVariants;
                     fn SetVariants(&self, element: super::DependencyObject, value: super::FontVariants);
                 }
@@ -870,18 +891,22 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(Underline)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IUnderline {}
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IInlineFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Inline: TextElement {
+                    #[default]
                     IInline,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InlineCollection {
+                    #[default]
+                    #[no_property(Size)]
                     super::super::super::Foundation::Collections::IVector<Inline>,
                     super::super::super::Foundation::Collections::IIterable<Inline>,
                 }
@@ -892,6 +917,8 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Child")]
                 class InlineUIContainer: Inline {
+                    #[default]
+                    #[no_property(Child)]
                     IInlineUIContainer,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -900,6 +927,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Italic: Span {
+                    #[default]
                     IItalic,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -908,6 +936,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class LineBreak: Inline {
+                    #[default]
                     ILineBreak,
                 }
                 #[repr(i32)]
@@ -924,7 +953,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Inlines")]
+                #[no_static_property(IParagraphStatics, TextIndentProperty)]
                 class Paragraph: Block {
+                    #[default]
+                    #[no_property(Inlines)]
+                    #[no_property(TextIndent)]
                     IParagraph,
                 }
                 #[Windows::Foundation::Metadata::Activatable(393216, "Windows.Foundation.UniversalApiContract")]
@@ -933,6 +966,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PlaceContentLinkProvider: ContentLinkProvider {
+                    #[default]
                     IPlaceContentLinkProvider,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -942,9 +976,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Text")]
+                #[no_static_property(IRunStatics, FlowDirectionProperty)]
                 class Run: Inline {
+                    #[default]
+                    #[no_property(FlowDirection)]
+                    #[no_property(Text)]
                     IRun,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ISpanFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -952,8 +991,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Inlines")]
                 class Span: Inline {
+                    #[default]
+                    #[no_property(Inlines)]
                     ISpan,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ITextElementFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -963,35 +1005,98 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ITextElementStatics4, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(ITextElementStatics, CharacterSpacingProperty)]
+                #[no_static_property(ITextElementStatics, FontFamilyProperty)]
+                #[no_static_property(ITextElementStatics, FontSizeProperty)]
+                #[no_static_property(ITextElementStatics, FontStretchProperty)]
+                #[no_static_property(ITextElementStatics, FontStyleProperty)]
+                #[no_static_property(ITextElementStatics, FontWeightProperty)]
+                #[no_static_property(ITextElementStatics, ForegroundProperty)]
+                #[no_static_property(ITextElementStatics, LanguageProperty)]
+                #[no_static_property(ITextElementStatics2, IsTextScaleFactorEnabledProperty)]
+                #[no_static_property(ITextElementStatics3, AccessKeyProperty)]
+                #[no_static_property(ITextElementStatics3, AllowFocusOnInteractionProperty)]
+                #[no_static_property(ITextElementStatics3, ExitDisplayModeOnAccessKeyInvokedProperty)]
+                #[no_static_property(ITextElementStatics4, AccessKeyScopeOwnerProperty)]
+                #[no_static_property(ITextElementStatics4, IsAccessKeyScopeProperty)]
+                #[no_static_property(ITextElementStatics4, KeyTipHorizontalOffsetProperty)]
+                #[no_static_property(ITextElementStatics4, KeyTipPlacementModeProperty)]
+                #[no_static_property(ITextElementStatics4, KeyTipVerticalOffsetProperty)]
+                #[no_static_property(ITextElementStatics4, TextDecorationsProperty)]
                 class TextElement: super::DependencyObject {
+                    #[default]
+                    #[no_property(CharacterSpacing)]
+                    #[no_property(ContentEnd)]
+                    #[no_property(ContentStart)]
+                    #[no_property(ElementEnd)]
+                    #[no_property(ElementStart)]
+                    #[no_property(FontFamily)]
+                    #[no_property(FontSize)]
+                    #[no_property(FontStretch)]
+                    #[no_property(FontStyle)]
+                    #[no_property(FontWeight)]
+                    #[no_property(Foreground)]
+                    #[no_property(Language)]
+                    #[no_property(Name)]
                     ITextElement,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                    #[no_property(IsTextScaleFactorEnabled)]
                     ITextElement2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
+                    #[no_property(AccessKey)]
+                    #[no_property(AllowFocusOnInteraction)]
+                    #[no_property(ExitDisplayModeOnAccessKeyInvoked)]
                     ITextElement3,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
+                    #[no_event(AccessKeyDisplayDismissed)]
+                    #[no_event(AccessKeyDisplayRequested)]
+                    #[no_event(AccessKeyInvoked)]
+                    #[no_property(AccessKeyScopeOwner)]
+                    #[no_property(IsAccessKeyScope)]
+                    #[no_property(KeyTipHorizontalOffset)]
+                    #[no_property(KeyTipPlacementMode)]
+                    #[no_property(KeyTipVerticalOffset)]
+                    #[no_property(TextDecorations)]
                     ITextElement4,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
+                    #[no_property(XamlRoot)]
                     ITextElement5,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                    #[Windows::Foundation::Metadata::Overridable]
                     ITextElementOverrides,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ITextHighlighterFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ITextHighlighterStatics, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[class_property(static BackgroundProperty: super::DependencyProperty, get = get_BackgroundProperty)]
+                #[class_property(static ForegroundProperty: super::DependencyProperty, get = get_ForegroundProperty)]
                 class TextHighlighter {
+                    #[default]
                     ITextHighlighter,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ITextHighlighterBaseFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TextHighlighterBase: super::DependencyObject {
+                    #[default]
                     ITextHighlighterBase,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[class_property(LogicalDirection: LogicalDirection, get = get_LogicalDirection)]
+                #[class_property(Offset: i32, get = get_Offset)]
+                #[class_property(Parent: super::DependencyObject, get = get_Parent)]
+                #[class_property(VisualParent: super::FrameworkElement, get = get_VisualParent)]
                 class TextPointer {
+                    #[default]
                     ITextPointer,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
@@ -1005,7 +1110,51 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ITypographyStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[class_property(static AnnotationAlternatesProperty: super::DependencyProperty, get = get_AnnotationAlternatesProperty)]
+                #[class_property(static CapitalSpacingProperty: super::DependencyProperty, get = get_CapitalSpacingProperty)]
+                #[class_property(static CapitalsProperty: super::DependencyProperty, get = get_CapitalsProperty)]
+                #[class_property(static CaseSensitiveFormsProperty: super::DependencyProperty, get = get_CaseSensitiveFormsProperty)]
+                #[class_property(static ContextualAlternatesProperty: super::DependencyProperty, get = get_ContextualAlternatesProperty)]
+                #[class_property(static ContextualLigaturesProperty: super::DependencyProperty, get = get_ContextualLigaturesProperty)]
+                #[class_property(static ContextualSwashesProperty: super::DependencyProperty, get = get_ContextualSwashesProperty)]
+                #[class_property(static DiscretionaryLigaturesProperty: super::DependencyProperty, get = get_DiscretionaryLigaturesProperty)]
+                #[class_property(static EastAsianExpertFormsProperty: super::DependencyProperty, get = get_EastAsianExpertFormsProperty)]
+                #[class_property(static EastAsianLanguageProperty: super::DependencyProperty, get = get_EastAsianLanguageProperty)]
+                #[class_property(static EastAsianWidthsProperty: super::DependencyProperty, get = get_EastAsianWidthsProperty)]
+                #[class_property(static FractionProperty: super::DependencyProperty, get = get_FractionProperty)]
+                #[class_property(static HistoricalFormsProperty: super::DependencyProperty, get = get_HistoricalFormsProperty)]
+                #[class_property(static HistoricalLigaturesProperty: super::DependencyProperty, get = get_HistoricalLigaturesProperty)]
+                #[class_property(static KerningProperty: super::DependencyProperty, get = get_KerningProperty)]
+                #[class_property(static MathematicalGreekProperty: super::DependencyProperty, get = get_MathematicalGreekProperty)]
+                #[class_property(static NumeralAlignmentProperty: super::DependencyProperty, get = get_NumeralAlignmentProperty)]
+                #[class_property(static NumeralStyleProperty: super::DependencyProperty, get = get_NumeralStyleProperty)]
+                #[class_property(static SlashedZeroProperty: super::DependencyProperty, get = get_SlashedZeroProperty)]
+                #[class_property(static StandardLigaturesProperty: super::DependencyProperty, get = get_StandardLigaturesProperty)]
+                #[class_property(static StandardSwashesProperty: super::DependencyProperty, get = get_StandardSwashesProperty)]
+                #[class_property(static StylisticAlternatesProperty: super::DependencyProperty, get = get_StylisticAlternatesProperty)]
+                #[class_property(static StylisticSet10Property: super::DependencyProperty, get = get_StylisticSet10Property)]
+                #[class_property(static StylisticSet11Property: super::DependencyProperty, get = get_StylisticSet11Property)]
+                #[class_property(static StylisticSet12Property: super::DependencyProperty, get = get_StylisticSet12Property)]
+                #[class_property(static StylisticSet13Property: super::DependencyProperty, get = get_StylisticSet13Property)]
+                #[class_property(static StylisticSet14Property: super::DependencyProperty, get = get_StylisticSet14Property)]
+                #[class_property(static StylisticSet15Property: super::DependencyProperty, get = get_StylisticSet15Property)]
+                #[class_property(static StylisticSet16Property: super::DependencyProperty, get = get_StylisticSet16Property)]
+                #[class_property(static StylisticSet17Property: super::DependencyProperty, get = get_StylisticSet17Property)]
+                #[class_property(static StylisticSet18Property: super::DependencyProperty, get = get_StylisticSet18Property)]
+                #[class_property(static StylisticSet19Property: super::DependencyProperty, get = get_StylisticSet19Property)]
+                #[class_property(static StylisticSet1Property: super::DependencyProperty, get = get_StylisticSet1Property)]
+                #[class_property(static StylisticSet20Property: super::DependencyProperty, get = get_StylisticSet20Property)]
+                #[class_property(static StylisticSet2Property: super::DependencyProperty, get = get_StylisticSet2Property)]
+                #[class_property(static StylisticSet3Property: super::DependencyProperty, get = get_StylisticSet3Property)]
+                #[class_property(static StylisticSet4Property: super::DependencyProperty, get = get_StylisticSet4Property)]
+                #[class_property(static StylisticSet5Property: super::DependencyProperty, get = get_StylisticSet5Property)]
+                #[class_property(static StylisticSet6Property: super::DependencyProperty, get = get_StylisticSet6Property)]
+                #[class_property(static StylisticSet7Property: super::DependencyProperty, get = get_StylisticSet7Property)]
+                #[class_property(static StylisticSet8Property: super::DependencyProperty, get = get_StylisticSet8Property)]
+                #[class_property(static StylisticSet9Property: super::DependencyProperty, get = get_StylisticSet9Property)]
+                #[class_property(static VariantsProperty: super::DependencyProperty, get = get_VariantsProperty)]
                 class Typography {
+                    #[default]
                     ITypography,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1014,6 +1163,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Underline: Span {
+                    #[default]
                     IUnderline,
                 }
                 #[repr(i32)]

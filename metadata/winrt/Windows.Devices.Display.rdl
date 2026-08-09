@@ -8,7 +8,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDisplayMonitorStatics, 393216, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DisplayMonitor {
+                #[default]
                 IDisplayMonitor,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IDisplayMonitor2,
             }
             #[repr(i32)]

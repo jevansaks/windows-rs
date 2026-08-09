@@ -8,6 +8,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IBatteryStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class Battery {
+                #[default]
                 IBattery,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -15,6 +16,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class BatteryReport {
+                #[default]
                 IBatteryReport,
             }
             #[guid(0xbc894fc6_0072_47c8_8b5d_614aaa7a437e)]
@@ -84,6 +86,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(PowerGridApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PowerGridData {
+                #[default]
                 IPowerGridData,
             }
             #[Windows::Foundation::Metadata::ContractVersion(PowerGridApiContract, 65536)]
@@ -91,6 +94,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPowerGridForecastStatics, 65536, "Windows.Devices.Power.PowerGridApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PowerGridForecast {
+                #[default]
                 IPowerGridForecast,
             }
         }

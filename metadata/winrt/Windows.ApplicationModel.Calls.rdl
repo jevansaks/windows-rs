@@ -9,6 +9,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AcceptedVoipPhoneCallOptions {
+                #[default]
                 IAcceptedVoipPhoneCallOptions,
             }
             #[Windows::Foundation::Metadata::Activatable(327680, "Windows.ApplicationModel.Calls.CallsVoipContract")]
@@ -18,25 +19,30 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AppInitiatedVoipPhoneCallOptions {
+                #[default]
                 IAppInitiatedVoipPhoneCallOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsVoipContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CallAnswerEventArgs {
+                #[default]
                 ICallAnswerEventArgs,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 327680)]
                 ICallAnswerEventArgs2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsVoipContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CallRejectEventArgs {
+                #[default]
                 ICallRejectEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsVoipContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class CallStateChangeEventArgs {
+                #[default]
                 ICallStateChangeEventArgs,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -359,10 +365,10 @@ mod Windows {
             interface IPhoneCallHistoryStore {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetEntryAsync(&self, callHistoryEntryId: String) -> super::super::Foundation::IAsyncOperation<PhoneCallHistoryEntry>;
-                #[Windows::Foundation::Metadata::Overload("GetEntryReader")]
+                #[overload(GetEntryReader)]
                 fn GetEntryReader(&self) -> PhoneCallHistoryEntryReader;
-                #[Windows::Foundation::Metadata::Overload("GetEntryReaderWithOptions")]
-                fn GetEntryReader(&self, queryOptions: PhoneCallHistoryEntryQueryOptions) -> PhoneCallHistoryEntryReader;
+                #[overload(GetEntryReader)]
+                fn GetEntryReaderWithOptions(&self, queryOptions: PhoneCallHistoryEntryQueryOptions) -> PhoneCallHistoryEntryReader;
                 fn SaveEntryAsync(&self, callHistoryEntry: PhoneCallHistoryEntry) -> super::super::Foundation::IAsyncAction;
                 fn DeleteEntryAsync(&self, callHistoryEntry: PhoneCallHistoryEntry) -> super::super::Foundation::IAsyncAction;
                 fn DeleteEntriesAsync(&self, callHistoryEntries: super::super::Foundation::Collections::IIterable<PhoneCallHistoryEntry>) -> super::super::Foundation::IAsyncAction;
@@ -589,10 +595,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(PhoneLineTransportDevice)]
             interface IPhoneLineTransportDeviceStatics {
                 fn FromId(&self, id: String) -> PhoneLineTransportDevice;
-                #[Windows::Foundation::Metadata::Overload("GetDeviceSelector")]
+                #[overload(GetDeviceSelector)]
                 fn GetDeviceSelector(&self) -> String;
-                #[Windows::Foundation::Metadata::Overload("GetDeviceSelectorForPhoneLineTransport")]
-                fn GetDeviceSelector(&self, transport: PhoneLineTransport) -> String;
+                #[overload(GetDeviceSelector)]
+                fn GetDeviceSelectorForPhoneLineTransport(&self, transport: PhoneLineTransport) -> String;
             }
             #[guid(0x8a45cd0a_6323_44e0_a6f6_9f21f64dc90a)]
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
@@ -635,6 +641,7 @@ mod Windows {
             interface IVoipCallCoordinator {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ReserveCallResourcesAsync(&self, taskEntryPoint: String) -> super::super::Foundation::IAsyncOperation<VoipPhoneCallResourceReservationStatus>;
+                #[add_name(muteChangeHandler)]
                 event MuteStateChanged: super::super::Foundation::TypedEventHandler<VoipCallCoordinator, MuteChangeEventArgs>;
                 fn RequestNewIncomingCall(&self, context: String, contactName: String, contactNumber: String, contactImage: super::super::Foundation::Uri, serviceName: String, brandingImage: super::super::Foundation::Uri, callDetails: String, ringtone: super::super::Foundation::Uri, media: VoipPhoneCallMedia, ringTimeout: super::super::Foundation::TimeSpan) -> VoipPhoneCall;
                 fn RequestNewOutgoingCall(&self, context: String, contactName: String, serviceName: String, media: VoipPhoneCallMedia) -> VoipPhoneCall;
@@ -658,17 +665,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface IVoipCallCoordinator3: IVoipCallCoordinator {
                 fn RequestNewAppInitiatedCall(&self, context: String, contactName: String, contactNumber: String, serviceName: String, media: VoipPhoneCallMedia) -> VoipPhoneCall;
-                #[Windows::Foundation::Metadata::Overload("RequestNewIncomingCallWithContactRemoteId")]
-                fn RequestNewIncomingCall(&self, context: String, contactName: String, contactNumber: String, contactImage: super::super::Foundation::Uri, serviceName: String, brandingImage: super::super::Foundation::Uri, callDetails: String, ringtone: super::super::Foundation::Uri, media: VoipPhoneCallMedia, ringTimeout: super::super::Foundation::TimeSpan, contactRemoteId: String) -> VoipPhoneCall;
+                #[overload(RequestNewIncomingCall)]
+                fn RequestNewIncomingCallWithContactRemoteId(&self, context: String, contactName: String, contactNumber: String, contactImage: super::super::Foundation::Uri, serviceName: String, brandingImage: super::super::Foundation::Uri, callDetails: String, ringtone: super::super::Foundation::Uri, media: VoipPhoneCallMedia, ringTimeout: super::super::Foundation::TimeSpan, contactRemoteId: String) -> VoipPhoneCall;
             }
             #[guid(0x83737239_9311_468f_bb49_47e0dfb5d93e)]
             #[Windows::Foundation::Metadata::ContractVersion(CallsVoipContract, 262144)]
             #[Windows::Foundation::Metadata::ExclusiveTo(VoipCallCoordinator)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface IVoipCallCoordinator4: IVoipCallCoordinator {
-                #[Windows::Foundation::Metadata::Overload("ReserveOneProcessCallResourcesAsync")]
+                #[overload(ReserveCallResourcesAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn ReserveCallResourcesAsync(&self) -> super::super::Foundation::IAsyncOperation<VoipPhoneCallResourceReservationStatus>;
+                fn ReserveOneProcessCallResourcesAsync(&self) -> super::super::Foundation::IAsyncOperation<VoipPhoneCallResourceReservationStatus>;
             }
             #[guid(0xd4f79017_d1c1_5820_955e_7a1676355d00)]
             #[Windows::Foundation::Metadata::ContractVersion(CallsVoipContract, 327680)]
@@ -703,7 +710,9 @@ mod Windows {
                 event EndRequested: super::super::Foundation::TypedEventHandler<VoipPhoneCall, CallStateChangeEventArgs>;
                 event HoldRequested: super::super::Foundation::TypedEventHandler<VoipPhoneCall, CallStateChangeEventArgs>;
                 event ResumeRequested: super::super::Foundation::TypedEventHandler<VoipPhoneCall, CallStateChangeEventArgs>;
+                #[add_name(acceptHandler)]
                 event AnswerRequested: super::super::Foundation::TypedEventHandler<VoipPhoneCall, CallAnswerEventArgs>;
+                #[add_name(rejectHandler)]
                 event RejectRequested: super::super::Foundation::TypedEventHandler<VoipPhoneCall, CallRejectEventArgs>;
                 fn NotifyCallHeld(&self);
                 fn NotifyCallActive(&self);
@@ -734,8 +743,8 @@ mod Windows {
             interface IVoipPhoneCall4 {
                 #[get]
                 IsUsingAssociatedDevicesList: bool;
-                #[Windows::Foundation::Metadata::Overload("NotifyCallActiveOnDevices")]
-                fn NotifyCallActive(&self, associatedDeviceIds: super::super::Foundation::Collections::IIterable<String>);
+                #[overload(NotifyCallActive)]
+                fn NotifyCallActiveOnDevices(&self, associatedDeviceIds: super::super::Foundation::Collections::IIterable<String>);
                 fn AddAssociatedCallControlDevice(&self, deviceId: String);
                 fn RemoveAssociatedCallControlDevice(&self, deviceId: String);
                 fn SetAssociatedCallControlDevices(&self, associatedDeviceIds: super::super::Foundation::Collections::IIterable<String>);
@@ -748,6 +757,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class IncomingVoipPhoneCallOptions {
+                #[default]
                 IIncomingVoipPhoneCallOptions,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -756,22 +766,26 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(LockScreenCallContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class LockScreenCallEndCallDeferral {
+                #[default]
                 ILockScreenCallEndCallDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(LockScreenCallContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class LockScreenCallEndRequestedEventArgs {
+                #[default]
                 ILockScreenCallEndRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(LockScreenCallContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class LockScreenCallUI {
+                #[default]
                 ILockScreenCallUI,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsVoipContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class MuteChangeEventArgs {
+                #[default]
                 IMuteChangeEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(327680, "Windows.ApplicationModel.Calls.CallsVoipContract")]
@@ -781,6 +795,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Threading(Both)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class OutgoingVoipPhoneCallOptions {
+                #[default]
                 IOutgoingVoipPhoneCallOptions,
             }
             #[repr(i32)]
@@ -795,6 +810,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPhoneCallStatics, 393216, "Windows.ApplicationModel.Calls.CallsPhoneContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCall {
+                #[default]
                 IPhoneCall,
             }
             #[repr(i32)]
@@ -804,6 +820,7 @@ mod Windows {
                 LocalDevice = 1,
                 RemoteDevice = 2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IPhoneCallBlockingStatics, 65536, "Windows.ApplicationModel.Calls.CallsPhoneContract")]
@@ -821,6 +838,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCallHistoryEntry {
+                #[default]
                 IPhoneCallHistoryEntry,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -829,6 +847,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCallHistoryEntryAddress {
+                #[default]
                 IPhoneCallHistoryEntryAddress,
             }
             #[repr(i32)]
@@ -857,6 +876,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCallHistoryEntryQueryOptions {
+                #[default]
                 IPhoneCallHistoryEntryQueryOptions,
             }
             #[repr(i32)]
@@ -869,8 +889,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCallHistoryEntryReader {
+                #[default]
                 IPhoneCallHistoryEntryReader,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IPhoneCallHistoryManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -880,6 +902,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 196608)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhoneCallHistoryManagerForUser {
+                #[default]
                 IPhoneCallHistoryManagerForUser,
             }
             #[repr(i32)]
@@ -892,6 +915,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCallHistoryStore {
+                #[default]
                 IPhoneCallHistoryStore,
             }
             #[repr(i32)]
@@ -904,8 +928,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhoneCallInfo {
+                #[default]
                 IPhoneCallInfo,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IPhoneCallManagerStatics, 65536, "Windows.ApplicationModel.Calls.CallsPhoneContract")]
@@ -917,6 +943,7 @@ mod Windows {
             enum PhoneCallMedia {
                 Audio = 0,
                 AudioAndVideo = 1,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsPhoneContract", 262144)]
                 AudioAndRealTimeText = 2,
             }
             #[repr(i32)]
@@ -942,14 +969,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCallStore {
+                #[default]
                 IPhoneCallStore,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneCallVideoCapabilities {
+                #[default]
                 IPhoneCallVideoCapabilities,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IPhoneCallVideoCapabilitiesManagerStatics, 65536, "Windows.ApplicationModel.Calls.CallsPhoneContract")]
@@ -958,6 +988,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhoneCallsResult {
+                #[default]
                 IPhoneCallsResult,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.ApplicationModel.Calls.CallsPhoneContract")]
@@ -965,6 +996,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneDialOptions {
+                #[default]
                 IPhoneDialOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
@@ -972,25 +1004,31 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPhoneLineStatics, 65536, "Windows.ApplicationModel.Calls.CallsPhoneContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneLine {
+                #[default]
                 IPhoneLine,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsPhoneContract", 327680)]
                 IPhoneLine2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsPhoneContract", 393216)]
                 IPhoneLine3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneLineCellularDetails {
+                #[default]
                 IPhoneLineCellularDetails,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneLineConfiguration {
+                #[default]
                 IPhoneLineConfiguration,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhoneLineDialResult {
+                #[default]
                 IPhoneLineDialResult,
             }
             #[repr(i32)]
@@ -1015,6 +1053,7 @@ mod Windows {
             enum PhoneLineTransport {
                 Cellular = 0,
                 VoipApp = 1,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsPhoneContract", 327680)]
                 Bluetooth = 2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 327680)]
@@ -1022,19 +1061,23 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IPhoneLineTransportDeviceStatics, 327680, "Windows.ApplicationModel.Calls.CallsPhoneContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneLineTransportDevice {
+                #[default]
                 IPhoneLineTransportDevice,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsPhoneContract", 393216)]
                 IPhoneLineTransportDevice2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneLineWatcher {
+                #[default]
                 IPhoneLineWatcher,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsPhoneContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneLineWatcherEventArgs {
+                #[default]
                 IPhoneLineWatcherEventArgs,
             }
             #[repr(i32)]
@@ -1073,6 +1116,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhoneVoicemail {
+                #[default]
                 IPhoneVoicemail,
             }
             #[repr(i32)]
@@ -1102,19 +1146,28 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IVoipCallCoordinatorStatics2, 327680, "Windows.ApplicationModel.Calls.CallsVoipContract")]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VoipCallCoordinator {
+                #[default]
                 IVoipCallCoordinator,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 131072)]
                 IVoipCallCoordinator2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 196608)]
                 IVoipCallCoordinator3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 262144)]
                 IVoipCallCoordinator4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 327680)]
                 IVoipCallCoordinator5,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallsVoipContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class VoipPhoneCall {
+                #[default]
                 IVoipPhoneCall,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 131072)]
                 IVoipPhoneCall2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 196608)]
                 IVoipPhoneCall3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.ApplicationModel.Calls.CallsVoipContract", 327680)]
                 IVoipPhoneCall4,
             }
             #[repr(u32)]

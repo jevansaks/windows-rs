@@ -9,7 +9,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDateTimeFormatterStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DateTimeFormatter {
+                #[default]
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDateTimeFormatter,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IDateTimeFormatter2,
             }
             #[repr(i32)]
@@ -73,8 +76,8 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(DateTimeFormatter)]
             interface IDateTimeFormatter2 {
-                #[Windows::Foundation::Metadata::Overload("FormatUsingTimeZone")]
-                fn Format(&self, datetime: super::super::Foundation::DateTime, timeZoneId: String) -> String;
+                #[overload(Format)]
+                fn FormatUsingTimeZone(&self, datetime: super::super::Foundation::DateTime, timeZoneId: String) -> String;
             }
             #[guid(0xec8d8a53_1a2e_412d_8815_3b745fb1a2a0)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]

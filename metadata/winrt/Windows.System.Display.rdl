@@ -7,6 +7,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
             #[Windows::Foundation::Metadata::Threading(STA)]
             class DisplayRequest {
+                #[default]
                 IDisplayRequest,
             }
             #[guid(0xe5732044_f49f_4b60_8dd4_5e7e3a632ac0)]

@@ -8,6 +8,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class GeolocationProvider {
+                    #[default]
                     IGeolocationProvider,
                 }
                 #[guid(0xe4cf071d_3f64_509f_8dc2_0b74a059829d)]

@@ -5,25 +5,33 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(UIAutomationContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
+            #[class_property(#[Windows::Foundation::Metadata::NoException] IsRemoteSystem: bool, get = get_IsRemoteSystem)]
             class AutomationConnection {
+                #[default]
+                #[no_property(IsRemoteSystem)]
                 IAutomationConnection,
             }
             #[Windows::Foundation::Metadata::ContractVersion(UIAutomationContract, 131072)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AutomationConnectionBoundObject {
+                #[default]
                 IAutomationConnectionBoundObject,
             }
             #[Windows::Foundation::Metadata::ContractVersion(UIAutomationContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
+            #[class_property(#[Windows::Foundation::Metadata::NoException] IsRemoteSystem: bool, get = get_IsRemoteSystem)]
             class AutomationElement {
+                #[default]
+                #[no_property(IsRemoteSystem)]
                 IAutomationElement,
             }
             #[Windows::Foundation::Metadata::ContractVersion(UIAutomationContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             class AutomationTextRange {
+                #[default]
                 IAutomationTextRange,
             }
             #[guid(0xaad262ed_0ef4_5d43_97be_a834e27b65b9)]
@@ -31,9 +39,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(AutomationConnection)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface IAutomationConnection {
-                #[special]
-                #[Windows::Foundation::Metadata::NoException]
-                fn get_IsRemoteSystem(&self) -> bool;
+                #[get]
+                #[property(Windows::Foundation::Metadata::NoException)]
+                #[get(Windows::Foundation::Metadata::NoException)]
+                IsRemoteSystem: bool;
                 #[get]
                 AppUserModelId: String;
                 #[get]
@@ -52,9 +61,10 @@ mod Windows {
             #[Windows::Foundation::Metadata::ExclusiveTo(AutomationElement)]
             #[Windows::Foundation::Metadata::WebHostHidden]
             interface IAutomationElement {
-                #[special]
-                #[Windows::Foundation::Metadata::NoException]
-                fn get_IsRemoteSystem(&self) -> bool;
+                #[get]
+                #[property(Windows::Foundation::Metadata::NoException)]
+                #[get(Windows::Foundation::Metadata::NoException)]
+                IsRemoteSystem: bool;
                 #[get]
                 AppUserModelId: String;
                 #[get]

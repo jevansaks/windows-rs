@@ -12,14 +12,16 @@ mod Windows {
                 fn ScanAsync(&self) -> super::super::Foundation::IAsyncAction;
                 #[get]
                 NetworkReport: WiFiNetworkReport;
+                #[add_name(args)]
+                #[remove_name(eventCookie)]
                 event AvailableNetworksChanged: super::super::Foundation::TypedEventHandler<WiFiAdapter, Object>;
-                #[Windows::Foundation::Metadata::Overload("ConnectAsync")]
+                #[overload(ConnectAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ConnectAsync(&self, availableNetwork: WiFiAvailableNetwork, reconnectionKind: WiFiReconnectionKind) -> super::super::Foundation::IAsyncOperation<WiFiConnectionResult>;
-                #[Windows::Foundation::Metadata::Overload("ConnectWithPasswordCredentialAsync")]
-                fn ConnectAsync(&self, availableNetwork: WiFiAvailableNetwork, reconnectionKind: WiFiReconnectionKind, passwordCredential: super::super::Security::Credentials::PasswordCredential) -> super::super::Foundation::IAsyncOperation<WiFiConnectionResult>;
-                #[Windows::Foundation::Metadata::Overload("ConnectWithPasswordCredentialAndSsidAsync")]
-                fn ConnectAsync(&self, availableNetwork: WiFiAvailableNetwork, reconnectionKind: WiFiReconnectionKind, passwordCredential: super::super::Security::Credentials::PasswordCredential, ssid: String) -> super::super::Foundation::IAsyncOperation<WiFiConnectionResult>;
+                #[overload(ConnectAsync)]
+                fn ConnectWithPasswordCredentialAsync(&self, availableNetwork: WiFiAvailableNetwork, reconnectionKind: WiFiReconnectionKind, passwordCredential: super::super::Security::Credentials::PasswordCredential) -> super::super::Foundation::IAsyncOperation<WiFiConnectionResult>;
+                #[overload(ConnectAsync)]
+                fn ConnectWithPasswordCredentialAndSsidAsync(&self, availableNetwork: WiFiAvailableNetwork, reconnectionKind: WiFiReconnectionKind, passwordCredential: super::super::Security::Credentials::PasswordCredential, ssid: String) -> super::super::Foundation::IAsyncOperation<WiFiConnectionResult>;
                 fn Disconnect(&self);
             }
             #[guid(0x5bc4501d_81e4_453d_9430_1fcafbadd6b6)]
@@ -28,8 +30,8 @@ mod Windows {
             interface IWiFiAdapter2 {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetWpsConfigurationAsync(&self, availableNetwork: WiFiAvailableNetwork) -> super::super::Foundation::IAsyncOperation<WiFiWpsConfigurationResult>;
-                #[Windows::Foundation::Metadata::Overload("ConnectWithPasswordCredentialAndSsidAndConnectionMethodAsync")]
-                fn ConnectAsync(&self, availableNetwork: WiFiAvailableNetwork, reconnectionKind: WiFiReconnectionKind, passwordCredential: super::super::Security::Credentials::PasswordCredential, ssid: String, connectionMethod: WiFiConnectionMethod) -> super::super::Foundation::IAsyncOperation<WiFiConnectionResult>;
+                #[overload(ConnectAsync)]
+                fn ConnectWithPasswordCredentialAndSsidAndConnectionMethodAsync(&self, availableNetwork: WiFiAvailableNetwork, reconnectionKind: WiFiReconnectionKind, passwordCredential: super::super::Security::Credentials::PasswordCredential, ssid: String, connectionMethod: WiFiConnectionMethod) -> super::super::Foundation::IAsyncOperation<WiFiConnectionResult>;
             }
             #[guid(0xda25fddd_d24c_43e3_aabd_c4659f730f99)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -38,7 +40,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FindAllAdaptersAsync(&self) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<WiFiAdapter>>;
                 fn GetDeviceSelector(&self) -> String;
-                #[Windows::Foundation::Metadata::Overload("FromIdAsync")]
+                #[overload(FromIdAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FromIdAsync(&self, deviceId: String) -> super::super::Foundation::IAsyncOperation<WiFiAdapter>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -154,13 +156,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IWiFiAdapterStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             class WiFiAdapter {
+                #[default]
                 IWiFiAdapter,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IWiFiAdapter2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WiFiAvailableNetwork {
+                #[default]
                 IWiFiAvailableNetwork,
             }
             #[repr(i32)]
@@ -174,6 +179,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WiFiConnectionResult {
+                #[default]
                 IWiFiConnectionResult,
             }
             #[repr(i32)]
@@ -198,6 +204,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WiFiNetworkReport {
+                #[default]
                 IWiFiNetworkReport,
             }
             #[repr(i32)]
@@ -242,11 +249,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 983040)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WiFiOnDemandHotspotConnectTriggerDetails {
+                #[default]
                 IWiFiOnDemandHotspotConnectTriggerDetails,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 983040)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WiFiOnDemandHotspotConnectionResult {
+                #[default]
                 IWiFiOnDemandHotspotConnectionResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 983040)]
@@ -254,11 +263,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IWiFiOnDemandHotspotNetworkStatics, 983040, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class WiFiOnDemandHotspotNetwork {
+                #[default]
                 IWiFiOnDemandHotspotNetwork,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 983040)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WiFiOnDemandHotspotNetworkProperties {
+                #[default]
                 IWiFiOnDemandHotspotNetworkProperties,
             }
             #[repr(i32)]
@@ -273,8 +284,11 @@ mod Windows {
                 Erp = 6,
                 HT = 7,
                 Vht = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 Dmg = 9,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 HE = 10,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 Eht = 11,
             }
             #[repr(i32)]
@@ -286,6 +300,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class WiFiWpsConfigurationResult {
+                #[default]
                 IWiFiWpsConfigurationResult,
             }
             #[repr(i32)]

@@ -38,7 +38,8 @@ impl<const LEN: usize> STREAM_HEADER<LEN> {
 }
 
 impl File {
-    pub fn into_stream(mut self) -> Vec<u8> {
+    /// Finalizes table ordering and heaps without packaging a `.winmd` file.
+    pub fn finalize(mut self) -> FinalizedFile {
         // Flatten sorted records.
 
         self.records.Constant.extend(self.Constant.values());
@@ -80,6 +81,8 @@ impl File {
                 .is_sorted()
         );
 
+        debug_assert!(self.records.MethodImpl.iter().map(|r| r.Class).is_sorted());
+
         debug_assert!(
             self.records
                 .NestedClass
@@ -101,6 +104,32 @@ impl File {
             panic!("heap too large");
         }
 
+        let tables_len = records.len();
+        let strings_len = strings.len();
+        let mut metadata = Vec::with_capacity(records.len() + strings.len() + blobs.len());
+        metadata.append(&mut records);
+        metadata.append(&mut strings);
+        metadata.append(&mut blobs);
+
+        FinalizedFile {
+            metadata: metadata.into(),
+            tables_len,
+            strings_len,
+            reference: self.reference.take(),
+        }
+    }
+
+    pub fn into_stream(self) -> Vec<u8> {
+        self.finalize().into_stream()
+    }
+}
+
+impl FinalizedFile {
+    /// Packages the finalized metadata streams as a `.winmd` file.
+    pub fn into_stream(self) -> Vec<u8> {
+        let records = &self.metadata[..self.tables_len];
+        let strings = &self.metadata[self.tables_len..self.tables_len + self.strings_len];
+        let blobs = &self.metadata[self.tables_len + self.strings_len..];
         let mut guids = vec![0u8; 16]; // zero guid
         let size_of_streams = records.len() + guids.len() + strings.len() + blobs.len();
 
@@ -251,10 +280,10 @@ impl File {
         buffer.write_header(&guids_header);
         buffer.write_header(&blobs_header);
 
-        buffer.append(&mut records);
-        buffer.append(&mut strings);
+        buffer.extend_from_slice(records);
+        buffer.extend_from_slice(strings);
         buffer.append(&mut guids);
-        buffer.append(&mut blobs);
+        buffer.extend_from_slice(blobs);
 
         let unpadded_size = buffer.len();
         buffer.resize(

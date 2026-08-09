@@ -123,6 +123,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IImageScannerStatics, 65536, "Windows.Devices.Scanners.ScannerDeviceContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ImageScanner {
+                #[default]
                 IImageScanner,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ScannerDeviceContract, 65536)]
@@ -130,6 +131,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ImageScannerAutoConfiguration {
+                #[default]
                 IImageScannerFormatConfiguration,
             }
             #[repr(i32)]
@@ -152,6 +154,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ImageScannerFeederConfiguration {
+                #[default]
                 IImageScannerFormatConfiguration,
                 IImageScannerSourceConfiguration,
                 IImageScannerFeederConfiguration,
@@ -161,6 +164,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ImageScannerFlatbedConfiguration {
+                #[default]
                 IImageScannerFormatConfiguration,
                 IImageScannerSourceConfiguration,
             }
@@ -180,6 +184,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ImageScannerPreviewResult {
+                #[default]
                 IImageScannerPreviewResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(ScannerDeviceContract, 65536)]
@@ -192,6 +197,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ImageScannerScanResult {
+                #[default]
                 IImageScannerScanResult,
             }
             #[repr(i32)]

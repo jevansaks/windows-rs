@@ -8,6 +8,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AdvancedPhotoCaptureSettings {
+                #[default]
                 IAdvancedPhotoCaptureSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -15,6 +16,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AdvancedPhotoControl {
+                #[default]
                 IAdvancedPhotoControl,
             }
             #[repr(i32)]
@@ -23,6 +25,7 @@ mod Windows {
                 Auto = 0,
                 Standard = 1,
                 Hdr = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 LowLight = 3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -30,12 +33,15 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class AudioDeviceController {
+                #[default]
                 IAudioDeviceController,
                 IMediaDeviceController,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 IAudioDeviceController2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             class AudioDeviceModule {
+                #[default]
                 IAudioDeviceModule,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -43,6 +49,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AudioDeviceModuleNotificationEventArgs {
+                #[default]
                 IAudioDeviceModuleNotificationEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(IAudioDeviceModulesManagerFactory, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -51,6 +58,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AudioDeviceModulesManager {
+                #[default]
                 IAudioDeviceModulesManager,
             }
             #[repr(i32)]
@@ -72,6 +80,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ICallControlStatics, 65536, "Windows.Media.Devices.CallControlContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CallControl {
+                #[default]
                 ICallControl,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -84,6 +93,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class CameraOcclusionInfo {
+                #[default]
                 ICameraOcclusionInfo,
             }
             #[repr(i32)]
@@ -96,12 +106,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class CameraOcclusionState {
+                #[default]
                 ICameraOcclusionState,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 851968)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class CameraOcclusionStateChangedEventArgs {
+                #[default]
                 ICameraOcclusionStateChangedEventArgs,
             }
             #[repr(i32)]
@@ -151,16 +163,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DefaultAudioCaptureDeviceChangedEventArgs {
+                #[default]
                 IDefaultAudioDeviceChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DefaultAudioRenderDeviceChangedEventArgs {
+                #[default]
                 IDefaultAudioDeviceChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallControlContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DialRequestedEventArgs {
+                #[default]
                 IDialRequestedEventArgs,
             }
             #[guid(0x5abbffdb_c21f_4bc4_891b_257e28c1b1a4)]
@@ -171,16 +186,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DigitalWindowBounds {
+                #[default]
                 IDigitalWindowBounds,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 786432)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DigitalWindowCapability {
+                #[default]
                 IDigitalWindowCapability,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 786432)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class DigitalWindowControl {
+                #[default]
                 IDigitalWindowControl,
             }
             #[repr(i32)]
@@ -195,6 +213,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class ExposureCompensationControl {
+                #[default]
                 IExposureCompensationControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -202,6 +221,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class ExposureControl {
+                #[default]
                 IExposureControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -209,6 +229,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ExposurePriorityVideoControl {
+                #[default]
                 IExposurePriorityVideoControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -216,7 +237,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class FlashControl {
+                #[default]
                 IFlashControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IFlashControl2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -224,7 +247,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class FocusControl {
+                #[default]
                 IFocusControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IFocusControl2,
             }
             #[repr(i32)]
@@ -251,6 +276,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class FocusSettings {
+                #[default]
                 IFocusSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -258,6 +284,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class HdrVideoControl {
+                #[default]
                 IHdrVideoControl,
             }
             #[repr(i32)]
@@ -556,10 +583,10 @@ mod Windows {
                 #[get]
                 CurrentMode: DigitalWindowMode;
                 fn GetBounds(&self) -> DigitalWindowBounds;
-                #[Windows::Foundation::Metadata::Overload("Configure")]
+                #[overload(Configure)]
                 fn Configure(&self, digitalWindowMode: DigitalWindowMode);
-                #[Windows::Foundation::Metadata::Overload("ConfigureWithBounds")]
-                fn Configure(&self, digitalWindowMode: DigitalWindowMode, digitalWindowBounds: DigitalWindowBounds);
+                #[overload(Configure)]
+                fn ConfigureWithBounds(&self, digitalWindowMode: DigitalWindowMode, digitalWindowBounds: DigitalWindowBounds);
                 #[get]
                 SupportedCapabilities: super::super::Foundation::Collections::IVectorView<DigitalWindowCapability>;
                 fn GetCapabilityForSize(&self, width: i32, height: i32) -> DigitalWindowCapability;
@@ -643,12 +670,12 @@ mod Windows {
                 SupportedPresets: super::super::Foundation::Collections::IVectorView<FocusPreset>;
                 #[get]
                 Preset: FocusPreset;
-                #[Windows::Foundation::Metadata::Overload("SetPresetAsync")]
+                #[overload(SetPresetAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn SetPresetAsync(&self, preset: FocusPreset) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("SetPresetWithCompletionOptionAsync")]
+                #[overload(SetPresetAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn SetPresetAsync(&self, preset: FocusPreset, completeBeforeFocus: bool) -> super::super::Foundation::IAsyncAction;
+                fn SetPresetWithCompletionOptionAsync(&self, preset: FocusPreset, completeBeforeFocus: bool) -> super::super::Foundation::IAsyncAction;
                 #[get]
                 Min: u32;
                 #[get]
@@ -730,12 +757,12 @@ mod Windows {
             interface IIsoSpeedControl {
                 #[get]
                 Supported: bool;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("SupportedPresets may not be available in future versions of Windows Phone. Starting with Windows Phone 8.1, use SetAutoAsync, Auto, SetValueAsync, and Value instead", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_SupportedPresets(&self) -> super::super::Foundation::Collections::IVectorView<IsoSpeedPreset>;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Preset may not be available in future versions of Windows Phone. Starting with Windows Phone 8.1, use SetAutoAsync, Auto, SetValueAsync, and Value instead", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_Preset(&self) -> IsoSpeedPreset;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("SupportedPresets may not be available in future versions of Windows Phone. Starting with Windows Phone 8.1, use SetAutoAsync, Auto, SetValueAsync, and Value instead", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                SupportedPresets: super::super::Foundation::Collections::IVectorView<IsoSpeedPreset>;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Preset may not be available in future versions of Windows Phone. Starting with Windows Phone 8.1, use SetAutoAsync, Auto, SetValueAsync, and Value instead", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                Preset: IsoSpeedPreset;
                 #[Windows::Foundation::Metadata::Deprecated("SetPresetAsync may not be available in future versions of Windows Phone. Starting with Windows Phone 8.1, use SetAutoAsync, Auto, SetValueAsync, and Value instead", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn SetPresetAsync(&self, preset: IsoSpeedPreset) -> super::super::Foundation::IAsyncAction;
@@ -842,7 +869,9 @@ mod Windows {
                 fn GetVideoCaptureSelector(&self) -> String;
                 fn GetDefaultAudioCaptureId(&self, role: AudioDeviceRole) -> String;
                 fn GetDefaultAudioRenderId(&self, role: AudioDeviceRole) -> String;
+                #[remove_name(cookie)]
                 event DefaultAudioCaptureDeviceChanged: super::super::Foundation::TypedEventHandler<Object, DefaultAudioCaptureDeviceChangedEventArgs>;
+                #[remove_name(cookie)]
                 event DefaultAudioRenderDeviceChanged: super::super::Foundation::TypedEventHandler<Object, DefaultAudioRenderDeviceChangedEventArgs>;
             }
             #[guid(0x520d1eb4_1374_4c7d_b1e4_39dcdf3eae4e)]
@@ -879,6 +908,7 @@ mod Windows {
                 #[get]
                 Supported: bool;
                 Enabled: bool;
+                #[set_name(format)]
                 PixelFormat: super::MediaProperties::MediaPixelFormat;
             }
             #[guid(0x7eb55209_76ab_4c31_b40e_4b58379d580c)]
@@ -910,10 +940,10 @@ mod Windows {
             interface IRegionsOfInterestControl {
                 #[get]
                 MaxRegions: u32;
-                #[Windows::Foundation::Metadata::Overload("SetRegionsAsync")]
+                #[overload(SetRegionsAsync)]
                 fn SetRegionsAsync(&self, regions: super::super::Foundation::Collections::IIterable<RegionOfInterest>) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("SetRegionsWithLockAsync")]
-                fn SetRegionsAsync(&self, regions: super::super::Foundation::Collections::IIterable<RegionOfInterest>, lockValues: bool) -> super::super::Foundation::IAsyncAction;
+                #[overload(SetRegionsAsync)]
+                fn SetRegionsWithLockAsync(&self, regions: super::super::Foundation::Collections::IIterable<RegionOfInterest>, lockValues: bool) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ClearRegionsAsync(&self) -> super::super::Foundation::IAsyncAction;
                 #[get]
@@ -1048,6 +1078,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 524288)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class InfraredTorchControl {
+                #[default]
                 IInfraredTorchControl,
             }
             #[repr(i32)]
@@ -1062,7 +1093,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class IsoSpeedControl {
+                #[default]
                 IIsoSpeedControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IIsoSpeedControl2,
             }
             #[repr(i32)]
@@ -1085,6 +1118,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(CallControlContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class KeypadPressedEventArgs {
+                #[default]
                 IKeypadPressedEventArgs,
             }
             #[guid(0xe637a454_c527_422c_8926_c9af83b559a0)]
@@ -1095,6 +1129,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class LowLagPhotoControl {
+                #[default]
                 ILowLagPhotoControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -1102,6 +1137,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class LowLagPhotoSequenceControl {
+                #[default]
                 ILowLagPhotoSequenceControl,
             }
             #[repr(i32)]
@@ -1137,6 +1173,7 @@ mod Windows {
                 RetainHardwareResources = 0,
                 ReleaseHardwareResources = 1,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -1148,6 +1185,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaDeviceControl {
+                #[default]
                 IMediaDeviceControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -1155,6 +1193,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaDeviceControlCapabilities {
+                #[default]
                 IMediaDeviceControlCapabilities,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -1162,6 +1201,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class ModuleCommandResult {
+                #[default]
                 IModuleCommandResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -1169,6 +1209,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class OpticalImageStabilizationControl {
+                #[default]
                 IOpticalImageStabilizationControl,
             }
             #[repr(i32)]
@@ -1182,6 +1223,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PanelBasedOptimizationControl {
+                #[default]
                 IPanelBasedOptimizationControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -1189,11 +1231,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class PhotoConfirmationControl {
+                #[default]
                 IPhotoConfirmationControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CallControlContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class RedialRequestedEventArgs {
+                #[default]
                 IRedialRequestedEventArgs,
             }
             #[guid(0xbaf257d1_4ebd_4b84_9f47_6ec43d75d8b1)]
@@ -1205,7 +1249,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RegionOfInterest {
+                #[default]
                 IRegionOfInterest,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IRegionOfInterest2,
             }
             #[repr(i32)]
@@ -1219,6 +1265,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class RegionsOfInterestControl {
+                #[default]
                 IRegionsOfInterestControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -1226,6 +1273,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class SceneModeControl {
+                #[default]
                 ISceneModeControl,
             }
             #[repr(i32)]
@@ -1259,6 +1307,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class TorchControl {
+                #[default]
                 ITorchControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -1266,18 +1315,29 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class VideoDeviceController {
+                #[default]
                 IVideoDeviceController,
                 IMediaDeviceController,
                 IAdvancedVideoCaptureDeviceController,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IAdvancedVideoCaptureDeviceController2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IAdvancedVideoCaptureDeviceController3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IAdvancedVideoCaptureDeviceController4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IAdvancedVideoCaptureDeviceController5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IAdvancedVideoCaptureDeviceController6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                 IAdvancedVideoCaptureDeviceController7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IAdvancedVideoCaptureDeviceController8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 IAdvancedVideoCaptureDeviceController9,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 IAdvancedVideoCaptureDeviceController10,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 983040)]
                 IAdvancedVideoCaptureDeviceController11,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -1285,6 +1345,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class VideoDeviceControllerGetDevicePropertyResult {
+                #[default]
                 IVideoDeviceControllerGetDevicePropertyResult,
             }
             #[repr(i32)]
@@ -1312,6 +1373,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class VideoTemporalDenoisingControl {
+                #[default]
                 IVideoTemporalDenoisingControl,
             }
             #[repr(i32)]
@@ -1326,6 +1388,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class WhiteBalanceControl {
+                #[default]
                 IWhiteBalanceControl,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -1333,7 +1396,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class ZoomControl {
+                #[default]
                 IZoomControl,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IZoomControl2,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1342,6 +1407,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ZoomSettings {
+                #[default]
                 IZoomSettings,
             }
             #[repr(i32)]

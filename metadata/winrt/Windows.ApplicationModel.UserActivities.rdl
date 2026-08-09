@@ -51,7 +51,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::ExclusiveTo(UserActivityChannel)]
             interface IUserActivityChannel {
-                #[Windows::Foundation::Metadata::Overload("GetOrCreateUserActivityAsync")]
+                #[overload(GetOrCreateUserActivityAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetOrCreateUserActivityAsync(&self, activityId: String) -> super::super::Foundation::IAsyncOperation<UserActivity>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -181,8 +181,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IUserActivityStatics, 393216, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserActivity {
+                #[default]
                 IUserActivity,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IUserActivity2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IUserActivity3,
             }
             #[Windows::Foundation::Metadata::Activatable(327680, "Windows.Foundation.UniversalApiContract")]
@@ -191,6 +194,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserActivityAttribution {
+                #[default]
                 IUserActivityAttribution,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
@@ -200,7 +204,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IUserActivityChannelStatics3, 524288, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserActivityChannel {
+                #[default]
                 IUserActivityChannel,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IUserActivityChannel2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
@@ -208,33 +214,39 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IUserActivityContentInfoStatics, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UserActivityContentInfo {
+                #[default]
                 IUserActivityContentInfo,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UserActivityRequest {
+                #[default]
                 IUserActivityRequest,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Static(IUserActivityRequestManagerStatics, 393216, "Windows.Foundation.UniversalApiContract")]
             class UserActivityRequestManager {
+                #[default]
                 IUserActivityRequestManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UserActivityRequestedEventArgs {
+                #[default]
                 IUserActivityRequestedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UserActivitySession {
+                #[default]
                 IUserActivitySession,
                 super::super::Foundation::IClosable,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UserActivitySessionHistoryItem {
+                #[default]
                 IUserActivitySessionHistoryItem,
             }
             #[repr(i32)]
@@ -246,7 +258,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class UserActivityVisualElements {
+                #[default]
                 IUserActivityVisualElements,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IUserActivityVisualElements2,
             }
         }

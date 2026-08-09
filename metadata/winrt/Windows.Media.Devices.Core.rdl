@@ -9,7 +9,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class CameraIntrinsics {
+                    #[default]
                     ICameraIntrinsics,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     ICameraIntrinsics2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -17,6 +19,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class DepthCorrelatedCoordinateMapper {
+                    #[default]
                     IDepthCorrelatedCoordinateMapper,
                     super::super::super::Foundation::IClosable,
                 }
@@ -25,7 +28,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameControlCapabilities {
+                    #[default]
                     IFrameControlCapabilities,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IFrameControlCapabilities2,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -34,7 +39,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class FrameController {
+                    #[default]
                     IFrameController,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IFrameController2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -42,6 +49,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameExposureCapabilities {
+                    #[default]
                     IFrameExposureCapabilities,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -49,6 +57,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameExposureCompensationCapabilities {
+                    #[default]
                     IFrameExposureCompensationCapabilities,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -56,6 +65,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameExposureCompensationControl {
+                    #[default]
                     IFrameExposureCompensationControl,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -63,6 +73,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameExposureControl {
+                    #[default]
                     IFrameExposureControl,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -70,6 +81,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameFlashCapabilities {
+                    #[default]
                     IFrameFlashCapabilities,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -77,6 +89,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameFlashControl {
+                    #[default]
                     IFrameFlashControl,
                 }
                 #[repr(i32)]
@@ -91,6 +104,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameFocusCapabilities {
+                    #[default]
                     IFrameFocusCapabilities,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -98,6 +112,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameFocusControl {
+                    #[default]
                     IFrameFocusControl,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -105,6 +120,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameIsoSpeedCapabilities {
+                    #[default]
                     IFrameIsoSpeedCapabilities,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -112,6 +128,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class FrameIsoSpeedControl {
+                    #[default]
                     IFrameIsoSpeedControl,
                 }
                 #[guid(0x0aa6ed32_6589_49da_afde_594270ca0aac)]
@@ -323,6 +340,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
                 #[Windows::Foundation::Metadata::Threading(MTA)]
                 class VariablePhotoSequenceController {
+                    #[default]
                     IVariablePhotoSequenceController,
                 }
             }

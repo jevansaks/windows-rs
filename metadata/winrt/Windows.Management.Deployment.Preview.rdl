@@ -3,6 +3,7 @@ mod Windows {
     mod Management {
         mod Deployment {
             mod Preview {
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(DeploymentPreviewContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -32,6 +33,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InstalledClassicAppInfo {
+                    #[default]
                     IInstalledClassicAppInfo,
                 }
             }

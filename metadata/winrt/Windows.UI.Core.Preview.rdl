@@ -9,6 +9,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CoreAppWindowPreview {
+                    #[default]
                     ICoreAppWindowPreview,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 524288)]
@@ -44,12 +45,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class SystemNavigationCloseRequestedPreviewEventArgs {
+                    #[default]
                     ISystemNavigationCloseRequestedPreviewEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ISystemNavigationManagerPreviewStatics, 262144, "Windows.Foundation.UniversalApiContract")]
                 class SystemNavigationManagerPreview {
+                    #[default]
                     ISystemNavigationManagerPreview,
                 }
             }

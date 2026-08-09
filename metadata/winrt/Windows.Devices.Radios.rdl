@@ -8,6 +8,7 @@ mod Windows {
             interface IRadio {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn SetStateAsync(&self, value: RadioState) -> super::super::Foundation::IAsyncOperation<RadioAccessStatus>;
+                #[remove_name(eventCookie)]
                 event StateChanged: super::super::Foundation::TypedEventHandler<Radio, Object>;
                 #[get]
                 State: RadioState;
@@ -23,7 +24,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetRadiosAsync(&self) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<Radio>>;
                 fn GetDeviceSelector(&self) -> String;
-                #[Windows::Foundation::Metadata::Overload("FromIdAsync")]
+                #[overload(FromIdAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn FromIdAsync(&self, deviceId: String) -> super::super::Foundation::IAsyncOperation<Radio>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -34,6 +35,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IRadioStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             class Radio {
+                #[default]
                 IRadio,
             }
             #[repr(i32)]

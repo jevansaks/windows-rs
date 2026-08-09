@@ -12,32 +12,42 @@ mod Windows {
                         Control = 1,
                         Content = 2,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IAppBarAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class AppBarAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IAppBarAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IToggleProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IExpandCollapseProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                         super::Provider::IWindowProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IAppBarButtonAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class AppBarButtonAutomationPeer: ButtonAutomationPeer {
+                        #[default]
                         IAppBarButtonAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                         super::Provider::IExpandCollapseProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IAppBarToggleButtonAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class AppBarToggleButtonAutomationPeer: ToggleButtonAutomationPeer {
+                        #[default]
                         IAppBarToggleButtonAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::Activatable(IAutoSuggestBoxAutomationPeerFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -46,7 +56,9 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class AutoSuggestBoxAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IAutoSuggestBoxAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                         super::Provider::IInvokeProvider,
                     }
                     #[repr(i32)]
@@ -93,6 +105,7 @@ mod Windows {
                         TitleBar = 37,
                         Separator = 38,
                         SemanticZoom = 39,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         AppBar = 40,
                     }
                     #[repr(i32)]
@@ -121,13 +134,21 @@ mod Windows {
                         DragLeave = 19,
                         Dropped = 20,
                         LiveRegionChanged = 21,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         InputReachedTarget = 22,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         InputReachedOtherElement = 23,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         InputDiscarded = 24,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         WindowClosed = 25,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         WindowOpened = 26,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         ConversionTargetChanged = 27,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         TextEditTextChanged = 28,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                         LayoutInvalidated = 29,
                     }
                     #[repr(i32)]
@@ -202,6 +223,7 @@ mod Windows {
                         Horizontal = 1,
                         Vertical = 2,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IAutomationPeerFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -210,23 +232,51 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class AutomationPeer: super::super::DependencyObject {
+                        #[default]
+                        #[no_property(EventsSource)]
                         IAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         IAutomationPeer2,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         IAutomationPeer3,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                         IAutomationPeer4,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                         IAutomationPeer5,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                         IAutomationPeer6,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                         IAutomationPeer7,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                         IAutomationPeer8,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                         IAutomationPeer9,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[Windows::Foundation::Metadata::Protected]
                         IAutomationPeerProtected,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides2,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides3,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides4,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides5,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides6,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides8,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IAutomationPeerOverrides9,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -237,6 +287,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class AutomationPeerAnnotation: super::super::DependencyObject {
+                        #[default]
                         IAutomationPeerAnnotation,
                     }
                     #[repr(i32)]
@@ -250,99 +301,128 @@ mod Windows {
                         ChildrenBulkRemoved = 4,
                         ChildrenReordered = 5,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IButtonAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ButtonAutomationPeer: ButtonBaseAutomationPeer {
+                        #[default]
                         IButtonAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IInvokeProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IButtonBaseAutomationPeerFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ButtonBaseAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IButtonBaseAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ICalendarDatePickerAutomationPeerFactory, Public, 393216, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 393216)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CalendarDatePickerAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ICalendarDatePickerAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                         super::Provider::IInvokeProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                         super::Provider::IValueProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ICaptureElementAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CaptureElementAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ICaptureElementAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ICheckBoxAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class CheckBoxAutomationPeer: ToggleButtonAutomationPeer {
+                        #[default]
                         ICheckBoxAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IColorPickerSliderAutomationPeerFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 327680)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ColorPickerSliderAutomationPeer: SliderAutomationPeer {
+                        #[default]
                         IColorPickerSliderAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IColorSpectrumAutomationPeerFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 327680)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ColorSpectrumAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IColorSpectrumAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IComboBoxAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ComboBoxAutomationPeer: SelectorAutomationPeer {
+                        #[default]
                         IComboBoxAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IValueProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IExpandCollapseProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                         super::Provider::IWindowProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IComboBoxItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ComboBoxItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IComboBoxItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IComboBoxItemDataAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ComboBoxItemDataAutomationPeer: SelectorItemAutomationPeer {
+                        #[default]
                         IComboBoxItemDataAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IDatePickerAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DatePickerAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IDatePickerAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -350,41 +430,52 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DatePickerFlyoutPresenterAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IDatePickerFlyoutPresenterAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IFlipViewAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class FlipViewAutomationPeer: SelectorAutomationPeer {
+                        #[default]
                         IFlipViewAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IFlipViewItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class FlipViewItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IFlipViewItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IFlipViewItemDataAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class FlipViewItemDataAutomationPeer: SelectorItemAutomationPeer {
+                        #[default]
                         IFlipViewItemDataAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IFlyoutPresenterAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class FlyoutPresenterAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IFlyoutPresenterAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IFrameworkElementAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -392,73 +483,94 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class FrameworkElementAutomationPeer: AutomationPeer {
+                        #[default]
+                        #[no_property(Owner)]
                         IFrameworkElementAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IGridViewAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class GridViewAutomationPeer: ListViewBaseAutomationPeer {
+                        #[default]
                         IGridViewAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IGridViewHeaderItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class GridViewHeaderItemAutomationPeer: ListViewBaseHeaderItemAutomationPeer {
+                        #[default]
                         IGridViewHeaderItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IGridViewItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class GridViewItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IGridViewItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IGridViewItemDataAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class GridViewItemDataAutomationPeer: SelectorItemAutomationPeer {
+                        #[default]
                         IGridViewItemDataAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IGroupItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class GroupItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IGroupItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IHubAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class HubAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IHubAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IHubSectionAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class HubSectionAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IHubSectionAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IHyperlinkButtonAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class HyperlinkButtonAutomationPeer: ButtonBaseAutomationPeer {
+                        #[default]
                         IHyperlinkButtonAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IInvokeProvider,
                     }
                     #[guid(0x8b4acfeb_89fa_4f13_84be_35ca5b7c9590)]
@@ -1740,12 +1852,14 @@ mod Windows {
                     interface ITreeViewListAutomationPeerFactory {
                         fn CreateInstanceWithOwner(&self, owner: super::super::Controls::TreeViewList, baseInterface: Object, innerInterface: &mut Object) -> TreeViewListAutomationPeer;
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IImageAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ImageAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IImageAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 196608)]
@@ -1753,51 +1867,70 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class InkToolbarAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IInkToolbarAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ItemAutomationPeer: AutomationPeer {
+                        #[default]
+                        #[no_property(Item)]
+                        #[no_property(ItemsControlAutomationPeer)]
                         IItemAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IVirtualizedItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IItemsControlAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ItemsControlAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IItemsControlAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         IItemsControlAutomationPeer2,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IItemsControlAutomationPeerOverrides2,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IItemContainerProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListBoxAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListBoxAutomationPeer: SelectorAutomationPeer {
+                        #[default]
                         IListBoxAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListBoxItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListBoxItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IListBoxItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListBoxItemDataAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListBoxItemDataAutomationPeer: SelectorItemAutomationPeer {
+                        #[default]
                         IListBoxItemDataAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1805,56 +1938,73 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListPickerFlyoutPresenterAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IListPickerFlyoutPresenterAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListViewAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListViewAutomationPeer: ListViewBaseAutomationPeer {
+                        #[default]
                         IListViewAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListViewBaseAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListViewBaseAutomationPeer: SelectorAutomationPeer {
+                        #[default]
                         IListViewBaseAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[no_property(DropEffect)]
+                        #[no_property(DropEffects)]
                         super::Provider::IDropTargetProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListViewBaseHeaderItemAutomationPeerFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListViewBaseHeaderItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IListViewBaseHeaderItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListViewHeaderItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListViewHeaderItemAutomationPeer: ListViewBaseHeaderItemAutomationPeer {
+                        #[default]
                         IListViewHeaderItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListViewItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListViewItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IListViewItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IListViewItemDataAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ListViewItemDataAutomationPeer: SelectorItemAutomationPeer {
+                        #[default]
                         IListViewItemDataAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1862,10 +2012,15 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class LoopingSelectorAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ILoopingSelectorAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::ISelectionProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IItemContainerProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IExpandCollapseProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollProvider,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1873,8 +2028,11 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class LoopingSelectorItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ILoopingSelectorItemAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::ISelectionItemProvider,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1882,7 +2040,9 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class LoopingSelectorItemDataAutomationPeer: AutomationPeer {
+                        #[default]
                         ILoopingSelectorItemDataAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IVirtualizedItemProvider,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1890,84 +2050,107 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MapControlAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IMapControlAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                         super::Provider::IScrollProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                         super::Provider::ITransformProvider2,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                         super::Provider::ITransformProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IMediaElementAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MediaElementAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IMediaElementAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IMediaPlayerElementAutomationPeerFactory, Public, 196608, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 196608)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MediaPlayerElementAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IMediaPlayerElementAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IMediaTransportControlsAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MediaTransportControlsAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IMediaTransportControlsAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IMenuBarAutomationPeerFactory, Public, 458752, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 458752)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MenuBarAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IMenuBarAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IMenuBarItemAutomationPeerFactory, Public, 458752, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 458752)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MenuBarItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IMenuBarItemAutomationPeer,
                         super::Provider::IExpandCollapseProvider,
                         super::Provider::IInvokeProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IMenuFlyoutItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MenuFlyoutItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IMenuFlyoutItemAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IInvokeProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IMenuFlyoutPresenterAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class MenuFlyoutPresenterAutomationPeer: ItemsControlAutomationPeer {
+                        #[default]
                         IMenuFlyoutPresenterAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(INavigationViewItemAutomationPeerFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 327680)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class NavigationViewItemAutomationPeer: ListViewItemAutomationPeer {
+                        #[default]
                         INavigationViewItemAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IPasswordBoxAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PasswordBoxAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IPasswordBoxAutomationPeer,
                     }
                     #[repr(i32)]
@@ -2000,21 +2183,31 @@ mod Windows {
                         Annotation = 23,
                         Drag = 24,
                         DropTarget = 25,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         ObjectModel = 26,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         Spreadsheet = 27,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         SpreadsheetItem = 28,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         Styles = 29,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         Transform2 = 30,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         SynchronizedInput = 31,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         TextEdit = 32,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         CustomNavigation = 33,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IPersonPictureAutomationPeerFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 327680)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PersonPictureAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IPersonPictureAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -2022,6 +2215,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PickerFlyoutPresenterAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IPickerFlyoutPresenterAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::Activatable(IPivotAutomationPeerFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -2030,8 +2224,11 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PivotAutomationPeer: ItemsControlAutomationPeer {
+                        #[default]
                         IPivotAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::ISelectionProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollProvider,
                     }
                     #[Windows::Foundation::Metadata::Activatable(IPivotItemAutomationPeerFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -2040,6 +2237,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PivotItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IPivotItemAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::Activatable(IPivotItemDataAutomationPeerFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -2048,51 +2246,73 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class PivotItemDataAutomationPeer: ItemAutomationPeer {
+                        #[default]
                         IPivotItemDataAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollItemProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::ISelectionItemProvider,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IVirtualizedItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IProgressBarAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ProgressBarAutomationPeer: RangeBaseAutomationPeer {
+                        #[default]
                         IProgressBarAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IProgressRingAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ProgressRingAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IProgressRingAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IRadioButtonAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RadioButtonAutomationPeer: ToggleButtonAutomationPeer {
+                        #[default]
                         IRadioButtonAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::ISelectionItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IRangeBaseAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RangeBaseAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IRangeBaseAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[no_property(IsReadOnly)]
+                        #[no_property(LargeChange)]
+                        #[no_property(Maximum)]
+                        #[no_property(Minimum)]
+                        #[no_property(SmallChange)]
+                        #[no_property(Value)]
                         super::Provider::IRangeValueProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IRatingControlAutomationPeerFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 327680)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RatingControlAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IRatingControlAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -2101,137 +2321,179 @@ mod Windows {
                         Part1: u32,
                         Part2: u32,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IRepeatButtonAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RepeatButtonAutomationPeer: ButtonBaseAutomationPeer {
+                        #[default]
                         IRepeatButtonAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IInvokeProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IRichEditBoxAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RichEditBoxAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IRichEditBoxAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IRichTextBlockAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RichTextBlockAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IRichTextBlockAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IRichTextBlockOverflowAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RichTextBlockOverflowAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IRichTextBlockOverflowAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IScrollBarAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ScrollBarAutomationPeer: RangeBaseAutomationPeer {
+                        #[default]
                         IScrollBarAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IScrollViewerAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ScrollViewerAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IScrollViewerAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IScrollProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISearchBoxAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SearchBoxAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ISearchBoxAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISelectorAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SelectorAutomationPeer: ItemsControlAutomationPeer {
+                        #[default]
                         ISelectorAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[no_property(CanSelectMultiple)]
+                        #[no_property(IsSelectionRequired)]
                         super::Provider::ISelectionProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISelectorItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SelectorItemAutomationPeer: ItemAutomationPeer {
+                        #[default]
                         ISelectorItemAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[no_property(IsSelected)]
+                        #[no_property(SelectionContainer)]
                         super::Provider::ISelectionItemProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISemanticZoomAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SemanticZoomAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ISemanticZoomAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[no_property(ToggleState)]
                         super::Provider::IToggleProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISettingsFlyoutAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SettingsFlyoutAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ISettingsFlyoutAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISliderAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SliderAutomationPeer: RangeBaseAutomationPeer {
+                        #[default]
                         ISliderAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITextBlockAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TextBlockAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ITextBlockAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITextBoxAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TextBoxAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ITextBoxAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IThumbAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ThumbAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IThumbAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITimePickerAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TimePickerAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ITimePickerAutomationPeer,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -2239,50 +2501,65 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TimePickerFlyoutPresenterAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         ITimePickerFlyoutPresenterAutomationPeer,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IToggleButtonAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ToggleButtonAutomationPeer: ButtonBaseAutomationPeer {
+                        #[default]
                         IToggleButtonAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[no_property(ToggleState)]
                         super::Provider::IToggleProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IToggleMenuFlyoutItemAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ToggleMenuFlyoutItemAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IToggleMenuFlyoutItemAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IToggleProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IToggleSwitchAutomationPeerFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class ToggleSwitchAutomationPeer: FrameworkElementAutomationPeer {
+                        #[default]
                         IToggleSwitchAutomationPeer,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::Provider::IToggleProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITreeViewItemAutomationPeerFactory, Public, 393216, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 393216)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TreeViewItemAutomationPeer: ListViewItemAutomationPeer {
+                        #[default]
                         ITreeViewItemAutomationPeer,
                         super::Provider::IExpandCollapseProvider,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ITreeViewListAutomationPeerFactory, Public, 393216, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 393216)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class TreeViewListAutomationPeer: SelectorAutomationPeer {
+                        #[default]
                         ITreeViewListAutomationPeer,
                     }
                 }

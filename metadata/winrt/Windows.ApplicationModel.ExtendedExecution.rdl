@@ -19,6 +19,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ExtendedExecutionRevokedEventArgs {
+                #[default]
                 IExtendedExecutionRevokedEventArgs,
             }
             #[repr(i32)]
@@ -32,6 +33,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ExtendedExecutionSession {
+                #[default]
                 IExtendedExecutionSession,
                 super::super::Foundation::IClosable,
             }

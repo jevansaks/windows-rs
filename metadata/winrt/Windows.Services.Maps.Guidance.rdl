@@ -27,6 +27,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceAudioNotificationRequestedEventArgs {
+                    #[default]
                     IGuidanceAudioNotificationRequestedEventArgs,
                 }
                 #[repr(u32)]
@@ -47,6 +48,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceLaneInfo {
+                    #[default]
                     IGuidanceLaneInfo,
                 }
                 #[repr(u32)]
@@ -70,6 +72,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceManeuver {
+                    #[default]
                     IGuidanceManeuver,
                 }
                 #[repr(i32)]
@@ -130,6 +133,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceMapMatchedCoordinate {
+                    #[default]
                     IGuidanceMapMatchedCoordinate,
                 }
                 #[repr(i32)]
@@ -148,7 +152,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceNavigator {
+                    #[default]
                     IGuidanceNavigator,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Services.Maps.GuidanceContract", 131072)]
                     IGuidanceNavigator2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::GuidanceContract, 65536)]
@@ -156,6 +162,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceReroutedEventArgs {
+                    #[default]
                     IGuidanceReroutedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::GuidanceContract, 65536)]
@@ -163,7 +170,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceRoadSegment {
+                    #[default]
                     IGuidanceRoadSegment,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Services.Maps.GuidanceContract", 196608)]
                     IGuidanceRoadSegment2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::GuidanceContract, 65536)]
@@ -171,6 +180,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceRoadSignpost {
+                    #[default]
                     IGuidanceRoadSignpost,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::GuidanceContract, 65536)]
@@ -179,6 +189,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceRoute {
+                    #[default]
                     IGuidanceRoute,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::GuidanceContract, 65536)]
@@ -187,6 +198,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceTelemetryCollector {
+                    #[default]
                     IGuidanceTelemetryCollector,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::GuidanceContract, 65536)]
@@ -194,6 +206,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GuidanceUpdatedEventArgs {
+                    #[default]
                     IGuidanceUpdatedEventArgs,
                 }
                 #[guid(0xca2aa24a_c7c2_4d4c_9d7c_499576bceddb)]
@@ -286,16 +299,17 @@ mod Windows {
                     event UserLocationLost: super::super::super::Foundation::TypedEventHandler<GuidanceNavigator, Object>;
                     event UserLocationRestored: super::super::super::Foundation::TypedEventHandler<GuidanceNavigator, Object>;
                     fn SetGuidanceVoice(&self, voiceId: i32, voiceFolder: String);
-                    #[Windows::Foundation::Metadata::Overload("UpdateUserLocation")]
+                    #[overload(UpdateUserLocation)]
                     fn UpdateUserLocation(&self, userLocation: super::super::super::Devices::Geolocation::Geocoordinate);
-                    #[Windows::Foundation::Metadata::Overload("UpdateUserLocationWithPositionOverride")]
-                    fn UpdateUserLocation(&self, userLocation: super::super::super::Devices::Geolocation::Geocoordinate, positionOverride: super::super::super::Devices::Geolocation::BasicGeoposition);
+                    #[overload(UpdateUserLocation)]
+                    fn UpdateUserLocationWithPositionOverride(&self, userLocation: super::super::super::Devices::Geolocation::Geocoordinate, positionOverride: super::super::super::Devices::Geolocation::BasicGeoposition);
                 }
                 #[guid(0x6cdc50d1_041c_4bf3_b633_a101fc2f6b57)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::GuidanceContract, 131072)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(GuidanceNavigator)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IGuidanceNavigator2 {
+                    #[add_name(value)]
                     event AudioNotificationRequested: super::super::super::Foundation::TypedEventHandler<GuidanceNavigator, GuidanceAudioNotificationRequestedEventArgs>;
                     IsGuidanceAudioMuted: bool;
                 }

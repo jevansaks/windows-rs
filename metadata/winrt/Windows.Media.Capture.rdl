@@ -8,7 +8,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AdvancedCapturedPhoto {
+                #[default]
                 IAdvancedCapturedPhoto,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IAdvancedCapturedPhoto2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -16,24 +18,31 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AdvancedPhotoCapture {
+                #[default]
                 IAdvancedPhotoCapture,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastBackgroundService {
+                #[default]
                 IAppBroadcastBackgroundService,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppBroadcastContract", 131072)]
                 IAppBroadcastBackgroundService2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastBackgroundServiceSignInInfo {
+                #[default]
                 IAppBroadcastBackgroundServiceSignInInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppBroadcastContract", 131072)]
                 IAppBroadcastBackgroundServiceSignInInfo2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastBackgroundServiceStreamInfo {
+                #[default]
                 IAppBroadcastBackgroundServiceStreamInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppBroadcastContract", 131072)]
                 IAppBroadcastBackgroundServiceStreamInfo2,
             }
             #[repr(i32)]
@@ -47,6 +56,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastCameraCaptureStateChangedEventArgs {
+                #[default]
                 IAppBroadcastCameraCaptureStateChangedEventArgs,
             }
             #[repr(i32)]
@@ -89,13 +99,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastGlobalSettings {
+                #[default]
                 IAppBroadcastGlobalSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastHeartbeatRequestedEventArgs {
+                #[default]
                 IAppBroadcastHeartbeatRequestedEventArgs,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Static(IAppBroadcastManagerStatics, 65536, "Windows.Media.Capture.AppBroadcastContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
@@ -111,12 +124,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastMicrophoneCaptureStateChangedEventArgs {
+                #[default]
                 IAppBroadcastMicrophoneCaptureStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPlugIn {
+                #[default]
                 IAppBroadcastPlugIn,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
@@ -124,6 +139,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IAppBroadcastPlugInManagerStatics, 65536, "Windows.Media.Capture.AppBroadcastContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPlugInManager {
+                #[default]
                 IAppBroadcastPlugInManager,
             }
             #[repr(i32)]
@@ -141,12 +157,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPlugInStateChangedEventArgs {
+                #[default]
                 IAppBroadcastPlugInStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPreview {
+                #[default]
                 IAppBroadcastPreview,
             }
             #[repr(i32)]
@@ -160,35 +178,41 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPreviewStateChangedEventArgs {
+                #[default]
                 IAppBroadcastPreviewStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPreviewStreamReader {
+                #[default]
                 IAppBroadcastPreviewStreamReader,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPreviewStreamVideoFrame {
+                #[default]
                 IAppBroadcastPreviewStreamVideoFrame,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastPreviewStreamVideoHeader {
+                #[default]
                 IAppBroadcastPreviewStreamVideoHeader,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastProviderSettings {
+                #[default]
                 IAppBroadcastProviderSettings,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastServices {
+                #[default]
                 IAppBroadcastServices,
             }
             #[repr(i32)]
@@ -212,27 +236,32 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastSignInStateChangedEventArgs {
+                #[default]
                 IAppBroadcastSignInStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastState {
+                #[default]
                 IAppBroadcastState,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastStreamAudioFrame {
+                #[default]
                 IAppBroadcastStreamAudioFrame,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastStreamAudioHeader {
+                #[default]
                 IAppBroadcastStreamAudioHeader,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastStreamReader {
+                #[default]
                 IAppBroadcastStreamReader,
             }
             #[repr(i32)]
@@ -247,16 +276,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastStreamStateChangedEventArgs {
+                #[default]
                 IAppBroadcastStreamStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastStreamVideoFrame {
+                #[default]
                 IAppBroadcastStreamVideoFrame,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastStreamVideoHeader {
+                #[default]
                 IAppBroadcastStreamVideoHeader,
             }
             #[repr(i32)]
@@ -276,6 +308,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(AppBroadcastContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastTriggerDetails {
+                #[default]
                 IAppBroadcastTriggerDetails,
             }
             #[repr(i32)]
@@ -294,19 +327,24 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppBroadcastViewerCountChangedEventArgs {
+                #[default]
                 IAppBroadcastViewerCountChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 131072)]
             #[Windows::Foundation::Metadata::Static(IAppCaptureStatics, 131072, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Static(IAppCaptureStatics2, 327680, "Windows.Foundation.UniversalApiContract")]
             class AppCapture {
+                #[default]
                 IAppCapture,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppCaptureContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureAlternateShortcutKeys {
+                #[default]
                 IAppCaptureAlternateShortcutKeys,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppCaptureContract", 131072)]
                 IAppCaptureAlternateShortcutKeys2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppCaptureContract", 196608)]
                 IAppCaptureAlternateShortcutKeys3,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -316,12 +354,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureDurationGeneratedEventArgs {
+                #[default]
                 IAppCaptureDurationGeneratedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppCaptureContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureFileGeneratedEventArgs {
+                #[default]
                 IAppCaptureFileGeneratedEventArgs,
             }
             #[repr(i32)]
@@ -330,6 +370,7 @@ mod Windows {
                 Megabytes = 0,
                 Seconds = 1,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(AppCaptureContract, 65536)]
             #[Windows::Foundation::Metadata::Static(IAppCaptureManagerStatics, 65536, "Windows.Media.Capture.AppCaptureContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
@@ -349,6 +390,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureMetadataWriter {
+                #[default]
                 IAppCaptureMetadataWriter,
                 super::super::Foundation::IClosable,
             }
@@ -363,12 +405,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureMicrophoneCaptureStateChangedEventArgs {
+                #[default]
                 IAppCaptureMicrophoneCaptureStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppCaptureContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureRecordOperation {
+                #[default]
                 IAppCaptureRecordOperation,
             }
             #[repr(i32)]
@@ -382,27 +426,34 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureRecordingStateChangedEventArgs {
+                #[default]
                 IAppCaptureRecordingStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppCaptureContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureServices {
+                #[default]
                 IAppCaptureServices,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppCaptureContract, 65536)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureSettings {
+                #[default]
                 IAppCaptureSettings,
                 IAppCaptureSettings2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppCaptureContract", 131072)]
                 IAppCaptureSettings3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppCaptureContract", 196608)]
                 IAppCaptureSettings4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Media.Capture.AppCaptureContract", 262144)]
                 IAppCaptureSettings5,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppCaptureContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppCaptureState {
+                #[default]
                 IAppCaptureState,
             }
             #[repr(i32)]
@@ -430,6 +481,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
             #[Windows::Foundation::Metadata::Threading(STA)]
             class CameraCaptureUI {
+                #[default]
                 ICameraCaptureUI,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -464,6 +516,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CameraCaptureUIPhotoCaptureSettings {
+                #[default]
                 ICameraCaptureUIPhotoCaptureSettings,
             }
             #[repr(i32)]
@@ -477,6 +530,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CameraCaptureUIVideoCaptureSettings {
+                #[default]
                 ICameraCaptureUIVideoCaptureSettings,
             }
             #[repr(i32)]
@@ -485,6 +539,7 @@ mod Windows {
                 Mp4 = 0,
                 Wmv = 1,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CameraCaptureUIContract, 65536)]
             #[Windows::Foundation::Metadata::Static(ICameraOptionsUIStatics, 65536, "Windows.Media.Capture.CameraCaptureUIContract")]
             #[Windows::Foundation::Metadata::Threading(MTA)]
@@ -495,6 +550,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CapturedFrame {
+                #[default]
                 ICapturedFrame,
                 super::super::Storage::Streams::IRandomAccessStreamWithContentType,
                 super::super::Storage::Streams::IContentTypeProvider,
@@ -502,7 +558,9 @@ mod Windows {
                 super::super::Storage::Streams::IOutputStream,
                 super::super::Foundation::IClosable,
                 super::super::Storage::Streams::IInputStream,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ICapturedFrameWithSoftwareBitmap,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 ICapturedFrame2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -510,7 +568,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CapturedFrameControlValues {
+                #[default]
                 ICapturedFrameControlValues,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ICapturedFrameControlValues2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -518,6 +578,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CapturedPhoto {
+                #[default]
                 ICapturedPhoto,
             }
             #[repr(i32)]
@@ -558,12 +619,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GameBarServices {
+                #[default]
                 IGameBarServices,
             }
             #[Windows::Foundation::Metadata::ContractVersion(GameBarContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GameBarServicesCommandEventArgs {
+                #[default]
                 IGameBarServicesCommandEventArgs,
             }
             #[repr(i32)]
@@ -577,18 +640,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IGameBarServicesManagerStatics, 65536, "Windows.Media.Capture.GameBarContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GameBarServicesManager {
+                #[default]
                 IGameBarServicesManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(GameBarContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GameBarServicesManagerGameBarServicesCreatedEventArgs {
+                #[default]
                 IGameBarServicesManagerGameBarServicesCreatedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(GameBarContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class GameBarServicesTargetInfo {
+                #[default]
                 IGameBarServicesTargetInfo,
             }
             #[repr(i32)]
@@ -622,12 +688,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(AdvancedPhotoCapture)]
             interface IAdvancedPhotoCapture {
-                #[Windows::Foundation::Metadata::Overload("CaptureAsync")]
+                #[overload(CaptureAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CaptureAsync(&self) -> super::super::Foundation::IAsyncOperation<AdvancedCapturedPhoto>;
-                #[Windows::Foundation::Metadata::Overload("CaptureWithContextAsync")]
+                #[overload(CaptureAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn CaptureAsync(&self, context: Object) -> super::super::Foundation::IAsyncOperation<AdvancedCapturedPhoto>;
+                fn CaptureWithContextAsync(&self, context: Object) -> super::super::Foundation::IAsyncOperation<AdvancedCapturedPhoto>;
                 event OptionalReferencePhotoCaptured: super::super::Foundation::TypedEventHandler<AdvancedPhotoCapture, OptionalReferencePhotoCapturedEventArgs>;
                 event AllPhotosCaptured: super::super::Foundation::TypedEventHandler<AdvancedPhotoCapture, Object>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -867,6 +933,7 @@ mod Windows {
                 PreviewState: AppBroadcastPreviewState;
                 #[get]
                 ErrorCode: super::super::Foundation::IReference<u32>;
+                #[add_name(value)]
                 event PreviewStateChanged: super::super::Foundation::TypedEventHandler<AppBroadcastPreview, AppBroadcastPreviewStateChangedEventArgs>;
                 #[get]
                 PreviewStreamReader: AppBroadcastPreviewStreamReader;
@@ -895,6 +962,7 @@ mod Windows {
                 #[get]
                 VideoBitmapAlphaMode: super::super::Graphics::Imaging::BitmapAlphaMode;
                 fn TryGetNextVideoFrame(&self) -> AppBroadcastPreviewStreamVideoFrame;
+                #[add_name(value)]
                 event VideoFrameArrived: super::super::Foundation::TypedEventHandler<AppBroadcastPreviewStreamReader, Object>;
             }
             #[guid(0x010fbea1_94fe_4499_b8c0_8d244279fb12)]
@@ -1021,11 +1089,15 @@ mod Windows {
                 TerminationReason: AppBroadcastTerminationReason;
                 #[get]
                 TerminationReasonPlugInSpecific: u32;
+                #[add_name(value)]
                 event ViewerCountChanged: super::super::Foundation::TypedEventHandler<AppBroadcastState, AppBroadcastViewerCountChangedEventArgs>;
+                #[add_name(value)]
                 event MicrophoneCaptureStateChanged: super::super::Foundation::TypedEventHandler<AppBroadcastState, AppBroadcastMicrophoneCaptureStateChangedEventArgs>;
+                #[add_name(value)]
                 event CameraCaptureStateChanged: super::super::Foundation::TypedEventHandler<AppBroadcastState, AppBroadcastCameraCaptureStateChangedEventArgs>;
                 event PlugInStateChanged: super::super::Foundation::TypedEventHandler<AppBroadcastState, AppBroadcastPlugInStateChangedEventArgs>;
                 event StreamStateChanged: super::super::Foundation::TypedEventHandler<AppBroadcastState, AppBroadcastStreamStateChangedEventArgs>;
+                #[add_name(value)]
                 event CaptureTargetClosed: super::super::Foundation::TypedEventHandler<AppBroadcastState, Object>;
             }
             #[guid(0xefab4ac8_21ba_453f_8bb7_5e938a2e9a74)]
@@ -1072,7 +1144,9 @@ mod Windows {
                 #[get]
                 VideoBitrate: u32;
                 fn TryGetNextVideoFrame(&self) -> AppBroadcastStreamVideoFrame;
+                #[add_name(value)]
                 event AudioFrameArrived: super::super::Foundation::TypedEventHandler<AppBroadcastStreamReader, Object>;
+                #[add_name(value)]
                 event VideoFrameArrived: super::super::Foundation::TypedEventHandler<AppBroadcastStreamReader, Object>;
             }
             #[guid(0x5108a733_d008_4a89_93be_58aed961374e)]
@@ -1272,8 +1346,11 @@ mod Windows {
                 File: super::super::Storage::StorageFile;
                 #[get]
                 IsFileTruncated: super::super::Foundation::IReference<bool>;
+                #[add_name(value)]
                 event StateChanged: super::super::Foundation::TypedEventHandler<AppCaptureRecordOperation, AppCaptureRecordingStateChangedEventArgs>;
+                #[add_name(value)]
                 event DurationGenerated: super::super::Foundation::TypedEventHandler<AppCaptureRecordOperation, AppCaptureDurationGeneratedEventArgs>;
+                #[add_name(value)]
                 event FileGenerated: super::super::Foundation::TypedEventHandler<AppCaptureRecordOperation, AppCaptureFileGeneratedEventArgs>;
             }
             #[guid(0x24fc8712_e305_490d_b415_6b1c9049736b)]
@@ -1439,7 +1516,9 @@ mod Windows {
                 MicrophoneCaptureState: AppCaptureMicrophoneCaptureState;
                 #[get]
                 MicrophoneCaptureError: u32;
+                #[add_name(value)]
                 event MicrophoneCaptureStateChanged: super::super::Foundation::TypedEventHandler<AppCaptureState, AppCaptureMicrophoneCaptureStateChangedEventArgs>;
+                #[add_name(value)]
                 event CaptureTargetClosed: super::super::Foundation::TypedEventHandler<AppCaptureState, Object>;
             }
             #[guid(0xf922dd6c_0a7e_4e74_8b20_9c1f902d08a1)]
@@ -1578,6 +1657,7 @@ mod Windows {
                 AppBroadcastServices: AppBroadcastServices;
                 #[get]
                 AppCaptureServices: AppCaptureServices;
+                #[add_name(value)]
                 event CommandReceived: super::super::Foundation::TypedEventHandler<GameBarServices, GameBarServicesCommandEventArgs>;
             }
             #[guid(0xa74226b2_f176_4fcf_8fbb_cf698b2eb8e0)]
@@ -1593,6 +1673,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(GameBarContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(GameBarServicesManager)]
             interface IGameBarServicesManager {
+                #[add_name(value)]
                 event GameBarServicesCreated: super::super::Foundation::TypedEventHandler<GameBarServicesManager, GameBarServicesManagerGameBarServicesCreatedEventArgs>;
             }
             #[guid(0xededbd9c_143e_49a3_a5ea_0b1995c8d46e)]
@@ -1675,20 +1756,20 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(MediaCapture)]
             interface IMediaCapture {
-                #[Windows::Foundation::Metadata::Overload("InitializeAsync")]
+                #[overload(InitializeAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn InitializeAsync(&self) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("InitializeWithSettingsAsync")]
-                fn InitializeAsync(&self, mediaCaptureInitializationSettings: MediaCaptureInitializationSettings) -> super::super::Foundation::IAsyncAction;
+                #[overload(InitializeAsync)]
+                fn InitializeWithSettingsAsync(&self, mediaCaptureInitializationSettings: MediaCaptureInitializationSettings) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn StartRecordToStorageFileAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, file: super::super::Storage::IStorageFile) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn StartRecordToStreamAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, stream: super::super::Storage::Streams::IRandomAccessStream) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("StartRecordToCustomSinkAsync")]
+                #[overload(StartRecordToCustomSinkAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn StartRecordToCustomSinkAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customMediaSink: super::IMediaExtension) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("StartRecordToCustomSinkIdAsync")]
-                fn StartRecordToCustomSinkAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customSinkActivationId: String, customSinkSettings: super::super::Foundation::Collections::IPropertySet) -> super::super::Foundation::IAsyncAction;
+                #[overload(StartRecordToCustomSinkAsync)]
+                fn StartRecordToCustomSinkIdAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customSinkActivationId: String, customSinkSettings: super::super::Foundation::Collections::IPropertySet) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn StopRecordAsync(&self) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
@@ -1701,7 +1782,11 @@ mod Windows {
                 fn ClearEffectsAsync(&self, mediaStreamType: MediaStreamType) -> super::super::Foundation::IAsyncAction;
                 fn SetEncoderProperty(&self, mediaStreamType: MediaStreamType, propertyId: GUID, propertyValue: Object);
                 fn GetEncoderProperty(&self, mediaStreamType: MediaStreamType, propertyId: GUID) -> Object;
+                #[add_name(errorEventHandler)]
+                #[remove_name(eventCookie)]
                 event Failed: MediaCaptureFailedEventHandler;
+                #[add_name(recordLimitationExceededEventHandler)]
+                #[remove_name(eventCookie)]
                 event RecordLimitationExceeded: RecordLimitationExceededEventHandler;
                 #[get]
                 MediaCaptureSettings: MediaCaptureSettings;
@@ -1722,10 +1807,10 @@ mod Windows {
             interface IMediaCapture2 {
                 fn PrepareLowLagRecordToStorageFileAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, file: super::super::Storage::IStorageFile) -> super::super::Foundation::IAsyncOperation<LowLagMediaRecording>;
                 fn PrepareLowLagRecordToStreamAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, stream: super::super::Storage::Streams::IRandomAccessStream) -> super::super::Foundation::IAsyncOperation<LowLagMediaRecording>;
-                #[Windows::Foundation::Metadata::Overload("PrepareLowLagRecordToCustomSinkAsync")]
+                #[overload(PrepareLowLagRecordToCustomSinkAsync)]
                 fn PrepareLowLagRecordToCustomSinkAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customMediaSink: super::IMediaExtension) -> super::super::Foundation::IAsyncOperation<LowLagMediaRecording>;
-                #[Windows::Foundation::Metadata::Overload("PrepareLowLagRecordToCustomSinkIdAsync")]
-                fn PrepareLowLagRecordToCustomSinkAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customSinkActivationId: String, customSinkSettings: super::super::Foundation::Collections::IPropertySet) -> super::super::Foundation::IAsyncOperation<LowLagMediaRecording>;
+                #[overload(PrepareLowLagRecordToCustomSinkAsync)]
+                fn PrepareLowLagRecordToCustomSinkIdAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customSinkActivationId: String, customSinkSettings: super::super::Foundation::Collections::IPropertySet) -> super::super::Foundation::IAsyncOperation<LowLagMediaRecording>;
                 fn PrepareLowLagPhotoCaptureAsync(&self, r#type: super::MediaProperties::ImageEncodingProperties) -> super::super::Foundation::IAsyncOperation<LowLagPhotoCapture>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn PrepareLowLagPhotoSequenceCaptureAsync(&self, r#type: super::MediaProperties::ImageEncodingProperties) -> super::super::Foundation::IAsyncOperation<LowLagPhotoSequenceCapture>;
@@ -1753,12 +1838,12 @@ mod Windows {
                 event CameraStreamStateChanged: super::super::Foundation::TypedEventHandler<MediaCapture, Object>;
                 #[get]
                 CameraStreamState: super::Devices::CameraStreamState;
-                #[Windows::Foundation::Metadata::Overload("GetPreviewFrameAsync")]
+                #[overload(GetPreviewFrameAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetPreviewFrameAsync(&self) -> super::super::Foundation::IAsyncOperation<super::VideoFrame>;
-                #[Windows::Foundation::Metadata::Overload("GetPreviewFrameCopyAsync")]
+                #[overload(GetPreviewFrameAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn GetPreviewFrameAsync(&self, destination: super::VideoFrame) -> super::super::Foundation::IAsyncOperation<super::VideoFrame>;
+                fn GetPreviewFrameCopyAsync(&self, destination: super::VideoFrame) -> super::super::Foundation::IAsyncOperation<super::VideoFrame>;
                 event ThermalStatusChanged: super::super::Foundation::TypedEventHandler<MediaCapture, Object>;
                 #[get]
                 ThermalStatus: MediaCaptureThermalStatus;
@@ -1776,15 +1861,15 @@ mod Windows {
                 fn StopRecordWithResultAsync(&self) -> super::super::Foundation::IAsyncOperation<MediaCaptureStopResult>;
                 #[get]
                 FrameSources: super::super::Foundation::Collections::IMapView<String, Frames::MediaFrameSource>;
-                #[Windows::Foundation::Metadata::Overload("CreateFrameReaderAsync")]
+                #[overload(CreateFrameReaderAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn CreateFrameReaderAsync(&self, inputSource: Frames::MediaFrameSource) -> super::super::Foundation::IAsyncOperation<Frames::MediaFrameReader>;
-                #[Windows::Foundation::Metadata::Overload("CreateFrameReaderWithSubtypeAsync")]
+                #[overload(CreateFrameReaderAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn CreateFrameReaderAsync(&self, inputSource: Frames::MediaFrameSource, outputSubtype: String) -> super::super::Foundation::IAsyncOperation<Frames::MediaFrameReader>;
-                #[Windows::Foundation::Metadata::Overload("CreateFrameReaderWithSubtypeAndSizeAsync")]
+                fn CreateFrameReaderWithSubtypeAsync(&self, inputSource: Frames::MediaFrameSource, outputSubtype: String) -> super::super::Foundation::IAsyncOperation<Frames::MediaFrameReader>;
+                #[overload(CreateFrameReaderAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn CreateFrameReaderAsync(&self, inputSource: Frames::MediaFrameSource, outputSubtype: String, outputSize: super::super::Graphics::Imaging::BitmapSize) -> super::super::Foundation::IAsyncOperation<Frames::MediaFrameReader>;
+                fn CreateFrameReaderWithSubtypeAndSizeAsync(&self, inputSource: Frames::MediaFrameSource, outputSubtype: String, outputSize: super::super::Graphics::Imaging::BitmapSize) -> super::super::Foundation::IAsyncOperation<Frames::MediaFrameReader>;
             }
             #[guid(0x228948bd_4b20_4bb1_9fd6_a583212a1012)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -1989,10 +2074,10 @@ mod Windows {
             interface IMediaCaptureVideoPreview {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn StartPreviewAsync(&self) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("StartPreviewToCustomSinkAsync")]
+                #[overload(StartPreviewToCustomSinkAsync)]
                 fn StartPreviewToCustomSinkAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customMediaSink: super::IMediaExtension) -> super::super::Foundation::IAsyncAction;
-                #[Windows::Foundation::Metadata::Overload("StartPreviewToCustomSinkIdAsync")]
-                fn StartPreviewToCustomSinkAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customSinkActivationId: String, customSinkSettings: super::super::Foundation::Collections::IPropertySet) -> super::super::Foundation::IAsyncAction;
+                #[overload(StartPreviewToCustomSinkAsync)]
+                fn StartPreviewToCustomSinkIdAsync(&self, encodingProfile: super::MediaProperties::MediaEncodingProfile, customSinkActivationId: String, customSinkSettings: super::super::Foundation::Collections::IPropertySet) -> super::super::Foundation::IAsyncAction;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn StopPreviewAsync(&self) -> super::super::Foundation::IAsyncAction;
             }
@@ -2031,12 +2116,12 @@ mod Windows {
                 Height: u32;
                 #[get]
                 FrameRate: f64;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("IsVariablePhotoSequenceSupported might not be available in the next major update following Windows 10, version 1709", Deprecate, 393216, "Windows.Foundation.UniversalApiContract")]
-                fn get_IsVariablePhotoSequenceSupported(&self) -> bool;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("IsHdrVideoSupported might not be available in the next major update following Windows 10, version 1709", Deprecate, 393216, "Windows.Foundation.UniversalApiContract")]
-                fn get_IsHdrVideoSupported(&self) -> bool;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("IsVariablePhotoSequenceSupported might not be available in the next major update following Windows 10, version 1709", Deprecate, 393216, "Windows.Foundation.UniversalApiContract"))]
+                IsVariablePhotoSequenceSupported: bool;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("IsHdrVideoSupported might not be available in the next major update following Windows 10, version 1709", Deprecate, 393216, "Windows.Foundation.UniversalApiContract"))]
+                IsHdrVideoSupported: bool;
             }
             #[guid(0xc6a6ef13_322d_413a_b85a_68a88e02f4e9)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
@@ -2093,11 +2178,17 @@ mod Windows {
                 BalancedVideoAndPhoto = 2,
                 VideoConferencing = 3,
                 PhotoSequence = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 HighFrameRate = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 VariablePhotoSequence = 6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 HdrWithWcgVideo = 7,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 HdrWithWcgPhoto = 8,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 VideoHdr8 = 9,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
                 CompressedCamera = 10,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -2105,8 +2196,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class LowLagMediaRecording {
+                #[default]
                 ILowLagMediaRecording,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ILowLagMediaRecording2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 ILowLagMediaRecording3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -2114,6 +2208,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class LowLagPhotoCapture {
+                #[default]
                 ILowLagPhotoCapture,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -2121,6 +2216,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class LowLagPhotoSequenceCapture {
+                #[default]
                 ILowLagPhotoSequenceCapture,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2130,14 +2226,22 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IMediaCaptureStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaCapture {
+                #[default]
                 IMediaCapture,
                 IMediaCaptureVideoPreview,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IMediaCapture2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IMediaCapture3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IMediaCapture4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IMediaCapture5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IMediaCapture6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IMediaCapture7,
             }
             #[repr(i32)]
@@ -2157,12 +2261,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MediaCaptureDeviceExclusiveControlStatusChangedEventArgs {
+                #[default]
                 IMediaCaptureDeviceExclusiveControlStatusChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaCaptureFailedEventArgs {
+                #[default]
                 IMediaCaptureFailedEventArgs,
             }
             #[guid(0x2014effb_5cd8_4f08_a314_0d360da59f14)]
@@ -2173,6 +2279,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MediaCaptureFocusChangedEventArgs {
+                #[default]
                 IMediaCaptureFocusChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -2181,12 +2288,19 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MediaCaptureInitializationSettings {
+                #[default]
                 IMediaCaptureInitializationSettings,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IMediaCaptureInitializationSettings2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IMediaCaptureInitializationSettings3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IMediaCaptureInitializationSettings4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IMediaCaptureInitializationSettings5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 IMediaCaptureInitializationSettings6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                 IMediaCaptureInitializationSettings7,
             }
             #[repr(i32)]
@@ -2201,6 +2315,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaCapturePauseResult {
+                #[default]
                 IMediaCapturePauseResult,
                 super::super::Foundation::IClosable,
             }
@@ -2208,6 +2323,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class MediaCaptureRelativePanelWatcher {
+                #[default]
                 IMediaCaptureRelativePanelWatcher,
                 super::super::Foundation::IClosable,
             }
@@ -2216,8 +2332,11 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaCaptureSettings {
+                #[default]
                 IMediaCaptureSettings,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IMediaCaptureSettings2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IMediaCaptureSettings3,
             }
             #[repr(i32)]
@@ -2232,6 +2351,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class MediaCaptureStopResult {
+                #[default]
                 IMediaCaptureStopResult,
                 super::super::Foundation::IClosable,
             }
@@ -2246,7 +2366,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MediaCaptureVideoProfile {
+                #[default]
                 IMediaCaptureVideoProfile,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IMediaCaptureVideoProfile2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -2254,7 +2376,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class MediaCaptureVideoProfileMediaDescription {
+                #[default]
                 IMediaCaptureVideoProfileMediaDescription,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IMediaCaptureVideoProfileMediaDescription2,
             }
             #[repr(i32)]
@@ -2262,11 +2386,17 @@ mod Windows {
             enum MediaCategory {
                 Other = 0,
                 Communications = 1,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Media = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 GameChat = 3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 Speech = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 FarFieldSpeech = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 UniformSpeech = 6,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 VoiceTyping = 7,
             }
             #[repr(i32)]
@@ -2276,6 +2406,7 @@ mod Windows {
                 VideoRecord = 1,
                 Audio = 2,
                 Photo = 3,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 Metadata = 4,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -2284,6 +2415,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class OptionalReferencePhotoCapturedEventArgs {
+                #[default]
                 IOptionalReferencePhotoCapturedEventArgs,
             }
             #[repr(i32)]
@@ -2298,6 +2430,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhotoCapturedEventArgs {
+                #[default]
                 IPhotoCapturedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -2305,6 +2438,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PhotoConfirmationCapturedEventArgs {
+                #[default]
                 IPhotoConfirmationCapturedEventArgs,
             }
             #[repr(i32)]
@@ -2313,6 +2447,7 @@ mod Windows {
                 Disabled = 0,
                 FiftyHertz = 1,
                 SixtyHertz = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 Auto = 3,
             }
             #[guid(0x3fae8f2e_4fe1_4ffd_aaba_e1f1337d4e53)]
@@ -2347,6 +2482,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class VideoStreamConfiguration {
+                #[default]
                 IVideoStreamConfiguration,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]

@@ -9,6 +9,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AddPagesEventArgs {
+                    #[default]
                     IAddPagesEventArgs,
                 }
                 #[guid(0xd4b57970_57a0_4209_847c_c093b54bc729)]
@@ -21,6 +22,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GetPreviewPageEventArgs {
+                    #[default]
                     IGetPreviewPageEventArgs,
                 }
                 #[guid(0xccb3e9ed_9c11_4e50_ab49_e98086bbfdef)]
@@ -60,9 +62,18 @@ mod Windows {
                 interface IPrintDocument {
                     #[get]
                     DocumentSource: super::super::super::Graphics::Printing::IPrintDocumentSource;
-                    event Paginate: PaginateEventHandler;
-                    event GetPreviewPage: GetPreviewPageEventHandler;
-                    event AddPages: AddPagesEventHandler;
+                    #[special]
+                    fn add_Paginate(&self, handler: PaginateEventHandler) -> super::super::super::Foundation::EventRegistrationToken;
+                    #[special]
+                    fn remove_Paginate(&self, token: super::super::super::Foundation::EventRegistrationToken);
+                    #[special]
+                    fn add_GetPreviewPage(&self, handler: GetPreviewPageEventHandler) -> super::super::super::Foundation::EventRegistrationToken;
+                    #[special]
+                    fn remove_GetPreviewPage(&self, token: super::super::super::Foundation::EventRegistrationToken);
+                    #[special]
+                    fn add_AddPages(&self, handler: AddPagesEventHandler) -> super::super::super::Foundation::EventRegistrationToken;
+                    #[special]
+                    fn remove_AddPages(&self, token: super::super::super::Foundation::EventRegistrationToken);
                     fn AddPage(&self, pageVisual: super::UIElement);
                     fn AddPagesComplete(&self);
                     fn SetPreviewPageCount(&self, count: i32, r#type: PreviewPageCountType);
@@ -90,6 +101,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PaginateEventArgs {
+                    #[default]
                     IPaginateEventArgs,
                 }
                 #[guid(0x0cc05b61_811b_4a32_9965_13eb78dbb01b)]
@@ -103,6 +115,7 @@ mod Windows {
                     Final = 0,
                     Intermediate = 1,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IPrintDocumentFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -110,6 +123,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PrintDocument: super::DependencyObject {
+                    #[default]
                     IPrintDocument,
                 }
             }

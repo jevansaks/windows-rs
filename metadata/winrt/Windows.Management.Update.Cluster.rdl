@@ -8,6 +8,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AcquireEnvironmentInfoResult {
+                    #[default]
                     IAcquireEnvironmentInfoResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IAreRebootsPendingResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -15,6 +16,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class AreRebootsPendingResult {
+                    #[default]
                     IAreRebootsPendingResult,
                 }
                 #[repr(i32)]
@@ -61,6 +63,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(ClusterNativeUpdatingContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class ClusterUpdateServices {
+                    #[default]
                     IClusterUpdateServices,
                 }
                 #[guid(0xb720e3a4_9a34_51c1_a1fa_0c6673bef689)]
@@ -470,6 +473,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InstallUpdateTaskResult {
+                    #[default]
                     IInstallUpdateTaskResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IRollbackUpdateTaskResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -477,6 +481,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RollbackUpdateTaskResult {
+                    #[default]
                     IRollbackUpdateTaskResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IScanUpdateTaskResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -484,6 +489,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class ScanUpdateTaskResult {
+                    #[default]
                     IScanUpdateTaskResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IStageUpdateTaskResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -491,6 +497,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class StageUpdateTaskResult {
+                    #[default]
                     IStageUpdateTaskResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateCredentialFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -498,6 +505,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateCredential {
+                    #[default]
                     IUpdateCredential,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateInstallRecordFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -505,6 +513,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateInstallRecord {
+                    #[default]
                     IUpdateInstallRecord,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateOperationResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -512,6 +521,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateOperationResult {
+                    #[default]
                     IUpdateOperationResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdatePendingOperationResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -519,6 +529,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdatePendingOperationResult {
+                    #[default]
                     IUpdatePendingOperationResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdatePluginVersionInfoFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -526,6 +537,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdatePluginVersionInfo {
+                    #[default]
                     IUpdatePluginVersionInfo,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateRecipeNodeValidationInfoRecordFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -533,6 +545,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateRecipeNodeValidationInfoRecord {
+                    #[default]
                     IUpdateRecipeNodeValidationInfoRecord,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateScanRecordFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -540,6 +553,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateScanRecord {
+                    #[default]
                     IUpdateScanRecord,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateStageRecordFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -547,6 +561,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateStageRecord {
+                    #[default]
                     IUpdateStageRecord,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateTaskResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -554,6 +569,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateTaskResult {
+                    #[default]
                     IUpdateTaskResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IUpdateValidationLogMessageFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -561,6 +577,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class UpdateValidationLogMessage {
+                    #[default]
                     IUpdateValidationLogMessage,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IValidateAllNodesUpdateRecipeResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -568,6 +585,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class ValidateAllNodesUpdateRecipeResult {
+                    #[default]
                     IValidateAllNodesUpdateRecipeResult,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IValidateClusterEnvironmentResultFactory, 65536, "Windows.Management.Update.Cluster.ClusterNativeUpdatingContract")]
@@ -575,6 +593,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class ValidateClusterEnvironmentResult {
+                    #[default]
                     IValidateClusterEnvironmentResult,
                 }
             }

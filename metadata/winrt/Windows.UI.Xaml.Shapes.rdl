@@ -9,6 +9,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Ellipse: Shape {
+                    #[default]
                     IEllipse,
                 }
                 #[guid(0x70e05ac4_d38d_4bab_831f_4a22ef52ac86)]
@@ -184,8 +185,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Line: Shape {
+                    #[default]
                     ILine,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IPathFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -193,6 +196,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Path: Shape {
+                    #[default]
                     IPath,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -201,7 +205,12 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IPolygonStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IPolygonStatics, FillRuleProperty)]
+                #[no_static_property(IPolygonStatics, PointsProperty)]
                 class Polygon: Shape {
+                    #[default]
+                    #[no_property(FillRule)]
+                    #[no_property(Points)]
                     IPolygon,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -210,7 +219,12 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IPolylineStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IPolylineStatics, FillRuleProperty)]
+                #[no_static_property(IPolylineStatics, PointsProperty)]
                 class Polyline: Shape {
+                    #[default]
+                    #[no_property(FillRule)]
+                    #[no_property(Points)]
                     IPolyline,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -219,17 +233,48 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IRectangleStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IRectangleStatics, RadiusXProperty)]
+                #[no_static_property(IRectangleStatics, RadiusYProperty)]
                 class Rectangle: Shape {
+                    #[default]
+                    #[no_property(RadiusX)]
+                    #[no_property(RadiusY)]
                     IRectangle,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IShapeFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IShapeStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IShapeStatics, FillProperty)]
+                #[no_static_property(IShapeStatics, StretchProperty)]
+                #[no_static_property(IShapeStatics, StrokeDashArrayProperty)]
+                #[no_static_property(IShapeStatics, StrokeDashCapProperty)]
+                #[no_static_property(IShapeStatics, StrokeDashOffsetProperty)]
+                #[no_static_property(IShapeStatics, StrokeEndLineCapProperty)]
+                #[no_static_property(IShapeStatics, StrokeLineJoinProperty)]
+                #[no_static_property(IShapeStatics, StrokeMiterLimitProperty)]
+                #[no_static_property(IShapeStatics, StrokeProperty)]
+                #[no_static_property(IShapeStatics, StrokeStartLineCapProperty)]
+                #[no_static_property(IShapeStatics, StrokeThicknessProperty)]
                 class Shape: super::FrameworkElement {
+                    #[default]
+                    #[no_property(Fill)]
+                    #[no_property(GeometryTransform)]
+                    #[no_property(Stretch)]
+                    #[no_property(Stroke)]
+                    #[no_property(StrokeDashArray)]
+                    #[no_property(StrokeDashCap)]
+                    #[no_property(StrokeDashOffset)]
+                    #[no_property(StrokeEndLineCap)]
+                    #[no_property(StrokeLineJoin)]
+                    #[no_property(StrokeMiterLimit)]
+                    #[no_property(StrokeStartLineCap)]
+                    #[no_property(StrokeThickness)]
                     IShape,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     IShape2,
                 }
             }

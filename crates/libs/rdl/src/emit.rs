@@ -88,51 +88,7 @@ pub fn write_type(namespace: &str, item: &metadata::Type) -> TokenStream {
 
             ty
         }
-        ClassName(type_name) | ValueName(type_name) => {
-            let name = write_ident(&type_name.name);
-
-            let name = if type_name.generics.is_empty() {
-                name
-            } else {
-                let generics = type_name
-                    .generics
-                    .iter()
-                    .map(|ty| write_type(namespace, ty));
-                quote! { #name <#(#generics),*> }
-            };
-
-            // The empty namespace test is for nested types.
-            if namespace == type_name.namespace || type_name.namespace.is_empty() {
-                name
-            } else {
-                let mut relative = namespace.split('.').peekable();
-                let mut namespace = type_name.namespace.split('.').peekable();
-                let shares_root = relative.peek() == namespace.peek();
-
-                while relative.peek() == namespace.peek() {
-                    if relative.next().is_none() {
-                        break;
-                    }
-
-                    namespace.next();
-                }
-
-                let mut tokens = TokenStream::new();
-
-                if shares_root {
-                    for _ in 0..relative.count() {
-                        tokens = quote! { #tokens super:: };
-                    }
-                }
-
-                for namespace in namespace {
-                    let namespace = write_ident(namespace);
-                    tokens = quote! { #tokens #namespace ::};
-                }
-
-                quote! { #tokens #name }
-            }
-        }
+        ClassName(type_name) | ValueName(type_name) => write_type_name(namespace, type_name, false),
         Generic(name, _) => {
             let name = write_ident(name);
             quote! { #name }
@@ -144,6 +100,10 @@ pub fn write_type(namespace: &str, item: &metadata::Type) -> TokenStream {
 pub fn write_value(namespace: &str, value: &metadata::Value) -> TokenStream {
     match value {
         metadata::Value::Bool(value) => quote! { #value },
+        metadata::Value::Char(value) => {
+            let literal = Literal::u16_unsuffixed(*value);
+            quote! { #literal }
+        }
         metadata::Value::U8(value) => {
             let literal = Literal::u8_unsuffixed(*value);
             quote! { #literal }
@@ -194,10 +154,72 @@ pub fn write_value(namespace: &str, value: &metadata::Value) -> TokenStream {
         }
         metadata::Value::Utf8(value) => quote! { #value },
         metadata::Value::Utf16(value) => quote! { #value },
-        metadata::Value::TypeName(tn) => {
-            write_type(namespace, &metadata::Type::ClassName(tn.clone()))
-        }
+        metadata::Value::TypeName(tn) => write_type_name(namespace, tn, true),
         metadata::Value::EnumValue(_, inner) => write_value(namespace, inner),
+        metadata::Value::Boxed(inner) => {
+            let ty = write_type(namespace, &inner.ty());
+            let value = write_value(namespace, inner);
+            quote! { boxed(#ty, #value) }
+        }
+        metadata::Value::Array(_, values) => {
+            let values = values.iter().map(|value| write_value(namespace, value));
+            quote! { [#(#values),*] }
+        }
+        metadata::Value::Null(_) => quote! { null },
+    }
+}
+
+fn write_type_name(
+    current_namespace: &str,
+    type_name: &metadata::TypeName,
+    expression: bool,
+) -> TokenStream {
+    let name = write_ident(&type_name.name);
+
+    let name = if type_name.generics.is_empty() {
+        name
+    } else {
+        let generics = type_name
+            .generics
+            .iter()
+            .map(|ty| write_type(current_namespace, ty));
+        if expression {
+            quote! { #name :: <#(#generics),*> }
+        } else {
+            quote! { #name <#(#generics),*> }
+        }
+    };
+
+    // The empty namespace test is for nested types.
+    if current_namespace == type_name.namespace || type_name.namespace.is_empty() {
+        name
+    } else {
+        let mut relative = current_namespace.split('.').peekable();
+        let mut namespace = type_name.namespace.split('.').peekable();
+        let shares_root = relative.peek() == namespace.peek();
+
+        while relative.peek() == namespace.peek() {
+            if relative.next().is_none() {
+                break;
+            }
+
+            namespace.next();
+        }
+
+        let mut tokens = TokenStream::new();
+
+        if shares_root {
+            for _ in 0..relative.count() {
+                tokens = quote! { #tokens super:: };
+            }
+        }
+
+        for namespace in namespace {
+            let namespace = write_ident(namespace);
+            tokens = quote! { #tokens #namespace ::};
+        }
+
+        quote! { #tokens #name }
     }
 }
 

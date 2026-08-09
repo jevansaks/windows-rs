@@ -21,18 +21,59 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Static(IBitmapImageStatics3, 196608, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IBitmapImageStatics, CreateOptionsProperty)]
+                    #[no_static_property(IBitmapImageStatics, DecodePixelHeightProperty)]
+                    #[no_static_property(IBitmapImageStatics, DecodePixelWidthProperty)]
+                    #[no_static_property(IBitmapImageStatics, UriSourceProperty)]
+                    #[no_static_property(IBitmapImageStatics2, DecodePixelTypeProperty)]
+                    #[no_static_property(IBitmapImageStatics3, AutoPlayProperty)]
+                    #[no_static_property(IBitmapImageStatics3, IsAnimatedBitmapProperty)]
+                    #[no_static_property(IBitmapImageStatics3, IsPlayingProperty)]
                     class BitmapImage: BitmapSource {
+                        #[default]
+                        #[no_property(CreateOptions)]
+                        #[no_property(DecodePixelHeight)]
+                        #[no_property(DecodePixelWidth)]
+                        #[no_property(UriSource)]
                         IBitmapImage,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[no_property(DecodePixelType)]
                         IBitmapImage2,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
+                        #[no_property(AutoPlay)]
+                        #[no_property(IsAnimatedBitmap)]
+                        #[no_property(IsPlaying)]
                         IBitmapImage3,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IBitmapSourceFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Static(IBitmapSourceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
+                    #[no_static_property(IBitmapSourceStatics, PixelHeightProperty)]
+                    #[no_static_property(IBitmapSourceStatics, PixelWidthProperty)]
+                    #[class_property(UriSource: super::super::super::super::Foundation::Uri, set = BitmapImage::put_UriSource, get = BitmapImage::get_UriSource)]
+                    #[class_property(DecodePixelWidth: i32, set = BitmapImage::put_DecodePixelWidth, get = BitmapImage::get_DecodePixelWidth)]
+                    #[class_property(DecodePixelHeight: i32, get = BitmapImage::get_DecodePixelHeight, set = BitmapImage::put_DecodePixelHeight)]
+                    #[class_property(CreateOptions: BitmapCreateOptions, get = BitmapImage::get_CreateOptions, set = BitmapImage::put_CreateOptions)]
+                    #[class_property(DecodePixelType: DecodePixelType, set = BitmapImage::put_DecodePixelType, get = BitmapImage::get_DecodePixelType)]
+                    #[class_property(AutoPlay: bool, get = BitmapImage::get_AutoPlay, set = BitmapImage::put_AutoPlay)]
+                    #[class_property(IsAnimatedBitmap: bool, get = BitmapImage::get_IsAnimatedBitmap)]
+                    #[class_property(IsPlaying: bool, get = BitmapImage::get_IsPlaying)]
+                    #[class_property(static CreateOptionsProperty: super::super::DependencyProperty, get = BitmapImage::get_CreateOptionsProperty)]
+                    #[class_property(static DecodePixelHeightProperty: super::super::DependencyProperty, get = BitmapImage::get_DecodePixelHeightProperty)]
+                    #[class_property(static DecodePixelWidthProperty: super::super::DependencyProperty, get = BitmapImage::get_DecodePixelWidthProperty)]
+                    #[class_property(static UriSourceProperty: super::super::DependencyProperty, get = BitmapImage::get_UriSourceProperty)]
+                    #[class_property(static DecodePixelTypeProperty: super::super::DependencyProperty, get = BitmapImage::get_DecodePixelTypeProperty)]
+                    #[class_property(static AutoPlayProperty: super::super::DependencyProperty, get = BitmapImage::get_AutoPlayProperty)]
+                    #[class_property(static IsAnimatedBitmapProperty: super::super::DependencyProperty, get = BitmapImage::get_IsAnimatedBitmapProperty)]
+                    #[class_property(static IsPlayingProperty: super::super::DependencyProperty, get = BitmapImage::get_IsPlayingProperty)]
                     class BitmapSource: super::ImageSource {
+                        #[default]
+                        #[no_property(PixelHeight)]
+                        #[no_property(PixelWidth)]
                         IBitmapSource,
                     }
                     #[repr(i32)]
@@ -46,6 +87,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class DownloadProgressEventArgs {
+                        #[default]
                         IDownloadProgressEventArgs,
                     }
                     #[guid(0x1abaee23_74ee_4cc7_99ba_b171e3cda61e)]
@@ -172,12 +214,12 @@ mod Windows {
                         PixelWidth: i32;
                         #[get]
                         PixelHeight: i32;
-                        #[Windows::Foundation::Metadata::Overload("RenderAsync")]
+                        #[overload(RenderAsync)]
                         #[Windows::Foundation::Metadata::RemoteAsync]
                         fn RenderAsync(&self, element: super::super::UIElement) -> super::super::super::super::Foundation::IAsyncAction;
-                        #[Windows::Foundation::Metadata::Overload("RenderToSizeAsync")]
+                        #[overload(RenderAsync)]
                         #[Windows::Foundation::Metadata::RemoteAsync]
-                        fn RenderAsync(&self, element: super::super::UIElement, scaledWidth: i32, scaledHeight: i32) -> super::super::super::super::Foundation::IAsyncAction;
+                        fn RenderToSizeAsync(&self, element: super::super::UIElement, scaledWidth: i32, scaledHeight: i32) -> super::super::super::super::Foundation::IAsyncAction;
                         #[Windows::Foundation::Metadata::RemoteAsync]
                         fn GetPixelsAsync(&self) -> super::super::super::super::Foundation::IAsyncOperation<super::super::super::super::Storage::Streams::IBuffer>;
                     }
@@ -313,6 +355,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class RenderTargetBitmap: super::ImageSource {
+                        #[default]
                         IRenderTargetBitmap,
                     }
                     #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -321,17 +364,22 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SoftwareBitmapSource: super::ImageSource {
+                        #[default]
                         ISoftwareBitmapSource,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                         super::super::super::super::Foundation::IClosable,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISurfaceImageSourceFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SurfaceImageSource: super::ImageSource {
+                        #[default]
                         ISurfaceImageSource,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(ISvgImageSourceFactory, Public, 262144, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 262144)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -339,12 +387,14 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SvgImageSource: super::ImageSource {
+                        #[default]
                         ISvgImageSource,
                     }
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 262144)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SvgImageSourceFailedEventArgs {
+                        #[default]
                         ISvgImageSourceFailedEventArgs,
                     }
                     #[repr(i32)]
@@ -360,6 +410,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class SvgImageSourceOpenedEventArgs {
+                        #[default]
                         ISvgImageSourceOpenedEventArgs,
                     }
                     #[Windows::Foundation::Metadata::Activatable(IVirtualSurfaceImageSourceFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -368,6 +419,7 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class VirtualSurfaceImageSource: SurfaceImageSource {
+                        #[default]
                         IVirtualSurfaceImageSource,
                     }
                     #[Windows::Foundation::Metadata::Activatable(IWriteableBitmapFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -376,15 +428,20 @@ mod Windows {
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class WriteableBitmap: BitmapSource {
+                        #[default]
                         IWriteableBitmap,
                     }
+                    #[unsealed]
                     #[Windows::Foundation::Metadata::Composable(IXamlRenderingBackgroundTaskFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                     #[Windows::Foundation::Metadata::ContractVersion(super::super::super::super::Foundation::UniversalApiContract, 65536)]
                     #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                     #[Windows::Foundation::Metadata::Threading(Both)]
                     #[Windows::Foundation::Metadata::WebHostHidden]
                     class XamlRenderingBackgroundTask {
+                        #[default]
                         IXamlRenderingBackgroundTask,
+                        #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                        #[Windows::Foundation::Metadata::Overridable]
                         IXamlRenderingBackgroundTaskOverrides,
                     }
                 }

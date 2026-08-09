@@ -10,6 +10,7 @@ mod Windows {
                     HostBackdrop = 0,
                     Backdrop = 1,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IAcrylicBrushFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -18,7 +19,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AcrylicBrush: XamlCompositionBrushBase {
+                    #[default]
                     IAcrylicBrush,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 524288)]
                     IAcrylicBrush2,
                 }
                 #[repr(i32)]
@@ -44,6 +47,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ArcSegment: PathSegment {
+                    #[default]
                     IArcSegment,
                 }
                 #[repr(i32)]
@@ -51,16 +55,22 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 enum AudioCategory {
                     Other = 0,
+                    #[Windows::Foundation::Metadata::Deprecated("ForegroundOnlyMedia is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                     ForegroundOnlyMedia = 1,
+                    #[Windows::Foundation::Metadata::Deprecated("BackgroundCapableMedia is deprecated and might not work on all platforms. For more info, see MSDN.", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                     BackgroundCapableMedia = 2,
                     Communications = 3,
                     Alerts = 4,
                     SoundEffects = 5,
                     GameEffects = 6,
                     GameMedia = 7,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     GameChat = 8,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     Speech = 9,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     Movie = 10,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     Media = 11,
                 }
                 #[repr(i32)]
@@ -78,6 +88,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BezierSegment: PathSegment {
+                    #[default]
                     IBezierSegment,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -86,17 +97,29 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BitmapCache: CacheMode {
+                    #[default]
                     IBitmapCache,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IBrushFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IBrushStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IBrushStatics, OpacityProperty)]
+                #[no_static_property(IBrushStatics, RelativeTransformProperty)]
+                #[no_static_property(IBrushStatics, TransformProperty)]
                 class Brush: super::DependencyObject {
+                    #[default]
+                    #[no_property(Opacity)]
+                    #[no_property(RelativeTransform)]
+                    #[no_property(Transform)]
                     IBrush,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
+                    #[Windows::Foundation::Metadata::Overridable]
                     IBrushOverrides2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                     super::super::Composition::IAnimationObject,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -105,6 +128,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class BrushCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<Brush>,
                     super::super::super::Foundation::Collections::IIterable<Brush>,
                 }
@@ -115,12 +139,14 @@ mod Windows {
                     Absolute = 0,
                     RelativeToBoundingBox = 1,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ICacheModeFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CacheMode: super::DependencyObject {
+                    #[default]
                     ICacheMode,
                 }
                 #[repr(i32)]
@@ -136,7 +162,26 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ICompositeTransformStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(ICompositeTransformStatics, CenterXProperty)]
+                #[no_static_property(ICompositeTransformStatics, CenterYProperty)]
+                #[no_static_property(ICompositeTransformStatics, RotationProperty)]
+                #[no_static_property(ICompositeTransformStatics, ScaleXProperty)]
+                #[no_static_property(ICompositeTransformStatics, ScaleYProperty)]
+                #[no_static_property(ICompositeTransformStatics, SkewXProperty)]
+                #[no_static_property(ICompositeTransformStatics, SkewYProperty)]
+                #[no_static_property(ICompositeTransformStatics, TranslateXProperty)]
+                #[no_static_property(ICompositeTransformStatics, TranslateYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterXProperty: super::DependencyProperty, get = get_CenterXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterYProperty: super::DependencyProperty, get = get_CenterYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static RotationProperty: super::DependencyProperty, get = get_RotationProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static ScaleXProperty: super::DependencyProperty, get = get_ScaleXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static ScaleYProperty: super::DependencyProperty, get = get_ScaleYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static SkewXProperty: super::DependencyProperty, get = get_SkewXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static SkewYProperty: super::DependencyProperty, get = get_SkewYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static TranslateXProperty: super::DependencyProperty, get = get_TranslateXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static TranslateYProperty: super::DependencyProperty, get = get_TranslateYProperty)]
                 class CompositeTransform: Transform {
+                    #[default]
                     ICompositeTransform,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -146,6 +191,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CompositionTarget {
+                    #[default]
                     ICompositionTarget,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -154,6 +200,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DoubleCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<f64>,
                     super::super::super::Foundation::Collections::IIterable<f64>,
                 }
@@ -171,7 +218,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IEllipseGeometryStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IEllipseGeometryStatics, CenterProperty)]
+                #[no_static_property(IEllipseGeometryStatics, RadiusXProperty)]
+                #[no_static_property(IEllipseGeometryStatics, RadiusYProperty)]
                 class EllipseGeometry: Geometry {
+                    #[default]
+                    #[no_property(Center)]
+                    #[no_property(RadiusX)]
+                    #[no_property(RadiusY)]
                     IEllipseGeometry,
                 }
                 #[repr(i32)]
@@ -189,31 +243,54 @@ mod Windows {
                     EvenOdd = 0,
                     Nonzero = 1,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IFontFamilyFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IFontFamilyStatics2, 131072, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IFontFamilyStatics2, XamlAutoFontFamily)]
                 class FontFamily {
+                    #[default]
+                    #[no_property(Source)]
                     IFontFamily,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IGeneralTransformFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GeneralTransform: super::DependencyObject {
+                    #[default]
+                    #[no_property(Inverse)]
                     IGeneralTransform,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
+                    #[Windows::Foundation::Metadata::Overridable]
+                    #[no_property(InverseCore)]
                     IGeneralTransformOverrides,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IGeometryFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IGeometryStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IGeometryStatics, Empty)]
+                #[no_static_property(IGeometryStatics, StandardFlatteningTolerance)]
+                #[no_static_property(IGeometryStatics, TransformProperty)]
+                #[class_property(RadiusY: f64, get = EllipseGeometry::get_RadiusY, set = EllipseGeometry::put_RadiusY)]
+                #[class_property(RadiusX: f64, get = EllipseGeometry::get_RadiusX, set = EllipseGeometry::put_RadiusX)]
+                #[class_property(Center: super::super::super::Foundation::Point, get = EllipseGeometry::get_Center, set = EllipseGeometry::put_Center)]
+                #[class_property(static CenterProperty: super::DependencyProperty, get = EllipseGeometry::get_CenterProperty)]
+                #[class_property(static RadiusXProperty: super::DependencyProperty, get = EllipseGeometry::get_RadiusXProperty)]
+                #[class_property(static RadiusYProperty: super::DependencyProperty, get = EllipseGeometry::get_RadiusYProperty)]
                 class Geometry: super::DependencyObject {
+                    #[default]
+                    #[no_property(Bounds)]
+                    #[no_property(Transform)]
                     IGeometry,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -222,6 +299,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GeometryCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<Geometry>,
                     super::super::super::Foundation::Collections::IIterable<Geometry>,
                 }
@@ -233,8 +311,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Children")]
                 class GeometryGroup: Geometry {
+                    #[default]
                     IGeometryGroup,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IGradientBrushFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -243,6 +323,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "GradientStops")]
                 class GradientBrush: Brush {
+                    #[default]
                     IGradientBrush,
                 }
                 #[repr(i32)]
@@ -261,6 +342,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Color")]
                 class GradientStop: super::DependencyObject {
+                    #[default]
                     IGradientStop,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -269,6 +351,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class GradientStopCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<GradientStop>,
                     super::super::super::Foundation::Collections::IIterable<GradientStop>,
                 }
@@ -441,33 +524,42 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(CompositeTransform)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ICompositeTransformStatics {
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_ScaleXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_ScaleYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_SkewXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_SkewYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_RotationProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_TranslateXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_TranslateYProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    ScaleXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    ScaleYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    SkewXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    SkewYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    RotationProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    TranslateXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    TranslateYProperty: super::DependencyProperty;
                 }
                 #[guid(0x26cfbff0_713c_4bec_8803_e101f7b14ed3)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -602,9 +694,10 @@ mod Windows {
                     Empty: Geometry;
                     #[get]
                     StandardFlatteningTolerance: f64;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_TransformProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    TransformProperty: super::DependencyProperty;
                 }
                 #[guid(0x2166e69f_935a_4191_8e3c_1c8dfdfcdc78)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -766,13 +859,13 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(LoadedImageSurface)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ILoadedImageSurfaceStatics {
-                    #[Windows::Foundation::Metadata::Overload("StartLoadFromUriWithSize")]
-                    fn StartLoadFromUri(&self, uri: super::super::super::Foundation::Uri, desiredMaxSize: super::super::super::Foundation::Size) -> LoadedImageSurface;
-                    #[Windows::Foundation::Metadata::Overload("StartLoadFromUri")]
+                    #[overload(StartLoadFromUri)]
+                    fn StartLoadFromUriWithSize(&self, uri: super::super::super::Foundation::Uri, desiredMaxSize: super::super::super::Foundation::Size) -> LoadedImageSurface;
+                    #[overload(StartLoadFromUri)]
                     fn StartLoadFromUri(&self, uri: super::super::super::Foundation::Uri) -> LoadedImageSurface;
-                    #[Windows::Foundation::Metadata::Overload("StartLoadFromStreamWithSize")]
-                    fn StartLoadFromStream(&self, stream: super::super::super::Storage::Streams::IRandomAccessStream, desiredMaxSize: super::super::super::Foundation::Size) -> LoadedImageSurface;
-                    #[Windows::Foundation::Metadata::Overload("StartLoadFromStream")]
+                    #[overload(StartLoadFromStream)]
+                    fn StartLoadFromStreamWithSize(&self, stream: super::super::super::Storage::Streams::IRandomAccessStream, desiredMaxSize: super::super::super::Foundation::Size) -> LoadedImageSurface;
+                    #[overload(StartLoadFromStream)]
                     fn StartLoadFromStream(&self, stream: super::super::super::Storage::Streams::IRandomAccessStream) -> LoadedImageSurface;
                 }
                 #[guid(0x6f03e149_bfc9_4c01_b578_50338cec97fc)]
@@ -922,42 +1015,54 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(PlaneProjection)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IPlaneProjectionStatics {
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_LocalOffsetXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_LocalOffsetYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_LocalOffsetZProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_RotationXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_RotationYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_RotationZProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterOfRotationXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterOfRotationYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterOfRotationZProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_GlobalOffsetXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_GlobalOffsetYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_GlobalOffsetZProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    LocalOffsetXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    LocalOffsetYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    LocalOffsetZProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    RotationXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    RotationYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    RotationZProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterOfRotationXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterOfRotationYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterOfRotationZProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    GlobalOffsetXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    GlobalOffsetYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    GlobalOffsetZProperty: super::DependencyProperty;
                     #[get]
                     ProjectionMatrixProperty: super::DependencyProperty;
                 }
@@ -1142,15 +1247,18 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(RotateTransform)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IRotateTransformStatics {
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_AngleProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    AngleProperty: super::DependencyProperty;
                 }
                 #[guid(0xed67f18d_936e_43ab_929a_e9cd0a511e52)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1167,18 +1275,22 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(ScaleTransform)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IScaleTransformStatics {
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_ScaleXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_ScaleYProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    ScaleXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    ScaleYProperty: super::DependencyProperty;
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 524288)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(Shadow)]
@@ -1203,18 +1315,22 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(SkewTransform)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ISkewTransformStatics {
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_CenterYProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_AngleXProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_AngleYProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    CenterYProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    AngleXProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    AngleYProperty: super::DependencyProperty;
                 }
                 #[guid(0x9d850850_66f3_48df_9a8f_824bd5e070af)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1235,9 +1351,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(SolidColorBrush)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ISolidColorBrushStatics {
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::IndependentlyAnimatable]
-                    fn get_ColorProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::IndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::IndependentlyAnimatable)]
+                    ColorProperty: super::DependencyProperty;
                 }
                 #[guid(0x3eccad09_7985_5f39_8b62_6c10696dca6f)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 524288)]
@@ -1350,12 +1467,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(TranslateTransform)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ITranslateTransformStatics {
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_XProperty(&self) -> super::DependencyProperty;
-                    #[special]
-                    #[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable]
-                    fn get_YProperty(&self) -> super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    XProperty: super::DependencyProperty;
+                    #[get]
+                    #[property(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    #[get(Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable)]
+                    YProperty: super::DependencyProperty;
                 }
                 #[guid(0x24b935e3_52c7_4141_8bac_a73d06130569)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1367,16 +1486,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ExclusiveTo(VisualTreeHelper)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface IVisualTreeHelperStatics {
-                    #[Windows::Foundation::Metadata::DefaultOverload]
-                    #[Windows::Foundation::Metadata::Overload("FindElementsInHostCoordinatesPoint")]
-                    fn FindElementsInHostCoordinates(&self, intersectingPoint: super::super::super::Foundation::Point, subtree: super::UIElement) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
-                    #[Windows::Foundation::Metadata::Overload("FindElementsInHostCoordinatesRect")]
-                    fn FindElementsInHostCoordinates(&self, intersectingRect: super::super::super::Foundation::Rect, subtree: super::UIElement) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
-                    #[Windows::Foundation::Metadata::DefaultOverload]
-                    #[Windows::Foundation::Metadata::Overload("FindAllElementsInHostCoordinatesPoint")]
-                    fn FindElementsInHostCoordinates(&self, intersectingPoint: super::super::super::Foundation::Point, subtree: super::UIElement, includeAllElements: bool) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
-                    #[Windows::Foundation::Metadata::Overload("FindAllElementsInHostCoordinatesRect")]
-                    fn FindElementsInHostCoordinates(&self, intersectingRect: super::super::super::Foundation::Rect, subtree: super::UIElement, includeAllElements: bool) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
+                    #[overload(FindElementsInHostCoordinates)]
+                    #[default_overload]
+                    fn FindElementsInHostCoordinatesPoint(&self, intersectingPoint: super::super::super::Foundation::Point, subtree: super::UIElement) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
+                    #[overload(FindElementsInHostCoordinates)]
+                    fn FindElementsInHostCoordinatesRect(&self, intersectingRect: super::super::super::Foundation::Rect, subtree: super::UIElement) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
+                    #[overload(FindElementsInHostCoordinates)]
+                    #[default_overload]
+                    fn FindAllElementsInHostCoordinatesPoint(&self, intersectingPoint: super::super::super::Foundation::Point, subtree: super::UIElement, includeAllElements: bool) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
+                    #[overload(FindElementsInHostCoordinates)]
+                    fn FindAllElementsInHostCoordinatesRect(&self, intersectingRect: super::super::super::Foundation::Rect, subtree: super::UIElement, includeAllElements: bool) -> super::super::super::Foundation::Collections::IIterable<super::UIElement>;
                     fn GetChild(&self, reference: super::DependencyObject, childIndex: i32) -> super::DependencyObject;
                     fn GetChildrenCount(&self, reference: super::DependencyObject) -> i32;
                     fn GetParent(&self, reference: super::DependencyObject) -> super::DependencyObject;
@@ -1478,14 +1597,17 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ImageBrush: TileBrush {
+                    #[default]
                     IImageBrush,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IImageSourceFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ImageSource: super::DependencyObject {
+                    #[default]
                     IImageSource,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1495,6 +1617,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class LineGeometry: Geometry {
+                    #[default]
                     ILineGeometry,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1504,6 +1627,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class LineSegment: PathSegment {
+                    #[default]
                     ILineSegment,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1514,12 +1638,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class LinearGradientBrush: GradientBrush {
+                    #[default]
                     ILinearGradientBrush,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class LoadedImageSourceLoadCompletedEventArgs {
+                    #[default]
                     ILoadedImageSourceLoadCompletedEventArgs,
                 }
                 #[repr(i32)]
@@ -1537,8 +1663,12 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class LoadedImageSurface {
+                    #[default]
+                    #[no_event(LoadCompleted)]
                     ILoadedImageSurface,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     super::super::super::Foundation::IClosable,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     super::super::Composition::ICompositionSurface,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1559,6 +1689,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "ProjectionMatrix")]
                 class Matrix3DProjection: Projection {
+                    #[default]
                     IMatrix3DProjection,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1567,6 +1698,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class MatrixHelper {
+                    #[default]
                     IMatrixHelper,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1576,6 +1708,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class MatrixTransform: Transform {
+                    #[default]
                     IMatrixTransform,
                 }
                 #[repr(i32)]
@@ -1601,6 +1734,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class MediaTransportControlsThumbnailRequestedEventArgs {
+                    #[default]
                     IMediaTransportControlsThumbnailRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1609,7 +1743,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PartialMediaFailureDetectedEventArgs {
+                    #[default]
                     IPartialMediaFailureDetectedEventArgs,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 131072)]
                     IPartialMediaFailureDetectedEventArgs2,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1620,6 +1756,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Segments")]
                 class PathFigure: super::DependencyObject {
+                    #[default]
                     IPathFigure,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1628,6 +1765,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PathFigureCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<PathFigure>,
                     super::super::super::Foundation::Collections::IIterable<PathFigure>,
                 }
@@ -1639,14 +1777,17 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Figures")]
                 class PathGeometry: Geometry {
+                    #[default]
                     IPathGeometry,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IPathSegmentFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PathSegment: super::DependencyObject {
+                    #[default]
                     IPathSegment,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1655,6 +1796,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PathSegmentCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<PathSegment>,
                     super::super::super::Foundation::Collections::IIterable<PathSegment>,
                 }
@@ -1681,7 +1823,32 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IPlaneProjectionStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IPlaneProjectionStatics, CenterOfRotationXProperty)]
+                #[no_static_property(IPlaneProjectionStatics, CenterOfRotationYProperty)]
+                #[no_static_property(IPlaneProjectionStatics, CenterOfRotationZProperty)]
+                #[no_static_property(IPlaneProjectionStatics, GlobalOffsetXProperty)]
+                #[no_static_property(IPlaneProjectionStatics, GlobalOffsetYProperty)]
+                #[no_static_property(IPlaneProjectionStatics, GlobalOffsetZProperty)]
+                #[no_static_property(IPlaneProjectionStatics, LocalOffsetXProperty)]
+                #[no_static_property(IPlaneProjectionStatics, LocalOffsetYProperty)]
+                #[no_static_property(IPlaneProjectionStatics, LocalOffsetZProperty)]
+                #[no_static_property(IPlaneProjectionStatics, RotationXProperty)]
+                #[no_static_property(IPlaneProjectionStatics, RotationYProperty)]
+                #[no_static_property(IPlaneProjectionStatics, RotationZProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterOfRotationXProperty: super::DependencyProperty, get = get_CenterOfRotationXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterOfRotationYProperty: super::DependencyProperty, get = get_CenterOfRotationYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterOfRotationZProperty: super::DependencyProperty, get = get_CenterOfRotationZProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static GlobalOffsetXProperty: super::DependencyProperty, get = get_GlobalOffsetXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static GlobalOffsetYProperty: super::DependencyProperty, get = get_GlobalOffsetYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static GlobalOffsetZProperty: super::DependencyProperty, get = get_GlobalOffsetZProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static LocalOffsetXProperty: super::DependencyProperty, get = get_LocalOffsetXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static LocalOffsetYProperty: super::DependencyProperty, get = get_LocalOffsetYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static LocalOffsetZProperty: super::DependencyProperty, get = get_LocalOffsetZProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static RotationXProperty: super::DependencyProperty, get = get_RotationXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static RotationYProperty: super::DependencyProperty, get = get_RotationYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static RotationZProperty: super::DependencyProperty, get = get_RotationZProperty)]
                 class PlaneProjection: Projection {
+                    #[default]
                     IPlaneProjection,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1690,6 +1857,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class PointCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<super::super::super::Foundation::Point>,
                     super::super::super::Foundation::Collections::IIterable<super::super::super::Foundation::Point>,
                 }
@@ -1701,6 +1869,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Points")]
                 class PolyBezierSegment: PathSegment {
+                    #[default]
                     IPolyBezierSegment,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1711,6 +1880,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Points")]
                 class PolyLineSegment: PathSegment {
+                    #[default]
                     IPolyLineSegment,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1721,14 +1891,17 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Points")]
                 class PolyQuadraticBezierSegment: PathSegment {
+                    #[default]
                     IPolyQuadraticBezierSegment,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IProjectionFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Projection: super::DependencyObject {
+                    #[default]
                     IProjection,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1738,6 +1911,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class QuadraticBezierSegment: PathSegment {
+                    #[default]
                     IQuadraticBezierSegment,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1746,6 +1920,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RateChangedRoutedEventArgs: super::RoutedEventArgs {
+                    #[default]
                     IRateChangedRoutedEventArgs,
                 }
                 #[guid(0x08e9a257_ae05_489b_8839_28c6225d2349)]
@@ -1759,36 +1934,44 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RectangleGeometry: Geometry {
+                    #[default]
                     IRectangleGeometry,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RenderedEventArgs {
+                    #[default]
                     IRenderedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RenderingEventArgs {
+                    #[default]
                     IRenderingEventArgs,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IRevealBackgroundBrushFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RevealBackgroundBrush: RevealBrush {
+                    #[default]
                     IRevealBackgroundBrush,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IRevealBorderBrushFactory, Public, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RevealBorderBrush: RevealBrush {
+                    #[default]
                     IRevealBorderBrush,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IRevealBrushFactory, Protected, 327680, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 327680)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -1796,6 +1979,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RevealBrush: XamlCompositionBrushBase {
+                    #[default]
                     IRevealBrush,
                 }
                 #[repr(i32)]
@@ -1812,7 +1996,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IRotateTransformStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IRotateTransformStatics, AngleProperty)]
+                #[no_static_property(IRotateTransformStatics, CenterXProperty)]
+                #[no_static_property(IRotateTransformStatics, CenterYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static AngleProperty: super::DependencyProperty, get = get_AngleProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterXProperty: super::DependencyProperty, get = get_CenterXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterYProperty: super::DependencyProperty, get = get_CenterYProperty)]
                 class RotateTransform: Transform {
+                    #[default]
                     IRotateTransform,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1821,15 +2012,26 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IScaleTransformStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IScaleTransformStatics, CenterXProperty)]
+                #[no_static_property(IScaleTransformStatics, CenterYProperty)]
+                #[no_static_property(IScaleTransformStatics, ScaleXProperty)]
+                #[no_static_property(IScaleTransformStatics, ScaleYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterXProperty: super::DependencyProperty, get = get_CenterXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static CenterYProperty: super::DependencyProperty, get = get_CenterYProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static ScaleXProperty: super::DependencyProperty, get = get_ScaleXProperty)]
+                #[class_property(#[Windows::UI::Xaml::Media::Animation::ConditionallyIndependentlyAnimatable] static ScaleYProperty: super::DependencyProperty, get = get_ScaleYProperty)]
                 class ScaleTransform: Transform {
+                    #[default]
                     IScaleTransform,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IShadowFactory, Public, 524288, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 524288)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Shadow: super::DependencyObject {
+                    #[default]
                     IShadow,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1838,7 +2040,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ISkewTransformStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(ISkewTransformStatics, AngleXProperty)]
+                #[no_static_property(ISkewTransformStatics, AngleYProperty)]
+                #[no_static_property(ISkewTransformStatics, CenterXProperty)]
+                #[no_static_property(ISkewTransformStatics, CenterYProperty)]
                 class SkewTransform: Transform {
+                    #[default]
+                    #[no_property(AngleX)]
+                    #[no_property(AngleY)]
+                    #[no_property(CenterX)]
+                    #[no_property(CenterY)]
                     ISkewTransform,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1849,7 +2060,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Color")]
+                #[no_static_property(ISolidColorBrushStatics, ColorProperty)]
                 class SolidColorBrush: Brush {
+                    #[default]
+                    #[no_property(Color)]
                     ISolidColorBrush,
                 }
                 #[repr(i32)]
@@ -1892,21 +2106,32 @@ mod Windows {
                     Counterclockwise = 0,
                     Clockwise = 1,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IThemeShadowFactory, Public, 524288, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 524288)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ThemeShadow: Shadow {
+                    #[default]
+                    #[no_property(Receivers)]
                     IThemeShadow,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ITileBrushFactory, Protected, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ITileBrushStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(ITileBrushStatics, AlignmentXProperty)]
+                #[no_static_property(ITileBrushStatics, AlignmentYProperty)]
+                #[no_static_property(ITileBrushStatics, StretchProperty)]
                 class TileBrush: Brush {
+                    #[default]
+                    #[no_property(AlignmentX)]
+                    #[no_property(AlignmentY)]
+                    #[no_property(Stretch)]
                     ITileBrush,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1916,6 +2141,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TimelineMarker: super::DependencyObject {
+                    #[default]
                     ITimelineMarker,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1924,6 +2150,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TimelineMarkerCollection {
+                    #[default]
                     super::super::super::Foundation::Collections::IVector<TimelineMarker>,
                     super::super::super::Foundation::Collections::IIterable<TimelineMarker>,
                 }
@@ -1933,18 +2160,21 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TimelineMarkerRoutedEventArgs: super::RoutedEventArgs {
+                    #[default]
                     ITimelineMarkerRoutedEventArgs,
                 }
                 #[guid(0x72e2fa9c_6dea_4cbe_a159_06ce95fbeced)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 delegate fn TimelineMarkerRoutedEventHandler(sender: Object, e: TimelineMarkerRoutedEventArgs);
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(ITransformFactory, Public, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class Transform: GeneralTransform {
+                    #[default]
                     ITransform,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1953,6 +2183,8 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class TransformCollection {
+                    #[default]
+                    #[no_property(Size)]
                     super::super::super::Foundation::Collections::IVector<Transform>,
                     super::super::super::Foundation::Collections::IIterable<Transform>,
                 }
@@ -1963,7 +2195,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 #[Windows::UI::Xaml::Markup::ContentProperty(Name = "Children")]
+                #[no_static_property(ITransformGroupStatics, ChildrenProperty)]
                 class TransformGroup: Transform {
+                    #[default]
+                    #[no_property(Children)]
+                    #[no_property(Value)]
                     ITransformGroup,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -1972,7 +2208,12 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(ITranslateTransformStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(ITranslateTransformStatics, XProperty)]
+                #[no_static_property(ITranslateTransformStatics, YProperty)]
                 class TranslateTransform: Transform {
+                    #[default]
+                    #[no_property(X)]
+                    #[no_property(Y)]
                     ITranslateTransform,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
@@ -1983,19 +2224,30 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class VisualTreeHelper {
+                    #[default]
                     IVisualTreeHelper,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IXamlCompositionBrushBaseFactory, Protected, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IXamlCompositionBrushBaseStatics, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
+                #[no_static_property(IXamlCompositionBrushBaseStatics, FallbackColorProperty)]
                 class XamlCompositionBrushBase: Brush {
+                    #[default]
+                    #[no_property(FallbackColor)]
                     IXamlCompositionBrushBase,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
+                    #[Windows::Foundation::Metadata::Protected]
+                    #[no_property(CompositionBrush)]
                     IXamlCompositionBrushBaseProtected,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
+                    #[Windows::Foundation::Metadata::Overridable]
                     IXamlCompositionBrushBaseOverrides,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IXamlLightFactory, Public, 262144, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -2003,8 +2255,13 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class XamlLight: super::DependencyObject {
+                    #[default]
                     IXamlLight,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
+                    #[Windows::Foundation::Metadata::Protected]
                     IXamlLightProtected,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
+                    #[Windows::Foundation::Metadata::Overridable]
                     IXamlLightOverrides,
                 }
             }

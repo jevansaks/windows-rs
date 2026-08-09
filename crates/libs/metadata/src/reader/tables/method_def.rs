@@ -74,6 +74,10 @@ impl<'a> MethodDef<'a> {
         self.blob(4).read_method_signature(generics)
     }
 
+    pub fn generic_params(&self) -> RowIterator<'a, GenericParam<'a>> {
+        self.equal_range(2, TypeOrMethodDef::MethodDef(*self).encode())
+    }
+
     /// Iterates the method's `Param` rows in physical table order.
     ///
     /// Use [`Self::params_by_sequence`] when associating rows with signature positions.
@@ -132,14 +136,11 @@ impl<'a> MethodDef<'a> {
 
     pub fn calling_convention(&self) -> &'static str {
         self.impl_map().map_or("", |map| {
-            let flags = map.flags();
-
-            if flags.contains(PInvokeAttributes::CallConvPlatformapi) {
-                "system"
-            } else if flags.contains(PInvokeAttributes::CallConvCdecl) {
-                "C"
-            } else {
-                ""
+            match (map.flags() & PInvokeAttributes::CallConvMask).0 {
+                value if value == PInvokeAttributes::CallConvPlatformapi.0 => "system",
+                value if value == PInvokeAttributes::CallConvCdecl.0 => "C",
+                value if value == PInvokeAttributes::CallConvFastcall.0 => "fastcall",
+                _ => "",
             }
         })
     }

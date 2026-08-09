@@ -6,6 +6,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 1)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class AcousticEchoCancellationConfiguration {
+                #[default]
                 IAcousticEchoCancellationConfiguration,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -13,6 +14,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class AudioCaptureEffectsManager {
+                #[default]
                 IAudioCaptureEffectsManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -20,7 +22,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class AudioEffect {
+                #[default]
                 IAudioEffect,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 1245184)]
                 IAudioEffect2,
             }
             #[Windows::Foundation::Metadata::Activatable(IAudioEffectDefinitionFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -28,6 +32,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AudioEffectDefinition {
+                #[default]
                 IAudioEffectDefinition,
             }
             #[repr(i32)]
@@ -57,9 +62,12 @@ mod Windows {
                 SpeakerProtection = 15,
                 SpeakerCompensation = 16,
                 DynamicRangeCompression = 17,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                 FarFieldBeamForming = 18,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                 DeepNoiseSuppression = 19,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IAudioEffectsManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -69,7 +77,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class AudioRenderEffectsManager {
+                #[default]
                 IAudioRenderEffectsManager,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IAudioRenderEffectsManager2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -78,6 +88,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class CompositeVideoFrameContext {
+                #[default]
                 ICompositeVideoFrameContext,
             }
             #[guid(0x587e735b_175b_5177_a407_2e33bafe33a5)]
@@ -131,14 +142,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::ExclusiveTo(AudioEffectsManager)]
             interface IAudioEffectsManagerStatics {
-                #[Windows::Foundation::Metadata::Overload("CreateAudioRenderEffectsManager")]
+                #[overload(CreateAudioRenderEffectsManager)]
                 fn CreateAudioRenderEffectsManager(&self, deviceId: String, category: super::Render::AudioRenderCategory) -> AudioRenderEffectsManager;
-                #[Windows::Foundation::Metadata::Overload("CreateAudioRenderEffectsManagerWithMode")]
-                fn CreateAudioRenderEffectsManager(&self, deviceId: String, category: super::Render::AudioRenderCategory, mode: super::AudioProcessing) -> AudioRenderEffectsManager;
-                #[Windows::Foundation::Metadata::Overload("CreateAudioCaptureEffectsManager")]
+                #[overload(CreateAudioRenderEffectsManager)]
+                fn CreateAudioRenderEffectsManagerWithMode(&self, deviceId: String, category: super::Render::AudioRenderCategory, mode: super::AudioProcessing) -> AudioRenderEffectsManager;
+                #[overload(CreateAudioCaptureEffectsManager)]
                 fn CreateAudioCaptureEffectsManager(&self, deviceId: String, category: super::Capture::MediaCategory) -> AudioCaptureEffectsManager;
-                #[Windows::Foundation::Metadata::Overload("CreateAudioCaptureEffectsManagerWithMode")]
-                fn CreateAudioCaptureEffectsManager(&self, deviceId: String, category: super::Capture::MediaCategory, mode: super::AudioProcessing) -> AudioCaptureEffectsManager;
+                #[overload(CreateAudioCaptureEffectsManager)]
+                fn CreateAudioCaptureEffectsManagerWithMode(&self, deviceId: String, category: super::Capture::MediaCategory, mode: super::AudioProcessing) -> AudioCaptureEffectsManager;
             }
             #[guid(0x4dc98966_8751_42b2_bfcb_39ca7864bd47)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -152,12 +163,12 @@ mod Windows {
             #[Windows::Foundation::Metadata::Deprecated("Not supported starting in windows 10", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::ExclusiveTo(AudioRenderEffectsManager)]
             interface IAudioRenderEffectsManager2 {
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Not supported starting in windows 10", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_EffectsProviderThumbnail(&self) -> super::super::Storage::Streams::IRandomAccessStreamWithContentType;
-                #[special]
-                #[Windows::Foundation::Metadata::Deprecated("Not supported starting in windows 10", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
-                fn get_EffectsProviderSettingsLabel(&self) -> String;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Not supported starting in windows 10", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                EffectsProviderThumbnail: super::super::Storage::Streams::IRandomAccessStreamWithContentType;
+                #[get]
+                #[get(Windows::Foundation::Metadata::Deprecated("Not supported starting in windows 10", Deprecate, 65536, "Windows.Foundation.UniversalApiContract"))]
+                EffectsProviderSettingsLabel: String;
                 #[Windows::Foundation::Metadata::Deprecated("Not supported starting in windows 10", Deprecate, 65536, "Windows.Foundation.UniversalApiContract")]
                 fn ShowSettingsUI(&self);
             }
@@ -309,6 +320,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessAudioFrameContext {
+                #[default]
                 IProcessAudioFrameContext,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -317,6 +329,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessVideoFrameContext {
+                #[default]
                 IProcessVideoFrameContext,
             }
             #[Windows::Foundation::Metadata::Activatable(IVideoCompositorDefinitionFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -324,6 +337,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class VideoCompositorDefinition {
+                #[default]
                 IVideoCompositorDefinition,
             }
             #[Windows::Foundation::Metadata::Activatable(IVideoEffectDefinitionFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -331,6 +345,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class VideoEffectDefinition {
+                #[default]
                 IVideoEffectDefinition,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -338,14 +353,17 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class VideoTransformEffectDefinition {
+                #[default]
                 IVideoEffectDefinition,
                 IVideoTransformEffectDefinition,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IVideoTransformEffectDefinition2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 393216)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class VideoTransformSphericalProjection {
+                #[default]
                 IVideoTransformSphericalProjection,
             }
         }

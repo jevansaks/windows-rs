@@ -102,3 +102,98 @@ fn nested() {
     assert_eq!(fields[0].name(), "NumElements");
     assert_eq!(fields[1].name(), "ElementWidth");
 }
+
+#[test]
+fn unsupported_table_error() {
+    let mut bytes = writer::File::new("test").into_stream();
+    let metadata = bytes
+        .windows(4)
+        .position(|window| window == b"BSJB")
+        .unwrap();
+    let stream_name = bytes
+        .windows(4)
+        .position(|window| window == b"#~\0\0")
+        .unwrap();
+    let stream_offset =
+        u32::from_le_bytes(bytes[stream_name - 8..stream_name - 4].try_into().unwrap()) as usize;
+    let tables = metadata + stream_offset;
+    let valid = u64::from_le_bytes(bytes[tables + 8..tables + 16].try_into().unwrap());
+
+    let table = 3;
+    let row_count = tables + 24 + (valid & ((1 << table) - 1)).count_ones() as usize * 4;
+    bytes.splice(row_count..row_count, 1u32.to_le_bytes());
+    bytes[tables + 8..tables + 16].copy_from_slice(&(valid | 1 << table).to_le_bytes());
+
+    let error = match reader::File::try_new(bytes.clone()) {
+        Ok(_) => panic!("unsupported table should fail"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        reader::FileError::UnsupportedTable {
+            table: "FieldPtr",
+            rows: 1
+        }
+    ));
+    assert_eq!(
+        error.to_string(),
+        "unsupported metadata table `FieldPtr` has 1 rows"
+    );
+    assert!(reader::File::new(bytes).is_none());
+}
+
+#[test]
+fn committed_metadata_uses_supported_tables() {
+    fn collect(path: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(path).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect(&path, files);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("winmd"))
+            {
+                files.push(path);
+            }
+        }
+    }
+
+    let mut files = vec![];
+    collect(std::path::Path::new("../../.."), &mut files);
+    assert!(!files.is_empty());
+
+    for path in files {
+        let file = reader::File::try_read(&path)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        let index = reader::Index::new(vec![file]);
+        for method_impl in index.types().flat_map(|ty| ty.method_impls()) {
+            for method in [method_impl.body(), method_impl.declaration()] {
+                match method {
+                    reader::MethodDefOrRef::MethodDef(method) => {
+                        let _ = method.name();
+                    }
+                    reader::MethodDefOrRef::MemberRef(method) => {
+                        match method.parent() {
+                            reader::MemberRefParent::TypeDef(parent) => {
+                                let _ = (parent.namespace(), parent.name());
+                            }
+                            reader::MemberRefParent::TypeRef(parent) => {
+                                let _ = (parent.namespace(), parent.name());
+                            }
+                            reader::MemberRefParent::TypeSpec(parent) => {
+                                let _ = parent.ty(&[]);
+                            }
+                            reader::MemberRefParent::ModuleRef(parent) => {
+                                let _ = parent.name();
+                            }
+                            reader::MemberRefParent::MethodDef(parent) => {
+                                let _ = parent.name();
+                            }
+                        }
+                        let _ = method.name();
+                    }
+                }
+            }
+        }
+    }
+}

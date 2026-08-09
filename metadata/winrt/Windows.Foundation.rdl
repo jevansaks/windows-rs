@@ -5,18 +5,23 @@ mod Windows {
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn AsyncActionCompletedHandler(asyncInfo: IAsyncAction, asyncStatus: AsyncStatus);
         #[guid(0x6d844858_0cff_4590_ae89_95a5a5c8b4b8)]
+        #[invoke_no_new_slot]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn AsyncActionProgressHandler<TProgress>(asyncInfo: IAsyncActionWithProgress<TProgress>, progressInfo: TProgress);
         #[guid(0x9c029f91_cc84_44fd_ac26_0a6c4e555281)]
+        #[invoke_no_new_slot]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn AsyncActionWithProgressCompletedHandler<TProgress>(asyncInfo: IAsyncActionWithProgress<TProgress>, asyncStatus: AsyncStatus);
         #[guid(0xfcdcf02c_e5d8_4478_915a_4d90b74b83a5)]
+        #[invoke_no_new_slot]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn AsyncOperationCompletedHandler<TResult>(asyncInfo: IAsyncOperation<TResult>, asyncStatus: AsyncStatus);
         #[guid(0x55690902_0aab_421a_8778_f8ce5026d758)]
+        #[invoke_no_new_slot]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn AsyncOperationProgressHandler<TResult, TProgress>(asyncInfo: IAsyncOperationWithProgress<TResult, TProgress>, progressInfo: TProgress);
         #[guid(0xe85df41d_6aa7_46e3_a8e2_f009d840c627)]
+        #[invoke_no_new_slot]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn AsyncOperationWithProgressCompletedHandler<TResult, TProgress>(asyncInfo: IAsyncOperationWithProgress<TResult, TProgress>, asyncStatus: AsyncStatus);
         #[repr(i32)]
@@ -36,6 +41,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         class Deferral {
+            #[default]
             IDeferral,
             IClosable,
         }
@@ -43,6 +49,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn DeferralCompletedHandler();
         #[guid(0x9de1c535_6ae1_11e0_84e1_18a905bcc53f)]
+        #[invoke_no_new_slot]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn EventHandler<T>(sender: Object, args: T);
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
@@ -52,6 +59,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::ApiContract]
         #[Windows::Foundation::Metadata::ContractVersion(262144)]
         struct FoundationContract {}
+        #[static_only]
         #[Windows::Foundation::Metadata::ContractVersion(UniversalApiContract, 458752)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Static(IGuidHelperStatics, 458752, "Windows.Foundation.UniversalApiContract")]
@@ -65,25 +73,30 @@ mod Windows {
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         interface IAsyncAction: IAsyncInfo {
             #[set]
+            #[set_name(handler)]
             Completed: AsyncActionCompletedHandler;
             #[get]
             Completed: AsyncActionCompletedHandler;
             fn GetResults(&self);
         }
         #[guid(0x1f6db258_e803_48a1_9546_eb7353398884)]
+        #[runtime]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         interface IAsyncActionWithProgress<TProgress>: IAsyncInfo {
             #[set]
+            #[set_name(handler)]
             Progress: AsyncActionProgressHandler<TProgress>;
             #[get]
             Progress: AsyncActionProgressHandler<TProgress>;
             #[set]
+            #[set_name(handler)]
             Completed: AsyncActionWithProgressCompletedHandler<TProgress>;
             #[get]
             Completed: AsyncActionWithProgressCompletedHandler<TProgress>;
             fn GetResults(&self);
         }
         #[guid(0x00000036_0000_0000_c000_000000000046)]
+        #[runtime]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         interface IAsyncInfo {
             #[get]
@@ -96,22 +109,27 @@ mod Windows {
             fn Close(&self);
         }
         #[guid(0xb5d036d7_e297_498f_ba60_0289e76e23dd)]
+        #[runtime]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         interface IAsyncOperationWithProgress<TResult, TProgress>: IAsyncInfo {
             #[set]
+            #[set_name(handler)]
             Progress: AsyncOperationProgressHandler<TResult, TProgress>;
             #[get]
             Progress: AsyncOperationProgressHandler<TResult, TProgress>;
             #[set]
+            #[set_name(handler)]
             Completed: AsyncOperationWithProgressCompletedHandler<TResult, TProgress>;
             #[get]
             Completed: AsyncOperationWithProgressCompletedHandler<TResult, TProgress>;
             fn GetResults(&self) -> TResult;
         }
         #[guid(0x9fc2b0bb_e446_44e2_aa61_9cab8f636af2)]
+        #[runtime]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         interface IAsyncOperation<TResult>: IAsyncInfo {
             #[set]
+            #[set_name(handler)]
             Completed: AsyncOperationCompletedHandler<TResult>;
             #[get]
             Completed: AsyncOperationCompletedHandler<TResult>;
@@ -165,6 +183,7 @@ mod Windows {
         interface IMemoryBufferReference: IClosable {
             #[get]
             Capacity: u32;
+            #[remove_name(cookie)]
             event Closed: TypedEventHandler<IMemoryBufferReference, Object>;
         }
         #[guid(0x4bd682dd_7554_40e9_9a9b_82654ede7e62)]
@@ -258,12 +277,14 @@ mod Windows {
             fn CreateRectArray(&self, value: [Rect]) -> Object;
         }
         #[guid(0x61c17707_2d65_11e0_9ae8_d48564015472)]
+        #[runtime]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         interface IReferenceArray<T>: IPropertyValue {
             #[get]
             Value: [T];
         }
         #[guid(0x61c17706_2d65_11e0_9ae8_d48564015472)]
+        #[runtime]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         interface IReference<T>: IPropertyValue {
             #[get]
@@ -360,6 +381,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class MemoryBuffer {
+            #[default]
             IMemoryBuffer,
             IClosable,
         }
@@ -413,6 +435,7 @@ mod Windows {
             RectArray = 1043,
             OtherTypeArray = 1044,
         }
+        #[static_only]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -437,6 +460,7 @@ mod Windows {
             Duration: i64,
         }
         #[guid(0x9de1c534_6ae1_11e0_84e1_18a905bcc53f)]
+        #[invoke_no_new_slot]
         #[Windows::Foundation::Metadata::ContractVersion(FoundationContract, 65536)]
         delegate fn TypedEventHandler<TSender, TResult>(sender: TSender, args: TResult);
         #[Windows::Foundation::Metadata::ApiContract]
@@ -449,8 +473,10 @@ mod Windows {
         #[Windows::Foundation::Metadata::Static(IUriEscapeStatics, 65536, "Windows.Foundation.UniversalApiContract")]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class Uri {
+            #[default]
             IUriRuntimeClass,
             IUriRuntimeClassWithAbsoluteCanonicalUri,
+            #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
             IStringable,
         }
         #[Windows::Foundation::Metadata::Activatable(IWwwFormUrlDecoderRuntimeClassFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -459,6 +485,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class WwwFormUrlDecoder {
+            #[default]
             IWwwFormUrlDecoderRuntimeClass,
             Collections::IVectorView<IWwwFormUrlDecoderEntry>,
             Collections::IIterable<IWwwFormUrlDecoderEntry>,
@@ -468,6 +495,7 @@ mod Windows {
         #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
         #[Windows::Foundation::Metadata::Threading(Both)]
         class WwwFormUrlDecoderEntry {
+            #[default]
             IWwwFormUrlDecoderEntry,
         }
     }

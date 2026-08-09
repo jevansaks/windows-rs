@@ -41,6 +41,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(StartupAppsPreviewContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StartupAppInfoPreview {
+                #[default]
                 IStartupAppInfoPreview,
             }
             #[Windows::Foundation::Metadata::ContractVersion(StartupAppsPreviewContract, 65536)]
@@ -48,6 +49,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IStartupAppsManagerPreviewStatics, 65536, "Windows.ApplicationModel.Preview.StartupAppsPreviewContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StartupAppsManagerPreview {
+                #[default]
                 IStartupAppsManagerPreview,
             }
             #[Windows::Foundation::Metadata::ApiContract]

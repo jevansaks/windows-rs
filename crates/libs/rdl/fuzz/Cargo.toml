@@ -1,0 +1,43 @@
+[package]
+name = "windows-rdl-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+windows-metadata = { path = "../../metadata" }
+windows-rdl = { path = ".." }
+
+[[bin]]
+name = "rdl_parser"
+path = "fuzz_targets/rdl_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rdl_formatter"
+path = "fuzz_targets/rdl_formatter.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "metadata_reader"
+path = "fuzz_targets/metadata_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "attribute_decoder"
+path = "fuzz_targets/attribute_decoder.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

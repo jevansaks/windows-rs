@@ -54,6 +54,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class LanguageFont {
+                #[default]
                 ILanguageFont,
             }
             #[Windows::Foundation::Metadata::Activatable(ILanguageFontGroupFactory, 65536, "Windows.Foundation.UniversalApiContract")]
@@ -62,6 +63,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class LanguageFontGroup {
+                #[default]
                 ILanguageFontGroup,
             }
         }

@@ -7,12 +7,14 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class Geofence {
+                    #[default]
                     IGeofence,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IGeofenceMonitorStatics, 65536, "Windows.Foundation.UniversalApiContract")]
                 class GeofenceMonitor {
+                    #[default]
                     IGeofenceMonitor,
                 }
                 #[repr(i32)]
@@ -43,6 +45,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class GeofenceStateChangeReport {
+                    #[default]
                     IGeofenceStateChangeReport,
                 }
                 #[guid(0x9c090823_edb8_47e0_8245_5bf61d321f2d)]
@@ -83,8 +86,10 @@ mod Windows {
                     Geofences: super::super::super::Foundation::Collections::IVector<Geofence>;
                     #[get]
                     LastKnownGeoposition: super::Geoposition;
+                    #[add_name(eventHandler)]
                     event GeofenceStateChanged: super::super::super::Foundation::TypedEventHandler<GeofenceMonitor, Object>;
                     fn ReadReports(&self) -> super::super::super::Foundation::Collections::IVectorView<GeofenceStateChangeReport>;
+                    #[add_name(eventHandler)]
                     event StatusChanged: super::super::super::Foundation::TypedEventHandler<GeofenceMonitor, Object>;
                 }
                 #[guid(0x2dd32fcf_7e75_4899_ace3_2bd0a65cce06)]

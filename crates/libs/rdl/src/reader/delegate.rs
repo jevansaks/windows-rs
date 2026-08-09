@@ -79,11 +79,12 @@ impl Encoder<'_> {
             metadata::writer::TypeDefOrRef::TypeRef(extends),
             flags,
         );
+        self.origin(delegate, &item.sig.ident);
 
         self.encode_attrs(
             metadata::writer::HasAttribute::TypeDef(delegate),
             &item.attrs,
-            &["guid", "no_guid"],
+            &["guid", "no_guid", "invoke", "invoke_no_new_slot"],
         )?;
 
         if let Some(arch_bits) = self.read_arch(&item.attrs)? {
@@ -104,11 +105,27 @@ impl Encoder<'_> {
             );
         }
 
-        let flags = metadata::MethodAttributes::Public
+        let mut flags = metadata::MethodAttributes::Public
             | metadata::MethodAttributes::HideBySig
             | metadata::MethodAttributes::SpecialName
-            | metadata::MethodAttributes::NewSlot
             | metadata::MethodAttributes::Virtual;
+        let mut invoke_no_new_slot = None;
+        for attr in &item.attrs {
+            if attr.path().is_ident("invoke_no_new_slot") {
+                if !matches!(attr.meta, syn::Meta::Path(_)) {
+                    return self.err(
+                        attr,
+                        "`invoke_no_new_slot` attribute does not accept arguments",
+                    );
+                }
+                if invoke_no_new_slot.replace(attr).is_some() {
+                    return self.err(attr, "duplicate `invoke_no_new_slot` attribute");
+                }
+            }
+        }
+        if invoke_no_new_slot.is_none() {
+            flags |= metadata::MethodAttributes::NewSlot;
+        }
 
         let params = self.collect_params(&item.sig)?;
 
@@ -137,20 +154,46 @@ impl Encoder<'_> {
             );
         }
 
+        let constructor_types = [metadata::Type::Object, metadata::Type::ISize];
+        let constructor = self.output.MethodDef(
+            ".ctor",
+            &metadata::Signature {
+                flags: metadata::MethodCallAttributes::HASTHIS,
+                return_type: metadata::Type::Void,
+                types: constructor_types.to_vec(),
+            },
+            metadata::MethodAttributes::Private
+                | metadata::MethodAttributes::HideBySig
+                | metadata::MethodAttributes::SpecialName
+                | metadata::MethodAttributes::RTSpecialName,
+            metadata::MethodImplAttributes::Runtime,
+        );
+        self.origin(constructor, &item.sig.ident);
+        self.encode_simple_params(&[
+            ("object", &constructor_types[0]),
+            ("method", &constructor_types[1]),
+        ])?;
+
         let signature = metadata::Signature {
-            flags: Default::default(),
+            flags: metadata::MethodCallAttributes::HASTHIS,
             return_type,
             types,
         };
 
         // Delegate methods are runtime-implemented, matching real WinRT delegate metadata
         // so that strict consumers (e.g. CsWinRT) recognize the `Invoke` method.
-        self.output.MethodDef(
+        let invoke = self.output.MethodDef(
             "Invoke",
             &signature,
             flags,
             metadata::MethodImplAttributes::Runtime,
         );
+        self.origin(invoke, &item.sig.ident);
+        self.encode_wrapped_attrs(
+            metadata::writer::HasAttribute::MethodDef(invoke),
+            &item.attrs,
+            "invoke",
+        )?;
 
         self.encode_return_attrs(&item.return_attrs)?;
         self.encode_params(&params)?;

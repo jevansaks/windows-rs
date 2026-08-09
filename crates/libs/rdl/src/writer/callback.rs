@@ -9,7 +9,17 @@ pub fn write_callback(item: &metadata::reader::TypeDef) -> Result<TokenStream, E
         .find(|method| method.name() == "Invoke")
         .ok_or_else(|| writer_err!("callback `{}` has no `Invoke` method", item.name()))?;
 
+    let invoke = quote! { invoke };
+    let invoke_attrs = write_custom_attributes_wrapped(
+        method.attributes(),
+        namespace,
+        item.index(),
+        &[],
+        Some(&invoke),
+    )?;
+    reject_method_generics(&method)?;
     let signature = method.signature(&[]);
+    reject_variadic_method(&method, &signature, "callback")?;
     let return_type = write_return_type(namespace, &method, &signature)?;
     let params = write_params(namespace, &method, signature.types)?;
 
@@ -38,6 +48,7 @@ pub fn write_callback(item: &metadata::reader::TypeDef) -> Result<TokenStream, E
 
     Ok(quote! {
         #arch_attr
+        #(#invoke_attrs)*
         #(#custom_attrs)*
         extern #abi fn #name (#(#params),*) #return_type;
     })

@@ -17,6 +17,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Compressor {
+                #[default]
                 ICompressor,
                 super::Streams::IOutputStream,
                 super::super::Foundation::IClosable,
@@ -26,6 +27,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class Decompressor {
+                #[default]
                 IDecompressor,
                 super::Streams::IInputStream,
                 super::super::Foundation::IClosable,

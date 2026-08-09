@@ -28,7 +28,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class SceneLightingEffect {
+                    #[default]
                     ISceneLightingEffect,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                     ISceneLightingEffect2,
                     super::super::super::Graphics::Effects::IGraphicsEffect,
                     super::super::super::Graphics::Effects::IGraphicsEffectSource,

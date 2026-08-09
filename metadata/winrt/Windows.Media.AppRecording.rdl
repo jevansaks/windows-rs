@@ -11,6 +11,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IAppRecordingManagerStatics, 65536, "Windows.Media.AppRecording.AppRecordingContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppRecordingManager {
+                #[default]
                 IAppRecordingManager,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppRecordingContract, 65536)]
@@ -18,6 +19,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppRecordingResult {
+                #[default]
                 IAppRecordingResult,
             }
             #[repr(i32)]
@@ -31,6 +33,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppRecordingSaveScreenshotResult {
+                #[default]
                 IAppRecordingSaveScreenshotResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppRecordingContract, 65536)]
@@ -38,6 +41,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppRecordingSavedScreenshotInfo {
+                #[default]
                 IAppRecordingSavedScreenshotInfo,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppRecordingContract, 65536)]
@@ -45,6 +49,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppRecordingStatus {
+                #[default]
                 IAppRecordingStatus,
             }
             #[Windows::Foundation::Metadata::ContractVersion(AppRecordingContract, 65536)]
@@ -52,6 +57,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class AppRecordingStatusDetails {
+                #[default]
                 IAppRecordingStatusDetails,
             }
             #[guid(0xe7e26076_a044_48e2_a512_3094d574c7cc)]

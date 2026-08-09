@@ -7,6 +7,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DesignerAppExitedEventArgs {
+                    #[default]
                     IDesignerAppExitedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IDesignerAppManagerFactory, 131072, "Windows.UI.Xaml.Hosting.HostingContract")]
@@ -15,14 +16,18 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DesignerAppManager {
+                    #[default]
                     IDesignerAppManager,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.UI.Xaml.Hosting.HostingContract", 131072)]
                     super::super::super::Foundation::IClosable,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HostingContract, 131072)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DesignerAppView {
+                    #[default]
                     IDesignerAppView,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.UI.Xaml.Hosting.HostingContract", 131072)]
                     super::super::super::Foundation::IClosable,
                 }
                 #[repr(i32)]
@@ -32,25 +37,30 @@ mod Windows {
                     Visible = 0,
                     Hidden = 1,
                 }
+                #[unsealed]
                 #[Windows::Foundation::Metadata::Composable(IDesktopWindowXamlSourceFactory, Public, 196608, "Windows.UI.Xaml.Hosting.HostingContract")]
                 #[Windows::Foundation::Metadata::ContractVersion(HostingContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DesktopWindowXamlSource {
+                    #[default]
                     IDesktopWindowXamlSource,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.UI.Xaml.Hosting.HostingContract", 196608)]
                     super::super::super::Foundation::IClosable,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HostingContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DesktopWindowXamlSourceGotFocusEventArgs {
+                    #[default]
                     IDesktopWindowXamlSourceGotFocusEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HostingContract, 196608)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class DesktopWindowXamlSourceTakeFocusRequestedEventArgs {
+                    #[default]
                     IDesktopWindowXamlSourceTakeFocusRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 131072)]
@@ -61,6 +71,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class ElementCompositionPreview {
+                    #[default]
                     IElementCompositionPreview,
                 }
                 #[Windows::Foundation::Metadata::ApiContract]
@@ -278,7 +289,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class WindowsXamlManager {
+                    #[default]
                     IWindowsXamlManager,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.UI.Xaml.Hosting.HostingContract", 196608)]
                     super::super::super::Foundation::IClosable,
                 }
                 #[repr(i32)]
@@ -300,6 +313,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class XamlSourceFocusNavigationRequest {
+                    #[default]
                     IXamlSourceFocusNavigationRequest,
                 }
                 #[Windows::Foundation::Metadata::Activatable(IXamlSourceFocusNavigationResultFactory, 196608, "Windows.UI.Xaml.Hosting.HostingContract")]
@@ -308,6 +322,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class XamlSourceFocusNavigationResult {
+                    #[default]
                     IXamlSourceFocusNavigationResult,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(HostingContract, 65536)]
@@ -317,6 +332,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class XamlUIPresenter {
+                    #[default]
                     IXamlUIPresenter,
                 }
             }

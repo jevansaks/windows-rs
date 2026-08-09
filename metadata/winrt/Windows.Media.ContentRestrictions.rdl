@@ -14,6 +14,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ContentRestrictionsBrowsePolicy {
+                #[default]
                 IContentRestrictionsBrowsePolicy,
             }
             #[guid(0x8c0133a4_442e_461a_8757_fad2f5bd37e4)]
@@ -74,6 +75,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RatedContentDescription {
+                #[default]
                 IRatedContentDescription,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -82,6 +84,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class RatedContentRestrictions {
+                #[default]
                 IRatedContentRestrictions,
             }
         }

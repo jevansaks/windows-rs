@@ -90,9 +90,9 @@ mod Windows {
                     fn ProcessPointerUpdate(&self, pointerPoint: super::PointerPoint) -> #[Windows::Foundation::Metadata::Variant] Object;
                     fn ProcessPointerUp(&self, pointerPoint: super::PointerPoint) -> super::super::super::Foundation::Rect;
                     fn SetDefaultDrawingAttributes(&self, drawingAttributes: InkDrawingAttributes);
-                    #[Windows::Foundation::Metadata::Overload("RecognizeAsync2")]
+                    #[overload(RecognizeAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
-                    fn RecognizeAsync(&self, recognitionTarget: InkRecognitionTarget) -> super::super::super::Foundation::IAsyncOperation<super::super::super::Foundation::Collections::IVectorView<InkRecognitionResult>>;
+                    fn RecognizeAsync2(&self, recognitionTarget: InkRecognitionTarget) -> super::super::super::Foundation::IAsyncOperation<super::super::super::Foundation::Collections::IVectorView<InkRecognitionResult>>;
                 }
                 #[guid(0xbad31f27_0cd9_4bfd_b6f3_9e03ba8d7454)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
@@ -155,7 +155,9 @@ mod Windows {
                     fn UpdateDefaultDrawingAttributes(&self, value: InkDrawingAttributes);
                     fn ActivateCustomDrying(&self) -> InkSynchronizer;
                     fn SetPredefinedConfiguration(&self, value: InkPresenterPredefinedConfiguration);
+                    #[remove_name(cookie)]
                     event StrokesCollected: super::super::super::Foundation::TypedEventHandler<InkPresenter, InkStrokesCollectedEventArgs>;
+                    #[remove_name(cookie)]
                     event StrokesErased: super::super::super::Foundation::TypedEventHandler<InkPresenter, InkStrokesErasedEventArgs>;
                 }
                 #[guid(0xcf53e612_9a34_11e6_9f33_a24fc0d9649c)]
@@ -321,7 +323,7 @@ mod Windows {
                     fn CanPasteFromClipboard(&self) -> bool;
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn LoadAsync(&self, inputStream: super::super::super::Storage::Streams::IInputStream) -> super::super::super::Foundation::IAsyncActionWithProgress<u64>;
-                    #[Windows::Foundation::Metadata::Overload("SaveAsync")]
+                    #[overload(SaveAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
                     fn SaveAsync(&self, outputStream: super::super::super::Storage::Streams::IOutputStream) -> super::super::super::Foundation::IAsyncOperationWithProgress<u32, u32>;
                     fn UpdateRecognitionResults(&self, recognitionResults: super::super::super::Foundation::Collections::IVectorView<InkRecognitionResult>);
@@ -339,18 +341,22 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 262144)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(InkStrokeContainer)]
                 interface IInkStrokeContainer3 {
-                    #[Windows::Foundation::Metadata::Overload("SaveWithFormatAsync")]
+                    #[overload(SaveAsync)]
                     #[Windows::Foundation::Metadata::RemoteAsync]
-                    fn SaveAsync(&self, outputStream: super::super::super::Storage::Streams::IOutputStream, inkPersistenceFormat: InkPersistenceFormat) -> super::super::super::Foundation::IAsyncOperationWithProgress<u32, u32>;
+                    fn SaveWithFormatAsync(&self, outputStream: super::super::super::Storage::Streams::IOutputStream, inkPersistenceFormat: InkPersistenceFormat) -> super::super::super::Foundation::IAsyncOperationWithProgress<u32, u32>;
                     fn GetStrokeById(&self, id: u32) -> InkStroke;
                 }
                 #[guid(0xcf2ffe7b_5e10_43c6_a080_88f26e1dc67d)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(InkStrokeInput)]
                 interface IInkStrokeInput {
+                    #[remove_name(cookie)]
                     event StrokeStarted: super::super::super::Foundation::TypedEventHandler<InkStrokeInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event StrokeContinued: super::super::super::Foundation::TypedEventHandler<InkStrokeInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event StrokeEnded: super::super::super::Foundation::TypedEventHandler<InkStrokeInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event StrokeCanceled: super::super::super::Foundation::TypedEventHandler<InkStrokeInput, super::super::Core::PointerEventArgs>;
                     #[get]
                     InkPresenter: InkPresenter;
@@ -399,12 +405,19 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::ExclusiveTo(InkUnprocessedInput)]
                 interface IInkUnprocessedInput {
+                    #[remove_name(cookie)]
                     event PointerEntered: super::super::super::Foundation::TypedEventHandler<InkUnprocessedInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event PointerHovered: super::super::super::Foundation::TypedEventHandler<InkUnprocessedInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event PointerExited: super::super::super::Foundation::TypedEventHandler<InkUnprocessedInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event PointerPressed: super::super::super::Foundation::TypedEventHandler<InkUnprocessedInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event PointerMoved: super::super::super::Foundation::TypedEventHandler<InkUnprocessedInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event PointerReleased: super::super::super::Foundation::TypedEventHandler<InkUnprocessedInput, super::super::Core::PointerEventArgs>;
+                    #[remove_name(cookie)]
                     event PointerLost: super::super::super::Foundation::TypedEventHandler<InkUnprocessedInput, super::super::Core::PointerEventArgs>;
                     #[get]
                     InkPresenter: InkPresenter;
@@ -445,10 +458,15 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IInkDrawingAttributesStatics, 196608, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InkDrawingAttributes {
+                    #[default]
                     IInkDrawingAttributes,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IInkDrawingAttributes2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                     IInkDrawingAttributes3,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInkDrawingAttributes4,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     IInkDrawingAttributes5,
                 }
                 #[repr(i32)]
@@ -462,6 +480,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InkDrawingAttributesPencilProperties {
+                    #[default]
                     IInkDrawingAttributesPencilProperties,
                 }
                 #[repr(i32)]
@@ -474,13 +493,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 393216)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkInputConfiguration {
+                    #[default]
                     IInkInputConfiguration,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IInkInputConfiguration2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkInputProcessingConfiguration {
+                    #[default]
                     IInkInputProcessingConfiguration,
                 }
                 #[repr(i32)]
@@ -502,6 +524,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InkManager {
+                    #[default]
                     IInkManager,
                     IInkRecognizerContainer,
                     IInkStrokeContainer,
@@ -517,7 +540,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772165)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkModelerAttributes {
+                    #[default]
                     IInkModelerAttributes,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 655360)]
                     IInkModelerAttributes2,
                 }
                 #[repr(i32)]
@@ -532,15 +557,20 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkPoint {
+                    #[default]
                     IInkPoint,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInkPoint2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkPresenter {
+                    #[default]
                     IInkPresenter,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInkPresenter2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                     IInkPresenter3,
                 }
                 #[repr(i32)]
@@ -555,6 +585,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InkPresenterProtractor {
+                    #[default]
                     IInkPresenterProtractor,
                     IInkPresenterStencil,
                 }
@@ -564,8 +595,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class InkPresenterRuler {
+                    #[default]
                     IInkPresenterRuler,
                     IInkPresenterStencil,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInkPresenterRuler2,
                 }
                 #[repr(i32)]
@@ -574,12 +607,14 @@ mod Windows {
                 enum InkPresenterStencilKind {
                     Other = 0,
                     Ruler = 1,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     Protractor = 2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkRecognitionResult {
+                    #[default]
                     IInkRecognitionResult,
                 }
                 #[repr(i32)]
@@ -593,6 +628,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 class InkRecognizer {
+                    #[default]
                     IInkRecognizer,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -601,15 +637,20 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InkRecognizerContainer {
+                    #[default]
                     IInkRecognizerContainer,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkStroke {
+                    #[default]
                     IInkStroke,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IInkStroke2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInkStroke3,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 851968)]
                     IInkStroke4,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -618,8 +659,11 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InkStrokeBuilder {
+                    #[default]
                     IInkStrokeBuilder,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IInkStrokeBuilder2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInkStrokeBuilder3,
                 }
                 #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -628,44 +672,53 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InkStrokeContainer {
+                    #[default]
                     IInkStrokeContainer,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                     IInkStrokeContainer2,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                     IInkStrokeContainer3,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkStrokeInput {
+                    #[default]
                     IInkStrokeInput,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 100794368)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkStrokeRenderingSegment {
+                    #[default]
                     IInkStrokeRenderingSegment,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 class InkStrokesCollectedEventArgs {
+                    #[default]
                     IInkStrokesCollectedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 class InkStrokesErasedEventArgs {
+                    #[default]
                     IInkStrokesErasedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(None)]
                 class InkSynchronizer {
+                    #[default]
                     IInkSynchronizer,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 65536)]
                 #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class InkUnprocessedInput {
+                    #[default]
                     IInkUnprocessedInput,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 458752)]
@@ -673,7 +726,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IPenAndInkSettingsStatics, 458752, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class PenAndInkSettings {
+                    #[default]
                     IPenAndInkSettings,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 786432)]
                     IPenAndInkSettings2,
                 }
                 #[repr(i32)]

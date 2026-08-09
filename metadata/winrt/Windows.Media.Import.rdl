@@ -90,9 +90,11 @@ mod Windows {
                 SelectedTotalCount: u32;
                 #[get]
                 SelectedTotalSizeInBytes: u64;
+                #[add_name(value)]
                 event SelectionChanged: super::super::Foundation::TypedEventHandler<PhotoImportFindItemsResult, PhotoImportSelectionChangedEventArgs>;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn ImportItemsAsync(&self) -> super::super::Foundation::IAsyncOperationWithProgress<PhotoImportImportItemsResult, PhotoImportProgress>;
+                #[add_name(value)]
                 event ItemImported: super::super::Foundation::TypedEventHandler<PhotoImportFindItemsResult, PhotoImportItemImportedEventArgs>;
             }
             #[guid(0xfbdd6a3b_ecf9_406a_815e_5015625b0a88)]
@@ -194,15 +196,18 @@ mod Windows {
                 Stage: PhotoImportStage;
                 #[get]
                 Session: PhotoImportSession;
-                #[special]
-                #[Windows::Foundation::Metadata::RemoteAsync]
-                fn get_ContinueFindingItemsAsync(&self) -> super::super::Foundation::IAsyncOperationWithProgress<PhotoImportFindItemsResult, u32>;
-                #[special]
-                #[Windows::Foundation::Metadata::RemoteAsync]
-                fn get_ContinueImportingItemsAsync(&self) -> super::super::Foundation::IAsyncOperationWithProgress<PhotoImportImportItemsResult, PhotoImportProgress>;
-                #[special]
-                #[Windows::Foundation::Metadata::RemoteAsync]
-                fn get_ContinueDeletingImportedItemsFromSourceAsync(&self) -> super::super::Foundation::IAsyncOperationWithProgress<PhotoImportDeleteImportedItemsFromSourceResult, f64>;
+                #[get]
+                #[property(Windows::Foundation::Metadata::RemoteAsync)]
+                #[get(Windows::Foundation::Metadata::RemoteAsync)]
+                ContinueFindingItemsAsync: super::super::Foundation::IAsyncOperationWithProgress<PhotoImportFindItemsResult, u32>;
+                #[get]
+                #[property(Windows::Foundation::Metadata::RemoteAsync)]
+                #[get(Windows::Foundation::Metadata::RemoteAsync)]
+                ContinueImportingItemsAsync: super::super::Foundation::IAsyncOperationWithProgress<PhotoImportImportItemsResult, PhotoImportProgress>;
+                #[get]
+                #[property(Windows::Foundation::Metadata::RemoteAsync)]
+                #[get(Windows::Foundation::Metadata::RemoteAsync)]
+                ContinueDeletingImportedItemsFromSourceAsync: super::super::Foundation::IAsyncOperationWithProgress<PhotoImportDeleteImportedItemsFromSourceResult, f64>;
             }
             #[guid(0x10461782_fa9d_4c30_8bc9_4d64911572d5)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -372,25 +377,30 @@ mod Windows {
                 OnlyImages = 0,
                 OnlyVideos = 1,
                 ImagesAndVideos = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 ImagesAndVideosFromCameraRoll = 3,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportDeleteImportedItemsFromSourceResult {
+                #[default]
                 IPhotoImportDeleteImportedItemsFromSourceResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportFindItemsResult {
+                #[default]
                 IPhotoImportFindItemsResult,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IPhotoImportFindItemsResult2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportImportItemsResult {
+                #[default]
                 IPhotoImportImportItemsResult,
             }
             #[repr(i32)]
@@ -405,13 +415,16 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportItem {
+                #[default]
                 IPhotoImportItem,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 458752)]
                 IPhotoImportItem2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportItemImportedEventArgs {
+                #[default]
                 IPhotoImportItemImportedEventArgs,
             }
             #[repr(i32)]
@@ -421,6 +434,7 @@ mod Windows {
                 SelectNone = 1,
                 SelectNew = 2,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -430,7 +444,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
+            #[class_property(#[Windows::Foundation::Metadata::RemoteAsync] ContinueDeletingImportedItemsFromSourceAsync: super::super::Foundation::IAsyncOperationWithProgress<PhotoImportDeleteImportedItemsFromSourceResult, f64>, get = get_ContinueDeletingImportedItemsFromSourceAsync)]
+            #[class_property(#[Windows::Foundation::Metadata::RemoteAsync] ContinueFindingItemsAsync: super::super::Foundation::IAsyncOperationWithProgress<PhotoImportFindItemsResult, u32>, get = get_ContinueFindingItemsAsync)]
+            #[class_property(#[Windows::Foundation::Metadata::RemoteAsync] ContinueImportingItemsAsync: super::super::Foundation::IAsyncOperationWithProgress<PhotoImportImportItemsResult, PhotoImportProgress>, get = get_ContinueImportingItemsAsync)]
             class PhotoImportOperation {
+                #[default]
+                #[no_property(ContinueDeletingImportedItemsFromSourceAsync)]
+                #[no_property(ContinueFindingItemsAsync)]
+                #[no_property(ContinueImportingItemsAsync)]
                 IPhotoImportOperation,
             }
             #[repr(i32)]
@@ -452,20 +473,24 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportSelectionChangedEventArgs {
+                #[default]
                 IPhotoImportSelectionChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportSession {
+                #[default]
                 IPhotoImportSession,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 196608)]
                 IPhotoImportSession2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportSidecar {
+                #[default]
                 IPhotoImportSidecar,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -473,6 +498,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(IPhotoImportSourceStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             class PhotoImportSource {
+                #[default]
                 IPhotoImportSource,
             }
             #[repr(i32)]
@@ -498,6 +524,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportStorageMedium {
+                #[default]
                 IPhotoImportStorageMedium,
             }
             #[repr(i32)]
@@ -526,6 +553,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class PhotoImportVideoSegment {
+                #[default]
                 IPhotoImportVideoSegment,
             }
         }

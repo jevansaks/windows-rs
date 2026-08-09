@@ -98,6 +98,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class SpeechSynthesisStream {
+                #[default]
                 ISpeechSynthesisStream,
                 super::super::Storage::Streams::IRandomAccessStreamWithContentType,
                 super::super::Storage::Streams::IContentTypeProvider,
@@ -105,6 +106,7 @@ mod Windows {
                 super::super::Storage::Streams::IOutputStream,
                 super::super::Foundation::IClosable,
                 super::super::Storage::Streams::IInputStream,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 super::Core::ITimedMetadataTrackProvider,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -114,16 +116,21 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IInstalledVoicesStatic, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Static(IInstalledVoicesStatic2, 327680, "Windows.Foundation.UniversalApiContract")]
             class SpeechSynthesizer {
+                #[default]
                 ISpeechSynthesizer,
                 super::super::Foundation::IClosable,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 262144)]
                 ISpeechSynthesizer2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class SpeechSynthesizerOptions {
+                #[default]
                 ISpeechSynthesizerOptions,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 ISpeechSynthesizerOptions2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 ISpeechSynthesizerOptions3,
             }
             #[repr(i32)]
@@ -136,6 +143,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772160)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class VoiceInformation {
+                #[default]
                 IVoiceInformation,
             }
         }

@@ -59,11 +59,12 @@ impl Encoder<'_> {
             metadata::writer::TypeDefOrRef::TypeRef(extends),
             flags,
         );
+        self.origin(callback, &item.sig.ident);
 
         self.encode_attrs(
             metadata::writer::HasAttribute::TypeDef(callback),
             &item.attrs,
-            &[],
+            &["invoke"],
         )?;
 
         if let Some(arch_bits) = self.read_arch(&item.attrs)? {
@@ -131,8 +132,15 @@ impl Encoder<'_> {
             types,
         };
 
-        self.output
+        let invoke = self
+            .output
             .MethodDef("Invoke", &signature, flags, Default::default());
+        self.origin(invoke, &item.sig.ident);
+        self.encode_wrapped_attrs(
+            metadata::writer::HasAttribute::MethodDef(invoke),
+            &item.attrs,
+            "invoke",
+        )?;
 
         self.encode_return_attrs(&item.return_attrs)?;
         self.encode_params(&params)?;

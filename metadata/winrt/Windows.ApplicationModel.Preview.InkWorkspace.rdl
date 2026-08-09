@@ -21,6 +21,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IInkWorkspaceHostedAppManagerStatics, 65536, "Windows.ApplicationModel.Preview.InkWorkspace.PreviewInkWorkspaceContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class InkWorkspaceHostedAppManager {
+                    #[default]
                     IInkWorkspaceHostedAppManager,
                 }
                 #[Windows::Foundation::Metadata::ApiContract]

@@ -17,13 +17,16 @@ mod Windows {
                 Local = 0,
                 Remote = 1,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Static(ICachedFileUpdaterStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             class CachedFileUpdater {}
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             class CachedFileUpdaterUI {
+                #[default]
                 ICachedFileUpdaterUI,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 ICachedFileUpdaterUI2,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -31,15 +34,19 @@ mod Windows {
             struct CloudFilesContract {}
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             class FileUpdateRequest {
+                #[default]
                 IFileUpdateRequest,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 65536)]
                 IFileUpdateRequest2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             class FileUpdateRequestDeferral {
+                #[default]
                 IFileUpdateRequestDeferral,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
             class FileUpdateRequestedEventArgs {
+                #[default]
                 IFileUpdateRequestedEventArgs,
             }
             #[repr(i32)]
@@ -442,6 +449,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderFileTypeInfo {
+                #[default]
                 IStorageProviderFileTypeInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(131072, "Windows.Storage.Provider.CloudFilesContract")]
@@ -450,6 +458,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderGetContentInfoForPathResult {
+                #[default]
                 IStorageProviderGetContentInfoForPathResult,
             }
             #[Windows::Foundation::Metadata::Activatable(131072, "Windows.Storage.Provider.CloudFilesContract")]
@@ -458,6 +467,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderGetPathForContentUriResult {
+                #[default]
                 IStorageProviderGetPathForContentUriResult,
             }
             #[repr(u32)]
@@ -482,7 +492,9 @@ mod Windows {
                 None = 0,
                 ValidationRequired = 1,
                 StreamingAllowed = 2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Storage.Provider.CloudFilesContract", 196608)]
                 AutoDehydrationAllowed = 4,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Storage.Provider.CloudFilesContract", 393216)]
                 AllowFullRestartHydration = 8,
             }
             #[repr(u32)]
@@ -502,6 +514,7 @@ mod Windows {
                 DirectoryLastWriteTime = 512,
                 PreserveInsyncForSyncEngine = 2147483648,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CloudFilesContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
@@ -514,6 +527,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderItemProperty {
+                #[default]
                 IStorageProviderItemProperty,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Storage.Provider.CloudFilesContract")]
@@ -522,6 +536,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderItemPropertyDefinition {
+                #[default]
                 IStorageProviderItemPropertyDefinition,
             }
             #[Windows::Foundation::Metadata::Activatable(458752, "Windows.Storage.Provider.CloudFilesContract")]
@@ -529,6 +544,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderKnownFolderEntry {
+                #[default]
                 IStorageProviderKnownFolderEntry,
             }
             #[Windows::Foundation::Metadata::Activatable(458752, "Windows.Storage.Provider.CloudFilesContract")]
@@ -536,11 +552,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderKnownFolderSyncInfo {
+                #[default]
                 IStorageProviderKnownFolderSyncInfo,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CloudFilesContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StorageProviderKnownFolderSyncRequestArgs {
+                #[default]
                 IStorageProviderKnownFolderSyncRequestArgs,
             }
             #[guid(0xc4cbb4f5_13dd_5c8e_8b96_336fc30c629b)]
@@ -558,6 +576,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderMoreInfoUI {
+                #[default]
                 IStorageProviderMoreInfoUI,
             }
             #[repr(i32)]
@@ -577,6 +596,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderQueryResultSet {
+                #[default]
                 IStorageProviderQueryResultSet,
             }
             #[Windows::Foundation::Metadata::Activatable(458752, "Windows.Storage.Provider.CloudFilesContract")]
@@ -584,6 +604,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderQuotaUI {
+                #[default]
                 IStorageProviderQuotaUI,
             }
             #[repr(i32)]
@@ -613,6 +634,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::ContractVersion(CloudFilesContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StorageProviderSearchQueryOptions {
+                #[default]
                 IStorageProviderSearchQueryOptions,
             }
             #[repr(i32)]
@@ -632,6 +654,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderSearchResult {
+                #[default]
                 IStorageProviderSearchResult,
                 IStorageProviderQueryResult,
             }
@@ -657,6 +680,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderStatusUI {
+                #[default]
                 IStorageProviderStatusUI,
             }
             #[Windows::Foundation::Metadata::Activatable(458752, "Windows.Storage.Provider.CloudFilesContract")]
@@ -664,11 +688,13 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderSuggestionResult {
+                #[default]
                 IStorageProviderQueryResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(CloudFilesContract, 458752)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             class StorageProviderSuggestionsQueryOptions {
+                #[default]
                 IStorageProviderSuggestionsQueryOptions,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Storage.Provider.CloudFilesContract")]
@@ -677,10 +703,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class StorageProviderSyncRootInfo {
+                #[default]
                 IStorageProviderSyncRootInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Storage.Provider.CloudFilesContract", 196608)]
                 IStorageProviderSyncRootInfo2,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Storage.Provider.CloudFilesContract", 262144)]
                 IStorageProviderSyncRootInfo3,
             }
+            #[static_only]
             #[Windows::Foundation::Metadata::ContractVersion(CloudFilesContract, 65536)]
             #[Windows::Foundation::Metadata::DualApiPartition(version = 167772164)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]

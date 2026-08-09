@@ -6,6 +6,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DiagnosticActionResult {
+                #[default]
                 IDiagnosticActionResult,
             }
             #[repr(i32)]
@@ -17,6 +18,7 @@ mod Windows {
                 Detecting = 3,
                 Resolving = 4,
                 VerifyingResolution = 5,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 720896)]
                 Executing = 6,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
@@ -24,7 +26,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IDiagnosticInvokerStatics, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class DiagnosticInvoker {
+                #[default]
                 IDiagnosticInvoker,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 393216)]
                 IDiagnosticInvoker2,
             }
             #[guid(0xc265a296_e73b_4097_b28f_3442f03dd831)]
@@ -234,6 +238,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessCpuUsage {
+                #[default]
                 IProcessCpuUsage,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -241,6 +246,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessCpuUsageReport {
+                #[default]
                 IProcessCpuUsageReport,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -250,7 +256,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IProcessDiagnosticInfoStatics2, 327680, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessDiagnosticInfo {
+                #[default]
                 IProcessDiagnosticInfo,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IProcessDiagnosticInfo2,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -258,6 +266,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessDiskUsage {
+                #[default]
                 IProcessDiskUsage,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -265,6 +274,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessDiskUsageReport {
+                #[default]
                 IProcessDiskUsageReport,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -272,6 +282,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessMemoryUsage {
+                #[default]
                 IProcessMemoryUsage,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -279,6 +290,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class ProcessMemoryUsageReport {
+                #[default]
                 IProcessMemoryUsageReport,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -286,6 +298,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SystemCpuUsage {
+                #[default]
                 ISystemCpuUsage,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -293,6 +306,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SystemCpuUsageReport {
+                #[default]
                 ISystemCpuUsageReport,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -302,6 +316,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ISystemDiagnosticInfoStatics2, 720896, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SystemDiagnosticInfo {
+                #[default]
                 ISystemDiagnosticInfo,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -309,6 +324,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SystemMemoryUsage {
+                #[default]
                 ISystemMemoryUsage,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
@@ -316,6 +332,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class SystemMemoryUsageReport {
+                #[default]
                 ISystemMemoryUsageReport,
             }
         }

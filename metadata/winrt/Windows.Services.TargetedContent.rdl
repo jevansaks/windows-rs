@@ -121,8 +121,11 @@ mod Windows {
                 Id: String;
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetContentContainerAsync(&self) -> super::super::Foundation::IAsyncOperation<TargetedContentContainer>;
+                #[remove_name(cookie)]
                 event ContentChanged: super::super::Foundation::TypedEventHandler<TargetedContentSubscription, TargetedContentChangedEventArgs>;
+                #[remove_name(cookie)]
                 event AvailabilityChanged: super::super::Foundation::TypedEventHandler<TargetedContentSubscription, TargetedContentAvailabilityChangedEventArgs>;
+                #[remove_name(cookie)]
                 event StateChanged: super::super::Foundation::TypedEventHandler<TargetedContentSubscription, TargetedContentStateChangedEventArgs>;
             }
             #[guid(0x61ee6ad0_2c83_421b_8467_413eaf1aeb97)]
@@ -188,6 +191,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentAction {
+                #[default]
                 ITargetedContentAction,
             }
             #[repr(i32)]
@@ -209,6 +213,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentAvailabilityChangedEventArgs {
+                #[default]
                 ITargetedContentAvailabilityChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -216,6 +221,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentChangedEventArgs {
+                #[default]
                 ITargetedContentChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -223,6 +229,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentCollection {
+                #[default]
                 ITargetedContentCollection,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -231,6 +238,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ITargetedContentContainerStatics, 65536, "Windows.Services.TargetedContent.TargetedContentContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentContainer {
+                #[default]
                 ITargetedContentContainer,
             }
             #[Windows::Foundation::Metadata::ApiContract]
@@ -241,6 +249,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentFile {
+                #[default]
                 super::super::Storage::Streams::IRandomAccessStreamReference,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -248,6 +257,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentImage {
+                #[default]
                 ITargetedContentImage,
                 super::super::Storage::Streams::IRandomAccessStreamReference,
             }
@@ -273,6 +283,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentItem {
+                #[default]
                 ITargetedContentItem,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -280,6 +291,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentItemState {
+                #[default]
                 ITargetedContentItemState,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -287,6 +299,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentObject {
+                #[default]
                 ITargetedContentObject,
             }
             #[repr(i32)]
@@ -301,6 +314,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentStateChangedEventArgs {
+                #[default]
                 ITargetedContentStateChangedEventArgs,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -309,6 +323,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(ITargetedContentSubscriptionStatics, 65536, "Windows.Services.TargetedContent.TargetedContentContract")]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentSubscription {
+                #[default]
                 ITargetedContentSubscription,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -316,6 +331,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentSubscriptionOptions {
+                #[default]
                 ITargetedContentSubscriptionOptions,
             }
             #[Windows::Foundation::Metadata::ContractVersion(TargetedContentContract, 65536)]
@@ -323,6 +339,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class TargetedContentValue {
+                #[default]
                 ITargetedContentValue,
             }
             #[repr(i32)]

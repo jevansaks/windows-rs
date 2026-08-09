@@ -7,6 +7,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Static(IApplicationDataManagerStatics, 65536, "Windows.Foundation.UniversalApiContract")]
             #[Windows::Foundation::Metadata::Threading(MTA)]
             class ApplicationDataManager {
+                #[default]
                 IApplicationDataManager,
             }
             #[guid(0x74d10432_2e99_4000_9a3a_64307e858129)]

@@ -29,10 +29,10 @@ mod Windows {
                 #[get]
                 Commands: super::super::Foundation::Collections::IVector<IUICommand>;
                 fn ShowAsync(&self, invocationPoint: super::super::Foundation::Point) -> super::super::Foundation::IAsyncOperation<IUICommand>;
-                #[Windows::Foundation::Metadata::Overload("ShowAsyncWithRect")]
-                fn ShowForSelectionAsync(&self, selection: super::super::Foundation::Rect) -> super::super::Foundation::IAsyncOperation<IUICommand>;
-                #[Windows::Foundation::Metadata::Overload("ShowAsyncWithRectAndPlacement")]
-                fn ShowForSelectionAsync(&self, selection: super::super::Foundation::Rect, preferredPlacement: Placement) -> super::super::Foundation::IAsyncOperation<IUICommand>;
+                #[overload(ShowForSelectionAsync)]
+                fn ShowAsyncWithRect(&self, selection: super::super::Foundation::Rect) -> super::super::Foundation::IAsyncOperation<IUICommand>;
+                #[overload(ShowForSelectionAsync)]
+                fn ShowAsyncWithRectAndPlacement(&self, selection: super::super::Foundation::Rect, preferredPlacement: Placement) -> super::super::Foundation::IAsyncOperation<IUICommand>;
             }
             #[guid(0x4ff93a75_4145_47ff_ac7f_dff1c1fa5b0f)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 65536)]
@@ -54,6 +54,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             class MessageDialog {
+                #[default]
                 IMessageDialog,
             }
             #[repr(u32)]
@@ -77,6 +78,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Standard)]
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             class PopupMenu {
+                #[default]
                 IPopupMenu,
             }
             #[Windows::Foundation::Metadata::Activatable(65536, "Windows.Foundation.UniversalApiContract")]
@@ -86,6 +88,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UICommand {
+                #[default]
                 IUICommand,
             }
             #[guid(0xdaf77a4f_c27a_4298_9ac6_2922c45e7da6)]
@@ -97,6 +100,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::Muse(Version = 100794368)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class UICommandSeparator {
+                #[default]
                 IUICommand,
             }
         }

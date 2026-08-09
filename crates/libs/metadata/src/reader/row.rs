@@ -1,5 +1,62 @@
 use super::*;
 
+/// ECMA-335 metadata table identity.
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[repr(u8)]
+pub enum TableId {
+    Module = 0x00,
+    TypeRef = 0x01,
+    TypeDef = 0x02,
+    Field = 0x04,
+    MethodDef = 0x06,
+    Param = 0x08,
+    InterfaceImpl = 0x09,
+    MemberRef = 0x0a,
+    Constant = 0x0b,
+    Attribute = 0x0c,
+    ClassLayout = 0x0f,
+    FieldLayout = 0x10,
+    EventMap = 0x12,
+    Event = 0x14,
+    PropertyMap = 0x15,
+    Property = 0x17,
+    MethodSemantics = 0x18,
+    MethodImpl = 0x19,
+    ModuleRef = 0x1a,
+    TypeSpec = 0x1b,
+    ImplMap = 0x1c,
+    Assembly = 0x20,
+    AssemblyRef = 0x23,
+    NestedClass = 0x29,
+    GenericParam = 0x2a,
+}
+
+/// Stable identity of one metadata table row within an [`Index`].
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
+pub struct RowId {
+    file: usize,
+    table: TableId,
+    row: usize,
+}
+
+impl RowId {
+    pub(crate) fn new(file: usize, table: TableId, row: usize) -> Self {
+        Self { file, table, row }
+    }
+
+    pub fn file(&self) -> usize {
+        self.file
+    }
+
+    pub fn table(&self) -> TableId {
+        self.table
+    }
+
+    pub fn row(&self) -> usize {
+        self.row
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Row<'a> {
     pub index: &'a Index,
@@ -51,6 +108,7 @@ impl<'a> Row<'a> {
 
 pub trait AsRow<'a>: Copy {
     const TABLE: usize;
+    const TABLE_ID: TableId;
     fn to_row(&self) -> Row<'a>;
     fn from_row(row: Row<'a>) -> Self;
 
@@ -66,6 +124,11 @@ pub trait AsRow<'a>: Copy {
 
     fn pos(&self) -> usize {
         self.to_row().pos
+    }
+
+    fn row_id(&self) -> RowId {
+        let row = self.to_row();
+        RowId::new(row.file, Self::TABLE_ID, row.pos)
     }
 
     fn usize(&self, column: usize) -> usize {

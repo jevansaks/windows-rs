@@ -17,6 +17,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class AutomationRemoteOperationResult {
+                    #[default]
                     IAutomationRemoteOperationResult,
                 }
                 #[repr(i32)]
@@ -29,6 +30,7 @@ mod Windows {
                     UnhandledException = 3,
                     ExecutionFailure = 4,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(ICoreAutomationRegistrarStatics, 131072, "Windows.UI.UIAutomation.UIAutomationContract")]
@@ -41,13 +43,16 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CoreAutomationRemoteOperation {
+                    #[default]
                     ICoreAutomationRemoteOperation,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.UI.UIAutomation.UIAutomationContract", 131072)]
                     ICoreAutomationRemoteOperation2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class CoreAutomationRemoteOperationContext {
+                    #[default]
                     ICoreAutomationRemoteOperationContext,
                 }
                 #[guid(0xe0f80c42_4a67_5534_bf5a_09e8a99b36b1)]
@@ -68,9 +73,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ICoreAutomationConnectionBoundObjectProvider {
-                    #[special]
-                    #[Windows::Foundation::Metadata::NoException]
-                    fn get_IsComThreadingRequired(&self) -> bool;
+                    #[get]
+                    #[property(Windows::Foundation::Metadata::NoException)]
+                    #[get(Windows::Foundation::Metadata::NoException)]
+                    IsComThreadingRequired: bool;
                 }
                 #[guid(0x3e50129b_d6dc_5680_b580_ffff78300304)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
@@ -104,10 +110,10 @@ mod Windows {
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 interface ICoreAutomationRemoteOperationContext {
                     fn GetOperand(&self, id: AutomationRemoteOperationOperandId) -> Object;
-                    #[Windows::Foundation::Metadata::Overload("SetOperand")]
+                    #[overload(SetOperand)]
                     fn SetOperand(&self, id: AutomationRemoteOperationOperandId, operand: Object);
-                    #[Windows::Foundation::Metadata::Overload("SetOperand2")]
-                    fn SetOperand(&self, id: AutomationRemoteOperationOperandId, operand: Object, operandInterfaceId: GUID);
+                    #[overload(SetOperand)]
+                    fn SetOperand2(&self, id: AutomationRemoteOperationOperandId, operand: Object, operandInterfaceId: GUID);
                 }
                 #[guid(0x88f53e67_dc69_553b_a0aa_70477e724da8)]
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
@@ -179,20 +185,24 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RemoteAutomationClientSession {
+                    #[default]
                     IRemoteAutomationClientSession,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RemoteAutomationConnectionRequestedEventArgs {
+                    #[default]
                     IRemoteAutomationConnectionRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RemoteAutomationDisconnectedEventArgs {
+                    #[default]
                     IRemoteAutomationDisconnectedEventArgs,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::UIAutomationContract, 131072)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IRemoteAutomationServerStatics, 131072, "Windows.UI.UIAutomation.UIAutomationContract")]
@@ -203,6 +213,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::WebHostHidden]
                 class RemoteAutomationWindow {
+                    #[default]
                     IRemoteAutomationWindow,
                 }
             }

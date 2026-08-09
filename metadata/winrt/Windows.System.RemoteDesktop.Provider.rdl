@@ -70,6 +70,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 983040)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 class PerformLocalActionRequestedEventArgs {
+                    #[default]
                     IPerformLocalActionRequestedEventArgs,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 983040)]
@@ -77,7 +78,9 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IRemoteDesktopConnectionInfoStatics, 983040, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RemoteDesktopConnectionInfo {
+                    #[default]
                     IRemoteDesktopConnectionInfo,
+                    #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 983040)]
                     IRemoteDesktopConnectionInfo2,
                 }
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 983040)]
@@ -85,6 +88,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::Static(IRemoteDesktopConnectionRemoteInfoStatics, 983040, "Windows.Foundation.UniversalApiContract")]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RemoteDesktopConnectionRemoteInfo {
+                    #[default]
                     IRemoteDesktopConnectionRemoteInfo,
                     super::super::super::Foundation::IClosable,
                 }
@@ -101,6 +105,7 @@ mod Windows {
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Threading(Both)]
                 class RemoteDesktopInfo {
+                    #[default]
                     IRemoteDesktopInfo,
                 }
                 #[repr(i32)]
@@ -112,6 +117,7 @@ mod Windows {
                     ShowSystemAccountSettings = 3,
                     ShowLocalSettings = 4,
                 }
+                #[static_only]
                 #[Windows::Foundation::Metadata::ContractVersion(super::super::super::Foundation::UniversalApiContract, 983040)]
                 #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
                 #[Windows::Foundation::Metadata::Static(IRemoteDesktopRegistrarStatics, 983040, "Windows.Foundation.UniversalApiContract")]

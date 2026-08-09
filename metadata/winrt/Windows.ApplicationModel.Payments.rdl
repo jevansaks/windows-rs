@@ -105,12 +105,12 @@ mod Windows {
             interface IPaymentMediator {
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn GetSupportedMethodIdsAsync(&self) -> super::super::Foundation::IAsyncOperation<super::super::Foundation::Collections::IVectorView<String>>;
-                #[Windows::Foundation::Metadata::Overload("SubmitPaymentRequestAsync")]
+                #[overload(SubmitPaymentRequestAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
                 fn SubmitPaymentRequestAsync(&self, paymentRequest: PaymentRequest) -> super::super::Foundation::IAsyncOperation<PaymentRequestSubmitResult>;
-                #[Windows::Foundation::Metadata::Overload("SubmitPaymentRequestWithChangeHandlerAsync")]
+                #[overload(SubmitPaymentRequestAsync)]
                 #[Windows::Foundation::Metadata::RemoteAsync]
-                fn SubmitPaymentRequestAsync(&self, paymentRequest: PaymentRequest, changeHandler: PaymentRequestChangedHandler) -> super::super::Foundation::IAsyncOperation<PaymentRequestSubmitResult>;
+                fn SubmitPaymentRequestWithChangeHandlerAsync(&self, paymentRequest: PaymentRequest, changeHandler: PaymentRequestChangedHandler) -> super::super::Foundation::IAsyncOperation<PaymentRequestSubmitResult>;
             }
             #[guid(0xceef98f1_e407_4128_8e73_d93d5f822786)]
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 327680)]
@@ -287,6 +287,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentAddress {
+                #[default]
                 IPaymentAddress,
             }
             #[Windows::Foundation::Metadata::Activatable(IPaymentCanMakePaymentResultFactory, 327680, "Windows.Foundation.UniversalApiContract")]
@@ -294,6 +295,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentCanMakePaymentResult {
+                #[default]
                 IPaymentCanMakePaymentResult,
             }
             #[repr(i32)]
@@ -312,6 +314,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentCurrencyAmount {
+                #[default]
                 IPaymentCurrencyAmount,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Foundation.UniversalApiContract")]
@@ -320,6 +323,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentDetails {
+                #[default]
                 IPaymentDetails,
             }
             #[Windows::Foundation::Metadata::Activatable(IPaymentDetailsModifierFactory, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -327,6 +331,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentDetailsModifier {
+                #[default]
                 IPaymentDetailsModifier,
             }
             #[Windows::Foundation::Metadata::Activatable(IPaymentItemFactory, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -334,6 +339,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentItem {
+                #[default]
                 IPaymentItem,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Foundation.UniversalApiContract")]
@@ -342,7 +348,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentMediator {
+                #[default]
                 IPaymentMediator,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IPaymentMediator2,
             }
             #[Windows::Foundation::Metadata::Activatable(262144, "Windows.Foundation.UniversalApiContract")]
@@ -351,6 +359,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentMerchantInfo {
+                #[default]
                 IPaymentMerchantInfo,
             }
             #[Windows::Foundation::Metadata::Activatable(IPaymentMethodDataFactory, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -358,6 +367,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentMethodData {
+                #[default]
                 IPaymentMethodData,
             }
             #[repr(i32)]
@@ -372,6 +382,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentOptions {
+                #[default]
                 IPaymentOptions,
             }
             #[Windows::Foundation::Metadata::Activatable(IPaymentRequestFactory, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -380,7 +391,9 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentRequest {
+                #[default]
                 IPaymentRequest,
+                #[Windows::Foundation::Metadata::ContractVersion("Windows.Foundation.UniversalApiContract", 327680)]
                 IPaymentRequest2,
             }
             #[repr(i32)]
@@ -393,6 +406,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentRequestChangedArgs {
+                #[default]
                 IPaymentRequestChangedArgs,
             }
             #[guid(0x5078b9e1_f398_4f2c_a27e_94d371cf6c7d)]
@@ -403,6 +417,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentRequestChangedResult {
+                #[default]
                 IPaymentRequestChangedResult,
             }
             #[repr(i32)]
@@ -423,12 +438,14 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentRequestSubmitResult {
+                #[default]
                 IPaymentRequestSubmitResult,
             }
             #[Windows::Foundation::Metadata::ContractVersion(super::super::Foundation::UniversalApiContract, 262144)]
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentResponse {
+                #[default]
                 IPaymentResponse,
             }
             #[Windows::Foundation::Metadata::Activatable(IPaymentShippingOptionFactory, 262144, "Windows.Foundation.UniversalApiContract")]
@@ -436,6 +453,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentShippingOption {
+                #[default]
                 IPaymentShippingOption,
             }
             #[repr(i32)]
@@ -450,6 +468,7 @@ mod Windows {
             #[Windows::Foundation::Metadata::MarshalingBehavior(Agile)]
             #[Windows::Foundation::Metadata::Threading(Both)]
             class PaymentToken {
+                #[default]
                 IPaymentToken,
             }
         }

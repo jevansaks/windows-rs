@@ -49,6 +49,7 @@ impl FieldAttributes {
     pub const Public: Self = Self(0x6);
     pub const Literal: Self = Self(0x40);
     pub const Static: Self = Self(0x10);
+    pub const InitOnly: Self = Self(0x20);
     pub const SpecialName: Self = Self(0x200);
     pub const RTSpecialName: Self = Self(0x400);
     pub const HasDefault: Self = Self(0x8000);
@@ -57,8 +58,11 @@ impl FieldAttributes {
 flags!(MethodAttributes, u16);
 impl MethodAttributes {
     pub const Abstract: Self = Self(0x400);
+    pub const Family: Self = Self(0x4);
+    pub const Final: Self = Self(0x20);
     pub const HideBySig: Self = Self(0x80);
     pub const NewSlot: Self = Self(0x100);
+    pub const Private: Self = Self(0x1);
     pub const Public: Self = Self(0x6);
     pub const Static: Self = Self(0x10);
     pub const SpecialName: Self = Self(0x800);
@@ -91,6 +95,7 @@ flags!(PInvokeAttributes, u16);
 impl PInvokeAttributes {
     pub const NoMangle: Self = Self(0x01);
     pub const SupportsLastError: Self = Self(0x40);
+    pub const CallConvMask: Self = Self(0x700);
     pub const CallConvPlatformapi: Self = Self(0x100);
     pub const CallConvCdecl: Self = Self(0x200);
     pub const CallConvFastcall: Self = Self(0x500);
