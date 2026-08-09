@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use rustc_hash::{FxHashMap, FxHashSet};
+
 use super::*;
 
 pub(super) struct MountedTemplatedTree {
@@ -256,10 +258,9 @@ impl<B: Backend + 'static> Reconciler<B> {
                     .collect()
             };
             for (row_idx, output) in to_unmount {
+                self.dispatch_output_disappeared(output);
                 self.backend.set_templated_row_content(id, row_idx, None);
-                if let Some(content_id) = output.native {
-                    self.tree.clear_parent(content_id, id);
-                }
+                self.tree.detach_templated_output(id, output);
                 self.unmount_output(output);
             }
             self.backend.set_templated_item_count(id, new_count);
@@ -347,7 +348,7 @@ impl<B: Backend + 'static> Reconciler<B> {
             }
         }
 
-        let mut old_keys = rustc_hash::FxHashSet::default();
+        let mut old_keys = FxHashSet::default();
         let mut old_to_new = Vec::with_capacity(count);
         let mut order_changed = false;
         for old_idx in 0..count {
@@ -392,9 +393,7 @@ impl<B: Backend + 'static> Reconciler<B> {
         }
         for output in dropped {
             self.dispatch_output_disappeared(output);
-            if let Some(content_id) = output.native {
-                self.tree.clear_parent(content_id, id);
-            }
+            self.tree.detach_templated_output(id, output);
             self.unmount_output(output);
         }
 
@@ -416,9 +415,7 @@ impl<B: Backend + 'static> Reconciler<B> {
 
             if let Some(row) = existing {
                 let new_output = self.update_output(&row.rendered, &new_el, row.output);
-                if let Some(content_id) = new_output.native {
-                    self.tree.set_parent(content_id, id);
-                }
+                self.tree.attach_templated_output(id, new_output);
                 if moved_into[row_idx] || new_output.native != row.output.native {
                     self.backend
                         .set_templated_row_content(id, row_idx, new_output.native);
@@ -434,9 +431,7 @@ impl<B: Backend + 'static> Reconciler<B> {
                 }
             } else {
                 let output = self.mount_output(&new_el);
-                if let Some(content_id) = output.native {
-                    self.tree.set_parent(content_id, id);
-                }
+                self.tree.attach_templated_output(id, output);
                 self.backend
                     .set_templated_row_content(id, row_idx, output.native);
                 if let Some(state) = self.tree.templated.lists.get_mut(&id) {
@@ -485,9 +480,7 @@ impl<B: Backend + 'static> Reconciler<B> {
             }
 
             let new_output = self.update_output(&old_el, &new_el, old_output);
-            if let Some(content_id) = new_output.native {
-                self.tree.set_parent(content_id, id);
-            }
+            self.tree.attach_templated_output(id, new_output);
             if let Some(state) = self.tree.templated.lists.get_mut(&id) {
                 state.rows.insert(
                     row_idx,
@@ -519,7 +512,7 @@ impl<B: Backend + 'static> Reconciler<B> {
                 }
             }
             #[cfg(debug_assertions)]
-            self.debug_assert_native_ownership();
+            self.tree.debug_assert_native_ownership();
         }
     }
 
@@ -551,9 +544,7 @@ impl<B: Backend + 'static> Reconciler<B> {
             Err(payload) => std::panic::resume_unwind(payload),
         };
 
-        if let Some(content_id) = output.native {
-            self.tree.set_parent(content_id, list_id);
-        }
+        self.tree.attach_templated_output(list_id, output);
         self.backend
             .set_templated_row_content(list_id, row_idx, output.native);
         if let Some(state) = self.tree.templated.lists.get_mut(&list_id) {
@@ -585,97 +576,96 @@ impl<B: Backend + 'static> Reconciler<B> {
     ) -> Option<MountedOutput> {
         let state = self.tree.templated.lists.get_mut(&list_id)?;
         let output = state.rows.remove(&row_idx)?.output;
-        if let Some(content_id) = output.native {
-            self.tree.clear_parent(content_id, list_id);
-        }
+        self.tree.detach_templated_output(list_id, output);
         Some(output)
     }
 
     fn dispatch_output_appeared(&mut self, output: MountedOutput) {
-        if let Some(id) = output.native {
-            self.dispatch_appeared(id);
-        } else if let Some(node_id) = output.logical {
-            self.dispatch_logical_appeared(node_id);
+        if let Some(root) = output
+            .native
+            .map(OwnedLifecycleNode::Native)
+            .or_else(|| output.logical.map(OwnedLifecycleNode::Logical))
+        {
+            for node in self.collect_lifecycle_subtree(root) {
+                self.dispatch_lifecycle_node_appeared(node);
+            }
         }
     }
 
     fn dispatch_output_disappeared(&mut self, output: MountedOutput) {
-        if let Some(id) = output.native {
-            self.dispatch_disappeared(id);
-        } else if let Some(node_id) = output.logical {
-            self.dispatch_logical_disappeared(node_id);
+        if let Some(root) = output
+            .native
+            .map(OwnedLifecycleNode::Native)
+            .or_else(|| output.logical.map(OwnedLifecycleNode::Logical))
+        {
+            for node in self.collect_lifecycle_subtree(root).into_iter().rev() {
+                self.dispatch_lifecycle_node_disappeared(node);
+            }
         }
     }
 
-    fn dispatch_logical_appeared(&mut self, root: LogicalNodeId) {
-        for node in self.collect_logical_subtree(root) {
-            self.tree
-                .logical
-                .dispatch_node_appeared(node, &self.host.context_stack);
-        }
-    }
+    fn collect_lifecycle_subtree(&self, root: OwnedLifecycleNode) -> Vec<OwnedLifecycleNode> {
+        let mut nodes = Vec::new();
+        let mut stack = vec![root];
+        let mut seen = FxHashSet::default();
+        let mut children = Vec::new();
+        let mut logical_children = Vec::new();
 
-    fn dispatch_logical_disappeared(&mut self, root: LogicalNodeId) {
-        for node in self.collect_logical_subtree(root) {
-            self.tree
-                .logical
-                .dispatch_node_disappeared(node, &self.host.context_stack);
-        }
-    }
-
-    fn collect_logical_subtree(&self, root: LogicalNodeId) -> Vec<LogicalNodeId> {
-        let mut nodes = vec![root];
-        let mut index = 0;
-        while index < nodes.len() {
-            let parent = nodes[index];
-            index += 1;
-            nodes.extend(
-                self.tree
-                    .logical
-                    .components
-                    .values()
-                    .filter(|node| node.parent == Some(parent))
-                    .map(|node| node.node_id),
-            );
-            nodes.extend(
-                self.tree
-                    .logical
-                    .wrappers
-                    .values()
-                    .filter(|node| node.parent == Some(parent))
-                    .map(|node| node.node_id),
-            );
+        while let Some(node) = stack.pop() {
+            if !seen.insert(node) {
+                continue;
+            }
+            nodes.push(node);
+            children.clear();
+            match node {
+                OwnedLifecycleNode::Native(id) => {
+                    self.tree.extend_owned_lifecycle_children(id, &mut children);
+                }
+                OwnedLifecycleNode::Logical(node_id) => {
+                    logical_children.clear();
+                    self.tree
+                        .logical
+                        .extend_children(node_id, &mut logical_children);
+                    children.extend(logical_children.iter().map(|child| {
+                        self.tree.logical.node_native_root(*child).map_or(
+                            OwnedLifecycleNode::Logical(*child),
+                            OwnedLifecycleNode::Native,
+                        )
+                    }));
+                }
+            }
+            stack.extend(children.iter().rev().copied());
         }
         nodes
     }
 
-    fn dispatch_appeared(&mut self, id: ControlId) {
-        let subtree = self.collect_subtree_ids(id);
-        for node in subtree {
-            self.tree
-                .logical
-                .dispatch_appeared(node, &self.host.context_stack);
-        }
-    }
-
-    fn dispatch_disappeared(&mut self, id: ControlId) {
-        let subtree = self.collect_subtree_ids(id);
-        for node in subtree {
-            self.tree
-                .logical
-                .dispatch_disappeared(node, &self.host.context_stack);
-        }
-    }
-
-    fn collect_subtree_ids(&self, id: ControlId) -> Vec<ControlId> {
-        let mut out = Vec::new();
-        let mut stack = vec![id];
-        while let Some(node) = stack.pop() {
-            out.push(node);
-            for child in self.tree.children(node).iter().rev() {
-                stack.push(*child);
+    fn dispatch_lifecycle_node_appeared(&mut self, node: OwnedLifecycleNode) {
+        match node {
+            OwnedLifecycleNode::Native(id) => {
+                self.tree
+                    .logical
+                    .dispatch_appeared(id, &self.host.context_stack);
+            }
+            OwnedLifecycleNode::Logical(node_id) => {
+                self.tree
+                    .logical
+                    .dispatch_node_appeared(node_id, &self.host.context_stack);
             }
         }
-        out
+    }
+
+    fn dispatch_lifecycle_node_disappeared(&mut self, node: OwnedLifecycleNode) {
+        match node {
+            OwnedLifecycleNode::Native(id) => {
+                self.tree
+                    .logical
+                    .dispatch_disappeared(id, &self.host.context_stack);
+            }
+            OwnedLifecycleNode::Logical(node_id) => {
+                self.tree
+                    .logical
+                    .dispatch_node_disappeared(node_id, &self.host.context_stack);
+            }
+        }
     }
 }

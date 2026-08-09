@@ -6,8 +6,13 @@ $ErrorActionPreference = "Stop"
 $report = Get-Content $Path -Raw | ConvertFrom-Json
 $files = $report.data[0].files
 $requirements = @(
-    @{ Suffix = "reconciler.rs"; Branches = 62; Lines = 82 },
+    @{ Suffix = "reconciler.rs"; Branches = 59; Lines = 76.5 },
     @{ Suffix = "reconciler\child.rs"; Branches = 75; Lines = 90 },
+    @{ Suffix = "reconciler\context.rs"; Branches = 85; Lines = 88 },
+    @{ Suffix = "reconciler\diff_helpers.rs"; Branches = 80; Lines = 90 },
+    @{ Suffix = "reconciler\logical_tree.rs"; Branches = 60; Lines = 80 },
+    @{ Suffix = "reconciler\modifiers.rs"; Branches = 60; Lines = 75 },
+    @{ Suffix = "reconciler\mounted_tree.rs"; Branches = 60; Lines = 90 },
     @{ Suffix = "reconciler\templated.rs"; Branches = 65; Lines = 90 },
     @{ Suffix = "reconciler\widget_dispatch.rs"; Branches = 55; Lines = 65 },
     @{ Suffix = "reconciler\wrappers.rs"; Branches = 55; Lines = 79 }

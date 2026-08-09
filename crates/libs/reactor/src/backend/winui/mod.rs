@@ -1,14 +1,23 @@
 use std::cell::RefCell;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use super::*;
 
+mod animation;
 mod convert;
 mod diag;
+mod events;
 mod generated_attach_event;
 mod generated_set_prop;
+mod native_children;
+mod properties;
+mod resources;
+use animation::*;
 use convert::*;
+use events::{DragRevokerSet, PointerRevokerSet, RevokerOwner};
+use native_children::NativeChildren;
+use resources::ResourceState;
 
 /// Keeps `Handle`, `ControlKind` construction, and diagnostics in one table.
 macro_rules! define_handles {
@@ -126,62 +135,17 @@ define_handles! {
 /// controls and drives them on the WinUI thread.
 pub struct WinUIBackend {
     controls: RefCell<FxHashMap<ControlId, Handle>>,
-    event_revokers: RefCell<FxHashMap<(ControlId, Event), Vec<windows_core::EventRevoker>>>,
-    property_observers: RefCell<FxHashMap<(ControlId, Event), PropertyObserver>>,
-    templated_selection_revokers: RefCell<FxHashMap<ControlId, windows_core::EventRevoker>>,
+    events: RefCell<events::EventState>,
     /// Per-list virtualization state for templated ListView/GridView/FlipView.
     templated: RefCell<FxHashMap<ControlId, TemplatedList>>,
     /// Shared ListView/GridView template; its root `ContentControl` can host
     /// reactor elements where `ListViewItemPresenter` would render strings.
     content_template: RefCell<Option<bindings::DataTemplate>>,
-    pointer_revokers: RefCell<FxHashMap<ControlId, PointerRevokerSet>>,
-    drag_revokers: RefCell<FxHashMap<ControlId, DragRevokerSet>>,
-    /// Logical children mirror used to skip phantom children in visual indices.
-    parent_children: RefCell<FxHashMap<ControlId, Vec<ControlId>>>,
-    menu_click_handlers: RefCell<FxHashMap<ControlId, EventHandler>>,
-    command_bar_flyout_handlers: RefCell<FxHashMap<ControlId, EventHandler>>,
-    theme_brush_registry: RefCell<FxHashMap<ControlId, Vec<(Prop, ThemeRef)>>>,
-    resource_keys: RefCell<FxHashMap<ControlId, FxHashSet<String>>>,
+    native_children: RefCell<NativeChildren>,
+    resources: RefCell<ResourceState>,
     /// Per-host window state for window-level props.
     window_state: RefCell<Option<Rc<HostWindowState>>>,
     next_id: RefCell<u32>,
-}
-
-#[derive(Default)]
-struct PointerRevokerSet {
-    tapped: Option<windows_core::EventRevoker>,
-    right_tapped: Option<windows_core::EventRevoker>,
-    pressed: Option<windows_core::EventRevoker>,
-    released: Option<windows_core::EventRevoker>,
-    moved: Option<windows_core::EventRevoker>,
-    entered: Option<windows_core::EventRevoker>,
-    exited: Option<windows_core::EventRevoker>,
-    capture_lost: Option<windows_core::EventRevoker>,
-    canceled: Option<windows_core::EventRevoker>,
-    capture_on_press: bool,
-}
-
-struct PropertyObserver {
-    object: bindings::DependencyObject,
-    property: bindings::DependencyProperty,
-    token: i64,
-}
-
-impl Drop for PropertyObserver {
-    fn drop(&mut self) {
-        diag::dropped(
-            self.object
-                .UnregisterPropertyChangedCallback(&self.property, self.token),
-        );
-    }
-}
-
-#[derive(Default)]
-struct DragRevokerSet {
-    enter: Option<windows_core::EventRevoker>,
-    leave: Option<windows_core::EventRevoker>,
-    over: Option<windows_core::EventRevoker>,
-    drop: Option<windows_core::EventRevoker>,
 }
 
 /// Shared templated-list state touched from WinUI event handlers.
@@ -219,18 +183,11 @@ impl WinUIBackend {
     pub fn new() -> Self {
         Self {
             controls: RefCell::new(FxHashMap::default()),
-            event_revokers: RefCell::new(FxHashMap::default()),
-            property_observers: RefCell::new(FxHashMap::default()),
-            templated_selection_revokers: RefCell::new(FxHashMap::default()),
+            events: RefCell::new(events::EventState::default()),
             templated: RefCell::new(FxHashMap::default()),
             content_template: RefCell::new(None),
-            pointer_revokers: RefCell::new(FxHashMap::default()),
-            drag_revokers: RefCell::new(FxHashMap::default()),
-            parent_children: RefCell::new(FxHashMap::default()),
-            menu_click_handlers: RefCell::new(FxHashMap::default()),
-            command_bar_flyout_handlers: RefCell::new(FxHashMap::default()),
-            theme_brush_registry: RefCell::new(FxHashMap::default()),
-            resource_keys: RefCell::new(FxHashMap::default()),
+            native_children: RefCell::new(NativeChildren::default()),
+            resources: RefCell::new(ResourceState::default()),
             window_state: RefCell::new(None),
             next_id: RefCell::new(0),
         }
@@ -268,998 +225,6 @@ impl WinUIBackend {
         *counter += 1;
         ControlId::new(*counter)
     }
-
-    fn observe_navigation_state(
-        &self,
-        id: ControlId,
-        event: Event,
-        navigation: &bindings::NavigationView,
-        handler: EventHandler,
-    ) -> Result<()> {
-        let property = match event {
-            Event::NavigationPaneOpenChanged => bindings::NavigationView::IsPaneOpenProperty()?,
-            Event::NavigationDisplayModeChanged => bindings::NavigationView::DisplayModeProperty()?,
-            _ => unreachable!(),
-        };
-        let object = navigation.cast::<bindings::DependencyObject>()?;
-        let navigation = navigation.clone();
-        let callback = bindings::DependencyPropertyChangedCallback::new(
-            move |_sender, _property| match event {
-                Event::NavigationPaneOpenChanged => match navigation.IsPaneOpen() {
-                    Ok(open) => handler.invoke_bool(open),
-                    Err(error) => diag::warn(format_args!(
-                        "failed to read NavigationView.IsPaneOpen for {id}: {error:?}"
-                    )),
-                },
-                Event::NavigationDisplayModeChanged => match navigation.DisplayMode() {
-                    Ok(mode) => handler.invoke_navigation_display_mode(mode),
-                    Err(error) => diag::warn(format_args!(
-                        "failed to read NavigationView.DisplayMode for {id}: {error:?}"
-                    )),
-                },
-                _ => unreachable!(),
-            },
-        );
-        let token = object.RegisterPropertyChangedCallback(&property, &callback)?;
-        self.property_observers.borrow_mut().insert(
-            (id, event),
-            PropertyObserver {
-                object,
-                property,
-                token,
-            },
-        );
-        Ok(())
-    }
-
-    fn set_resources(
-        &self,
-        id: ControlId,
-        handle: &Handle,
-        resources: &HashMap<String, ResourceValue>,
-    ) -> Result<()> {
-        let dictionary = handle.as_framework_element().Resources()?;
-        let map = dictionary.cast::<windows_collections::IMap<
-            windows_core::IInspectable,
-            windows_core::IInspectable,
-        >>()?;
-
-        let previous = self
-            .resource_keys
-            .borrow()
-            .get(&id)
-            .cloned()
-            .unwrap_or_default();
-        for key in previous {
-            if resources.contains_key(&key) {
-                continue;
-            }
-            let key = windows_reference::IReference::from(key.as_str());
-            if map.HasKey(&key)? {
-                map.Remove(&key)?;
-            }
-        }
-
-        for (key, value) in resources {
-            let key = windows_reference::IReference::from(key.as_str());
-            let value: windows_core::IInspectable = match value {
-                ResourceValue::String(value) => {
-                    windows_reference::IReference::from(value.as_str()).cast()?
-                }
-                ResourceValue::SolidColorBrush(color) => solid_brush(*color)?.cast()?,
-                ResourceValue::F64(value) => windows_reference::IReference::from(*value).cast()?,
-                ResourceValue::Thickness(value) => {
-                    windows_reference::IReference::from(*value).cast()?
-                }
-                ResourceValue::CornerRadius(value) => {
-                    windows_reference::IReference::from(bindings::CornerRadius {
-                        top_left: value.top_left,
-                        top_right: value.top_right,
-                        bottom_right: value.bottom_right,
-                        bottom_left: value.bottom_left,
-                    })
-                    .cast()?
-                }
-            };
-            map.Insert(&key, &value)?;
-        }
-
-        let mut resource_keys = self.resource_keys.borrow_mut();
-        if resources.is_empty() {
-            resource_keys.remove(&id);
-        } else {
-            resource_keys.insert(id, resources.keys().cloned().collect::<FxHashSet<_>>());
-        }
-        Ok(())
-    }
-    /// `ContentDialog` is tracked logically but not attached as a visual child.
-    fn is_phantom_child(&self, id: ControlId) -> bool {
-        matches!(
-            self.controls.borrow().get(&id),
-            Some(Handle::ContentDialog(_))
-        )
-    }
-    fn visual_index(&self, parent: ControlId, logical: usize) -> usize {
-        let kids = self.parent_children.borrow();
-        let Some(list) = kids.get(&parent) else {
-            return logical;
-        };
-        let map = self.controls.borrow();
-        list.iter()
-            .take(logical)
-            .filter(|cid| !matches!(map.get(cid), Some(Handle::ContentDialog(_))))
-            .count()
-    }
-
-    fn wire_menu_bar_clicks(
-        mb: &bindings::MenuBar,
-        handler: &EventHandler,
-    ) -> Vec<windows_core::EventRevoker> {
-        let mut revokers = Vec::new();
-        let Ok(bar_items) = mb.Items() else {
-            return revokers;
-        };
-        for mbi in &bar_items {
-            if let Ok(flyout_items) = mbi.Items() {
-                Self::wire_flyout_items_click(&flyout_items, handler, &mut revokers);
-            }
-        }
-        revokers
-    }
-
-    fn wire_flyout_clicks(
-        flyout: &bindings::MenuFlyout,
-        handler: &EventHandler,
-    ) -> Vec<windows_core::EventRevoker> {
-        let mut revokers = Vec::new();
-        if let Ok(items) = flyout.Items() {
-            Self::wire_flyout_items_click(&items, handler, &mut revokers);
-        }
-        revokers
-    }
-
-    fn wire_flyout_items_click(
-        items: &windows_collections::IVector<bindings::MenuFlyoutItemBase>,
-        handler: &EventHandler,
-        revokers: &mut Vec<windows_core::EventRevoker>,
-    ) {
-        for base in items {
-            if let Ok(item) = base.cast::<bindings::MenuFlyoutItem>() {
-                let text = item.Text().unwrap_or_default().clone();
-                let handler = handler.clone();
-                if let Ok(rev) = item.Click(move |_s, _a| {
-                    handler.invoke_string(text.clone());
-                }) {
-                    revokers.push(rev);
-                }
-            } else if let Ok(sub) = base.cast::<bindings::MenuFlyoutSubItem>()
-                && let Ok(sub_items) = sub.Items()
-            {
-                Self::wire_flyout_items_click(&sub_items, handler, revokers);
-            }
-        }
-    }
-
-    fn wire_command_bar_clicks(
-        commands: &windows_collections::IObservableVector<bindings::ICommandBarElement>,
-        handler: &EventHandler,
-    ) -> Vec<windows_core::EventRevoker> {
-        let mut revokers = Vec::new();
-        for el in commands {
-            if let Ok(btn) = el.cast::<bindings::AppBarButton>() {
-                let label = btn.Label().unwrap_or_default().clone();
-                let handler = handler.clone();
-                if let Ok(rev) = btn.cast::<bindings::ButtonBase>().and_then(|bb| {
-                    bb.Click(move |_s, _a| {
-                        handler.invoke_string(label.clone());
-                    })
-                }) {
-                    revokers.push(rev);
-                }
-            }
-        }
-        revokers
-    }
-    fn visual_insert_at(&self, parent: ControlId, v_index: usize, child: ControlId) {
-        let map = self.controls.borrow();
-        let parent_h = map
-            .get(&parent)
-            .unwrap_or_else(|| panic!("WinUIBackend::visual_insert_at: unknown parent {parent}"));
-        let child_h = map
-            .get(&child)
-            .unwrap_or_else(|| panic!("WinUIBackend::visual_insert_at: unknown child {child}"));
-        let child_ui = child_h.as_ui_element();
-        let cc = classify_container(parent_h).unwrap_or_else(|| {
-            panic!("WinUIBackend::visual_insert_at: {parent} is not a container")
-        });
-        container_insert(&cc, v_index, &child_ui);
-    }
-    fn visual_remove_at(&self, parent: ControlId, v_index: usize) {
-        let map = self.controls.borrow();
-        let parent_h = map
-            .get(&parent)
-            .unwrap_or_else(|| panic!("WinUIBackend::visual_remove_at: unknown parent {parent}"));
-        let cc = classify_container(parent_h).unwrap_or_else(|| {
-            panic!("WinUIBackend::visual_remove_at: {parent} is not a container")
-        });
-        container_remove(&cc, v_index);
-    }
-    fn visual_set_at(&self, parent: ControlId, v_index: usize, new: ControlId) {
-        let map = self.controls.borrow();
-        let parent_h = map
-            .get(&parent)
-            .unwrap_or_else(|| panic!("WinUIBackend::visual_set_at: unknown parent {parent}"));
-        let new_h = map
-            .get(&new)
-            .unwrap_or_else(|| panic!("WinUIBackend::visual_set_at: unknown new {new}"));
-        let new_ui = new_h.as_ui_element();
-        let cc = classify_container(parent_h)
-            .unwrap_or_else(|| panic!("WinUIBackend::visual_set_at: {parent} is not a container"));
-        container_set(&cc, v_index, &new_ui);
-    }
-}
-
-enum ContainerChildren<'a> {
-    Panel(bindings::UIElementCollection),
-    SingleChild(&'a Handle),
-    ContentControl(bindings::IContentControl),
-    DirectContent(&'a Handle),
-    InspectableVector(windows_collections::IVector<windows_core::IInspectable>),
-}
-
-fn classify_container(h: &Handle) -> Option<ContainerChildren<'_>> {
-    match h {
-        Handle::StackPanel(s) => Some(ContainerChildren::Panel(
-            s.cast::<bindings::IPanel>().ok()?.Children().ok()?,
-        )),
-        Handle::Grid(g) => Some(ContainerChildren::Panel(
-            g.cast::<bindings::IPanel>().ok()?.Children().ok()?,
-        )),
-        Handle::Canvas(c) => Some(ContainerChildren::Panel(
-            c.cast::<bindings::IPanel>().ok()?.Children().ok()?,
-        )),
-        Handle::RelativePanel(r) => Some(ContainerChildren::Panel(
-            r.cast::<bindings::IPanel>().ok()?.Children().ok()?,
-        )),
-        Handle::Border(_) | Handle::Viewbox(_) => Some(ContainerChildren::SingleChild(h)),
-        Handle::ScrollViewer(s) => Some(ContainerChildren::ContentControl(s.cast().ok()?)),
-        Handle::Expander(e) => Some(ContainerChildren::ContentControl(e.cast().ok()?)),
-        Handle::TabViewItem(ti) => Some(ContainerChildren::ContentControl(ti.cast().ok()?)),
-        Handle::NavigationView(nv) => Some(ContainerChildren::ContentControl(nv.cast().ok()?)),
-        Handle::PivotItem(pi) => Some(ContainerChildren::ContentControl(pi.cast().ok()?)),
-        Handle::ScrollView(_) | Handle::SplitView(_) => Some(ContainerChildren::DirectContent(h)),
-        Handle::TabView(tv) => Some(ContainerChildren::InspectableVector(tv.TabItems().ok()?)),
-        Handle::Pivot(p) => Some(ContainerChildren::InspectableVector(
-            p.cast::<bindings::IItemsControl>()
-                .ok()?
-                .Items()
-                .ok()?
-                .cast()
-                .ok()?,
-        )),
-        _ => None,
-    }
-}
-
-fn container_append(cc: &ContainerChildren<'_>, child: &bindings::UIElement) {
-    match cc {
-        ContainerChildren::Panel(vec) => vec.Append(child).unwrap(),
-        ContainerChildren::SingleChild(h) => put_single_child(h, Some(child)),
-        ContainerChildren::ContentControl(c) => c.SetContent(child).unwrap(),
-        ContainerChildren::DirectContent(h) => put_direct_content(h, Some(child)),
-        ContainerChildren::InspectableVector(vec) => {
-            let insp: windows_core::IInspectable = child.cast().unwrap();
-            vec.Append(&insp).unwrap();
-        }
-    }
-}
-
-fn container_insert(cc: &ContainerChildren<'_>, index: usize, child: &bindings::UIElement) {
-    match cc {
-        ContainerChildren::Panel(vec) => vec.InsertAt(index as u32, child).unwrap(),
-        ContainerChildren::SingleChild(h) => put_single_child(h, Some(child)),
-        ContainerChildren::ContentControl(c) => c.SetContent(child).unwrap(),
-        ContainerChildren::DirectContent(h) => put_direct_content(h, Some(child)),
-        ContainerChildren::InspectableVector(vec) => {
-            let insp: windows_core::IInspectable = child.cast().unwrap();
-            vec.InsertAt(index as u32, &insp).unwrap();
-        }
-    }
-}
-
-fn container_set(cc: &ContainerChildren<'_>, index: usize, child: &bindings::UIElement) {
-    match cc {
-        ContainerChildren::Panel(vec) => vec.SetAt(index as u32, child).unwrap(),
-        ContainerChildren::SingleChild(h) => put_single_child(h, Some(child)),
-        ContainerChildren::ContentControl(c) => c.SetContent(child).unwrap(),
-        ContainerChildren::DirectContent(h) => put_direct_content(h, Some(child)),
-        ContainerChildren::InspectableVector(vec) => {
-            let insp: windows_core::IInspectable = child.cast().unwrap();
-            vec.SetAt(index as u32, &insp).unwrap();
-        }
-    }
-}
-
-fn container_remove(cc: &ContainerChildren<'_>, index: usize) {
-    match cc {
-        ContainerChildren::Panel(vec) => vec.RemoveAt(index as u32).unwrap(),
-        ContainerChildren::SingleChild(h) => {
-            debug_assert_eq!(index, 0);
-            put_single_child(h, None);
-        }
-        ContainerChildren::ContentControl(c) => {
-            debug_assert_eq!(index, 0);
-            c.SetContent(None::<&windows_core::IInspectable>).unwrap();
-        }
-        ContainerChildren::DirectContent(h) => {
-            debug_assert_eq!(index, 0);
-            put_direct_content(h, None);
-        }
-        ContainerChildren::InspectableVector(vec) => vec.RemoveAt(index as u32).unwrap(),
-    }
-}
-
-fn container_move(cc: &ContainerChildren<'_>, from: usize, to: usize) {
-    match cc {
-        ContainerChildren::Panel(vec) => {
-            let item = vec.GetAt(from as u32).unwrap();
-            vec.RemoveAt(from as u32).unwrap();
-            vec.InsertAt(to as u32, &item).unwrap();
-        }
-        ContainerChildren::SingleChild(_)
-        | ContainerChildren::ContentControl(_)
-        | ContainerChildren::DirectContent(_) => {}
-        ContainerChildren::InspectableVector(vec) => {
-            let item = vec.GetAt(from as u32).unwrap();
-            vec.RemoveAt(from as u32).unwrap();
-            vec.InsertAt(to as u32, &item).unwrap();
-        }
-    }
-}
-
-fn put_single_child(h: &Handle, child: Option<&bindings::UIElement>) {
-    match h {
-        Handle::Border(b) => b.SetChild(child).unwrap(),
-        Handle::Viewbox(v) => v.SetChild(child).unwrap(),
-        _ => unreachable!(),
-    }
-}
-
-fn put_direct_content(h: &Handle, child: Option<&bindings::UIElement>) {
-    match h {
-        Handle::ScrollView(sv) => sv.SetContent(child).unwrap(),
-        Handle::SplitView(sv) => sv.SetContent(child).unwrap(),
-        _ => unreachable!(),
-    }
-}
-
-fn apply_theme_resource_style(handle: &Handle, bindings: &[(Prop, ThemeRef)]) {
-    let Some((target_type, fe)) = style_target_for_handle(handle) else {
-        return;
-    };
-
-    let mut setters = String::new();
-    for (prop, theme_ref) in bindings {
-        let dp_name = match prop {
-            Prop::Background => "Background",
-            Prop::Foreground => "Foreground",
-            Prop::BorderBrush => "BorderBrush",
-            _ => continue,
-        };
-        let resource_key = theme_ref.resource_key();
-        setters.push_str(&format!(
-            "<Setter Property='{dp_name}' Value='{{ThemeResource {resource_key}}}'/>"
-        ));
-    }
-
-    if setters.is_empty() {
-        diag::dropped(fe.SetStyle(None));
-        return;
-    }
-
-    let xaml = format!(
-        "<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='{target_type}'>{setters}</Style>"
-    );
-
-    match bindings::XamlReader::Load(&xaml) {
-        Ok(obj) => {
-            if let Ok(style) = obj.cast::<bindings::Style>() {
-                // Force WinUI to re-resolve {ThemeResource} values.
-                diag::dropped(fe.SetStyle(None));
-                diag::dropped(fe.SetStyle(&style));
-            }
-        }
-        Err(e) => {
-            diag::warn(format_args!(
-                "ThemeStyle: XamlReader::Load failed: {e:?} xaml={xaml}"
-            ));
-        }
-    }
-}
-
-fn style_target_for_handle(handle: &Handle) -> Option<(&'static str, bindings::IFrameworkElement)> {
-    match handle {
-        Handle::Border(b) => b.cast().ok().map(|fe| ("Border", fe)),
-        Handle::StackPanel(s) => s.cast().ok().map(|fe| ("StackPanel", fe)),
-        Handle::Grid(g) => g.cast().ok().map(|fe| ("Grid", fe)),
-        Handle::Button(b) => b.cast().ok().map(|fe| ("Button", fe)),
-        Handle::TextBox(t) => t.cast().ok().map(|fe| ("TextBox", fe)),
-        Handle::TextBlock(t) => t.cast().ok().map(|fe| ("TextBlock", fe)),
-        Handle::Canvas(c) => c.cast().ok().map(|fe| ("Canvas", fe)),
-        _ => None,
-    }
-}
-
-// Composition animations use the element backing visual from ElementCompositionPreview.
-
-fn easing_for(
-    compositor: &windows_composition::Compositor,
-    easing: Easing,
-) -> windows_composition::CompositionEasingFunction {
-    let (p1, p2) = match easing {
-        Easing::Linear => return compositor.create_linear_easing_function(),
-        Easing::EaseOut => (
-            windows_numerics::Vector2 { x: 0.0, y: 0.0 },
-            windows_numerics::Vector2 { x: 0.58, y: 1.0 },
-        ),
-        Easing::EaseIn => (
-            windows_numerics::Vector2 { x: 0.42, y: 0.0 },
-            windows_numerics::Vector2 { x: 1.0, y: 1.0 },
-        ),
-        Easing::EaseInOut => (
-            windows_numerics::Vector2 { x: 0.42, y: 0.0 },
-            windows_numerics::Vector2 { x: 0.58, y: 1.0 },
-        ),
-    };
-    compositor.create_cubic_bezier_easing_function(p1, p2)
-}
-
-fn element_visual(ui: &bindings::UIElement) -> Result<windows_composition::Visual> {
-    let raw = bindings::ElementCompositionPreview::GetElementVisual(ui)?;
-    windows_composition::Visual::from_host(raw.into())
-}
-
-fn apply_implicit_transitions(
-    ui: &bindings::UIElement,
-    transitions: Option<ImplicitTransitions>,
-) -> Result<()> {
-    let visual = element_visual(ui)?;
-    let Some(t) = transitions.filter(|t| !t.is_empty()) else {
-        visual.set_implicit_animations(None);
-        return Ok(());
-    };
-    let compositor = visual.compositor();
-    let collection = compositor.create_implicit_animation_collection();
-
-    // The DSL exposes duration only, so implicit transitions use XAML's EaseOut curve.
-    let insert = |target: &str, duration: std::time::Duration, is_scalar: bool| {
-        let easing = easing_for(&compositor, Easing::EaseOut);
-        if is_scalar {
-            let a = compositor.create_scalar_key_frame_animation();
-            a.set_duration(duration);
-            a.insert_expression_key_frame_with_easing(1.0, "this.FinalValue", &easing);
-            a.set_target(target);
-            collection.insert(target, &a);
-        } else {
-            let a = compositor.create_vector3_key_frame_animation();
-            a.set_duration(duration);
-            a.insert_expression_key_frame_with_easing(1.0, "this.FinalValue", &easing);
-            a.set_target(target);
-            collection.insert(target, &a);
-        }
-    };
-
-    if let Some(s) = t.opacity {
-        insert("Opacity", s.duration, true);
-    }
-    if let Some(s) = t.rotation {
-        insert("RotationAngleInDegrees", s.duration, true);
-    }
-    if let Some(v) = t.scale {
-        insert("Scale", v.duration, false);
-    }
-    if let Some(v) = t.translation {
-        // `Offset` collides with XAML layout; this should target `Translation`.
-        insert("Offset", v.duration, false);
-    }
-    visual.set_implicit_animations(Some(&collection));
-    Ok(())
-}
-
-fn run_property_animation_inner(ui: &bindings::UIElement, cfg: AnimationConfig) -> Result<()> {
-    let visual = element_visual(ui)?;
-    let compositor = visual.compositor();
-
-    if let Some(opacity) = cfg.opacity {
-        let a = compositor.create_scalar_key_frame_animation();
-        a.set_duration(cfg.duration);
-        let easing = easing_for(&compositor, cfg.easing);
-        a.insert_key_frame_with_easing(1.0, opacity as f32, &easing);
-        visual.start_animation("Opacity", &a);
-    }
-    if let Some(scale) = cfg.scale {
-        let current = visual.scale();
-        let s = scale as f32;
-        if current.x == s && current.y == s {
-            return Ok(());
-        }
-        // Before first layout, ActualWidth/Height are 0 and CenterPoint is reused.
-        if let Ok(fe) = ui.cast::<bindings::IFrameworkElement>() {
-            let w = fe.ActualWidth().unwrap_or(0.0) as f32;
-            let h = fe.ActualHeight().unwrap_or(0.0) as f32;
-            if w > 0.0 && h > 0.0 {
-                visual.set_center_point(windows_numerics::Vector3 {
-                    x: w / 2.0,
-                    y: h / 2.0,
-                    z: 0.0,
-                });
-            } else {
-                diag::warn(format_args!(
-                    "animation: skipping CenterPoint - element not yet laid out"
-                ));
-            }
-        }
-        let a = compositor.create_vector3_key_frame_animation();
-        a.set_duration(cfg.duration);
-        let easing = easing_for(&compositor, cfg.easing);
-        a.insert_key_frame_with_easing(
-            1.0,
-            windows_numerics::Vector3 {
-                x: s,
-                y: s,
-                z: current.z,
-            },
-            &easing,
-        );
-        visual.start_animation("Scale", &a);
-    }
-    Ok(())
-}
-
-fn build_element_transition_animation(
-    ui: &bindings::UIElement,
-    cfg: AnimationConfig,
-    is_enter: bool,
-) -> Result<Option<bindings::ICompositionAnimationBase>> {
-    if cfg.opacity.is_none() && cfg.scale.is_none() {
-        return Ok(None);
-    }
-
-    let visual = element_visual(ui)?;
-    let compositor = visual.compositor();
-    let easing = easing_for(&compositor, cfg.easing);
-    let group = compositor.create_animation_group();
-
-    if let Some(opacity) = cfg.opacity {
-        let animation = compositor.create_scalar_key_frame_animation();
-        animation.set_duration(cfg.duration);
-        animation.set_target("Opacity");
-        if is_enter {
-            animation.insert_key_frame_with_easing(0.0, 0.0, &easing);
-        }
-        animation.insert_key_frame_with_easing(1.0, opacity as f32, &easing);
-        group.add(&animation);
-    }
-
-    if let Some(scale) = cfg.scale {
-        let z = visual.scale().z;
-        let animation = compositor.create_vector3_key_frame_animation();
-        animation.set_duration(cfg.duration);
-        animation.set_target("Scale");
-        if is_enter {
-            animation.insert_key_frame_with_easing(
-                0.0,
-                windows_numerics::Vector3 { x: 0.0, y: 0.0, z },
-                &easing,
-            );
-        }
-        let scale = scale as f32;
-        animation.insert_key_frame_with_easing(
-            1.0,
-            windows_numerics::Vector3 {
-                x: scale,
-                y: scale,
-                z,
-            },
-            &easing,
-        );
-        group.add(&animation);
-    }
-
-    Ok(Some(group.as_host().cast()?))
-}
-
-fn apply_element_transitions(
-    ui: &bindings::UIElement,
-    enter: Option<AnimationConfig>,
-    exit: Option<AnimationConfig>,
-) -> Result<()> {
-    let enter = enter
-        .map(|config| build_element_transition_animation(ui, config, true))
-        .transpose()?
-        .flatten();
-    let exit = exit
-        .map(|config| build_element_transition_animation(ui, config, false))
-        .transpose()?
-        .flatten();
-
-    bindings::ElementCompositionPreview::SetImplicitShowAnimation(ui, enter.as_ref())?;
-    bindings::ElementCompositionPreview::SetImplicitHideAnimation(ui, exit.as_ref())
-}
-
-/// Handles props shared by base-class interfaces.
-fn try_universal_prop(handle: &Handle, prop: Prop, value: &PropValue) -> Result<bool> {
-    match (prop, value) {
-        (Prop::FontSize, PropValue::F64(v)) => set_font_f64(handle, *v),
-        (Prop::FontSize, PropValue::Unset) => set_font_f64(handle, 14.0),
-        (Prop::FontWeight, PropValue::U16(w)) => {
-            set_font_weight(handle, bindings::FontWeight { weight: *w })
-        }
-        (Prop::FontWeight, PropValue::Unset) => {
-            set_font_weight(handle, bindings::FontWeight { weight: 400 })
-        }
-        (Prop::FontFamily, PropValue::Str(s)) => {
-            set_font_family(handle, &bindings::FontFamily::CreateInstanceWithName(s)?)
-        }
-        (Prop::FontFamily, PropValue::Unset) => set_font_family(
-            handle,
-            &bindings::FontFamily::CreateInstanceWithName("Segoe UI")?,
-        ),
-        (Prop::Margin, PropValue::Thickness(t)) => {
-            handle.as_framework_element().SetMargin(*t)?;
-            Ok(true)
-        }
-        (Prop::Margin, PropValue::Unset) => {
-            handle
-                .as_framework_element()
-                .SetMargin(Thickness::default())?;
-            Ok(true)
-        }
-        (Prop::Width, PropValue::F64(v)) => {
-            handle.as_framework_element().SetWidth(*v)?;
-            Ok(true)
-        }
-        (Prop::Width, PropValue::Unset) => {
-            handle.as_framework_element().SetWidth(f64::NAN)?;
-            Ok(true)
-        }
-        (Prop::Height, PropValue::F64(v)) => {
-            handle.as_framework_element().SetHeight(*v)?;
-            Ok(true)
-        }
-        (Prop::Height, PropValue::Unset) => {
-            handle.as_framework_element().SetHeight(f64::NAN)?;
-            Ok(true)
-        }
-        (Prop::MinWidth, PropValue::F64(v)) => {
-            handle.as_framework_element().SetMinWidth(*v)?;
-            Ok(true)
-        }
-        (Prop::MinWidth, PropValue::Unset) => {
-            handle.as_framework_element().SetMinWidth(0.0)?;
-            Ok(true)
-        }
-        (Prop::MaxWidth, PropValue::F64(v)) => {
-            handle.as_framework_element().SetMaxWidth(*v)?;
-            Ok(true)
-        }
-        (Prop::MaxWidth, PropValue::Unset) => {
-            handle.as_framework_element().SetMaxWidth(f64::INFINITY)?;
-            Ok(true)
-        }
-        (Prop::MinHeight, PropValue::F64(v)) => {
-            handle.as_framework_element().SetMinHeight(*v)?;
-            Ok(true)
-        }
-        (Prop::MinHeight, PropValue::Unset) => {
-            handle.as_framework_element().SetMinHeight(0.0)?;
-            Ok(true)
-        }
-        (Prop::MaxHeight, PropValue::F64(v)) => {
-            handle.as_framework_element().SetMaxHeight(*v)?;
-            Ok(true)
-        }
-        (Prop::MaxHeight, PropValue::Unset) => {
-            handle.as_framework_element().SetMaxHeight(f64::INFINITY)?;
-            Ok(true)
-        }
-        (Prop::HorizontalAlignment, PropValue::I32(v)) => {
-            handle
-                .as_framework_element()
-                .SetHorizontalAlignment(HorizontalAlignment(*v))?;
-            Ok(true)
-        }
-        (Prop::HorizontalAlignment, PropValue::Unset) => {
-            handle
-                .as_framework_element()
-                .SetHorizontalAlignment(HorizontalAlignment::Stretch)?;
-            Ok(true)
-        }
-        (Prop::VerticalAlignment, PropValue::I32(v)) => {
-            handle
-                .as_framework_element()
-                .SetVerticalAlignment(VerticalAlignment(*v))?;
-            Ok(true)
-        }
-        (Prop::VerticalAlignment, PropValue::Unset) => {
-            handle
-                .as_framework_element()
-                .SetVerticalAlignment(VerticalAlignment::Stretch)?;
-            Ok(true)
-        }
-        (Prop::Opacity, PropValue::F64(v)) => {
-            handle.as_ui_element().SetOpacity(*v)?;
-            Ok(true)
-        }
-        (Prop::Opacity, PropValue::Unset) => {
-            handle.as_ui_element().SetOpacity(1.0)?;
-            Ok(true)
-        }
-        (Prop::AllowDrop, PropValue::Bool(v)) => {
-            handle.as_ui_element().SetAllowDrop(*v)?;
-            Ok(true)
-        }
-        (Prop::AllowDrop, PropValue::Unset) => {
-            handle.as_ui_element().SetAllowDrop(false)?;
-            Ok(true)
-        }
-        (Prop::IsEnabled, PropValue::Unset) => {
-            handle
-                .as_ui_element()
-                .cast::<bindings::IControl>()?
-                .SetIsEnabled(true)?;
-            Ok(true)
-        }
-        (Prop::AttachedGridRow, PropValue::I32(v)) => {
-            bindings::Grid::SetRow(&handle.as_framework_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AttachedGridColumn, PropValue::I32(v)) => {
-            bindings::Grid::SetColumn(&handle.as_framework_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AttachedGridRowSpan, PropValue::I32(v)) => {
-            bindings::Grid::SetRowSpan(&handle.as_framework_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AttachedGridColumnSpan, PropValue::I32(v)) => {
-            bindings::Grid::SetColumnSpan(&handle.as_framework_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AttachedCanvasLeft, PropValue::F64(v)) => {
-            bindings::Canvas::SetLeft(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AttachedCanvasTop, PropValue::F64(v)) => {
-            bindings::Canvas::SetTop(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AttachedCanvasZIndex, PropValue::I32(v)) => {
-            bindings::Canvas::SetZIndex(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AlignLeftWithPanel, PropValue::Bool(v)) => {
-            bindings::RelativePanel::SetAlignLeftWithPanel(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AlignRightWithPanel, PropValue::Bool(v)) => {
-            bindings::RelativePanel::SetAlignRightWithPanel(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AlignTopWithPanel, PropValue::Bool(v)) => {
-            bindings::RelativePanel::SetAlignTopWithPanel(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AlignBottomWithPanel, PropValue::Bool(v)) => {
-            bindings::RelativePanel::SetAlignBottomWithPanel(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::AlignHCenterWithPanel, PropValue::Bool(v)) => {
-            bindings::RelativePanel::SetAlignHorizontalCenterWithPanel(
-                &handle.as_ui_element(),
-                *v,
-            )?;
-            Ok(true)
-        }
-        (Prop::AlignVCenterWithPanel, PropValue::Bool(v)) => {
-            bindings::RelativePanel::SetAlignVerticalCenterWithPanel(&handle.as_ui_element(), *v)?;
-            Ok(true)
-        }
-        (Prop::Padding, PropValue::Thickness(t)) => set_padding(handle, *t),
-        (Prop::Padding, PropValue::Unset) => set_padding(handle, Thickness::default()),
-        (Prop::Background, PropValue::Color(br)) => set_background(handle, &solid_brush(*br)?),
-        (Prop::Background, PropValue::Unset) => set_background(handle, None::<&bindings::Brush>),
-        (Prop::Foreground, PropValue::Color(br)) => set_foreground(handle, &solid_brush(*br)?),
-        (Prop::Foreground, PropValue::Unset) => set_foreground(handle, None::<&bindings::Brush>),
-        (Prop::Fill, PropValue::Color(b)) => {
-            handle
-                .cast_inner::<bindings::IShape>()?
-                .SetFill(&solid_brush(*b)?)?;
-            Ok(true)
-        }
-        (Prop::Fill, PropValue::Unset) => {
-            handle.cast_inner::<bindings::IShape>()?.SetFill(None)?;
-            Ok(true)
-        }
-        (Prop::Stroke, PropValue::Color(b)) => {
-            handle
-                .cast_inner::<bindings::IShape>()?
-                .SetStroke(&solid_brush(*b)?)?;
-            Ok(true)
-        }
-        (Prop::Stroke, PropValue::Unset) => {
-            handle.cast_inner::<bindings::IShape>()?.SetStroke(None)?;
-            Ok(true)
-        }
-        (Prop::StrokeThickness, PropValue::F64(v)) => {
-            handle
-                .cast_inner::<bindings::IShape>()?
-                .SetStrokeThickness(*v)?;
-            Ok(true)
-        }
-        (Prop::StrokeThickness, PropValue::Unset) => {
-            handle
-                .cast_inner::<bindings::IShape>()?
-                .SetStrokeThickness(0.0)?;
-            Ok(true)
-        }
-        _ => Ok(false),
-    }
-}
-
-fn set_padding(handle: &Handle, thickness: Thickness) -> Result<bool> {
-    match handle {
-        Handle::Border(h) => h.SetPadding(thickness)?,
-        Handle::StackPanel(h) => h.SetPadding(thickness)?,
-        Handle::TextBlock(h) => h.SetPadding(thickness)?,
-        Handle::RichTextBlock(h) => h.SetPadding(thickness)?,
-        // `Grid` is a `Panel`, not a `Control`, so it has no `IControl::SetPadding`;
-        // its padding lives on the `IGrid` interface instead.
-        Handle::Grid(h) => h.cast::<bindings::IGrid>()?.SetPadding(thickness)?,
-        Handle::SwapChainPanel(h) => h.cast::<bindings::IGrid>()?.SetPadding(thickness)?,
-        _ => {
-            if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetPadding(thickness)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::Padding, handle);
-            }
-        }
-    }
-    Ok(true)
-}
-
-fn set_background(
-    handle: &Handle,
-    brush: impl windows_core::Param<bindings::Brush>,
-) -> Result<bool> {
-    match handle {
-        Handle::Border(b) => b.SetBackground(brush)?,
-        _ => {
-            if let Ok(panel) = handle.cast_inner::<bindings::IPanel>() {
-                panel.SetBackground(brush)?;
-            } else if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetBackground(brush)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::Background, handle);
-            }
-        }
-    }
-    Ok(true)
-}
-
-fn set_foreground(
-    handle: &Handle,
-    brush: impl windows_core::Param<bindings::Brush>,
-) -> Result<bool> {
-    match handle {
-        Handle::TextBlock(h) => h.SetForeground(brush)?,
-        Handle::RichTextBlock(h) => h.SetForeground(brush)?,
-        _ => {
-            if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetForeground(brush)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::Foreground, handle);
-            }
-        }
-    }
-    Ok(true)
-}
-
-fn set_border_brush(
-    handle: &Handle,
-    brush: impl windows_core::Param<bindings::Brush>,
-) -> Result<()> {
-    match handle {
-        Handle::Border(b) => b.SetBorderBrush(brush)?,
-        _ => {
-            if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetBorderBrush(brush)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::BorderBrush, handle);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn set_border_thickness(handle: &Handle, thickness: Thickness) -> Result<()> {
-    match handle {
-        Handle::Border(b) => b.SetBorderThickness(thickness)?,
-        _ => {
-            if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetBorderThickness(thickness)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::BorderThickness, handle);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn set_font_f64(handle: &Handle, v: f64) -> Result<bool> {
-    match handle {
-        Handle::TextBlock(h) => h.SetFontSize(v)?,
-        Handle::RichTextBlock(h) => h.SetFontSize(v)?,
-        _ => {
-            if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetFontSize(v)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::FontSize, handle);
-            }
-        }
-    }
-    Ok(true)
-}
-
-fn set_font_weight(handle: &Handle, fw: bindings::FontWeight) -> Result<bool> {
-    match handle {
-        Handle::TextBlock(h) => h.SetFontWeight(fw)?,
-        _ => {
-            if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetFontWeight(fw)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::FontWeight, handle);
-            }
-        }
-    }
-    Ok(true)
-}
-
-fn set_font_family(handle: &Handle, ff: &bindings::FontFamily) -> Result<bool> {
-    match handle {
-        Handle::TextBlock(h) => h.SetFontFamily(ff)?,
-        Handle::RichTextBlock(h) => h.SetFontFamily(ff)?,
-        _ => {
-            if let Ok(ctl) = handle.cast_inner::<bindings::IControl>() {
-                ctl.SetFontFamily(ff)?;
-            } else {
-                diag::unhandled_modifier("set_prop", Prop::FontFamily, handle);
-            }
-        }
-    }
-    Ok(true)
-}
-
-fn set_str_items(
-    vec: &windows_collections::IVector<windows_core::IInspectable>,
-    items: &[String],
-) -> Result<()> {
-    vec.Clear()?;
-    for s in items {
-        let insp = windows_reference::IReference::from(s.as_str());
-        vec.Append(&insp)?;
-    }
-    Ok(())
-}
-
-fn str_list_as_ivector(
-    items: &[String],
-) -> windows_collections::IVector<windows_core::IInspectable> {
-    let vec: Vec<Option<windows_core::IInspectable>> = items
-        .iter()
-        .map(|s| Some(windows_reference::IReference::from(s.as_str()).into()))
-        .collect();
-    vec.into()
 }
 
 /// Boxed indices let drag-reorder be read back as a permutation.
@@ -1291,722 +256,56 @@ impl Backend for WinUIBackend {
                 return Ok(());
             }
             if let (Prop::Resources, PropValue::Resources(resources)) = (prop, value) {
-                self.set_resources(id, handle, resources)?;
+                self.resources
+                    .borrow_mut()
+                    .set_local(id, handle, resources)?;
                 return Ok(());
             }
-            if try_universal_prop(handle, prop, value)? {
-                return Ok(());
-            }
-            match (prop, value, handle) {
-                (Prop::MaxLines, PropValue::I32(v), Handle::TextBlock(text)) => {
-                    text.SetMaxLines(*v)
-                }
-                (Prop::MaxLines, PropValue::Unset, Handle::TextBlock(text)) => text.SetMaxLines(0),
-                (Prop::TextTrimming, PropValue::I32(v), Handle::TextBlock(text)) => {
-                    text.SetTextTrimming(TextTrimming(*v))
-                }
-                (Prop::TextTrimming, PropValue::Unset, Handle::TextBlock(text)) => {
-                    text.SetTextTrimming(TextTrimming::None)
-                }
-                (Prop::IsTextSelectionEnabled, PropValue::Bool(v), Handle::RichTextBlock(tb)) => {
-                    tb.SetIsTextSelectionEnabled(*v)
-                }
-                (Prop::IsTextSelectionEnabled, PropValue::Unset, Handle::RichTextBlock(tb)) => {
-                    tb.SetIsTextSelectionEnabled(false)
-                }
-                (Prop::TextWrappingWrap, PropValue::I32(v), Handle::RichTextBlock(tb)) => {
-                    tb.SetTextWrapping(TextWrapping(*v))
-                }
-                (Prop::Content, PropValue::Str(s), Handle::Button(b)) => {
-                    let cc = b.cast::<bindings::IContentControl>()?;
-                    // Preserve an existing icon+text layout when only text changes.
-                    if let Ok(existing) = cc.Content()
-                        && let Ok(panel) = existing.cast::<bindings::IPanel>()
-                    {
-                        let children = panel.Children()?;
-                        if children.Size()? >= 2
-                            && let Ok(tb) = children.GetAt(1)?.cast::<bindings::ITextBlock>()
-                        {
-                            return tb.SetText(s);
-                        }
-                    }
-                    let tb = string_as_textblock(s)?;
-                    cc.SetContent(&tb)
-                }
-                (Prop::Icon, PropValue::Icon(icon), Handle::Button(b)) => {
-                    let icon_elem = build_icon_element(icon)?;
-                    let cc = b.cast::<bindings::IContentControl>()?;
-                    // Preserve text when replacing an existing icon.
-                    if let Ok(existing) = cc.Content()
-                        && let Ok(panel) = existing.cast::<bindings::IPanel>()
-                    {
-                        let children = panel.Children()?;
-                        if children.Size()? >= 2 {
-                            children.SetAt(0, &icon_elem.cast::<bindings::UIElement>()?)?;
-                            return Ok(());
-                        }
-                    }
-                    let use_icon_only = if let Ok(existing) = cc.Content() {
-                        existing.cast::<bindings::IIconElement>().is_ok()
-                            || existing
-                                .cast::<bindings::ITextBlock>()
-                                .ok()
-                                .and_then(|tb| tb.Text().ok())
-                                .is_some_and(|t| t.is_empty())
-                    } else {
-                        true
-                    };
-                    if use_icon_only {
-                        cc.SetContent(&icon_elem)
-                    } else {
-                        let panel = bindings::StackPanel::new()?;
-                        panel.SetOrientation(Orientation::Horizontal)?;
-                        panel.SetSpacing(8.0)?;
-                        let children = panel.cast::<bindings::IPanel>()?.Children()?;
-                        children.Append(&icon_elem.cast::<bindings::UIElement>()?)?;
-                        if let Ok(existing) = cc.Content()
-                            && let Ok(ui) = existing.cast::<bindings::UIElement>()
-                        {
-                            children.Append(&ui)?;
-                        }
-                        cc.SetContent(&panel)
-                    }
-                }
-                (Prop::Icon, PropValue::Unset, Handle::Button(b)) => {
-                    let cc = b.cast::<bindings::IContentControl>()?;
-                    let Ok(existing) = cc.Content() else {
-                        return Ok(());
-                    };
-                    // Unwrap icon+text layout back to text-only.
-                    if let Ok(panel) = existing.cast::<bindings::IPanel>() {
-                        let children = panel.Children()?;
-                        if children.Size()? >= 2 {
-                            let text_child = children.GetAt(1)?;
-                            children.Clear()?;
-                            return cc.SetContent(&text_child);
-                        }
-                    }
-                    if existing.cast::<bindings::IIconElement>().is_ok() {
-                        return cc.SetContent(None::<&windows_core::IInspectable>);
-                    }
-                    Ok(())
-                }
-                (Prop::StyleVariant, PropValue::I32(v), Handle::Button(b)) => {
-                    let fe = b.cast::<bindings::IFrameworkElement>()?;
-                    let style_key = match *v {
-                        1 => Some("AccentButtonStyle"),
-                        2 => Some("SubtleButtonStyle"),
-                        3 => Some("TextBlockButtonStyle"),
-                        _ => None, // 0 = Default
-                    };
-                    if let Some(key_str) = style_key {
-                        let resources =
-                            bindings::Application::Current().and_then(|app| app.Resources())?;
-                        let key = windows_reference::IReference::from(windows_core::HSTRING::from(
-                            key_str,
-                        ));
-                        let map = resources.cast::<windows_collections::IMap<
-                            windows_core::IInspectable,
-                            windows_core::IInspectable,
-                        >>()?;
-                        if let Ok(style_obj) = map.Lookup(&key)
-                            && let Ok(s) = style_obj.cast::<bindings::Style>()
-                        {
-                            fe.SetStyle(&s)?;
-                        }
-                    } else {
-                        fe.SetStyle(None)?;
-                    }
-                    Ok(())
-                }
-                (Prop::Value, PropValue::Str(s), Handle::TextBox(t)) => {
-                    if t.Text().ok().as_deref() == Some(s.as_str()) {
-                        return Ok(());
-                    }
-                    t.SetText(s.as_str())
-                }
-                (Prop::GridRows, PropValue::GridLengths(rows), Handle::Grid(g)) => {
-                    let defs = g.RowDefinitions()?;
-                    defs.Clear()?;
-                    for r in rows {
-                        let rd = bindings::RowDefinition::new()?;
-                        rd.SetHeight(to_xaml_gridlength(*r)?)?;
-                        defs.Append(&rd)?;
-                    }
-                    Ok(())
-                }
-                (Prop::GridColumns, PropValue::GridLengths(cols), Handle::Grid(g)) => {
-                    let defs = g.ColumnDefinitions()?;
-                    defs.Clear()?;
-                    for c in cols {
-                        let cd = bindings::ColumnDefinition::new()?;
-                        cd.SetWidth(to_xaml_gridlength(*c)?)?;
-                        defs.Append(&cd)?;
-                    }
-                    Ok(())
-                }
-                (Prop::Step, PropValue::F64(v), Handle::Slider(s)) => {
-                    s.SetStepFrequency(*v)?;
-                    s.cast::<bindings::IRangeBase>()?.SetSmallChange(*v)
-                }
-                (Prop::Step, PropValue::Unset, Handle::Slider(s)) => {
-                    s.SetStepFrequency(1.0)?;
-                    s.cast::<bindings::IRangeBase>()?.SetSmallChange(1.0)
-                }
-                (Prop::NavigateUri, PropValue::Str(s), Handle::HyperlinkButton(h)) => {
-                    let uri = bindings::Uri::CreateUri(s.as_str())?;
-                    h.SetNavigateUri(&uri)
-                }
-                (Prop::NavigateUri, PropValue::Unset, Handle::HyperlinkButton(h)) => {
-                    h.SetNavigateUri(None)
-                }
-                (Prop::IsClosable, PropValue::Bool(v), Handle::TabViewItem(ti)) => {
-                    ti.SetIsClosable(*v)
-                }
-                (Prop::IsOpen, PropValue::Bool(v), Handle::ContentDialog(d)) => {
-                    if *v {
-                        // ContentDialog is not in the tree, so borrow another XamlRoot.
-                        let xroot = self
-                            .controls
-                            .borrow()
-                            .values()
-                            .filter_map(|h| match h {
-                                Handle::ContentDialog(_) => None,
-                                other => other
-                                    .as_ui_element()
-                                    .cast::<bindings::IUIElement>()
-                                    .ok()
-                                    .and_then(|u| u.XamlRoot().ok()),
-                            })
-                            .next();
-                        match xroot {
-                            Some(root) => {
-                                diag::dropped(d.cast::<bindings::IUIElement>()?.SetXamlRoot(&root));
-                                diag::dropped(d.ShowAsync());
-                            }
-                            None => {
-                                diag::warn(format_args!(
-                                    "ContentDialog.is_open ignored - no XamlRoot available"
-                                ));
-                            }
-                        }
-                        Ok(())
-                    } else {
-                        d.Hide()
-                    }
-                }
-                (Prop::Value, PropValue::I32(v), Handle::InfoBadge(ib)) => {
-                    if *v < 0 {
-                        ib.SetValue(-1)
-                    } else {
-                        ib.SetValue(*v)
-                    }
-                }
-                (Prop::DisplayName, PropValue::Unset, Handle::PersonPicture(p)) => {
-                    p.SetDisplayName("")
-                }
-                (Prop::Initials, PropValue::Unset, Handle::PersonPicture(p)) => p.SetInitials(""),
-                (Prop::CornerRadius, PropValue::F64(v), Handle::Rectangle(r)) => {
-                    r.SetRadiusX(*v).and_then(|_| r.SetRadiusY(*v))
-                }
-                (Prop::CornerRadius, PropValue::Unset, Handle::Rectangle(r)) => {
-                    r.SetRadiusX(0.0).and_then(|_| r.SetRadiusY(0.0))
-                }
-                (Prop::CornerRadius, PropValue::F64(v), Handle::Border(b)) => {
-                    b.SetCornerRadius(bindings::CornerRadius {
-                        top_left: *v,
-                        top_right: *v,
-                        bottom_right: *v,
-                        bottom_left: *v,
-                    })
-                }
-                (Prop::CornerRadius, PropValue::Unset, Handle::Border(b)) => {
-                    b.SetCornerRadius(bindings::CornerRadius::default())
-                }
-                (Prop::BorderBrush, PropValue::Color(br), h) => {
-                    set_border_brush(h, &solid_brush(*br)?)
-                }
-                (Prop::BorderBrush, PropValue::Unset, h) => {
-                    set_border_brush(h, None::<&bindings::Brush>)
-                }
-                (Prop::BorderThickness, PropValue::Thickness(t), h) => set_border_thickness(h, *t),
-                (Prop::BorderThickness, PropValue::Unset, h) => {
-                    set_border_thickness(h, Thickness::default())
-                }
-                (Prop::LineEndpoints, PropValue::LineEndpoints(p), Handle::Line(l)) => l
-                    .SetX1(p.x1)
-                    .and_then(|_| l.SetY1(p.y1))
-                    .and_then(|_| l.SetX2(p.x2))
-                    .and_then(|_| l.SetY2(p.y2)),
-                (Prop::ImageSource, PropValue::ImageSource(source), Handle::Image(img)) => {
-                    match build_image_source(source)? {
-                        Some(source) => img.SetSource(&source),
-                        None => img.SetSource(None),
-                    }
-                }
-                (Prop::ImageSource, PropValue::Unset, Handle::Image(img)) => img.SetSource(None),
-                (Prop::Header, PropValue::Str(s), Handle::TabViewItem(ti)) => {
-                    let tb = string_as_textblock(s)?;
-                    ti.SetHeader(&tb)
-                }
-                (Prop::Header, PropValue::Str(s), Handle::Expander(e)) => {
-                    let tb = string_as_textblock(s)?;
-                    e.SetHeader(&tb)
-                }
-                (Prop::Header, PropValue::Unset, Handle::Expander(e)) => e.SetHeader(None),
-                (Prop::ItemKey, PropValue::Str(s), Handle::TabViewItem(ti)) => {
-                    let tag = windows_reference::IReference::from(s.as_str());
-                    ti.cast::<bindings::IFrameworkElement>()?.SetTag(&tag)
-                }
-                (Prop::ItemKey, PropValue::Unset, Handle::TabViewItem(ti)) => {
-                    ti.cast::<bindings::IFrameworkElement>()?.SetTag(None)
-                }
-                (Prop::MenuItems, PropValue::NavMenuItems(items), Handle::NavigationView(nv)) => {
-                    let menu = nv.MenuItems()?;
-                    menu.Clear()?;
-                    for item in items {
-                        let nv_item = build_nav_view_item(item)?;
-                        menu.Append(&nv_item)?;
-                    }
-                    Ok(())
-                }
-                (Prop::SelectedTag, PropValue::Str(tag), Handle::NavigationView(nv)) => {
-                    select_nav_item_by_tag(nv, tag)
-                }
-                (Prop::SelectedTag, PropValue::Unset, Handle::NavigationView(nv)) => {
-                    nv.SetSelectedItem(None)
-                }
-                (Prop::AutoSuggestBox, PropValue::Bool(true), Handle::NavigationView(nv)) => {
-                    let asb = bindings::AutoSuggestBox::new()?;
-                    nv.SetAutoSuggestBox(&asb)
-                }
-                (Prop::AutoSuggestBox, PropValue::Bool(false), Handle::NavigationView(nv)) => {
-                    nv.SetAutoSuggestBox(None)
-                }
-                (Prop::AutoSuggestPlaceholder, PropValue::Str(s), Handle::NavigationView(nv)) => {
-                    if let Ok(asb) = nv.AutoSuggestBox() {
-                        asb.SetPlaceholderText(s.as_str())?;
-                    }
-                    Ok(())
-                }
-                (Prop::AutoSuggestItems, PropValue::StrList(items), Handle::NavigationView(nv)) => {
-                    if let Ok(asb) = nv.AutoSuggestBox() {
-                        asb.cast::<bindings::IItemsControl>()?
-                            .SetItemsSource(&str_list_as_ivector(items))?;
-                    }
-                    Ok(())
-                }
-                (Prop::Tall, PropValue::Bool(v), Handle::TitleBar(_)) => {
-                    if let Some(state) = self.window_state.borrow().as_ref() {
-                        state.set_titlebar_height(*v);
-                    }
-                    Ok(())
-                }
-                (Prop::IsBackButtonVisible, PropValue::Bool(v), Handle::NavigationView(nv)) => {
-                    let val = if *v {
-                        bindings::NavigationViewBackButtonVisible::Auto
-                    } else {
-                        bindings::NavigationViewBackButtonVisible::Collapsed
-                    };
-                    nv.cast::<bindings::INavigationView2>()?
-                        .SetIsBackButtonVisible(val)
-                }
-                (Prop::ItemHeader, PropValue::Str(s), Handle::PivotItem(pi)) => {
-                    let tb = string_as_textblock(s)?;
-                    pi.SetHeader(&tb)
-                }
-                (Prop::Items, PropValue::StrList(items), Handle::BreadcrumbBar(bc)) => {
-                    bc.SetItemsSource(&str_list_as_ivector(items))
-                }
-                (Prop::Value, PropValue::Str(s), Handle::PasswordBox(p)) => {
-                    if p.Password().ok().as_deref() == Some(s.as_str()) {
-                        return Ok(());
-                    }
-                    p.SetPassword(s.as_str())
-                }
-                (Prop::Value, PropValue::Unset, Handle::PasswordBox(p)) => p.SetPassword(""),
-                (Prop::Items, PropValue::StrList(items), Handle::RadioButtons(r)) => {
-                    set_str_items(&r.Items()?.cast()?, items)
-                }
-                (Prop::Items, PropValue::StrList(items), Handle::ComboBox(c)) => set_str_items(
-                    &c.cast::<bindings::IItemsControl>()?.Items()?.cast()?,
-                    items,
-                ),
-                (Prop::ColorValue, PropValue::Color(c), Handle::ColorPicker(cp)) => cp.SetColor(*c),
-                (Prop::Items, PropValue::StrList(items), Handle::ListBox(lb)) => set_str_items(
-                    &lb.cast::<bindings::IItemsControl>()?.Items()?.cast()?,
-                    items,
-                ),
-                (Prop::Text, PropValue::Str(s), Handle::AutoSuggestBox(asb)) => {
-                    // Skip SetText when the control already has this value -
-                    // calling SetText during a user-initiated TextChanged
-                    // cycle steals focus from the input field.
-                    if asb.Text().ok().as_deref() == Some(s.as_str()) {
-                        return Ok(());
-                    }
-                    asb.SetText(s)
-                }
-                (Prop::Items, PropValue::StrList(items), Handle::AutoSuggestBox(asb)) => asb
-                    .cast::<bindings::IItemsControl>()?
-                    .SetItemsSource(&str_list_as_ivector(items)),
-                (Prop::DisplayMode, PropValue::I32(m), Handle::SplitView(sv)) => {
-                    sv.SetDisplayMode(bindings::SplitViewDisplayMode(*m))
-                }
-                (Prop::Items, PropValue::MenuBarItems(items), Handle::MenuBar(mb)) => {
-                    let winui_items = mb.Items()?;
-                    winui_items.Clear()?;
-                    for bar_item_def in items {
-                        let mbi = bindings::MenuBarItem::new()?;
-                        mbi.SetTitle(&bar_item_def.title)?;
-                        let flyout_items = mbi.Items()?;
-                        for menu_def in &bar_item_def.items {
-                            let fi = build_menu_flyout_item_base(menu_def)?;
-                            flyout_items.Append(&fi)?;
-                        }
-                        winui_items.Append(&mbi)?;
-                    }
-                    let handlers = self.menu_click_handlers.borrow();
-                    if let Some(handler) = handlers.get(&id) {
-                        let revs = Self::wire_menu_bar_clicks(mb, handler);
-                        if !revs.is_empty() {
-                            self.event_revokers
-                                .borrow_mut()
-                                .insert((id, Event::ItemClicked), revs);
-                        }
-                    }
-                    Ok(())
-                }
-                (
-                    Prop::MenuFlyoutItems,
-                    PropValue::MenuFlyoutItems(items),
-                    Handle::DropDownButton(btn),
-                ) => {
-                    let flyout = bindings::MenuFlyout::new()?;
-                    let flyout_items = flyout.Items()?;
-                    for def in items {
-                        let fi = build_menu_flyout_item_base(def)?;
-                        flyout_items.Append(&fi)?;
-                    }
-                    btn.cast::<bindings::IButton>()?.SetFlyout(&flyout)?;
-                    let handlers = self.menu_click_handlers.borrow();
-                    if let Some(handler) = handlers.get(&id) {
-                        let revs = Self::wire_flyout_clicks(&flyout, handler);
-                        if !revs.is_empty() {
-                            self.event_revokers
-                                .borrow_mut()
-                                .insert((id, Event::ItemClicked), revs);
-                        }
-                    }
-                    Ok(())
-                }
-                (Prop::MenuFlyoutItems, PropValue::MenuFlyoutItems(items), Handle::Button(btn)) => {
-                    let flyout = bindings::MenuFlyout::new()?;
-                    let flyout_items = flyout.Items()?;
-                    for def in items {
-                        let fi = build_menu_flyout_item_base(def)?;
-                        flyout_items.Append(&fi)?;
-                    }
-                    btn.SetFlyout(&flyout)?;
-                    let handlers = self.menu_click_handlers.borrow();
-                    if let Some(handler) = handlers.get(&id) {
-                        let revs = Self::wire_flyout_clicks(&flyout, handler);
-                        if !revs.is_empty() {
-                            self.event_revokers
-                                .borrow_mut()
-                                .insert((id, Event::ItemClicked), revs);
-                        }
-                    }
-                    Ok(())
-                }
-                (
-                    Prop::CommandBarFlyoutCommands,
-                    PropValue::CommandBarFlyoutDef { primary, secondary },
-                    Handle::Button(btn),
-                ) => {
-                    let flyout = bindings::CommandBarFlyout::new()?;
-                    let primary_cmds = flyout.PrimaryCommands()?;
-                    let secondary_cmds = flyout.SecondaryCommands()?;
-                    for def in primary {
-                        let el = build_command_bar_element(def)?;
-                        primary_cmds.Append(&el)?;
-                    }
-                    for def in secondary {
-                        let el = build_command_bar_element(def)?;
-                        secondary_cmds.Append(&el)?;
-                    }
-                    btn.SetFlyout(&flyout)?;
-                    let handlers = self.command_bar_flyout_handlers.borrow();
-                    if let Some(handler) = handlers.get(&id) {
-                        let mut revs = Self::wire_command_bar_clicks(&primary_cmds, handler);
-                        revs.extend(Self::wire_command_bar_clicks(&secondary_cmds, handler));
-                        if !revs.is_empty() {
-                            self.event_revokers
-                                .borrow_mut()
-                                .insert((id, Event::Click), revs);
-                        }
-                    }
-                    Ok(())
-                }
-                (Prop::Nodes, PropValue::TreeViewNodes(nodes), Handle::TreeView(tv)) => {
-                    let root = tv.RootNodes()?;
-                    root.Clear()?;
-                    for node_def in nodes {
-                        let node = build_tree_view_node(node_def)?;
-                        root.Append(&node)?;
-                    }
-                    Ok(())
-                }
-                (
-                    Prop::PrimaryCommands,
-                    PropValue::CommandBarCommands(cmds),
-                    Handle::CommandBar(cb),
-                ) => {
-                    let primary = cb.PrimaryCommands()?;
-                    primary.Clear()?;
-                    for def in cmds {
-                        let el = build_command_bar_element(def)?;
-                        primary.Append(&el)?;
-                    }
-                    let handlers = self.menu_click_handlers.borrow();
-                    if let Some(handler) = handlers.get(&id) {
-                        let revs = Self::wire_command_bar_clicks(&primary, handler);
-                        if !revs.is_empty() {
-                            self.event_revokers
-                                .borrow_mut()
-                                .insert((id, Event::Click), revs);
-                        }
-                    }
-                    Ok(())
-                }
-                (
-                    Prop::SecondaryCommands,
-                    PropValue::CommandBarCommands(cmds),
-                    Handle::CommandBar(cb),
-                ) => {
-                    let secondary = cb.SecondaryCommands()?;
-                    secondary.Clear()?;
-                    for def in cmds {
-                        let el = build_command_bar_element(def)?;
-                        secondary.Append(&el)?;
-                    }
-                    let handlers = self.menu_click_handlers.borrow();
-                    if let Some(handler) = handlers.get(&id) {
-                        let revs = Self::wire_command_bar_clicks(&secondary, handler);
-                        if !revs.is_empty() {
-                            let mut rev_map = self.event_revokers.borrow_mut();
-                            rev_map.entry((id, Event::Click)).or_default().extend(revs);
-                        }
-                    }
-                    Ok(())
-                }
-                (Prop::ActionButton, PropValue::Str(s), Handle::TeachingTip(tt)) => {
-                    let boxed: windows_core::IInspectable =
-                        windows_reference::IReference::<windows_core::HSTRING>::from(
-                            windows_core::HSTRING::from(s.as_str()),
-                        )
-                        .cast()?;
-                    tt.SetActionButtonContent(&boxed)
-                }
-                (Prop::CloseButton, PropValue::Str(s), Handle::TeachingTip(tt)) => {
-                    let boxed: windows_core::IInspectable =
-                        windows_reference::IReference::<windows_core::HSTRING>::from(
-                            windows_core::HSTRING::from(s.as_str()),
-                        )
-                        .cast()?;
-                    tt.SetCloseButtonContent(&boxed)
-                }
-                (Prop::Items, PropValue::SelectorBarItems(items), Handle::SelectorBar(sb)) => {
-                    let vec = sb.Items()?;
-                    vec.Clear()?;
-                    for def in items {
-                        let item = bindings::SelectorBarItem::new()?;
-                        item.SetText(&def.text)?;
-                        if let Some(icon) = &def.icon {
-                            let icon_elem = build_icon_element(icon)?;
-                            item.SetIcon(&icon_elem)?;
-                        }
-                        vec.Append(&item)?;
-                    }
-                    Ok(())
-                }
-                (Prop::Text, PropValue::Str(s), Handle::RichEditBox(reb)) => {
-                    let doc = reb.Document()?;
-                    let mut current = windows_core::HSTRING::default();
-                    doc.GetText(bindings::TextGetOptions::None, &mut current)
-                        .ok();
-                    if current == s.as_str() {
-                        return Ok(());
-                    }
-                    let read_only = reb.IsReadOnly()?;
-                    if read_only {
-                        reb.SetIsReadOnly(false)?;
-                    }
-                    let set_result = doc.SetText(bindings::TextSetOptions::None, s.as_str());
-                    let restore_result = if read_only {
-                        reb.SetIsReadOnly(true)
-                    } else {
-                        Ok(())
-                    };
-                    set_result?;
-                    restore_result
-                }
-                (Prop::Header, PropValue::Str(s), Handle::RichEditBox(reb)) => {
-                    let tb = string_as_textblock(s)?;
-                    reb.SetHeader(&tb)
-                }
-                (Prop::Header, PropValue::Unset, Handle::RichEditBox(reb)) => reb.SetHeader(None),
-                (Prop::FlyoutContent, PropValue::Str(s), Handle::Button(b)) => {
-                    let flyout = bindings::Flyout::new()?;
-                    let tb = string_as_textblock(s)?;
-                    flyout.SetContent(&tb)?;
-                    b.SetFlyout(&flyout)?;
-                    Ok(())
-                }
-                (Prop::FlyoutPlacement, PropValue::I32(v), Handle::Button(b)) => {
-                    if let Ok(fb) = b.Flyout() {
-                        diag::dropped(
-                            fb.cast::<bindings::IFlyoutBase>()?
-                                .SetPlacement(FlyoutPlacementMode(*v)),
-                        );
-                    }
-                    Ok(())
-                }
-                (_, PropValue::Unset, _) => Ok(()),
-                (p, v, h) => {
-                    diag::unhandled_prop(id, p, v, h);
-                    Ok(())
-                }
-            }
+            properties::apply(
+                properties::PropertyContext {
+                    controls: &map,
+                    events: &self.events,
+                    window_state: &self.window_state,
+                },
+                id,
+                handle,
+                prop,
+                value,
+            )
         })();
         if let Err(e) = result {
             diag::warn(format_args!("set_prop on {id}: {e:?}"));
         }
     }
     fn append_child(&mut self, parent: ControlId, child: ControlId) {
-        self.parent_children
+        let controls = self.controls.borrow();
+        self.native_children
             .borrow_mut()
-            .entry(parent)
-            .or_default()
-            .push(child);
-        if self.is_phantom_child(child) {
-            return;
-        }
-        let map = self.controls.borrow();
-        let parent_h = map
-            .get(&parent)
-            .unwrap_or_else(|| panic!("WinUIBackend::append_child: unknown parent {parent}"));
-        let child_h = map
-            .get(&child)
-            .unwrap_or_else(|| panic!("WinUIBackend::append_child: unknown child {child}"));
-        let child_ui = child_h.as_ui_element();
-        let cc = classify_container(parent_h).unwrap_or_else(|| {
-            panic!(
-                "WinUIBackend::append_child: {} ({parent}) is not a container",
-                parent_h.kind_name()
-            )
-        });
-        container_append(&cc, &child_ui);
+            .append(&controls, parent, child);
     }
     fn remove_child(&mut self, parent: ControlId, index: usize) {
-        // Phantom children (e.g. ContentDialog) are never in the parent's
-        // visual `Children`; skip the collection mutation for them.
-        let phantom = self
-            .parent_children
-            .borrow()
-            .get(&parent)
-            .and_then(|v| v.get(index).copied())
-            .is_some_and(|cid| self.is_phantom_child(cid));
-        let v_index = self.visual_index(parent, index);
-        if let Some(list) = self.parent_children.borrow_mut().get_mut(&parent)
-            && index < list.len()
-        {
-            list.remove(index);
-        }
-        if phantom {
-            return;
-        }
-        let map = self.controls.borrow();
-        let parent_h = map
-            .get(&parent)
-            .unwrap_or_else(|| panic!("WinUIBackend::remove_child: unknown parent {parent}"));
-        let cc = classify_container(parent_h)
-            .unwrap_or_else(|| panic!("WinUIBackend::remove_child: {parent} is not a container"));
-        container_remove(&cc, v_index);
+        let controls = self.controls.borrow();
+        self.native_children
+            .borrow_mut()
+            .remove(&controls, parent, index);
     }
     fn replace_child(&mut self, parent: ControlId, index: usize, new: ControlId) {
-        let old = self
-            .parent_children
-            .borrow()
-            .get(&parent)
-            .and_then(|v| v.get(index).copied());
-        let old_phantom = old.is_some_and(|c| self.is_phantom_child(c));
-        let new_phantom = self.is_phantom_child(new);
-        let v_index = self.visual_index(parent, index);
-        if let Some(list) = self.parent_children.borrow_mut().get_mut(&parent)
-            && index < list.len()
-        {
-            list[index] = new;
-        }
-        match (old_phantom, new_phantom) {
-            (true, true) => {}
-            (false, true) => self.visual_remove_at(parent, v_index),
-            (true, false) => self.visual_insert_at(parent, v_index, new),
-            (false, false) => self.visual_set_at(parent, v_index, new),
-        }
+        let controls = self.controls.borrow();
+        self.native_children
+            .borrow_mut()
+            .replace(&controls, parent, index, new);
     }
     fn move_child(&mut self, parent: ControlId, from: usize, to: usize) {
-        if from == to {
-            return;
-        }
-        // Compute before mutating the mirror so phantoms use the pre-move state.
-        let v_from = self.visual_index(parent, from);
-        let v_to = self.visual_index(parent, to);
-        let moved_phantom = self
-            .parent_children
-            .borrow()
-            .get(&parent)
-            .and_then(|v| v.get(from).copied())
-            .is_some_and(|cid| self.is_phantom_child(cid));
-        if let Some(list) = self.parent_children.borrow_mut().get_mut(&parent)
-            && from < list.len()
-            && to < list.len()
-        {
-            let item = list.remove(from);
-            list.insert(to, item);
-        }
-        if moved_phantom || v_from == v_to {
-            return;
-        }
-        let map = self.controls.borrow();
-        let parent_h = map
-            .get(&parent)
-            .unwrap_or_else(|| panic!("WinUIBackend::move_child: unknown parent {parent}"));
-        let cc = classify_container(parent_h)
-            .unwrap_or_else(|| panic!("WinUIBackend::move_child: {parent} is not a container"));
-        container_move(&cc, v_from, v_to);
+        let controls = self.controls.borrow();
+        self.native_children
+            .borrow_mut()
+            .move_child(&controls, parent, from, to);
     }
     fn insert_child(&mut self, parent: ControlId, index: usize, child: ControlId) {
-        let v_index = self.visual_index(parent, index);
-        {
-            let mut kids = self.parent_children.borrow_mut();
-            let list = kids.entry(parent).or_default();
-            let clamped = index.min(list.len());
-            list.insert(clamped, child);
-        }
-        if self.is_phantom_child(child) {
-            return;
-        }
-        let map = self.controls.borrow();
-        let parent_h = map
-            .get(&parent)
-            .unwrap_or_else(|| panic!("WinUIBackend::insert_child: unknown parent {parent}"));
-        let child_h = map
-            .get(&child)
-            .unwrap_or_else(|| panic!("WinUIBackend::insert_child: unknown child {child}"));
-        let child_ui = child_h.as_ui_element();
-        let cc = classify_container(parent_h)
-            .unwrap_or_else(|| panic!("WinUIBackend::insert_child: {parent} is not a container"));
-        container_insert(&cc, v_index, &child_ui);
+        let controls = self.controls.borrow();
+        self.native_children
+            .borrow_mut()
+            .insert(&controls, parent, index, child);
     }
     fn set_templated_item_count(&mut self, id: ControlId, count: usize) {
         let map = self.controls.borrow();
@@ -2284,7 +583,7 @@ impl Backend for WinUIBackend {
             Handle::FlipView(fv) => fv.cast().unwrap(),
             _ => return,
         };
-        self.templated_selection_revokers.borrow_mut().remove(&id);
+        self.events.borrow_mut().clear_selection(id);
         let control = selector.clone();
         let revoker = selector
             .SelectionChanged(move |_sender, _args| {
@@ -2297,9 +596,7 @@ impl Backend for WinUIBackend {
                  Selector.SelectionChanged registration failed for control {id}: {e}"
                 )
             });
-        self.templated_selection_revokers
-            .borrow_mut()
-            .insert(id, revoker);
+        self.events.borrow_mut().replace_selection(id, revoker);
     }
     fn attach_templated_realization(
         &mut self,
@@ -2411,33 +708,14 @@ impl Backend for WinUIBackend {
         entry.reorder_revoker = Some(revoker);
     }
     fn destroy(&mut self, id: ControlId) {
-        self.templated_selection_revokers.borrow_mut().remove(&id);
         self.templated.borrow_mut().remove(&id);
-        let captured = self
-            .pointer_revokers
-            .borrow_mut()
-            .remove(&id)
-            .is_some_and(|tokens| tokens.capture_on_press);
+        let captured = self.events.borrow_mut().remove(id);
         if captured && let Some(handle) = self.controls.borrow().get(&id) {
             diag::dropped(handle.as_ui_element().ReleasePointerCaptures());
         }
-        self.drag_revokers.borrow_mut().remove(&id);
         self.controls.borrow_mut().remove(&id);
-        self.event_revokers
-            .borrow_mut()
-            .retain(|(hid, _), _| *hid != id);
-        self.property_observers
-            .borrow_mut()
-            .retain(|(hid, _), _| *hid != id);
-        let mut kids = self.parent_children.borrow_mut();
-        kids.remove(&id);
-        for list in kids.values_mut() {
-            list.retain(|c| *c != id);
-        }
-        self.menu_click_handlers.borrow_mut().remove(&id);
-        self.command_bar_flyout_handlers.borrow_mut().remove(&id);
-        self.theme_brush_registry.borrow_mut().remove(&id);
-        self.resource_keys.borrow_mut().remove(&id);
+        self.native_children.borrow_mut().remove_control(id);
+        self.resources.borrow_mut().remove(id);
     }
     fn attach_event(&mut self, id: ControlId, event: Event, handler: EventHandler) {
         let map = self.controls.borrow();
@@ -2450,7 +728,9 @@ impl Backend for WinUIBackend {
             Event::NavigationPaneOpenChanged | Event::NavigationDisplayModeChanged
         ) && let Handle::NavigationView(navigation) = handle
         {
-            self.observe_navigation_state(id, event, navigation, handler)
+            self.events
+                .borrow_mut()
+                .observe_navigation_state(id, event, navigation, handler)
                 .unwrap_or_else(|error| {
                     panic!(
                         "WinUIBackend::attach_event: failed to observe {event:?} \
@@ -2461,9 +741,7 @@ impl Backend for WinUIBackend {
         }
 
         if let Some(revs) = generated_attach_event::dispatch(handle, event, &handler) {
-            if !revs.is_empty() {
-                self.event_revokers.borrow_mut().insert((id, event), revs);
-            }
+            self.events.borrow_mut().insert_revokers(id, event, revs);
             return;
         }
 
@@ -2736,19 +1014,81 @@ impl Backend for WinUIBackend {
                 );
             }
             (Event::ItemClicked, Handle::MenuBar(mb)) => {
-                self.menu_click_handlers
+                self.events
                     .borrow_mut()
-                    .insert(id, handler.clone());
-                let revs = Self::wire_menu_bar_clicks(mb, &handler);
-                revokers.extend(revs);
-            }
-            (Event::ItemClicked, Handle::DropDownButton(_) | Handle::Button(_)) => {
-                self.menu_click_handlers.borrow_mut().insert(id, handler);
-            }
-            (Event::CommandBarFlyoutClick, Handle::Button(_)) => {
-                self.command_bar_flyout_handlers
+                    .set_menu_handler(id, handler.clone());
+                let revs = events::wire_menu_bar_clicks(mb, &handler);
+                self.events
                     .borrow_mut()
-                    .insert(id, handler);
+                    .insert_owned_revokers(id, RevokerOwner::MenuItems, revs);
+                return;
+            }
+            (Event::ItemClicked, Handle::DropDownButton(btn)) => {
+                self.events
+                    .borrow_mut()
+                    .set_menu_handler(id, handler.clone());
+                let revokers = btn
+                    .cast::<bindings::IButton>()
+                    .and_then(|button| button.Flyout())
+                    .and_then(|flyout| flyout.cast::<bindings::MenuFlyout>())
+                    .map_or_else(
+                        |_| Vec::new(),
+                        |flyout| events::wire_flyout_clicks(&flyout, &handler),
+                    );
+                self.events.borrow_mut().insert_owned_revokers(
+                    id,
+                    RevokerOwner::MenuItems,
+                    revokers,
+                );
+                return;
+            }
+            (Event::ItemClicked, Handle::Button(btn)) => {
+                self.events
+                    .borrow_mut()
+                    .set_menu_handler(id, handler.clone());
+                let revokers = btn
+                    .cast::<bindings::IButton>()
+                    .and_then(|button| button.Flyout())
+                    .and_then(|flyout| flyout.cast::<bindings::MenuFlyout>())
+                    .map_or_else(
+                        |_| Vec::new(),
+                        |flyout| events::wire_flyout_clicks(&flyout, &handler),
+                    );
+                self.events.borrow_mut().insert_owned_revokers(
+                    id,
+                    RevokerOwner::MenuItems,
+                    revokers,
+                );
+                return;
+            }
+            (Event::CommandBarFlyoutClick, Handle::Button(btn)) => {
+                self.events
+                    .borrow_mut()
+                    .set_command_bar_flyout_handler(id, handler.clone());
+                let revokers = btn
+                    .cast::<bindings::IButton>()
+                    .and_then(|button| button.Flyout())
+                    .and_then(|flyout| flyout.cast::<bindings::CommandBarFlyout>())
+                    .map_or_else(
+                        |_| Vec::new(),
+                        |flyout| {
+                            let mut revokers = flyout.PrimaryCommands().map_or_else(
+                                |_| Vec::new(),
+                                |commands| events::wire_command_bar_clicks(&commands, &handler),
+                            );
+                            if let Ok(commands) = flyout.SecondaryCommands() {
+                                revokers
+                                    .extend(events::wire_command_bar_clicks(&commands, &handler));
+                            }
+                            revokers
+                        },
+                    );
+                self.events.borrow_mut().insert_owned_revokers(
+                    id,
+                    RevokerOwner::CommandBarFlyout,
+                    revokers,
+                );
+                return;
             }
             (Event::ItemInvoked, Handle::TreeView(tv)) => {
                 revokers.push(
@@ -2775,17 +1115,26 @@ impl Backend for WinUIBackend {
                 );
             }
             (Event::Click, Handle::CommandBar(cb)) => {
-                self.menu_click_handlers
+                self.events
                     .borrow_mut()
-                    .insert(id, handler.clone());
+                    .set_command_bar_handler(id, handler.clone());
                 if let Ok(primary) = cb.PrimaryCommands() {
-                    let revs = Self::wire_command_bar_clicks(&primary, &handler);
-                    revokers.extend(revs);
+                    let revs = events::wire_command_bar_clicks(&primary, &handler);
+                    self.events.borrow_mut().insert_owned_revokers(
+                        id,
+                        RevokerOwner::CommandBarPrimary,
+                        revs,
+                    );
                 }
                 if let Ok(secondary) = cb.SecondaryCommands() {
-                    let revs = Self::wire_command_bar_clicks(&secondary, &handler);
-                    revokers.extend(revs);
+                    let revs = events::wire_command_bar_clicks(&secondary, &handler);
+                    self.events.borrow_mut().insert_owned_revokers(
+                        id,
+                        RevokerOwner::CommandBarSecondary,
+                        revs,
+                    );
                 }
+                return;
             }
             (Event::SelectionChanged, Handle::SelectorBar(sb)) => {
                 let sb2 = sb.clone();
@@ -2824,15 +1173,27 @@ impl Backend for WinUIBackend {
             }
         }
         drop(map);
-        if !revokers.is_empty() {
-            self.event_revokers
-                .borrow_mut()
-                .insert((id, event), revokers);
-        }
+        self.events
+            .borrow_mut()
+            .insert_revokers(id, event, revokers);
     }
     fn detach_event(&mut self, id: ControlId, event: Event) {
-        self.event_revokers.borrow_mut().remove(&(id, event));
-        self.property_observers.borrow_mut().remove(&(id, event));
+        let controls = self.controls.borrow();
+        let handle = controls
+            .get(&id)
+            .unwrap_or_else(|| panic!("WinUIBackend::detach_event: unknown control {id}"));
+        let mut events = self.events.borrow_mut();
+        match (event, handle) {
+            (
+                Event::ItemClicked,
+                Handle::MenuBar(_) | Handle::DropDownButton(_) | Handle::Button(_),
+            ) => events.clear_menu_handler(id),
+            (Event::Click, Handle::CommandBar(_)) => events.clear_command_bar_handler(id),
+            (Event::CommandBarFlyoutClick, Handle::Button(_)) => {
+                events.clear_command_bar_flyout_handler(id);
+            }
+            _ => events.detach(id, event),
+        }
     }
     fn set_theme_bindings(
         &mut self,
@@ -2841,36 +1202,15 @@ impl Backend for WinUIBackend {
         bindings: &[(Prop, ThemeRef)],
     ) {
         let _ = kind;
-        if bindings.is_empty() {
-            self.theme_brush_registry.borrow_mut().remove(&id);
-            let map = self.controls.borrow();
-            if let Some(handle) = map.get(&id)
-                && let Some((_, fe)) = style_target_for_handle(handle)
-            {
-                diag::dropped(fe.SetStyle(None));
-            }
-            return;
-        }
-        self.theme_brush_registry
+        let controls = self.controls.borrow();
+        self.resources
             .borrow_mut()
-            .insert(id, bindings.to_vec());
-
-        let map = self.controls.borrow();
-        let Some(handle) = map.get(&id) else {
-            return;
-        };
-        apply_theme_resource_style(handle, bindings);
+            .set_theme_bindings(id, controls.get(&id), bindings);
     }
     fn on_theme_changed(&mut self) {
         // Re-apply so WinUI re-resolves {ThemeResource}.
         let controls = self.controls.borrow();
-        let registry = self.theme_brush_registry.borrow();
-        for (id, bindings) in registry.iter() {
-            let Some(handle) = controls.get(id) else {
-                continue;
-            };
-            apply_theme_resource_style(handle, bindings);
-        }
+        self.resources.borrow().refresh_theme(&controls);
     }
     fn set_accessibility(&mut self, id: ControlId, accessibility: &AccessibilityModifiers) {
         let map = self.controls.borrow();
@@ -2972,7 +1312,7 @@ impl Backend for WinUIBackend {
             return;
         };
         let ui: bindings::UIElement = handle.as_ui_element();
-        if let Err(e) = run_property_animation_inner(&ui, cfg) {
+        if let Err(e) = run_property_animation(&ui, cfg) {
             diag::warn(format_args!("run_property_animation failed: {e:?}"));
         }
     }
@@ -3102,7 +1442,7 @@ impl Backend for WinUIBackend {
 
     fn set_pointer_handlers(&mut self, id: ControlId, handlers: Option<&PointerHandlers>) {
         // Remove the old token set from backend ownership before replacing it.
-        let prev = self.pointer_revokers.borrow_mut().remove(&id);
+        let prev = self.events.borrow_mut().take_pointer(id);
         let map = self.controls.borrow();
         let Some(handle) = map.get(&id) else {
             return;
@@ -3237,11 +1577,11 @@ impl Backend for WinUIBackend {
                 .ok();
         }
 
-        self.pointer_revokers.borrow_mut().insert(id, tokens);
+        self.events.borrow_mut().set_pointer(id, tokens);
     }
 
     fn set_drag_handlers(&mut self, id: ControlId, handlers: Option<&DragHandlers>) {
-        let prev = self.drag_revokers.borrow_mut().remove(&id);
+        let prev = self.events.borrow_mut().take_drag(id);
         let map = self.controls.borrow();
         let Some(handle) = map.get(&id) else {
             return;
@@ -3415,7 +1755,7 @@ impl Backend for WinUIBackend {
                 .ok();
         }
 
-        self.drag_revokers.borrow_mut().insert(id, tokens);
+        self.events.borrow_mut().set_drag(id, tokens);
     }
 
     fn get_native_element(&self, id: ControlId) -> Option<windows_core::IInspectable> {

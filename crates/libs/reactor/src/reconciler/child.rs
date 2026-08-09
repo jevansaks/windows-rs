@@ -51,32 +51,33 @@ fn live_len<B: Backend + 'static>(reconciler: &Reconciler<B>, parent: ControlId)
 pub fn reconcile<B: Backend + 'static>(
     reconciler: &mut Reconciler<B>,
     parent: ControlId,
-    old_live: LiveChildrenRef<'_>,
-    new_live: LiveChildrenRef<'_>,
+    old_live: &[Element],
+    new_live: &[Element],
 ) {
-    let has_keys = old_live.any_has_key() || new_live.any_has_key();
+    let has_keys = old_live.iter().any(|element| element.key().is_some())
+        || new_live.iter().any(|element| element.key().is_some());
 
     if has_keys {
-        reconcile_keyed_live(reconciler, parent, &old_live, &new_live);
+        reconcile_keyed_live(reconciler, parent, old_live, new_live);
     } else {
-        reconcile_positional_live(reconciler, parent, &old_live, &new_live);
+        reconcile_positional_live(reconciler, parent, old_live, new_live);
     }
 }
 
 pub fn reconcile_positional<B: Backend + 'static>(
     reconciler: &mut Reconciler<B>,
     parent: ControlId,
-    old_live: LiveChildrenRef<'_>,
-    new_live: LiveChildrenRef<'_>,
+    old_live: &[Element],
+    new_live: &[Element],
 ) {
-    reconcile_positional_live(reconciler, parent, &old_live, &new_live);
+    reconcile_positional_live(reconciler, parent, old_live, new_live);
 }
 
 fn reconcile_positional_live<B: Backend + 'static>(
     reconciler: &mut Reconciler<B>,
     parent: ControlId,
-    old_live: &LiveChildrenRef<'_>,
-    new_live: &LiveChildrenRef<'_>,
+    old_live: &[Element],
+    new_live: &[Element],
 ) {
     let old_len = old_live.len();
     let new_len = new_live.len();
@@ -134,8 +135,8 @@ fn key_match(a: &Element, b: &Element) -> bool {
 fn reconcile_keyed_live<B: Backend + 'static>(
     reconciler: &mut Reconciler<B>,
     parent: ControlId,
-    old: &LiveChildrenRef<'_>,
-    new: &LiveChildrenRef<'_>,
+    old: &[Element],
+    new: &[Element],
 ) {
     let old_len = old.len();
     let new_len = new.len();
@@ -229,8 +230,8 @@ fn reconcile_keyed_live<B: Backend + 'static>(
 fn reconcile_keyed_native_middle<B: Backend + 'static>(
     reconciler: &mut Reconciler<B>,
     parent: ControlId,
-    old: &LiveChildrenRef<'_>,
-    new: &LiveChildrenRef<'_>,
+    old: &[Element],
+    new: &[Element],
     old_start: usize,
     old_mid_len: usize,
     new_start: usize,
@@ -323,25 +324,9 @@ fn permute_logical_children<B: Backend + 'static>(
     new_to_old: &[i32],
     visited: &mut [bool],
 ) {
-    let children = reconciler.tree.logical_children.get_mut(&parent).unwrap();
-    visited.fill(false);
-    for cycle_start in 0..new_to_old.len() {
-        if visited[cycle_start] {
-            continue;
-        }
-        let saved = children[start + cycle_start];
-        let mut current = cycle_start;
-        loop {
-            visited[current] = true;
-            let next = new_to_old[current] as usize;
-            if next == cycle_start {
-                children[start + current] = saved;
-                break;
-            }
-            children[start + current] = children[start + next];
-            current = next;
-        }
-    }
+    reconciler
+        .tree
+        .permute_logical_children(parent, start, new_to_old, visited);
 }
 
 fn update_keyed_output<B: Backend + 'static>(
@@ -366,8 +351,8 @@ fn update_keyed_output<B: Backend + 'static>(
 fn reconcile_keyed_middle<B: Backend + 'static>(
     reconciler: &mut Reconciler<B>,
     parent: ControlId,
-    old: &LiveChildrenRef<'_>,
-    new: &LiveChildrenRef<'_>,
+    old: &[Element],
+    new: &[Element],
     old_start: usize,
     old_mid_len: usize,
     new_start: usize,

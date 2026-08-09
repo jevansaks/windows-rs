@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use test_reactor::RecordingBackend;
@@ -7,7 +7,9 @@ use windows_reactor::Reconciler;
 use windows_reactor::RenderCx;
 use windows_reactor::component;
 use windows_reactor::list_view;
-use windows_reactor::{Element, TextBlock};
+use windows_reactor::text_block;
+use windows_reactor::vstack;
+use windows_reactor::{Element, Expander, SplitView, TextBlock};
 
 #[derive(Clone)]
 struct Hooked {
@@ -91,6 +93,49 @@ impl Component<Recycled> for RecycledView {
     }
 }
 
+struct LogicalLifecycle {
+    events: Rc<RefCell<Vec<String>>>,
+    label: String,
+    nested: bool,
+}
+
+impl Component for LogicalLifecycle {
+    fn render(&self, _props: &(), _cx: &mut RenderCx) -> Element {
+        if self.nested {
+            component(
+                Self {
+                    events: Rc::clone(&self.events),
+                    label: format!("{}.child", self.label),
+                    nested: false,
+                },
+                (),
+            )
+        } else {
+            Element::Empty
+        }
+    }
+
+    fn has_on_appeared(&self) -> bool {
+        true
+    }
+
+    fn has_on_disappeared(&self) -> bool {
+        true
+    }
+
+    fn on_appeared(&self, _props: &(), _cx: &mut RenderCx) {
+        self.events
+            .borrow_mut()
+            .push(format!("{} appeared", self.label));
+    }
+
+    fn on_disappeared(&self, _props: &(), _cx: &mut RenderCx) {
+        self.events
+            .borrow_mut()
+            .push(format!("{} disappeared", self.label));
+    }
+}
+
 fn noop() -> Rc<dyn Fn()> {
     Rc::new(|| {})
 }
@@ -159,6 +204,126 @@ fn on_disappeared_fires_on_recycle() {
         disappeared.get(),
         1,
         "on_disappeared should fire on recycle"
+    );
+}
+
+#[test]
+fn realized_row_lifecycle_includes_header_and_pane_subtrees() {
+    let appeared = Rc::new(Cell::new(0));
+    let disappeared = Rc::new(Cell::new(0));
+    let a1 = Rc::clone(&appeared);
+    let d1 = Rc::clone(&disappeared);
+
+    let el = list_view(vec![0u32], move |_, _| {
+        let hooked = |label| {
+            component(
+                HookView,
+                Hooked {
+                    appeared: Rc::clone(&a1),
+                    disappeared: Rc::clone(&d1),
+                    label,
+                },
+            )
+        };
+        vstack((
+            Expander::new(text_block("body")).header_content(hooked("header".into())),
+            SplitView::new(text_block("content")).pane(hooked("pane".into())),
+        ))
+    })
+    .build();
+
+    let mut r = Reconciler::new(RecordingBackend::new());
+    let list_id = r.reconcile(None, &el, None, noop()).unwrap();
+    r.drain_realizations();
+
+    r.backend.simulate_prepare_row(list_id, 0);
+    r.drain_realizations();
+    assert_eq!(appeared.get(), 2);
+    assert_eq!(disappeared.get(), 0);
+
+    r.backend.simulate_clear_row(list_id, 0);
+    r.drain_realizations();
+    assert_eq!(appeared.get(), 2);
+    assert_eq!(disappeared.get(), 2);
+}
+
+#[test]
+fn realized_row_lifecycle_includes_nested_logical_empty_output_once() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let row_events = Rc::clone(&events);
+    let el = list_view(vec![0u32], move |_, _| {
+        vstack((component(
+            LogicalLifecycle {
+                events: Rc::clone(&row_events),
+                label: "row".into(),
+                nested: true,
+            },
+            (),
+        ),))
+    })
+    .build();
+
+    let mut r = Reconciler::new(RecordingBackend::new());
+    let list_id = r.reconcile(None, &el, None, noop()).unwrap();
+    r.drain_realizations();
+    assert!(events.borrow().is_empty());
+
+    r.backend.simulate_prepare_row(list_id, 0);
+    r.drain_realizations();
+    assert_eq!(
+        &*events.borrow(),
+        &["row appeared", "row.child appeared"],
+        "realization must visit logical-only descendants exactly once"
+    );
+
+    r.backend.simulate_clear_row(list_id, 0);
+    r.drain_realizations();
+    assert_eq!(
+        &*events.borrow(),
+        &[
+            "row appeared",
+            "row.child appeared",
+            "row.child disappeared",
+            "row disappeared",
+        ],
+        "recycle must visit logical-only descendants child-first exactly once"
+    );
+}
+
+#[test]
+fn shrinking_realized_rows_dispatches_logical_empty_lifecycle_once() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let make_tree = |items| {
+        let row_events = Rc::clone(&events);
+        list_view(items, move |row, _| {
+            vstack((component(
+                LogicalLifecycle {
+                    events: Rc::clone(&row_events),
+                    label: format!("row-{row}"),
+                    nested: true,
+                },
+                (),
+            ),))
+        })
+        .build()
+    };
+    let old = make_tree(vec![0u32, 1]);
+    let new = make_tree(vec![0u32]);
+
+    let mut r = Reconciler::new(RecordingBackend::new());
+    let list_id = r.reconcile(None, &old, None, noop()).unwrap();
+    r.drain_realizations();
+    r.backend.simulate_prepare_row(list_id, 0);
+    r.backend.simulate_prepare_row(list_id, 1);
+    r.drain_realizations();
+    events.borrow_mut().clear();
+
+    r.reconcile(Some(&old), &new, Some(list_id), noop());
+    r.drain_realizations();
+    assert_eq!(
+        &*events.borrow(),
+        &["row-1.child disappeared", "row-1 disappeared"],
+        "shrink must disappear the removed logical-only row exactly once"
     );
 }
 

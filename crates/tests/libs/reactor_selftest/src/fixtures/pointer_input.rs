@@ -184,14 +184,14 @@ pub fn pointer_injection_gesture(h: Harness) -> FixtureFuture {
         h.render().await;
 
         // Move into the element: PointerEntered + PointerMoved. Re-inject in a
-        // bounded loop so a momentary focus/timing hiccup doesn't lose the move.
+        // bounded loop until the move arrives; entered may be delivered first.
         let mut landed = false;
         for _ in 0..20 {
             let _ = inject_at(&injector, cx, cy, InjectedInputMouseOptions::Move);
             let _ = inject_at(&injector, cx + 6, cy + 6, InjectedInputMouseOptions::Move);
             h.render().await;
             let b = log.borrow();
-            if b.entered > 0 || b.moved > 0 {
+            if b.moved > 0 {
                 landed = true;
                 break;
             }

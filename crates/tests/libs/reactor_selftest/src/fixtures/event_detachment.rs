@@ -5,14 +5,26 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use windows_core::Interface;
 use windows_reactor::Element;
 use windows_reactor::Slider;
-use windows_reactor::{button, check_box, text_block};
+use windows_reactor::{CommandBar, app_bar_button, button, check_box, text_block};
 
+use crate::bindings;
 use crate::fixtures::reconciler::{FixtureFuture, cc};
 use crate::harness::Harness;
 
 use windows_reactor::vstack;
+
+fn invoke_command(command: bindings::ICommandBarElement) -> windows_core::Result<()> {
+    let button: bindings::Button = command.cast()?;
+    let peer = bindings::ButtonAutomationPeer::CreateInstanceWithOwner(&button)?;
+    let pattern = peer
+        .cast::<bindings::IAutomationPeer>()?
+        .GetPattern(bindings::PatternInterface::Invoke)?;
+    let invoke: bindings::IInvokeProvider = pattern.cast()?;
+    invoke.Invoke()
+}
 
 /// Verify that when a button with `on_click` is removed from the tree,
 /// subsequent programmatic clicks on the same UI slot don't fire the old
@@ -177,6 +189,153 @@ pub fn on_changed_handler_replacement(h: Harness) -> FixtureFuture {
         h.check(
             "EventDetach_Replacement_NewClosureUsed",
             h.find_text("result=8").is_some(),
+        );
+    })
+}
+
+pub fn ordinary_click_and_command_bar_flyout_coexist(h: Harness) -> FixtureFuture {
+    Box::pin(async move {
+        let ordinary_count = Rc::new(Cell::new(0u32));
+        let command_count = Rc::new(Cell::new(0u32));
+        let ordinary = Rc::clone(&ordinary_count);
+        let command = Rc::clone(&command_count);
+
+        h.mount(cc(move |_| {
+            button("Compound")
+                .on_click({
+                    let ordinary = Rc::clone(&ordinary);
+                    move || ordinary.set(ordinary.get() + 1)
+                })
+                .command_bar_flyout(vec![app_bar_button("Flyout Command")])
+                .on_command_bar_flyout_click({
+                    let command = Rc::clone(&command);
+                    move |_| command.set(command.get() + 1)
+                })
+                .into()
+        }));
+        h.render().await;
+
+        h.click_button("Compound").unwrap();
+        h.render().await;
+
+        let button = h.find_button("Compound").unwrap();
+        let flyout = button
+            .cast::<bindings::IButton>()
+            .unwrap()
+            .Flyout()
+            .unwrap()
+            .cast::<bindings::CommandBarFlyout>()
+            .unwrap();
+        let command = flyout.PrimaryCommands().unwrap().GetAt(0).unwrap();
+        invoke_command(command).unwrap();
+        h.render().await;
+
+        h.check(
+            "EventState_OrdinaryClickPreserved",
+            ordinary_count.get() == 1,
+        );
+        h.check(
+            "EventState_CommandBarFlyoutClickPreserved",
+            command_count.get() == 1,
+        );
+    })
+}
+
+pub fn command_bar_primary_update_preserves_secondary(h: Harness) -> FixtureFuture {
+    Box::pin(async move {
+        let secondary_count = Rc::new(Cell::new(0u32));
+        let callback_count = Rc::clone(&secondary_count);
+        let callback = windows_reactor::Callback::new(move |label: String| {
+            if label == "Secondary" {
+                callback_count.set(callback_count.get() + 1);
+            }
+        });
+
+        h.mount(cc(move |cx| {
+            let (updated, set_updated) = cx.use_state(false);
+            let primary = if updated {
+                "Primary Updated"
+            } else {
+                "Primary"
+            };
+            vstack((
+                CommandBar::new(vec![app_bar_button(primary)])
+                    .secondary_commands(vec![app_bar_button("Secondary")])
+                    .on_click(callback.clone()),
+                button("Update Primary").on_click(move || set_updated.call(true)),
+            ))
+            .into()
+        }));
+        h.render().await;
+
+        let command_bar = h
+            .find_all::<bindings::CommandBar>(&|_| true)
+            .into_iter()
+            .next()
+            .unwrap();
+        invoke_command(command_bar.SecondaryCommands().unwrap().GetAt(0).unwrap()).unwrap();
+        h.render().await;
+
+        h.click_button("Update Primary").unwrap();
+        h.render().await;
+
+        let command_bar = h
+            .find_all::<bindings::CommandBar>(&|_| true)
+            .into_iter()
+            .next()
+            .unwrap();
+        invoke_command(command_bar.SecondaryCommands().unwrap().GetAt(0).unwrap()).unwrap();
+        h.render().await;
+
+        h.check(
+            "EventState_PrimaryUpdatePreservesSecondary",
+            secondary_count.get() == 2,
+        );
+    })
+}
+
+pub fn detached_flyout_handler_stays_detached_after_prop_update(h: Harness) -> FixtureFuture {
+    Box::pin(async move {
+        let command_count = Rc::new(Cell::new(0u32));
+        let callback_count = Rc::clone(&command_count);
+        let callback = windows_reactor::Callback::new(move |_label: String| {
+            callback_count.set(callback_count.get() + 1);
+        });
+
+        h.mount(cc(move |cx| {
+            let (attached, set_attached) = cx.use_state(true);
+            let label = if attached { "Before" } else { "After" };
+            let target = button("Compound").command_bar_flyout(vec![app_bar_button(label)]);
+            let target = if attached {
+                target.on_command_bar_flyout_click(callback.clone())
+            } else {
+                target
+            };
+            vstack((
+                target,
+                button("Detach And Update").on_click(move || set_attached.call(false)),
+            ))
+            .into()
+        }));
+        h.render().await;
+
+        h.click_button("Detach And Update").unwrap();
+        h.render().await;
+
+        let button = h.find_button("Compound").unwrap();
+        let flyout = button
+            .cast::<bindings::IButton>()
+            .unwrap()
+            .Flyout()
+            .unwrap()
+            .cast::<bindings::CommandBarFlyout>()
+            .unwrap();
+        invoke_command(flyout.PrimaryCommands().unwrap().GetAt(0).unwrap()).unwrap();
+        h.render().await;
+
+        h.check(
+            "EventState_DetachedFlyoutHandlerNotReattached",
+            command_count.get() == 0,
         );
     })
 }

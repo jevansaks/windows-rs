@@ -362,6 +362,18 @@ pub static FIXTURES: &[(&str, FixtureFn)] = &[
         event_detachment::on_changed_handler_replacement,
     ),
     (
+        "EventState_OrdinaryAndFlyoutCoexist",
+        event_detachment::ordinary_click_and_command_bar_flyout_coexist,
+    ),
+    (
+        "EventState_PrimaryPreservesSecondary",
+        event_detachment::command_bar_primary_update_preserves_secondary,
+    ),
+    (
+        "EventState_DetachSurvivesPropUpdate",
+        event_detachment::detached_flyout_handler_stays_detached_after_prop_update,
+    ),
+    (
         "KeyedStress_MiddleRemoval",
         reconciler_stress::keyed_middle_removal,
     ),

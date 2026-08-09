@@ -29,6 +29,28 @@ struct EmptyStatefulRow {
     cleaned: Rc<Cell<u32>>,
 }
 
+struct ShrinkLifecycleRow {
+    events: Rc<RefCell<Vec<&'static str>>>,
+}
+
+impl Component for ShrinkLifecycleRow {
+    fn render(&self, _props: &(), cx: &mut RenderCx) -> Element {
+        let events = Rc::clone(&self.events);
+        cx.use_effect_with_cleanup((), move || {
+            Some(move || events.borrow_mut().push("cleanup"))
+        });
+        TextBlock::new("row").into()
+    }
+
+    fn has_on_disappeared(&self) -> bool {
+        true
+    }
+
+    fn on_disappeared(&self, _props: &(), _cx: &mut RenderCx) {
+        self.events.borrow_mut().push("disappeared");
+    }
+}
+
 impl Component for EmptyStatefulRow {
     fn render(&self, _props: &(), cx: &mut RenderCx) -> Element {
         let (visible, setter) = cx.use_state(false);
@@ -394,9 +416,28 @@ fn updating_with_same_items_rc_refreshes_nothing_for_unrealized() {
 fn shrinking_list_unmounts_rows_beyond_new_tail() {
     let old_items: Vec<i32> = (0..5).collect();
     let new_items: Vec<i32> = (0..2).collect();
+    let events = Rc::new(RefCell::new(Vec::new()));
 
-    let old_el = list_view(old_items, |n, _| TextBlock::new(n.to_string())).build();
-    let new_el = list_view(new_items, |n, _| TextBlock::new(n.to_string())).build();
+    let old_events = Rc::clone(&events);
+    let old_el = list_view(old_items, move |_, _| {
+        component(
+            ShrinkLifecycleRow {
+                events: Rc::clone(&old_events),
+            },
+            (),
+        )
+    })
+    .build();
+    let new_events = Rc::clone(&events);
+    let new_el = list_view(new_items, move |_, _| {
+        component(
+            ShrinkLifecycleRow {
+                events: Rc::clone(&new_events),
+            },
+            (),
+        )
+    })
+    .build();
 
     let mut r = Reconciler::new(RecordingBackend::new());
     let list_id = r
@@ -432,6 +473,18 @@ fn shrinking_list_unmounts_rows_beyond_new_tail() {
     );
 
     assert_eq!(r.backend.row_contents_of(list_id).len(), 2);
+    assert_eq!(
+        &*events.borrow(),
+        &[
+            "disappeared",
+            "cleanup",
+            "disappeared",
+            "cleanup",
+            "disappeared",
+            "cleanup",
+        ],
+        "shrunk rows must disappear before they detach and unmount"
+    );
 }
 
 #[test]
