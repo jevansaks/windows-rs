@@ -212,13 +212,14 @@ impl Struct {
             remaining_bits = 0;
 
             let name = demacro_member_name(child.name(), parser.macro_defs);
-            let ty = child.ty().to_type(parser);
+            let annotations = extract_win32_metadata_annotations(&child);
+            let ty = apply_metadata_type_annotations(child.ty().to_type(parser), &annotations);
             fields.push(Field {
                 name,
                 ty,
                 nested: None,
                 bitfields: vec![],
-                annotations: extract_win32_metadata_annotations(&child),
+                annotations,
             });
         }
 
@@ -306,7 +307,7 @@ impl Struct {
             quote! {}
         };
 
-        let metadata_attrs = win32_metadata_attrs(&self.annotations, false);
+        let metadata_attrs = all_win32_metadata_attrs(&self.annotations);
         quote! { #packed_attr #align_attr #(#metadata_attrs)* }
     }
 
@@ -315,7 +316,7 @@ impl Struct {
             .iter()
             .map(|field| {
                 let name = write_ident(&field.name);
-                let attrs = win32_metadata_attrs(&field.annotations, false);
+                let attrs = all_win32_metadata_attrs(&field.annotations);
                 // RDL bit-field syntax uses implicit offsets; gaps become padding.
                 if !field.bitfields.is_empty() {
                     let ty = write_type(namespace, &field.ty);

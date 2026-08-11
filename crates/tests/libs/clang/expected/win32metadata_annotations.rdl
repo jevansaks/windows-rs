@@ -1,21 +1,61 @@
 #[win32]
 mod Test {
+    #[struct_size_field("cbSize")]
+    #[native_inheritance("BASE_STRUCT")]
+    #[supported_os("windows10.0.10240")]
     struct ANNOTATED_STRUCT {
+        cbSize: u32,
         #[associated_enum("FLAGS")]
         flags: u32,
+        #[not_null_terminated]
+        #[null_null_terminated]
+        #[encoding("ansi")]
+        text: *mut i8,
+        #[free_with("CloseHandle")]
+        allocated: *mut HANDLE,
+        #[Windows::Win32::Metadata::NativeArrayInfo(CountFieldName = "cbSize")]
+        values: [u8; 16],
+        callback: *mut HANDLE,
     }
     #[supported_os("windows10.0.10240")]
+    #[errors_as_success]
     #[multiple_success_values]
+    #[static_library("example.lib")]
+    #[ansi]
     #[library("override.dll", set_last_error)]
     extern fn AnnotatedFunction(#[raii_free("CloseHandle")] #[invalid_handle(-1)] #[invalid_handle(0)] result: *mut HANDLE, #[not_null_terminated] bytes: *const i8, count: u32) -> i32;
     #[library("kernel32.dll")]
+    extern fn AnnotatedParameters(#[free_with("CloseHandle")] allocated: *mut HANDLE, #[ignore_if_return("0")] ignored: *mut HANDLE, #[not_null_terminated] #[null_null_terminated] text: *mut i8, #[len_param(5)] items: *mut void, #[len_const(16)] fixed: *mut void, count: u32, #[size_param(7)] bytes: *mut void, byteCount: u32, #[retained] retained: *mut HANDLE, #[in] #[out] #[opt] direction: *mut HANDLE, #[reserved] #[opt] reserved: *const HANDLE, #[iid_is] #[opt] com: *mut *mut void, #[retval] retval: *mut i32) -> i32;
+    #[library("kernel32.dll")]
     extern fn AnnotatedReturn() -> #[raii_free("CloseHandle")] #[invalid_handle(-1)]
     HANDLE;
+    #[library("kernel32.dll")]
+    extern "system" fn AnnotatedStringReturn() -> #[free_with("LocalFree")] #[do_not_release]
+    #[not_null_terminated]
+    *mut i8;
     type BOOL = i32;
+    type BYTE = u8;
     #[also_usable_for("HANDLE")]
     type DISTINCT_HANDLE = HANDLE;
     type DWORD = u32;
+    #[repr(u32)]
+    #[flags]
+    #[scoped]
+    #[supported_os("windows10.0.10240")]
+    #[associated_constant("FLAGS_ALL")]
+    enum FLAGS {
+        FLAGS_NONE = 0,
+        FLAGS_ONE = 1,
+    }
     type HANDLE = *mut void;
     #[library("kernel32.dll")]
-    extern fn PostfixAnnotatedFunction(#[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] result: *mut HANDLE) -> i32;
+    extern fn PostfixAnnotatedFunction(#[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] result: *mut HANDLE, reduced: *mut HANDLE) -> i32;
+    #[raii_free("CloseHandle")]
+    #[invalid_handle(-1)]
+    #[invalid_handle(0)]
+    type RESOURCE_HANDLE = HANDLE;
+    #[library("kernel32.dll")]
+    extern "system" fn TrailingAnnotatedReturn() -> #[invalid_handle(-1)] #[invalid_handle(0)]
+    #[raii_free("CloseHandle")]
+    HANDLE;
 }

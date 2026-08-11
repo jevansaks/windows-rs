@@ -162,7 +162,7 @@ impl Interface {
                 quote! { #special_attr #(#attrs)* fn #mname(&self, #(#params),*) #return_type; }
             })
             .collect();
-        let attrs = win32_metadata_attrs(&self.annotations, false);
+        let attrs = all_win32_metadata_attrs(&self.annotations);
 
         Ok(quote! {
             #guid_token
