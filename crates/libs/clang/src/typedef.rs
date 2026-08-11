@@ -26,7 +26,7 @@ impl Typedef {
     }
 
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>) -> Result<Option<Self>, Error> {
-        let name = cursor.name();
+        let name = parser.canonical_name(cursor.name());
         let underlying = cursor.typedef_underlying_type();
         let annotations = extract_win32_metadata_annotations(&cursor);
 

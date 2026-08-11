@@ -92,6 +92,8 @@ pub(crate) struct Parser<'a> {
     /// Expanded export name -> source spelling for object-like function aliases.
     /// Charset-selection aliases are excluded because they choose an `A`/`W` variant.
     pub alias_map: HashMap<String, String>,
+    /// Source typedef spelling -> metadata public name selected by an annotation.
+    pub canonical_names: HashMap<String, String>,
     /// Non-empty means only listed functions are roots; dependencies still flow in later.
     pub symbols: &'a HashSet<String>,
     /// Drops functions with no resolved import library; off for fixtures without `.lib` inputs.
@@ -138,11 +140,16 @@ impl<'a> Parser<'a> {
             flag_enums: HashSet::new(),
             iid_vars: HashMap::new(),
             alias_map: build_alias_map(macro_defs),
+            canonical_names: win32_metadata_canonical_names(&tu.cursor()),
             macro_defs,
             symbols,
             drop_lib_less: false,
             winrt_types: None,
         }
+    }
+
+    pub fn canonical_name(&self, name: String) -> String {
+        self.canonical_names.get(&name).cloned().unwrap_or(name)
     }
 
     /// Applies the lib-less drop policy before inserting a function.
@@ -294,6 +301,7 @@ impl<'a> Parser<'a> {
                             name,
                             ty: None,
                             value: const_value,
+                            annotations: vec![],
                         }));
                     }
                 } else if !self.ref_map.contains_key(&e.name) {
@@ -456,7 +464,7 @@ impl<'a> Parser<'a> {
                             self.iid_vars.insert(iface_name.to_string(), uuid);
                         }
                     }
-                } else if let Some(c) = Const::parse_var_decl(&child)
+                } else if let Some(c) = Const::parse_var_decl(&child, self)
                     && !self.ref_map.contains_key(&c.name)
                     && !collector.contains_key(&c.name)
                 {
@@ -490,6 +498,7 @@ impl<'a> Parser<'a> {
                             name,
                             ty: None,
                             value: const_value,
+                            annotations: vec![],
                         }));
                     }
                 }
@@ -1854,6 +1863,7 @@ mod tests {
             name: "D3DFMT_X8R8G8B8".to_string(),
             ty: None,
             value: metadata::Value::U32(22),
+            annotations: vec![],
         }));
 
         let collectors: BTreeMap<String, Collector> =

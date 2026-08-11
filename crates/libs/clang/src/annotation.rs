@@ -196,6 +196,27 @@ pub fn validate_win32_metadata_annotation_tree(cursor: &Cursor) -> Result<(), Er
     Ok(())
 }
 
+pub fn win32_metadata_canonical_names(cursor: &Cursor) -> HashMap<String, String> {
+    fn collect(cursor: &Cursor, result: &mut HashMap<String, String>) {
+        if cursor.kind() == CXCursor_TypedefDecl {
+            for annotation in extract_win32_metadata_annotations(cursor) {
+                if annotation.is("canonical_name")
+                    && let Some(value) = annotation.value
+                {
+                    result.insert(cursor.name(), value);
+                }
+            }
+        }
+        for child in cursor.children() {
+            collect(&child, result);
+        }
+    }
+
+    let mut result = HashMap::new();
+    collect(cursor, &mut result);
+    result
+}
+
 fn validate_win32_metadata_annotation(
     target: CXCursorKind,
     spelling: &str,
@@ -309,7 +330,7 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
         "also_usable_for" | "canonical_name" => target == CXCursor_TypedefDecl,
         "associated_enum" => matches!(
             target,
-            CXCursor_ParmDecl | CXCursor_FieldDecl | CXCursor_VarDecl | CXCursor_EnumConstantDecl
+            CXCursor_ParmDecl | CXCursor_FieldDecl | CXCursor_VarDecl
         ),
         "associated_constant" => target == CXCursor_EnumDecl,
         "native_inheritance" | "struct_size_field" => {

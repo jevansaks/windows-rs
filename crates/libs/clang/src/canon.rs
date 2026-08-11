@@ -8,7 +8,7 @@ use super::*;
 /// Resolves a typedef reference before parameter-specific mapping.
 pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadata::Type {
     let decl = cursor.ty();
-    let name = decl.name();
+    let name = parser.canonical_name(decl.name());
     // String normalisation and the flat collapses are gated to the per-header scrape: a
     // namespaced scrape (WebView2) resolves `PCWSTR`/`PCSTR` through a reference winmd where they
     // are `const PWSTR`, not distinct types, so forcing them here would leave the reference

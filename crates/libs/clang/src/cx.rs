@@ -923,6 +923,7 @@ impl Type {
                     // Recover `NAME *` for pointers to function-type typedefs so delegate
                     // aliases use the named callback instead of an opaque pointer.
                     if let Some(name) = named_function_typedef_pointer(self) {
+                        let name = parser.canonical_name(name);
                         let ns = parser
                             .ref_map
                             .get(&name)

@@ -27,6 +27,24 @@ W32M("win32metadata:invalid_handle=-1")
 W32M("win32metadata:invalid_handle=0")
 typedef HANDLE RESOURCE_HANDLE;
 
+W32M("win32metadata:canonical_name=PUBLIC_CALLBACK")
+typedef BOOL (WINAPI *INTERNAL_CALLBACK)(DWORD value);
+
+W32M("win32metadata:native_encoding=custom")
+const char* const AMBIGUOUS_TEXT = "text";
+
+W32M("win32metadata:associated_enum=FLAGS")
+const DWORD AMBIGUOUS_FLAG = 1;
+
+struct
+    W32M_POSTFIX("win32metadata:agile")
+    __declspec(uuid("40000000-0000-0000-c000-000000000046"))
+    IAnnotated {
+    virtual BOOL
+        W32M_POSTFIX("win32metadata:unicode")
+        Method(void) = 0;
+};
+
 W32M("win32metadata:set_last_error")
 W32M("win32metadata:supported_os=windows10.0.10240")
 W32M("win32metadata:can_return_errors_as_success")
@@ -67,6 +85,8 @@ BOOL AnnotatedParameters(
     BOOL* retval
         W32M_POSTFIX("win32metadata:out")
         W32M_POSTFIX("win32metadata:retval"));
+
+BOOL UsesCallback(INTERNAL_CALLBACK callback);
 
 BOOL PostfixAnnotatedFunction(
     HANDLE* result

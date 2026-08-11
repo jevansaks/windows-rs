@@ -1,5 +1,9 @@
 #[win32]
 mod Test {
+    #[associated_enum("FLAGS")]
+    const AMBIGUOUS_FLAG: u32 = 1;
+    #[encoding("custom")]
+    const AMBIGUOUS_TEXT: String = "text";
     #[struct_size_field("cbSize")]
     #[native_inheritance("BASE_STRUCT")]
     #[supported_os("windows10.0.10240")]
@@ -48,6 +52,13 @@ mod Test {
         FLAGS_ONE = 1,
     }
     type HANDLE = *mut void;
+    #[guid(0x40000000_0000_0000_c000_000000000046)]
+    #[agile]
+    interface IAnnotated {
+        #[unicode]
+        fn Method(&self,) -> i32;
+    }
+    extern fn PUBLIC_CALLBACK(value: u32) -> i32;
     #[library("kernel32.dll")]
     extern fn PostfixAnnotatedFunction(#[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] result: *mut HANDLE, reduced: *mut HANDLE) -> i32;
     #[raii_free("CloseHandle")]
@@ -58,4 +69,6 @@ mod Test {
     extern "system" fn TrailingAnnotatedReturn() -> #[invalid_handle(-1)] #[invalid_handle(0)]
     #[raii_free("CloseHandle")]
     HANDLE;
+    #[library("kernel32.dll")]
+    extern fn UsesCallback(callback: PUBLIC_CALLBACK) -> i32;
 }

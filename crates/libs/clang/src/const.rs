@@ -5,6 +5,7 @@ pub struct Const {
     pub name: String,
     pub ty: Option<metadata::Type>,
     pub value: metadata::Value,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 impl Const {
@@ -33,6 +34,7 @@ impl Const {
                 name,
                 ty: Some(ty),
                 value,
+                annotations: vec![],
             }));
         }
 
@@ -45,11 +47,12 @@ impl Const {
             name,
             ty: None,
             value,
+            annotations: vec![],
         }))
     }
 
-    /// Parse file-scope floating-point `const` variables that flat metadata would otherwise lose.
-    pub fn parse_var_decl(cursor: &Cursor) -> Option<Self> {
+    /// Parse file-scope `const` variables that flat metadata would otherwise lose.
+    pub fn parse_var_decl(cursor: &Cursor, parser: &mut Parser<'_>) -> Option<Self> {
         let name = cursor.name();
         if name.is_empty() || name.starts_with('_') {
             return None;
@@ -58,15 +61,32 @@ impl Const {
         if !ty.is_const() {
             return None;
         }
+        let annotations = extract_win32_metadata_annotations(cursor);
         let value = match ty.canonical_type().kind() {
             CXType_Float => metadata::Value::F32(cursor.evaluate_double()? as f32),
             CXType_Double | CXType_LongDouble => metadata::Value::F64(cursor.evaluate_double()?),
+            _ if !annotations.is_empty() => {
+                let tokens = parser.tu.tokenize(cursor.extent());
+                let equals = tokens.iter().position(|(_, token)| token == "=")?;
+                parse_body(
+                    &tokens[equals + 1..],
+                    parser.namespace,
+                    parser.ref_map,
+                    parser.header_names,
+                )?
+            }
             _ => return None,
+        };
+        let metadata_ty = if matches!(value, metadata::Value::Utf8(_) | metadata::Value::Utf16(_)) {
+            None
+        } else {
+            Some(ty.to_type(parser))
         };
         Some(Self {
             name,
-            ty: None,
+            ty: metadata_ty,
             value,
+            annotations,
         })
     }
 
@@ -76,22 +96,31 @@ impl Const {
         let ty = self.ty.as_ref().unwrap_or(&value_ty);
         let value = write_typed_value(namespace, ty, &self.value);
         let ty = write_type(namespace, ty);
+        let annotations = all_win32_metadata_attrs(&self.annotations);
         match &self.value {
             metadata::Value::Utf8(_) => {
-                let attr = native_encoding_attr("ansi");
+                let inferred = self
+                    .annotations
+                    .is_empty()
+                    .then(|| native_encoding_attr("ansi"));
                 Ok(quote! {
-                    #attr
+                    #inferred
+                    #(#annotations)*
                     const #name: #ty = #value;
                 })
             }
             metadata::Value::Utf16(_) => {
-                let attr = native_encoding_attr("utf-16");
+                let inferred = self
+                    .annotations
+                    .is_empty()
+                    .then(|| native_encoding_attr("utf-16"));
                 Ok(quote! {
-                    #attr
+                    #inferred
+                    #(#annotations)*
                     const #name: #ty = #value;
                 })
             }
-            _ => Ok(quote! { const #name: #ty = #value; }),
+            _ => Ok(quote! { #(#annotations)* const #name: #ty = #value; }),
         }
     }
 }
@@ -376,7 +405,12 @@ fn collect_eval_results(tu: &TranslationUnit) -> (Vec<Const>, HashSet<String>) {
                     signs.get(&name).copied(),
                 )
             };
-            Const { name, ty, value }
+            Const {
+                name,
+                ty,
+                value,
+                annotations: vec![],
+            }
         })
         .collect();
 

@@ -12,7 +12,7 @@ pub struct Callback {
 impl Callback {
     /// Parse a non-variadic function-pointer typedef as a callback.
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>) -> Result<Option<Self>, Error> {
-        let name = cursor.name();
+        let name = parser.canonical_name(cursor.name());
         if name.is_empty() {
             return Ok(None);
         }
