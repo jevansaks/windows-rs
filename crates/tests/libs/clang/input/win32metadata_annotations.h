@@ -32,6 +32,9 @@ typedef HANDLE RESOURCE_HANDLE;
 W32M("win32metadata:canonical_name=PUBLIC_CALLBACK")
 typedef BOOL (WINAPI *INTERNAL_CALLBACK)(DWORD value);
 
+W32M("win32metadata:free_with=FreeString")
+typedef char* OWNED_STRING;
+
 W32M("win32metadata:native_encoding=custom")
 const char* const AMBIGUOUS_TEXT = "text";
 

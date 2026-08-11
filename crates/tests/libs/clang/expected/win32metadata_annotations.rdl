@@ -58,6 +58,8 @@ mod Test {
         #[unicode]
         fn Method(&self,) -> i32;
     }
+    #[free_with("FreeString")]
+    type OWNED_STRING = *mut i8;
     extern fn PUBLIC_CALLBACK(value: u32) -> i32;
     #[library("kernel32.dll")]
     extern fn PostfixAnnotatedFunction(#[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] result: *mut HANDLE, reduced: *mut HANDLE) -> i32;

@@ -320,7 +320,11 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
         "free_with" | "do_not_release" | "not_null_terminated" | "null_null_terminated" => {
             matches!(
                 target,
-                CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_ParmDecl | CXCursor_FieldDecl
+                CXCursor_FunctionDecl
+                    | CXCursor_CXXMethod
+                    | CXCursor_ParmDecl
+                    | CXCursor_FieldDecl
+                    | CXCursor_TypedefDecl
             )
         }
         "retained" | "ignore_if_return" | "array_count_param" | "array_count_const"
