@@ -66,6 +66,8 @@ mod Test {
     #[invalid_handle(0)]
     type RESOURCE_HANDLE = HANDLE;
     #[library("kernel32.dll")]
+    extern fn RepeatedNestedAnnotations(#[invalid_handle(-1)] #[invalid_handle(0)] result: *mut HANDLE) -> i32;
+    #[library("kernel32.dll")]
     extern "system" fn TrailingAnnotatedReturn() -> #[invalid_handle(-1)] #[invalid_handle(0)]
     #[raii_free("CloseHandle")]
     HANDLE;

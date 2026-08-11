@@ -3,6 +3,8 @@
 #define W32M(text) [[clang::annotate(text)]]
 #define W32M_POSTFIX(text) __attribute__((annotate(text)))
 #define W32M_VALUE(key, value) [[clang::annotate("win32metadata:" key "=" value)]]
+#define W32M_NESTED(text) __attribute__((annotate(text)))
+#define W32M_INVALID(value) W32M_NESTED("win32metadata:invalid_handle=" #value)
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -87,6 +89,11 @@ BOOL AnnotatedParameters(
         W32M_POSTFIX("win32metadata:retval"));
 
 BOOL UsesCallback(INTERNAL_CALLBACK callback);
+
+BOOL RepeatedNestedAnnotations(
+    HANDLE* result
+        W32M_INVALID(-1)
+        W32M_INVALID(0));
 
 BOOL PostfixAnnotatedFunction(
     HANDLE* result
