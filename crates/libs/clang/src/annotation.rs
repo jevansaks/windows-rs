@@ -13,6 +13,12 @@ impl Win32MetadataAnnotation {
         self.key == "set_last_error"
     }
 
+    pub fn import_library(&self) -> Option<&str> {
+        (self.key == "import_library")
+            .then_some(self.value.as_deref())
+            .flatten()
+    }
+
     pub fn targets_return(&self) -> bool {
         matches!(
             self.key.as_str(),
@@ -114,6 +120,7 @@ impl Win32MetadataAnnotation {
             | "com_out_ptr"
             | "canonical_name"
             | "reduce_pointer_level"
+            | "import_library"
             | "set_last_error" => return None,
             _ => return None,
         })
