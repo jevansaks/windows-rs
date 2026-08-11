@@ -8,6 +8,7 @@ pub struct Enum {
     pub flags: bool,
     /// C++ `enum class` / `enum struct` -> `ScopedEnum`.
     pub scoped: bool,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 impl Enum {
@@ -26,6 +27,11 @@ impl Enum {
 
         let name = cursor.name();
         let scoped = cursor.is_scoped_enum();
+        let annotations = extract_win32_metadata_annotations(&cursor);
+        let flags = cursor
+            .children()
+            .iter()
+            .any(|child| child.kind() == CXCursor_FlagEnum);
 
         let mut variants = vec![];
 
@@ -41,8 +47,9 @@ impl Enum {
             name,
             repr,
             variants,
-            flags: false,
+            flags,
             scoped,
+            annotations,
         })
     }
 
@@ -89,11 +96,13 @@ impl Enum {
         } else {
             quote! {}
         };
+        let attrs = all_win32_metadata_attrs(&self.annotations);
 
         Ok(quote! {
             #[repr(#repr)]
             #flags_attr
             #scoped_attr
+            #(#attrs)*
             enum #name {
                 #(#variants)*
             }

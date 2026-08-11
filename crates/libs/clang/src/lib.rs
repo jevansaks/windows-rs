@@ -160,6 +160,8 @@ impl<'a> Parser<'a> {
         collector: &mut Collector,
         extern_c: bool,
     ) -> Result<(), Error> {
+        validate_win32_metadata_annotation_tree(&child)?;
+
         // Allowlist mode emits only named functions as roots. Bare tag dependencies are
         // not scheduled here; a missing one fails later as an unresolved reference.
         if !self.symbols.is_empty() {
@@ -1845,6 +1847,7 @@ mod tests {
             variants: vec![("D3DFMT_X8R8G8B8".to_string(), 22)],
             flags: false,
             scoped: false,
+            annotations: vec![],
         }));
         let mut b = Collector::new();
         b.insert(Item::Const(Const {

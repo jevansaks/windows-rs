@@ -628,6 +628,32 @@ impl Cursor {
             format!("{filename}:{line}:{col}")
         }
     }
+
+    pub fn source_location(&self) -> (String, usize, usize) {
+        unsafe {
+            let loc = clang_getCursorLocation(self.0);
+            let mut source_file: CXFile = std::ptr::null_mut();
+            let mut line: u32 = 0;
+            let mut col: u32 = 0;
+            clang_getExpansionLocation(
+                loc,
+                &mut source_file,
+                &mut line,
+                &mut col,
+                std::ptr::null_mut(),
+            );
+            let filename = if source_file.is_null() {
+                String::new()
+            } else {
+                to_string(clang_getFileName(source_file))
+            };
+            (
+                filename,
+                line.try_into().unwrap_or_default(),
+                col.saturating_sub(1).try_into().unwrap_or_default(),
+            )
+        }
+    }
 }
 
 pub struct Type(CXType);

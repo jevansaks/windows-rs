@@ -40,6 +40,46 @@ fn malformed_metadata_reports_its_role() {
     assert_eq!(resolution.file_name, "<memory>");
 }
 
+#[test]
+fn rejects_invalid_win32metadata_annotations() {
+    let _guard = test_clang::libclang_guard();
+    let output = format!("{}/invalid_win32metadata.rdl", env!("OUT_DIR"));
+
+    let unknown = windows_clang::clang()
+        .args(["-x", "c++", "--target=x86_64-pc-windows-msvc"])
+        .input_text(
+            r#"
+            #define W32M(text) __attribute__((annotate(text)))
+            W32M("win32metadata:unknown") int Unknown(void);
+            "#,
+        )
+        .output(&output)
+        .namespace("Test")
+        .write()
+        .unwrap_err();
+    assert_eq!(
+        unknown.message,
+        "unknown win32metadata annotation `unknown`"
+    );
+
+    let misplaced = windows_clang::clang()
+        .args(["-x", "c++", "--target=x86_64-pc-windows-msvc"])
+        .input_text(
+            r#"
+            #define W32M(text) __attribute__((annotate(text)))
+            int Misplaced(int value W32M("win32metadata:static_library=example.lib"));
+            "#,
+        )
+        .output(&output)
+        .namespace("Test")
+        .write()
+        .unwrap_err();
+    assert_eq!(
+        misplaced.message,
+        "win32metadata annotation `static_library` is not valid on this declaration"
+    );
+}
+
 fn run(name: &str) {
     let input_path = format!("input/{name}.h");
     let expected_path = format!("expected/{name}.rdl");

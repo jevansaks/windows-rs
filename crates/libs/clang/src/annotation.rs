@@ -9,6 +9,10 @@ pub struct Win32MetadataAnnotation {
 }
 
 impl Win32MetadataAnnotation {
+    pub fn is(&self, key: &str) -> bool {
+        self.key == key
+    }
+
     pub fn is_set_last_error(&self) -> bool {
         self.key == "set_last_error"
     }
@@ -39,7 +43,7 @@ impl Win32MetadataAnnotation {
                 quote! { #[raii_free(#value)] }
             }
             "invalid_handle" => {
-                let value = value?.parse::<i64>().ok()?;
+                let value = parse_integer::<i64>(value?)?;
                 let value = Literal::i64_unsuffixed(value);
                 quote! { #[invalid_handle(#value)] }
             }
@@ -51,12 +55,12 @@ impl Win32MetadataAnnotation {
             "not_null_terminated" => quote! { #[not_null_terminated] },
             "null_null_terminated" => quote! { #[null_null_terminated] },
             "array_count_param" => {
-                let value = value?.parse::<i16>().ok()?;
+                let value = parse_integer::<i16>(value?)?;
                 let value = Literal::i16_unsuffixed(value);
                 quote! { #[len_param(#value)] }
             }
             "array_count_const" => {
-                let value = value?.parse::<i32>().ok()?;
+                let value = parse_integer::<i32>(value?)?;
                 let value = Literal::i32_unsuffixed(value);
                 quote! { #[len_const(#value)] }
             }
@@ -65,7 +69,7 @@ impl Win32MetadataAnnotation {
                 quote! { #[Windows::Win32::Metadata::NativeArrayInfo(CountFieldName = #value)] }
             }
             "memory_size_param" => {
-                let value = value?.parse::<i16>().ok()?;
+                let value = parse_integer::<i16>(value?)?;
                 let value = Literal::i16_unsuffixed(value);
                 quote! { #[size_param(#value)] }
             }
@@ -127,6 +131,44 @@ impl Win32MetadataAnnotation {
     }
 }
 
+pub fn apply_metadata_type_annotations(
+    mut ty: metadata::Type,
+    annotations: &[Win32MetadataAnnotation],
+) -> metadata::Type {
+    for annotation in annotations {
+        if annotation.is("reduce_pointer_level") {
+            ty = match ty {
+                metadata::Type::PtrMut(inner, 1) | metadata::Type::PtrConst(inner, 1) => *inner,
+                metadata::Type::PtrMut(inner, depth) => metadata::Type::PtrMut(inner, depth - 1),
+                metadata::Type::PtrConst(inner, depth) => {
+                    metadata::Type::PtrConst(inner, depth - 1)
+                }
+                other => other,
+            };
+        }
+    }
+    ty
+}
+
+fn parse_integer<T>(value: &str) -> Option<T>
+where
+    T: TryFrom<i128>,
+{
+    let value = value.trim();
+    let (negative, value) = match value.as_bytes().first() {
+        Some(b'-') => (true, &value[1..]),
+        Some(b'+') => (false, &value[1..]),
+        _ => (false, value),
+    };
+    let value = value.trim_end_matches(['u', 'U', 'l', 'L']);
+    let (radix, digits) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .map_or((10, value), |digits| (16, digits));
+    let magnitude = i128::from_str_radix(digits, radix).ok()?;
+    T::try_from(if negative { -magnitude } else { magnitude }).ok()
+}
+
 fn parse_win32_metadata_annotation(spelling: &str) -> Option<Win32MetadataAnnotation> {
     let payload = spelling.strip_prefix(WIN32_METADATA_PREFIX)?;
     let (key, value) = payload
@@ -138,6 +180,159 @@ fn parse_win32_metadata_annotation(spelling: &str) -> Option<Win32MetadataAnnota
         key: key.to_string(),
         value,
     })
+}
+
+pub fn validate_win32_metadata_annotation_tree(cursor: &Cursor) -> Result<(), Error> {
+    for child in cursor.children() {
+        if child.kind() == CXCursor_AnnotateAttr {
+            let spelling = child.name();
+            if spelling.starts_with(WIN32_METADATA_PREFIX) {
+                validate_win32_metadata_annotation(cursor.kind(), &spelling, &child)?;
+            }
+        } else {
+            validate_win32_metadata_annotation_tree(&child)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_win32_metadata_annotation(
+    target: CXCursorKind,
+    spelling: &str,
+    cursor: &Cursor,
+) -> Result<(), Error> {
+    let annotation = parse_win32_metadata_annotation(spelling).unwrap();
+    let requires_value = matches!(
+        annotation.key.as_str(),
+        "import_library"
+            | "supported_os"
+            | "static_library"
+            | "raii_free"
+            | "invalid_handle"
+            | "free_with"
+            | "array_count_param"
+            | "array_count_const"
+            | "array_count_field"
+            | "memory_size_param"
+            | "ignore_if_return"
+            | "also_usable_for"
+            | "associated_enum"
+            | "associated_constant"
+            | "native_inheritance"
+            | "struct_size_field"
+            | "native_encoding"
+            | "canonical_name"
+    );
+    let valueless = matches!(
+        annotation.key.as_str(),
+        "set_last_error"
+            | "can_return_errors_as_success"
+            | "can_return_multiple_success_values"
+            | "agile"
+            | "do_not_release"
+            | "not_null_terminated"
+            | "null_null_terminated"
+            | "retained"
+            | "in"
+            | "out"
+            | "optional"
+            | "reserved"
+            | "retval"
+            | "com_out_ptr"
+            | "const"
+            | "ansi"
+            | "unicode"
+            | "reduce_pointer_level"
+    );
+
+    let error = if !requires_value && !valueless {
+        Some(format!(
+            "unknown win32metadata annotation `{}`",
+            annotation.key
+        ))
+    } else if requires_value
+        && annotation
+            .value
+            .as_deref()
+            .is_none_or(|value| value.is_empty())
+    {
+        Some(format!(
+            "win32metadata annotation `{}` requires a value",
+            annotation.key
+        ))
+    } else if valueless && annotation.value.is_some() {
+        Some(format!(
+            "win32metadata annotation `{}` does not accept a value",
+            annotation.key
+        ))
+    } else if !annotation_target_allowed(&annotation.key, target) {
+        Some(format!(
+            "win32metadata annotation `{}` is not valid on this declaration",
+            annotation.key
+        ))
+    } else {
+        None
+    };
+
+    if let Some(message) = error {
+        let (file, line, column) = cursor.source_location();
+        Err(Error::new(&message, &file, line, column))
+    } else {
+        Ok(())
+    }
+}
+
+fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
+    match key {
+        "set_last_error" | "import_library" | "static_library" => target == CXCursor_FunctionDecl,
+        "can_return_errors_as_success" | "can_return_multiple_success_values" => {
+            matches!(target, CXCursor_FunctionDecl | CXCursor_CXXMethod)
+        }
+        "agile" => matches!(
+            target,
+            CXCursor_ClassDecl | CXCursor_StructDecl | CXCursor_ClassTemplate
+        ),
+        "raii_free" | "invalid_handle" => matches!(
+            target,
+            CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_ParmDecl | CXCursor_TypedefDecl
+        ),
+        "free_with" | "do_not_release" | "not_null_terminated" | "null_null_terminated" => {
+            matches!(
+                target,
+                CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_ParmDecl | CXCursor_FieldDecl
+            )
+        }
+        "retained" | "ignore_if_return" | "array_count_param" | "array_count_const"
+        | "memory_size_param" | "in" | "out" | "optional" | "reserved" | "retval"
+        | "com_out_ptr" => target == CXCursor_ParmDecl,
+        "array_count_field" => target == CXCursor_FieldDecl,
+        "also_usable_for" | "canonical_name" => target == CXCursor_TypedefDecl,
+        "associated_enum" => matches!(
+            target,
+            CXCursor_ParmDecl | CXCursor_FieldDecl | CXCursor_VarDecl | CXCursor_EnumConstantDecl
+        ),
+        "associated_constant" => target == CXCursor_EnumDecl,
+        "native_inheritance" | "struct_size_field" => {
+            matches!(target, CXCursor_ClassDecl | CXCursor_StructDecl)
+        }
+        "native_encoding" => matches!(target, CXCursor_FieldDecl | CXCursor_VarDecl),
+        "const" => matches!(target, CXCursor_ParmDecl | CXCursor_FieldDecl),
+        "ansi" | "unicode" => matches!(
+            target,
+            CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_FieldDecl | CXCursor_VarDecl
+        ),
+        "supported_os" => matches!(
+            target,
+            CXCursor_FunctionDecl
+                | CXCursor_CXXMethod
+                | CXCursor_ClassDecl
+                | CXCursor_StructDecl
+                | CXCursor_EnumDecl
+                | CXCursor_TypedefDecl
+        ),
+        "reduce_pointer_level" => matches!(target, CXCursor_ParmDecl | CXCursor_FieldDecl),
+        _ => false,
+    }
 }
 
 pub fn extract_win32_metadata_annotations(cursor: &Cursor) -> Vec<Win32MetadataAnnotation> {
@@ -156,6 +351,13 @@ pub fn win32_metadata_attrs(
     annotations
         .iter()
         .filter(|annotation| annotation.targets_return() == include_return)
+        .filter_map(Win32MetadataAnnotation::to_rdl_attr)
+        .collect()
+}
+
+pub fn all_win32_metadata_attrs(annotations: &[Win32MetadataAnnotation]) -> Vec<TokenStream> {
+    annotations
+        .iter()
         .filter_map(Win32MetadataAnnotation::to_rdl_attr)
         .collect()
 }
@@ -446,6 +648,7 @@ pub(crate) fn parse_params(
             fallback
         };
         let mut ty = param_metadata_type(&child.ty(), &annotation, parser);
+        ty = apply_metadata_type_annotations(ty, &annotation.win32_metadata);
         // Token-recovered `_COM_Outptr_` becomes ComOutPtr only for caller-chosen `void**`.
         if annotation.com_out_ptr_token && is_void_double_ptr(&ty) {
             annotation.com_out_ptr = true;

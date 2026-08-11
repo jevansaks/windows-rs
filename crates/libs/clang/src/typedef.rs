@@ -163,7 +163,7 @@ impl Typedef {
     pub fn write(&self, namespace: &str) -> Result<TokenStream, Error> {
         let name = write_ident(&self.name);
         let ty = write_type(namespace, &self.ty);
-        let attrs = win32_metadata_attrs(&self.annotations, false);
+        let attrs = all_win32_metadata_attrs(&self.annotations);
 
         Ok(quote! {
             #(#attrs)*
