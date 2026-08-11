@@ -160,6 +160,12 @@ fn write_attribute_definitions(path: &Path) {
     define_attribute(&mut file, "ComOutPtrAttribute", &[], &[]);
     define_attribute(
         &mut file,
+        "InvalidHandleValueAttribute",
+        &[metadata::Type::I64],
+        &[],
+    );
+    define_attribute(
+        &mut file,
         "NativeArrayInfoAttribute",
         &[],
         &[
@@ -294,6 +300,8 @@ fn all_supported_param_attributes_and_directions_round_trip() {
                 marker("ReservedAttribute"),
                 marker("DoesNotReturnAttribute"),
                 marker("ScopedEnumAttribute"),
+                positional("InvalidHandleValueAttribute", metadata::Value::I64(-1)),
+                positional("InvalidHandleValueAttribute", metadata::Value::I64(0)),
                 positional(
                     "NativeEncodingAttribute",
                     metadata::Value::Utf8("utf-16".to_string()),
@@ -418,9 +426,9 @@ fn all_supported_param_attributes_and_directions_round_trip() {
     assert!(method.contains("#[len_param(2)] counted: *const i32"));
     assert!(method.contains("#[len_const(4)] fixed: *const i32"));
     assert!(method.contains("#[size_param(0)] bytes: *mut u8"));
-    assert!(
-        method.contains("#[encoding(\"utf-16\")] #[noreturn] #[reserved] #[scoped] decorated: i32")
-    );
+    assert!(method.contains("#[invalid_handle(-1)] #[invalid_handle(0)]"));
+    assert!(method.contains("#[encoding(\"utf-16\")]"));
+    assert!(method.contains("#[noreturn] #[reserved] #[scoped] decorated: i32"));
     assert!(method.contains("-> #[encoding(\"ansi\")] #[noreturn] i32"));
 
     windows_rdl::reader()
@@ -493,6 +501,15 @@ fn all_supported_param_attributes_and_directions_round_trip() {
     assert_attribute(decorated, "ReservedAttribute", &[]);
     assert_attribute(decorated, "DoesNotReturnAttribute", &[]);
     assert_attribute(decorated, "ScopedEnumAttribute", &[]);
+    let invalid_values: Vec<_> = decorated
+        .attributes()
+        .filter(|attribute| attribute.name() == "InvalidHandleValueAttribute")
+        .map(|attribute| attribute.value()[0].1.clone())
+        .collect();
+    assert_eq!(
+        invalid_values,
+        [metadata::Value::I64(-1), metadata::Value::I64(0)]
+    );
     assert_attribute(
         decorated,
         "NativeEncodingAttribute",
