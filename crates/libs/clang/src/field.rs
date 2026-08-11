@@ -8,6 +8,7 @@ pub struct Field {
     pub nested: Option<Box<Struct>>,
     /// Logical bit-field members packed into this synthetic storage unit.
     pub bitfields: Vec<(String, u32, u32)>,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 /// Function or method parameter with optional SAL metadata.

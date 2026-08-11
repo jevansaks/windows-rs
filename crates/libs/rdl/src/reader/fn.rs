@@ -85,23 +85,30 @@ impl Encoder<'_> {
             return self.err(&item.sig, "`library` attribute not found");
         };
 
-        let (library, import) = attribute
+        let (library, import, set_last_error) = attribute
             .parse_args_with(
-                |input: syn::parse::ParseStream| -> syn::Result<(syn::LitStr, Option<String>)> {
+                |input: syn::parse::ParseStream| -> syn::Result<(
+                    syn::LitStr,
+                    Option<String>,
+                    bool,
+                )> {
                     let library: syn::LitStr = input.parse()?;
                     let mut import = None;
+                    let mut set_last_error = false;
                     while input.peek(syn::Token![,]) {
                         input.parse::<syn::Token![,]>()?;
                         let ident: syn::Ident = input.parse()?;
-                        input.parse::<syn::Token![=]>()?;
                         if ident == "import" {
+                            input.parse::<syn::Token![=]>()?;
                             let value: syn::LitStr = input.parse()?;
                             import = Some(value.value());
+                        } else if ident == "set_last_error" {
+                            set_last_error = true;
                         } else {
                             return Err(syn::Error::new(ident.span(), "unknown library option"));
                         }
                     }
-                    Ok((library, import))
+                    Ok((library, import, set_last_error))
                 },
             )
             .or_else(|_| self.err(attribute.span(), "`library` name missing"))?;
@@ -117,6 +124,9 @@ impl Encoder<'_> {
             }
         } else {
             flags |= metadata::PInvokeAttributes::CallConvPlatformapi;
+        }
+        if set_last_error {
+            flags |= metadata::PInvokeAttributes::SupportsLastError;
         }
 
         let import_name = import.as_deref().unwrap_or(&name);

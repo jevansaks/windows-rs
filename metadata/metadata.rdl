@@ -84,6 +84,69 @@ mod Windows {
             attribute NativeBitfieldAttribute {
                 fn(name: String, offset: i64, length: i64);
             }
+            attribute RAIIFreeAttribute {
+                fn(name: String);
+            }
+            attribute InvalidHandleValueAttribute {
+                fn(value: i64);
+            }
+            attribute FreeWithAttribute {
+                fn(name: String);
+            }
+            attribute DoNotReleaseAttribute {
+                fn();
+            }
+            attribute NotNullTerminatedAttribute {
+                fn();
+            }
+            attribute NullNullTerminatedAttribute {
+                fn();
+            }
+            attribute CanReturnErrorsAsSuccessAttribute {
+                fn();
+            }
+            attribute CanReturnMultipleSuccessValuesAttribute {
+                fn();
+            }
+            attribute RetainedAttribute {
+                fn();
+            }
+            attribute IgnoreIfReturnAttribute {
+                fn(value: String);
+            }
+            attribute AlsoUsableForAttribute {
+                fn(otherType: String);
+            }
+            attribute AssociatedEnumAttribute {
+                fn(name: String);
+            }
+            attribute AssociatedConstantAttribute {
+                fn(name: String);
+            }
+            attribute NativeInheritanceAttribute {
+                fn(baseName: String);
+            }
+            attribute StructSizeFieldAttribute {
+                fn(field: String);
+            }
+            attribute AnsiAttribute {
+                fn();
+            }
+            attribute UnicodeAttribute {
+                fn();
+            }
+            attribute AgileAttribute {
+                fn();
+            }
+            attribute SupportedOSPlatformAttribute {
+                fn(platform: String);
+            }
+            attribute StaticLibraryAttribute {
+                fn(libName: String);
+            }
+            attribute ConstAttribute {
+                fn();
+            }
         }
     }
 }

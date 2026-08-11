@@ -34,6 +34,7 @@ pub struct Struct {
     pub packing: Option<u16>,
     /// Forced over-alignment in bytes; mutually exclusive with `packing`.
     pub alignment: Option<u16>,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 impl Struct {
@@ -45,6 +46,7 @@ impl Struct {
             is_union: false,
             packing: None,
             alignment: None,
+            annotations: vec![],
         }
     }
 
@@ -103,6 +105,7 @@ impl Struct {
                     ty,
                     nested: None,
                     bitfields: vec![],
+                    annotations: vec![],
                 });
                 continue;
             }
@@ -131,6 +134,7 @@ impl Struct {
                     ty: metadata::Type::Void,
                     nested: Some(Box::new(nested)),
                     bitfields: vec![],
+                    annotations: vec![],
                 });
                 continue;
             }
@@ -156,6 +160,7 @@ impl Struct {
                     ty: metadata::Type::Void,
                     nested: Some(Box::new(nested)),
                     bitfields: vec![],
+                    annotations: extract_win32_metadata_annotations(&child),
                 });
                 continue;
             }
@@ -186,6 +191,7 @@ impl Struct {
                         ty,
                         nested: None,
                         bitfields: members,
+                        annotations: extract_win32_metadata_annotations(&child),
                     });
                     unit_size = size;
                     remaining_bits = size * 8 - width;
@@ -212,6 +218,7 @@ impl Struct {
                 ty,
                 nested: None,
                 bitfields: vec![],
+                annotations: extract_win32_metadata_annotations(&child),
             });
         }
 
@@ -244,6 +251,7 @@ impl Struct {
             is_union,
             packing,
             alignment,
+            annotations: extract_win32_metadata_annotations(&cursor),
         })
     }
 
@@ -298,7 +306,8 @@ impl Struct {
             quote! {}
         };
 
-        quote! { #packed_attr #align_attr }
+        let metadata_attrs = win32_metadata_attrs(&self.annotations, false);
+        quote! { #packed_attr #align_attr #(#metadata_attrs)* }
     }
 
     fn write_fields(&self, namespace: &str) -> Vec<TokenStream> {
@@ -306,6 +315,7 @@ impl Struct {
             .iter()
             .map(|field| {
                 let name = write_ident(&field.name);
+                let attrs = win32_metadata_attrs(&field.annotations, false);
                 // RDL bit-field syntax uses implicit offsets; gaps become padding.
                 if !field.bitfields.is_empty() {
                     let ty = write_type(namespace, &field.ty);
@@ -321,14 +331,14 @@ impl Struct {
                         members.push(quote! { #member: #width_lit, });
                         cursor = offset + width;
                     }
-                    return quote! { #name: #ty { #(#members)* }, };
+                    return quote! { #(#attrs)* #name: #ty { #(#members)* }, };
                 }
                 if let Some(nested) = &field.nested {
                     let inner = nested.write_inline(namespace);
-                    quote! { #name: #inner, }
+                    quote! { #(#attrs)* #name: #inner, }
                 } else {
                     let ty = write_type(namespace, &field.ty);
-                    quote! { #name: #ty, }
+                    quote! { #(#attrs)* #name: #ty, }
                 }
             })
             .collect()
