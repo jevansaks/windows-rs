@@ -167,11 +167,13 @@ impl Fn {
         // Recover missing caller-chosen-type COM annotations from signature shape.
         infer_iid_is(&mut params, &return_type);
 
-        // Import libraries record the raw export symbol, not a source alias.
-        let library = parser
-            .libraries
-            .get(&export_name)
-            .cloned()
+        // Import-library scanning is the default. A header annotation is authoritative when
+        // the export is absent from the scanned libs or the SDK needs to correct their answer.
+        let library = annotations
+            .iter()
+            .find_map(Win32MetadataAnnotation::import_library)
+            .map(str::to_string)
+            .or_else(|| parser.libraries.get(&export_name).cloned())
             .unwrap_or_else(|| parser.library.to_string());
 
         let (name, import_name) = match source_name {

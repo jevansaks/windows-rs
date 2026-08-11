@@ -1,6 +1,7 @@
 //! library kernel32.dll
 
 #define W32M(text) [[clang::annotate(text)]]
+#define W32M_POSTFIX(text) __attribute__((annotate(text)))
 #define W32M_VALUE(key, value) [[clang::annotate("win32metadata:" key "=" value)]]
 
 typedef void* HANDLE;
@@ -13,6 +14,7 @@ typedef HANDLE DISTINCT_HANDLE;
 W32M("win32metadata:set_last_error")
 W32M("win32metadata:supported_os=windows10.0.10240")
 W32M("win32metadata:can_return_multiple_success_values")
+W32M("win32metadata:import_library=override.dll")
 BOOL AnnotatedFunction(
     W32M("win32metadata:raii_free=CloseHandle")
     W32M("win32metadata:invalid_handle=-1")
@@ -21,6 +23,12 @@ BOOL AnnotatedFunction(
     W32M("win32metadata:not_null_terminated")
     const char* bytes,
     DWORD count);
+
+BOOL PostfixAnnotatedFunction(
+    HANDLE* result
+        W32M_POSTFIX("win32metadata:invalid_handle=-1")
+        W32M_POSTFIX("win32metadata:invalid_handle=0")
+        W32M_POSTFIX("win32metadata:raii_free=CloseHandle"));
 
 W32M("win32metadata:raii_free=CloseHandle")
 W32M("win32metadata:invalid_handle=-1")
