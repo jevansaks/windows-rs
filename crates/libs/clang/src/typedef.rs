@@ -4,6 +4,7 @@ use super::*;
 pub struct Typedef {
     pub name: String,
     pub ty: metadata::Type,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 impl Typedef {
@@ -27,6 +28,7 @@ impl Typedef {
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>) -> Result<Option<Self>, Error> {
         let name = cursor.name();
         let underlying = cursor.typedef_underlying_type();
+        let annotations = extract_win32_metadata_annotations(&cursor);
 
         // The enum/flags merge emits the public name with this typedef's storage type.
         if parser.enum_merge.contains_key(&name) {
@@ -112,7 +114,11 @@ impl Typedef {
                 return Ok(None);
             }
             let ty = inner.to_type(parser);
-            return Ok(Some(Self { name, ty }));
+            return Ok(Some(Self {
+                name,
+                ty,
+                annotations,
+            }));
         }
 
         // Variadic function-pointer typedefs cannot be metadata callbacks; keep an opaque alias.
@@ -121,7 +127,11 @@ impl Typedef {
                 && fn_ty.is_variadic()
             {
                 let ty = underlying.to_type(parser);
-                return Ok(Some(Self { name, ty }));
+                return Ok(Some(Self {
+                    name,
+                    ty,
+                    annotations,
+                }));
             }
             return Ok(None);
         }
@@ -129,7 +139,11 @@ impl Typedef {
         // `DECLARE_HANDLE` emits an opaque handle rather than a one-off empty tag pointer.
         if underlying.is_handle_tag(&name) {
             let ty = metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1);
-            return Ok(Some(Self { name, ty }));
+            return Ok(Some(Self {
+                name,
+                ty,
+                annotations,
+            }));
         }
 
         let ty = underlying.to_type(parser);
@@ -139,14 +153,20 @@ impl Typedef {
             (Some(scalar), metadata::Type::U64 | metadata::Type::I64) => scalar,
             _ => ty,
         };
-        Ok(Some(Self { name, ty }))
+        Ok(Some(Self {
+            name,
+            ty,
+            annotations,
+        }))
     }
 
     pub fn write(&self, namespace: &str) -> Result<TokenStream, Error> {
         let name = write_ident(&self.name);
         let ty = write_type(namespace, &self.ty);
+        let attrs = win32_metadata_attrs(&self.annotations, false);
 
         Ok(quote! {
+            #(#attrs)*
             type #name = #ty;
         })
     }

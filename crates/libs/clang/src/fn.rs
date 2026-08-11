@@ -23,6 +23,7 @@ pub struct Fn {
     pub does_not_return: bool,
     /// The source-expressed calling convention, when stated explicitly.
     pub calling_convention: Option<CallingConvention>,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 /// Map a compiler keyword to a winmd-representable calling convention.
@@ -139,6 +140,7 @@ impl Fn {
 
         let is_variadic = cursor.ty().is_variadic();
         let does_not_return = detect_does_not_return(&cursor);
+        let annotations = extract_win32_metadata_annotations(&cursor);
 
         // SAL annotations take priority; MIDL comments are a fallback.
         let fn_tokens = parser
@@ -187,6 +189,7 @@ impl Fn {
             is_variadic,
             does_not_return,
             calling_convention,
+            annotations,
         })
     }
 
@@ -213,7 +216,8 @@ impl Fn {
             metadata::Type::Void => quote! {},
             ty => {
                 let ty = write_type(namespace, ty);
-                quote! { -> #ty }
+                let attrs = win32_metadata_attrs(&self.annotations, true);
+                quote! { -> #(#attrs)* #ty }
             }
         };
 
@@ -237,14 +241,23 @@ impl Fn {
             quote! {}
         };
 
-        let library_attr = if let Some(import) = &self.import_name {
-            quote! { #[library(#library, import = #import)] }
-        } else {
-            quote! { #[library(#library)] }
-        };
+        let import = self
+            .import_name
+            .as_ref()
+            .map(|import| quote! { , import = #import })
+            .unwrap_or_default();
+        let set_last_error = self
+            .annotations
+            .iter()
+            .any(Win32MetadataAnnotation::is_set_last_error)
+            .then(|| quote! { , set_last_error })
+            .unwrap_or_default();
+        let library_attr = quote! { #[library(#library #import #set_last_error)] };
+        let attrs = win32_metadata_attrs(&self.annotations, false);
 
         Ok(quote! {
             #does_not_return
+            #(#attrs)*
             #library_attr
             extern #abi fn #name(#(#params),*) #return_type;
         })

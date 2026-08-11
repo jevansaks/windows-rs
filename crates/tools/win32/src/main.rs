@@ -870,6 +870,18 @@ fn main() {
     // [`UM_WINMD`] (uncommitted).
     let um = scrape_um();
 
+    if std::env::var_os("WIN32METADATA_USER_MODE_ONLY").is_some() {
+        std::fs::copy(UM_WINMD, MERGED_WINMD).unwrap_or_else(|e| {
+            panic!("failed to copy user-mode winmd `{UM_WINMD}` to `{MERGED_WINMD}`: {e}")
+        });
+        println!(
+            "Wrote `{MERGED_WINMD}` (user mode only, {} partition(s)) in {:.2}s",
+            um.partitions,
+            time.elapsed().as_secs_f32()
+        );
+        return;
+    }
+
     // Phase B: scrape the kernel-mode WDK surface into `metadata/wdk` (committed RDL) and
     // [`KM_WINMD`] (uncommitted), resolving against phase A's [`UM_WINMD`] and emitting only the
     // WDK-net-new surface. Phase A wrote that winmd from the same three inputs an isolated
@@ -962,6 +974,11 @@ fn scrape_um() -> Summary {
         .scopes(SCOPE.iter().copied())
         .scope_headers(scope_headers.iter().copied())
         .exclude_headers(EXCLUDE_HEADERS.iter().copied());
+    if let Ok(header) = std::env::var("WIN32METADATA_ANNOTATION_HEADER") {
+        clang
+            .args(["-DWIN32METADATA=1"])
+            .args(["-include", header.as_str()]);
+    }
     clang.input_texts(&sources);
     for lib in &import_libs {
         clang
@@ -1026,10 +1043,15 @@ fn assert_no_duplicate_headers() {
 
 /// The pinned SDK include directories, in a fixed order so the parse is deterministic.
 fn sdk_include_dirs() -> Vec<String> {
-    let base = nuget_package("microsoft.windows.sdk.cpp", SDK_VERSION)
-        .join("c")
-        .join("Include")
-        .join(helpers::marketing_dir(SDK_VERSION));
+    let version = sdk_version();
+    let base = std::env::var_os("WIN32METADATA_SDK_INCLUDE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            nuget_package("microsoft.windows.sdk.cpp", &version)
+                .join("c")
+                .join("Include")
+                .join(helpers::marketing_dir(&version))
+        });
     ["ucrt", "um", "shared", "winrt", "cppwinrt"]
         .iter()
         .map(|seg| base.join(seg).to_string_lossy().replace('\\', "/"))
@@ -1040,7 +1062,8 @@ fn sdk_include_dirs() -> Vec<String> {
 /// an import lib is arch-invariant (the DLL that exports a symbol is the same on every
 /// arch), so the x64 libs serve the canonical metadata and every additional arch scrape.
 fn sdk_lib_dirs() -> Vec<String> {
-    let base = nuget_package("microsoft.windows.sdk.cpp.x64", SDK_VERSION).join("c");
+    let version = sdk_version();
+    let base = nuget_package("microsoft.windows.sdk.cpp.x64", &version).join("c");
     ["um", "ucrt"]
         .iter()
         .map(|seg| {
@@ -1050,6 +1073,12 @@ fn sdk_lib_dirs() -> Vec<String> {
                 .replace('\\', "/")
         })
         .collect()
+}
+
+fn sdk_version() -> std::borrow::Cow<'static, str> {
+    std::env::var("WIN32METADATA_SDK_VERSION")
+        .map(std::borrow::Cow::Owned)
+        .unwrap_or(std::borrow::Cow::Borrowed(SDK_VERSION))
 }
 
 fn resolve(name: &str, dirs: &[String], kind: &str, var: &str) -> String {

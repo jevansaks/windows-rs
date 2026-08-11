@@ -1,0 +1,16 @@
+#[win32]
+mod Test {
+    #[supported_os("windows10.0.10240")]
+    #[multiple_success_values]
+    #[library("kernel32.dll", set_last_error)]
+    extern fn AnnotatedFunction(#[raii_free("CloseHandle")] #[invalid_handle(-1)] #[invalid_handle(0)] result: *mut HANDLE, #[not_null_terminated] bytes: *const i8, count: u32) -> i32;
+    #[library("kernel32.dll")]
+    extern fn AnnotatedReturn() -> #[raii_free("CloseHandle")] #[invalid_handle(-1)] HANDLE;
+    struct ANNOTATED_STRUCT {
+        #[associated_enum("FLAGS")]
+        flags: u32,
+    }
+    #[also_usable_for("HANDLE")]
+    type DISTINCT_HANDLE = HANDLE;
+    type HANDLE = *mut void;
+}

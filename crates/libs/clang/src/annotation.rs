@@ -1,5 +1,158 @@
 use super::*;
 
+const WIN32_METADATA_PREFIX: &str = "win32metadata:";
+
+#[derive(Debug, Clone)]
+pub struct Win32MetadataAnnotation {
+    pub key: String,
+    pub value: Option<String>,
+}
+
+impl Win32MetadataAnnotation {
+    pub fn is_set_last_error(&self) -> bool {
+        self.key == "set_last_error"
+    }
+
+    pub fn targets_return(&self) -> bool {
+        matches!(
+            self.key.as_str(),
+            "raii_free"
+                | "invalid_handle"
+                | "free_with"
+                | "do_not_release"
+                | "not_null_terminated"
+                | "null_null_terminated"
+        )
+    }
+
+    pub fn to_rdl_attr(&self) -> Option<TokenStream> {
+        let value = self.value.as_deref();
+        Some(match self.key.as_str() {
+            "raii_free" => {
+                let value = value?;
+                quote! { #[raii_free(#value)] }
+            }
+            "invalid_handle" => {
+                let value = value?.parse::<i64>().ok()?;
+                let value = Literal::i64_unsuffixed(value);
+                quote! { #[invalid_handle(#value)] }
+            }
+            "free_with" => {
+                let value = value?;
+                quote! { #[free_with(#value)] }
+            }
+            "do_not_release" => quote! { #[do_not_release] },
+            "not_null_terminated" => quote! { #[not_null_terminated] },
+            "null_null_terminated" => quote! { #[null_null_terminated] },
+            "array_count_param" => {
+                let value = value?.parse::<i16>().ok()?;
+                let value = Literal::i16_unsuffixed(value);
+                quote! { #[len_param(#value)] }
+            }
+            "array_count_const" => {
+                let value = value?.parse::<i32>().ok()?;
+                let value = Literal::i32_unsuffixed(value);
+                quote! { #[len_const(#value)] }
+            }
+            "array_count_field" => {
+                let value = value?;
+                quote! { #[Windows::Win32::Metadata::NativeArrayInfo(CountFieldName = #value)] }
+            }
+            "memory_size_param" => {
+                let value = value?.parse::<i16>().ok()?;
+                let value = Literal::i16_unsuffixed(value);
+                quote! { #[size_param(#value)] }
+            }
+            "can_return_errors_as_success" => quote! { #[errors_as_success] },
+            "can_return_multiple_success_values" => quote! { #[multiple_success_values] },
+            "retained" => quote! { #[retained] },
+            "ignore_if_return" => {
+                let value = value?;
+                quote! { #[ignore_if_return(#value)] }
+            }
+            "also_usable_for" => {
+                let value = value?;
+                quote! { #[also_usable_for(#value)] }
+            }
+            "associated_enum" => {
+                let value = value?;
+                quote! { #[associated_enum(#value)] }
+            }
+            "associated_constant" => {
+                let value = value?;
+                quote! { #[associated_constant(#value)] }
+            }
+            "native_inheritance" => {
+                let value = value?;
+                quote! { #[native_inheritance(#value)] }
+            }
+            "struct_size_field" => {
+                let value = value?;
+                quote! { #[struct_size_field(#value)] }
+            }
+            "native_encoding" => {
+                let value = value?;
+                quote! { #[encoding(#value)] }
+            }
+            "ansi" => quote! { #[ansi] },
+            "unicode" => quote! { #[unicode] },
+            "agile" => quote! { #[agile] },
+            "const" => quote! { #[native_const] },
+            "supported_os" => {
+                let value = value?;
+                quote! { #[supported_os(#value)] }
+            }
+            "static_library" => {
+                let value = value?;
+                quote! { #[static_library(#value)] }
+            }
+            "in"
+            | "out"
+            | "optional"
+            | "reserved"
+            | "retval"
+            | "com_out_ptr"
+            | "canonical_name"
+            | "reduce_pointer_level"
+            | "set_last_error" => return None,
+            _ => return None,
+        })
+    }
+}
+
+fn parse_win32_metadata_annotation(spelling: &str) -> Option<Win32MetadataAnnotation> {
+    let payload = spelling.strip_prefix(WIN32_METADATA_PREFIX)?;
+    let (key, value) = payload
+        .split_once('=')
+        .map_or((payload, None), |(key, value)| {
+            (key, Some(value.to_string()))
+        });
+    Some(Win32MetadataAnnotation {
+        key: key.to_string(),
+        value,
+    })
+}
+
+pub fn extract_win32_metadata_annotations(cursor: &Cursor) -> Vec<Win32MetadataAnnotation> {
+    cursor
+        .children()
+        .into_iter()
+        .filter(|child| child.kind() == CXCursor_AnnotateAttr)
+        .filter_map(|child| parse_win32_metadata_annotation(&child.name()))
+        .collect()
+}
+
+pub fn win32_metadata_attrs(
+    annotations: &[Win32MetadataAnnotation],
+    include_return: bool,
+) -> Vec<TokenStream> {
+    annotations
+        .iter()
+        .filter(|annotation| annotation.targets_return() == include_return)
+        .filter_map(Win32MetadataAnnotation::to_rdl_attr)
+        .collect()
+}
+
 /// SAL, legacy direction, and MIDL parameter flags; unset flags let the reader infer from type.
 #[derive(Debug, Default, Clone)]
 pub struct ParamAnnotation {
@@ -17,10 +170,12 @@ pub struct ParamAnnotation {
     pub size: Option<SalSize>,
     /// Resolved array/size attribute.
     pub array: Option<ArrayInfo>,
+    /// Explicit win32metadata annotations carried by Clang `AnnotateAttr` cursors.
+    pub win32_metadata: Vec<Win32MetadataAnnotation>,
 }
 
 impl ParamAnnotation {
-    pub fn is_annotated(&self) -> bool {
+    pub fn has_sal_annotation(&self) -> bool {
         self.in_param
             || self.out_param
             || self.optional
@@ -29,6 +184,10 @@ impl ParamAnnotation {
             || self.com_out_ptr
             || self.size.is_some()
             || self.array.is_some()
+    }
+
+    pub fn is_annotated(&self) -> bool {
+        self.has_sal_annotation() || !self.win32_metadata.is_empty()
     }
 }
 
@@ -90,6 +249,24 @@ pub fn extract_param_annotation(cursor: &Cursor, tu: &TranslationUnit) -> ParamA
             CXCursor_AnnotateAttr => {
                 // Portable SAL stubs keep the macro argument in the spelling.
                 let spelling = child.name();
+                if let Some(metadata) = parse_win32_metadata_annotation(&spelling) {
+                    match metadata.key.as_str() {
+                        "in" => annotation.in_param = true,
+                        "out" => annotation.out_param = true,
+                        "optional" => annotation.optional = true,
+                        "reserved" => {
+                            annotation.reserved = true;
+                            annotation.optional = true;
+                        }
+                        "retval" => annotation.retval = true,
+                        "com_out_ptr" => {
+                            annotation.com_out_ptr = true;
+                            annotation.out_param = true;
+                        }
+                        _ => annotation.win32_metadata.push(metadata),
+                    }
+                    continue;
+                }
                 let (name, arg) = split_sal_annotation(&spelling);
                 apply_sal_string(name, &mut annotation);
                 if annotation.size.is_none() {
@@ -254,10 +431,12 @@ pub(crate) fn parse_params(
             name = format!("param{param_idx}");
         }
         let sal_annotation = extract_param_annotation(&child, parser.tu);
-        let mut annotation = if sal_annotation.is_annotated() {
+        let mut annotation = if sal_annotation.has_sal_annotation() {
             sal_annotation
         } else {
-            midl_annotations.get(param_idx).cloned().unwrap_or_default()
+            let mut fallback = midl_annotations.get(param_idx).cloned().unwrap_or_default();
+            fallback.win32_metadata = sal_annotation.win32_metadata;
+            fallback
         };
         let mut ty = param_metadata_type(&child.ty(), &annotation, parser);
         // Token-recovered `_COM_Outptr_` becomes ComOutPtr only for caller-chosen `void**`.
@@ -528,6 +707,13 @@ pub fn param_attrs_for_annotation(
     if retval {
         attrs.push(quote! { #[retval] });
     }
+
+    attrs.extend(
+        annotation
+            .win32_metadata
+            .iter()
+            .filter_map(Win32MetadataAnnotation::to_rdl_attr),
+    );
 
     attrs
 }

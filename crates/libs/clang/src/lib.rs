@@ -1763,16 +1763,19 @@ mod tests {
                 ty: metadata::Type::ValueName(metadata::TypeName::named("", "InnerType")),
                 nested: None,
                 bitfields: vec![],
+                annotations: vec![],
             }],
             is_union: true,
             packing: None,
             alignment: None,
+            annotations: vec![],
         };
         let field = Field {
             name: "Anonymous".to_string(),
             ty: metadata::Type::Void,
             nested: Some(Box::new(nested)),
             bitfields: vec![],
+            annotations: vec![],
         };
 
         let mut refs = HashSet::new();

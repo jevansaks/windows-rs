@@ -10,6 +10,7 @@ pub struct InterfaceMethod {
     pub is_propget: bool,
     /// `[propput]` marker from the MIDL method comment.
     pub is_propput: bool,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 /// COM-style abstract interface parsed from a C++ `struct`/`class`.
@@ -21,6 +22,7 @@ pub struct Interface {
     /// Base interface type, qualified from `ref_map` when needed.
     pub base: Option<metadata::Type>,
     pub methods: Vec<InterfaceMethod>,
+    pub annotations: Vec<Win32MetadataAnnotation>,
 }
 
 impl Interface {
@@ -90,6 +92,7 @@ impl Interface {
                 return_type,
                 is_propget: method_annotation.is_propget,
                 is_propput: method_annotation.is_propput,
+                annotations: extract_win32_metadata_annotations(&child),
             });
         }
 
@@ -109,6 +112,7 @@ impl Interface {
             guid,
             base,
             methods,
+            annotations: extract_win32_metadata_annotations(&cursor),
         })
     }
 
@@ -145,7 +149,8 @@ impl Interface {
                     metadata::Type::Void => quote! {},
                     ty => {
                         let ty = write_type(namespace, ty);
-                        quote! { -> #ty }
+                        let attrs = win32_metadata_attrs(&m.annotations, true);
+                        quote! { -> #(#attrs)* #ty }
                     }
                 };
                 let special_attr = if m.is_propget || m.is_propput {
@@ -153,12 +158,15 @@ impl Interface {
                 } else {
                     quote! {}
                 };
-                quote! { #special_attr fn #mname(&self, #(#params),*) #return_type; }
+                let attrs = win32_metadata_attrs(&m.annotations, false);
+                quote! { #special_attr #(#attrs)* fn #mname(&self, #(#params),*) #return_type; }
             })
             .collect();
+        let attrs = win32_metadata_attrs(&self.annotations, false);
 
         Ok(quote! {
             #guid_token
+            #(#attrs)*
             interface #name #requires_token {
                 #(#methods_tokens)*
             }
