@@ -996,7 +996,7 @@ fn scrape_um() -> Summary {
         reference_winmds: Vec::new(),
         resolution_winmds: RESOLUTION_WINMDS.iter().map(Into::into).collect(),
         seed: Some(METADATA_SEED.into()),
-        parallel: true,
+        parallel: std::env::var_os("WIN32METADATA_SEQUENTIAL").is_none(),
     });
 
     print!("{summary}");
