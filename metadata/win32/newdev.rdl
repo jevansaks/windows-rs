@@ -18,23 +18,23 @@ mod Windows {
         const DIURFLAG_NO_REMOVE_INF: i32 = 1;
         const DIURFLAG_RESERVED: i32 = 2;
         const DIURFLAG_VALID: i32 = 3;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiInstallDevice(#[opt] hwndParent: HWND, DeviceInfoSet: HDEVINFO, DeviceInfoData: *const SP_DEVINFO_DATA, #[opt] DriverInfoData: PSP_DRVINFO_DATA, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiInstallDriverA(#[opt] hwndParent: HWND, InfPath: PCSTR, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiInstallDriverW(#[opt] hwndParent: HWND, InfPath: PCWSTR, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiRollbackDriver(DeviceInfoSet: HDEVINFO, DeviceInfoData: *const SP_DEVINFO_DATA, #[opt] hwndParent: HWND, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiShowUpdateDevice(#[opt] hwndParent: HWND, DeviceInfoSet: HDEVINFO, DeviceInfoData: *const SP_DEVINFO_DATA, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
         #[library("newdev.dll")]
         extern fn DiShowUpdateDriver(hwndParent: HWND, FilePath: PCWSTR, Flags: u32, NeedReboot: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiUninstallDevice(hwndParent: HWND, DeviceInfoSet: HDEVINFO, DeviceInfoData: *const SP_DEVINFO_DATA, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiUninstallDriverA(#[opt] hwndParent: HWND, InfPath: PCSTR, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn DiUninstallDriverW(#[opt] hwndParent: HWND, InfPath: PCWSTR, Flags: u32, #[opt] NeedReboot: *mut BOOL) -> BOOL;
         const INSTALLFLAG_BITS: i32 = 7;
         const INSTALLFLAG_FORCE: i32 = 1;
@@ -42,9 +42,9 @@ mod Windows {
         const INSTALLFLAG_READONLY: i32 = 2;
         const ROLLBACK_BITS: i32 = 1;
         const ROLLBACK_FLAG_NO_UI: i32 = 1;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn UpdateDriverForPlugAndPlayDevicesA(#[opt] hwndParent: HWND, HardwareId: PCSTR, FullInfPath: PCSTR, InstallFlags: u32, #[opt] bRebootRequired: *mut BOOL) -> BOOL;
-        #[library("newdev.dll")]
+        #[library("newdev.dll", set_last_error)]
         extern fn UpdateDriverForPlugAndPlayDevicesW(#[opt] hwndParent: HWND, HardwareId: PCWSTR, FullInfPath: PCWSTR, InstallFlags: u32, #[opt] bRebootRequired: *mut BOOL) -> BOOL;
     }
 }

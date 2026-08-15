@@ -80,7 +80,7 @@ mod Windows {
             dataType: eAVEncVideoQPMapElementDataType,
             minValue: i16,
             maxValue: i16,
-            steps: u16,
+            step: u16,
         }
         const LOCAL_D3DFMT_DEFINES: i32 = 1;
         struct MACROBLOCK_DATA {
@@ -497,7 +497,6 @@ mod Windows {
         const MFSampleExtension_Timestamp: GUID = 0x1e436999_69be_4c7a_9369_70068c0260cb;
         const MFSampleExtension_Token: GUID = 0x8294da66_f328_4805_b551_00deb4c57a61;
         const MFSampleExtension_VideoEncodeBitsUsedMap: GUID = 0x6894263d_e6e2_4bcc_849d_8570365f5114;
-        const MFSampleExtension_VideoEncodeD3D12ReconstructedPicture: GUID = 0x3e8a1b7f_5c92_4d6e_b834_f0a729e65c48;
         const MFSampleExtension_VideoEncodeInputAbsoluteQPMap: GUID = 0x432a6e9a_f1ed_456e_8dc3_6f8985649eb9;
         const MFSampleExtension_VideoEncodeInputDeltaQPMap: GUID = 0xdab419c3_bf21_4b46_8692_9a7bf0a71769;
         const MFSampleExtension_VideoEncodePictureType: GUID = 0x973704e6_cd14_483c_8f20_c9fc0928bad5;

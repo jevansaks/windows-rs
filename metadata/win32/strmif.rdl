@@ -1786,7 +1786,7 @@ mod Windows {
             fn GetMonitor(&self, pGUID: *mut VMRGUID) -> HRESULT;
             fn SetDefaultMonitor(&self, pGUID: *const VMRGUID) -> HRESULT;
             fn GetDefaultMonitor(&self, pGUID: *mut VMRGUID) -> HRESULT;
-            fn GetAvailableMonitors(&self, pInfo: *mut VMRMONITORINFO, dwMaxInfoArraySize: u32, pdwNumDevices: *mut u32) -> HRESULT;
+            fn GetAvailableMonitors(&self, #[len_param(1)] pInfo: *mut VMRMONITORINFO, dwMaxInfoArraySize: u32, pdwNumDevices: *mut u32) -> HRESULT;
         }
         #[guid(0xa9849bbe_9ec8_4263_b764_62730f0d15d0)]
         interface IVMRSurface: IUnknown {

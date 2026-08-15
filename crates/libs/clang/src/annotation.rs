@@ -32,6 +32,8 @@ impl Win32MetadataAnnotation {
                 | "do_not_release"
                 | "not_null_terminated"
                 | "null_null_terminated"
+                | "project_as"
+                | "associated_enum"
         )
     }
 
@@ -83,6 +85,10 @@ impl Win32MetadataAnnotation {
             "also_usable_for" => {
                 let value = value?;
                 quote! { #[also_usable_for(#value)] }
+            }
+            "project_as" => {
+                let value = value?;
+                quote! { #[project_as(#value)] }
             }
             "associated_enum" => {
                 let value = value?;
@@ -237,6 +243,7 @@ fn validate_win32_metadata_annotation(
             | "memory_size_param"
             | "ignore_if_return"
             | "also_usable_for"
+            | "project_as"
             | "associated_enum"
             | "associated_constant"
             | "native_inheritance"
@@ -332,9 +339,9 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
         | "com_out_ptr" => target == CXCursor_ParmDecl,
         "array_count_field" => target == CXCursor_FieldDecl,
         "also_usable_for" | "canonical_name" => target == CXCursor_TypedefDecl,
-        "associated_enum" => matches!(
+        "project_as" | "associated_enum" => matches!(
             target,
-            CXCursor_ParmDecl | CXCursor_FieldDecl | CXCursor_VarDecl
+            CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_ParmDecl | CXCursor_FieldDecl
         ),
         "associated_constant" => target == CXCursor_EnumDecl,
         "native_inheritance" | "struct_size_field" => {

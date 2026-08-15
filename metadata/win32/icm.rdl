@@ -66,7 +66,7 @@ mod Windows {
         #[library("ICM32.dll")]
         extern fn CMCheckColorsInGamut(hcmTransform: HCMTRANSFORM, #[len_param(3)] lpaRGBTriple: *const RGBTRIPLE, #[size_param(3)] lpaResult: *mut u8, nCount: u32) -> BOOL;
         #[library("ICM32.dll")]
-        extern fn CMCheckRGBs(hcmTransform: HCMTRANSFORM, lpSrcBits: *const void, bmInput: BMFORMAT, dwWidth: u32, dwHeight: u32, dwStride: u32, lpaResult: *mut u8, pfnCallback: PBMCALLBACKFN, ulCallbackData: LPARAM) -> BOOL;
+        extern fn CMCheckRGBs(hcmTransform: HCMTRANSFORM, lpSrcBits: *const void, bmInput: BMFORMAT, dwWidth: u32, dwHeight: u32, dwStride: u32, lpaResult: *mut u8, pfnCallback: LPBMCALLBACKFN, ulCallbackData: LPARAM) -> BOOL;
         #[library("ICM32.dll")]
         extern fn CMConvertColorNameToIndex(hProfile: HPROFILE, #[len_param(3)] paColorName: *const COLOR_NAME, #[len_param(3)] paIndex: *mut u32, dwCount: u32) -> BOOL;
         #[library("ICM32.dll")]
@@ -247,7 +247,7 @@ mod Windows {
         const CSA_Lab: i32 = 8;
         const CSA_RGB: i32 = 6;
         #[library("mscms.dll")]
-        extern fn CheckBitmapBits(hColorTransform: HTRANSFORM, pSrcBits: *const void, bmInput: BMFORMAT, dwWidth: u32, dwHeight: u32, dwStride: u32, paResult: *mut u8, #[opt] pfnCallback: PBMCALLBACKFN, #[opt] lpCallbackData: LPARAM) -> BOOL;
+        extern fn CheckBitmapBits(hColorTransform: HTRANSFORM, pSrcBits: *const void, bmInput: BMFORMAT, dwWidth: u32, dwHeight: u32, dwStride: u32, paResult: *mut u8, #[opt] pfnCallback: LPBMCALLBACKFN, #[opt] lpCallbackData: LPARAM) -> BOOL;
         #[library("mscms.dll")]
         extern fn CheckColors(hColorTransform: HTRANSFORM, #[len_param(2)] paInputColors: *const COLOR, nColors: u32, ctInput: COLORTYPE, #[len_param(2)] paResult: *mut u8) -> BOOL;
         #[library("mscms.dll")]
@@ -417,7 +417,7 @@ mod Windows {
         extern fn IsColorProfileTagPresent(hProfile: HPROFILE, tag: TAGTYPE, pbPresent: *mut BOOL) -> BOOL;
         #[library("mscms.dll")]
         extern fn IsColorProfileValid(hProfile: HPROFILE, pbValid: *mut BOOL) -> BOOL;
-        type LPBMCALLBACKFN = PBMCALLBACKFN;
+        extern fn LPBMCALLBACKFN(param0: u32, param1: u32, param2: LPARAM) -> BOOL;
         type LPBMFORMAT = *mut BMFORMAT;
         type LPCOLOR = *mut COLOR;
         type LPCOLORDATATYPE = *mut COLORDATATYPE;
@@ -455,7 +455,6 @@ mod Windows {
         extern fn OpenColorProfileA(pProfile: *const PROFILE, dwDesiredAccess: u32, dwShareMode: u32, dwCreationMode: u32) -> HPROFILE;
         #[library("mscms.dll")]
         extern fn OpenColorProfileW(pProfile: *const PROFILE, dwDesiredAccess: u32, dwShareMode: u32, dwCreationMode: u32) -> HPROFILE;
-        extern fn PBMCALLBACKFN(param0: u32, param1: u32, param2: LPARAM) -> BOOL;
         type PBMFORMAT = *mut BMFORMAT;
         extern fn PCMSCALLBACKA(param0: *mut COLORMATCHSETUPA, param1: LPARAM) -> BOOL;
         extern fn PCMSCALLBACKW(param0: *mut COLORMATCHSETUPW, param1: LPARAM) -> BOOL;
@@ -553,7 +552,7 @@ mod Windows {
         extern fn SetupColorMatchingW(#[in] #[out] pcms: *mut COLORMATCHSETUPW) -> BOOL;
         type TAGTYPE = u32;
         #[library("mscms.dll")]
-        extern fn TranslateBitmapBits(hColorTransform: HTRANSFORM, pSrcBits: *const void, bmInput: BMFORMAT, dwWidth: u32, dwHeight: u32, dwInputStride: u32, pDestBits: *mut void, bmOutput: BMFORMAT, dwOutputStride: u32, #[opt] pfnCallBack: PBMCALLBACKFN, #[opt] ulCallbackData: LPARAM) -> BOOL;
+        extern fn TranslateBitmapBits(hColorTransform: HTRANSFORM, pSrcBits: *const void, bmInput: BMFORMAT, dwWidth: u32, dwHeight: u32, dwInputStride: u32, pDestBits: *mut void, bmOutput: BMFORMAT, dwOutputStride: u32, #[opt] pfnCallBack: LPBMCALLBACKFN, #[opt] ulCallbackData: LPARAM) -> BOOL;
         #[library("mscms.dll")]
         extern fn TranslateColors(hColorTransform: HTRANSFORM, #[len_param(2)] paInputColors: *const COLOR, nColors: u32, ctInput: COLORTYPE, #[len_param(2)] paOutputColors: *mut COLOR, ctOutput: COLORTYPE) -> BOOL;
         const USE_RELATIVE_COLORIMETRIC: i32 = 131072;

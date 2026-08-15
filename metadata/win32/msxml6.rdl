@@ -643,7 +643,7 @@ mod Windows {
             fn SetProperty(&self, eProperty: XHR_PROPERTY, ullValue: u64) -> HRESULT;
             fn SetRequestHeader(&self, pwszHeader: *const u16, pwszValue: *const u16) -> HRESULT;
             fn GetAllResponseHeaders(&self, ppwszHeaders: *mut *mut u16) -> HRESULT;
-            fn GetCookie(&self, pwszUrl: *const u16, pwszName: *const u16, dwFlags: u32, pcCookies: *mut u32, ppCookies: *mut *mut XHR_COOKIE) -> HRESULT;
+            fn GetCookie(&self, pwszUrl: *const u16, pwszName: *const u16, dwFlags: u32, pcCookies: *mut u32, #[len_param(3)] ppCookies: *mut *mut XHR_COOKIE) -> HRESULT;
             fn GetResponseHeader(&self, pwszHeader: *const u16, ppwszValue: *mut *mut u16) -> HRESULT;
         }
         #[guid(0xa44a9299_e321_40de_8866_341b41669162)]
@@ -656,12 +656,12 @@ mod Windows {
         }
         #[guid(0xa1c9feee_0617_4f23_9d58_8961ea43567c)]
         interface IXMLHTTPRequest3: IXMLHTTPRequest2 {
-            fn SetClientCertificate(&self, cbClientCertificateHash: u32, pbClientCertificateHash: *const u8, pwszPin: *const u16) -> HRESULT;
+            fn SetClientCertificate(&self, cbClientCertificateHash: u32, #[len_param(0)] pbClientCertificateHash: *const u8, pwszPin: *const u16) -> HRESULT;
         }
         #[guid(0xb9e57830_8c6c_4a6f_9c13_47772bb047bb)]
         interface IXMLHTTPRequest3Callback: IXMLHTTPRequest2Callback {
-            fn OnServerCertificateReceived(&self, pXHR: IXMLHTTPRequest3, dwCertificateErrors: u32, cServerCertificateChain: u32, rgServerCertificateChain: *const XHR_CERT) -> HRESULT;
-            fn OnClientCertificateRequested(&self, pXHR: IXMLHTTPRequest3, cIssuerList: u32, rgpwszIssuerList: *const *const u16) -> HRESULT;
+            fn OnServerCertificateReceived(&self, pXHR: IXMLHTTPRequest3, dwCertificateErrors: u32, cServerCertificateChain: u32, #[len_param(2)] rgServerCertificateChain: *const XHR_CERT) -> HRESULT;
+            fn OnClientCertificateRequested(&self, pXHR: IXMLHTTPRequest3, cIssuerList: u32, #[len_param(1)] rgpwszIssuerList: *const *const u16) -> HRESULT;
         }
         #[guid(0x2933bf92_7b36_11d2_b20e_00c04f983e60)]
         interface IXSLProcessor: IDispatch {

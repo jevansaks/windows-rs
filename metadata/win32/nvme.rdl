@@ -82,7 +82,6 @@ mod Windows {
         const GUID_OCP_DEVICE_TCG_CONFIGURATION: GUID = 0xbd244006_e07e_83e6_c047_54fa9d2ae054;
         const GUID_OCP_DEVICE_TCG_HISTORY: GUID = 0x704b513e_09c6_9490_274e_d0969690d788;
         const GUID_OCP_DEVICE_UNSUPPORTED_REQUIREMENTS: GUID = 0x0e9c722f_2399_bb2c_6348_32d0b798bbc7;
-        const GUID_OCP_DSSD_SPECIFIC_INFORMATION: GUID = 0x5bd594c1_94e0_9447_a21d_29998f56be6f;
         const GUID_WCS_DEVICE_ERROR_RECOVERY: GUID = 0x2131d944_30fe_ae34_ab4d_fd3dba83195a;
         const GUID_WCS_DEVICE_SMART_ATTRIBUTES: GUID = 0x2810afc5_bfea_a4f2_9c4f_6f7cc914d5af;
         struct IO_COMMAND_SET_VECTOR {
@@ -675,25 +674,6 @@ mod Windows {
             },
             Reserved1: u32,
         }
-        union NVME_BOOT_PARTITION_INFORMATION {
-            Anonymous: struct {
-                _bitfield: u32 {
-                    BPSZ: 15,
-                    Reserved0: 9,
-                    BRS: 2,
-                    Reserved1: 5,
-                    ABPID: 1,
-                },
-            },
-            AsUlong: u32,
-        }
-        struct NVME_BOOT_PARTITION_LOG {
-            LogIdentifier: u8,
-            Reserved0: [u8; 3],
-            BpInfo: NVME_BOOT_PARTITION_INFORMATION,
-            Reserved1: [u8; 8],
-            BootPartitionData: [u8; 1],
-        }
         #[repr(i32)]
         enum NVME_CC_SHN_SHUTDOWN_NOTIFICATIONS {
             NVME_CC_SHN_NO_NOTIFICATION = 0,
@@ -798,9 +778,8 @@ mod Windows {
             Anonymous: struct {
                 _bitfield: u32 {
                     FS: 3,
-                    AA: 3,
-                    Reserved: 25,
-                    BPID: 1,
+                    AA: 2,
+                    Reserved: 27,
                 },
             },
             AsUlong: u32,
@@ -890,8 +869,6 @@ mod Windows {
         const NVME_CDW10_LSP_ACTION_ESTABLISH_CONTEXT_AND_READ_LOG_DATA: i32 = 1;
         const NVME_CDW10_LSP_ACTION_READ_LOG_DATA: i32 = 0;
         const NVME_CDW10_LSP_ACTION_RELEASE_CONTEXT: i32 = 2;
-        const NVME_CDW10_LSP_BOOT_PARTITION_0: i32 = 0;
-        const NVME_CDW10_LSP_BOOT_PARTITION_1: i32 = 1;
         union NVME_CDW10_RESERVATION_ACQUIRE {
             Anonymous: struct {
                 _bitfield: u32 {
@@ -2085,8 +2062,7 @@ mod Windows {
             ACQ: NVME_ADMIN_COMPLETION_QUEUE_BASE_ADDRESS,
             CMBLOC: NVME_CONTROLLER_MEMORY_BUFFER_LOCATION,
             CMBSZ: NVME_CONTROLLER_MEMORY_BUFFER_SIZE,
-            BPINFO: NVME_BOOT_PARTITION_INFORMATION,
-            Reserved1: [u32; 8],
+            Reserved1: [u32; 9],
             NSSD: NVME_NVM_SUBSYSTEM_SHUTDOWN,
             CRTO: NVME_CONTROLLER_READY_TIMEOUTS,
             Reserved2: [u32; 933],
@@ -2572,8 +2548,6 @@ mod Windows {
             NVME_FIRMWARE_ACTIVATE_ACTION_DOWNLOAD_TO_SLOT_AND_ACTIVATE = 1,
             NVME_FIRMWARE_ACTIVATE_ACTION_ACTIVATE = 2,
             NVME_FIRMWARE_ACTIVATE_ACTION_DOWNLOAD_TO_SLOT_AND_ACTIVATE_IMMEDIATE = 3,
-            NVME_FIRMWARE_ACTIVATE_ACTION_REPLACE_BOOT_PARTITION = 6,
-            NVME_FIRMWARE_ACTIVATE_ACTION_ACTIVATE_BOOT_PARTITION = 7,
         }
         struct NVME_FIRMWARE_SLOT_INFO_LOG {
             AFI: struct {
@@ -3269,7 +3243,7 @@ mod Windows {
             NVME_LOG_PAGE_FEATURE_IDENTIFIERS_SUPPORTED_AND_EFFECTS = 18,
             NVME_LOG_PAGE_NVME_MI_COMMANDS_SUPPORTED_AND_EFFECTS = 19,
             NVME_LOG_PAGE_COMMAND_AND_FEATURE_LOCKDOWN = 20,
-            NVME_LOG_PAGE_BOOT_PARTITION = 21,
+            NVME_LOG_PAGE_BOOT_PARTITON = 21,
             NVME_LOG_PAGE_ROTATIONAL_MEDIA_INFORMATION = 22,
             NVME_LOG_PAGE_DISCOVERY = 112,
             NVME_LOG_PAGE_RESERVATION_NOTIFICATION = 128,
@@ -4546,8 +4520,6 @@ mod Windows {
         type PNVME_ADMIN_QUEUE_ATTRIBUTES = *mut NVME_ADMIN_QUEUE_ATTRIBUTES;
         type PNVME_ADMIN_SUBMISSION_QUEUE_BASE_ADDRESS = *mut NVME_ADMIN_SUBMISSION_QUEUE_BASE_ADDRESS;
         type PNVME_AUTO_POWER_STATE_TRANSITION_ENTRY = *mut NVME_AUTO_POWER_STATE_TRANSITION_ENTRY;
-        type PNVME_BOOT_PARTITION_INFORMATION = *mut NVME_BOOT_PARTITION_INFORMATION;
-        type PNVME_BOOT_PARTITION_LOG = *mut NVME_BOOT_PARTITION_LOG;
         type PNVME_CDW0_FEATURE_DSSD_POWER_STATE = *mut NVME_CDW0_FEATURE_DSSD_POWER_STATE;
         type PNVME_CDW0_FEATURE_ENABLE_IEEE1667_SILO = *mut NVME_CDW0_FEATURE_ENABLE_IEEE1667_SILO;
         type PNVME_CDW0_FEATURE_ERROR_INJECTION = *mut NVME_CDW11_FEATURE_ERROR_INJECTION;

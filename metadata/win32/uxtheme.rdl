@@ -31,26 +31,44 @@ mod Windows {
             prcExclude: *const RECT,
             pBlendFunction: *const BLENDFUNCTION,
         }
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BeginBufferedAnimation(hwnd: HWND, hdcTarget: HDC, prcTarget: *const RECT, dwFormat: BP_BUFFERFORMAT, #[opt] pPaintParams: *const BP_PAINTPARAMS, pAnimationParams: *const BP_ANIMATIONPARAMS, phdcFrom: *mut HDC, phdcTo: *mut HDC) -> HANIMATIONBUFFER;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BeginBufferedPaint(hdcTarget: HDC, prcTarget: *const RECT, dwFormat: BP_BUFFERFORMAT, #[opt] pPaintParams: *const BP_PAINTPARAMS, phdc: *mut HDC) -> HPAINTBUFFER;
+        #[supported_os("windows6.1")]
         #[library("UxTheme.dll")]
         extern fn BeginPanningFeedback(hwnd: HWND) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BufferedPaintClear(hBufferedPaint: HPAINTBUFFER, #[opt] prc: *const RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BufferedPaintInit() -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BufferedPaintRenderAnimation(hwnd: HWND, hdcTarget: HDC) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BufferedPaintSetAlpha(hBufferedPaint: HPAINTBUFFER, #[opt] prc: *const RECT, alpha: u8) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BufferedPaintStopAllAnimations(hwnd: HWND) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn BufferedPaintUnInit() -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn CloseThemeData(hTheme: HTHEME) -> HRESULT;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum DRAW_THEME_PARENT_BACKGROUND_FLAGS {
+            DTPB_WINDOWDC = 1,
+            DTPB_USECTLCOLORSTATIC = 2,
+            DTPB_USEERASEBKGND = 4,
+        }
         struct DTBGOPTS {
             dwSize: u32,
             dwFlags: u32,
@@ -64,9 +82,6 @@ mod Windows {
         const DTBG_OMITBORDER: i32 = 4;
         const DTBG_OMITCONTENT: i32 = 8;
         const DTBG_VALIDBITS: i32 = 127;
-        const DTPB_USECTLCOLORSTATIC: i32 = 2;
-        const DTPB_USEERASEBKGND: i32 = 4;
-        const DTPB_WINDOWDC: i32 = 1;
         struct DTTOPTS {
             dwSize: u32,
             dwFlags: u32,
@@ -102,20 +117,28 @@ mod Windows {
         const DTT_STATEID: u32 = 256;
         const DTT_TEXTCOLOR: u32 = 1;
         const DTT_VALIDBITS: u32 = 12287;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn DrawThemeBackground(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, pRect: *const RECT, #[opt] pClipRect: *const RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn DrawThemeBackgroundEx(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, pRect: *const RECT, #[opt] pOptions: *const DTBGOPTS) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn DrawThemeEdge(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, pDestRect: *const RECT, uEdge: u32, uFlags: u32, #[opt] pContentRect: *mut RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn DrawThemeIcon(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, pRect: *const RECT, himl: *const _IMAGELIST, iImageIndex: i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn DrawThemeParentBackground(hwnd: HWND, hdc: HDC, #[opt] prc: *const RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
-        extern fn DrawThemeParentBackgroundEx(hwnd: HWND, hdc: HDC, dwFlags: u32, #[opt] prc: *const RECT) -> HRESULT;
+        extern fn DrawThemeParentBackgroundEx(hwnd: HWND, hdc: HDC, dwFlags: DRAW_THEME_PARENT_BACKGROUND_FLAGS, #[opt] prc: *const RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn DrawThemeText(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, #[len_param(5)] pszText: PCWSTR, cchText: i32, dwTextFlags: u32, dwTextFlags2: u32, pRect: *const RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn DrawThemeTextEx(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, #[len_param(5)] pszText: PCWSTR, cchText: i32, dwTextFlags: u32, #[in] #[out] pRect: *mut RECT, #[opt] pOptions: *const DTTOPTS) -> HRESULT;
         const ETDT_DISABLE: i32 = 1;
@@ -125,127 +148,187 @@ mod Windows {
         const ETDT_USEAEROWIZARDTABTEXTURE: i32 = 8;
         const ETDT_USETABTEXTURE: i32 = 4;
         const ETDT_VALIDBITS: i32 = 15;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn EnableThemeDialogTexture(hwnd: HWND, dwFlags: u32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn EnableTheming(fEnable: BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn EndBufferedAnimation(hbpAnimation: HANIMATIONBUFFER, fUpdateTarget: BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn EndBufferedPaint(hBufferedPaint: HPAINTBUFFER, fUpdateTarget: BOOL) -> HRESULT;
+        #[supported_os("windows6.1")]
         #[library("UxTheme.dll")]
         extern fn EndPanningFeedback(hwnd: HWND, fAnimateBack: BOOL) -> BOOL;
-        const GBF_COPY: i32 = 2;
-        const GBF_DIRECT: i32 = 1;
-        const GBF_VALIDBITS: i32 = 3;
+        #[repr(i32)]
+        #[scoped]
+        enum GET_THEME_BITMAP_FLAGS {
+            GBF_DIRECT = 1,
+            GBF_COPY = 2,
+            GBF_VALIDBITS = 3,
+        }
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetBufferedPaintBits(hBufferedPaint: HPAINTBUFFER, ppbBuffer: *mut *mut RGBQUAD, pcxRow: *mut i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetBufferedPaintDC(hBufferedPaint: HPAINTBUFFER) -> HDC;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetBufferedPaintTargetDC(hBufferedPaint: HPAINTBUFFER) -> HDC;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetBufferedPaintTargetRect(hBufferedPaint: HPAINTBUFFER, prc: *mut RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetCurrentThemeName(#[len_param(1)] #[out] pszThemeFileName: PWSTR, cchMaxNameChars: i32, #[len_param(3)] #[out] #[opt] pszColorBuff: PWSTR, cchMaxColorChars: i32, #[len_param(5)] #[out] #[opt] pszSizeBuff: PWSTR, cchMaxSizeChars: i32) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("UxTheme.dll")]
         extern fn GetThemeAnimationProperty(hTheme: HTHEME, iStoryboardId: i32, iTargetId: i32, eProperty: TA_PROPERTY, #[size_param(5)] #[opt] pvProperty: *mut void, cbSize: u32, pcbSizeOut: *mut u32) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("UxTheme.dll")]
         extern fn GetThemeAnimationTransform(hTheme: HTHEME, iStoryboardId: i32, iTargetId: i32, dwTransformIndex: u32, #[size_param(5)] #[opt] pTransform: *mut TA_TRANSFORM, cbSize: u32, pcbSizeOut: *mut u32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
-        extern fn GetThemeAppProperties() -> u32;
+        extern fn GetThemeAppProperties() -> SET_THEME_APP_PROPERTIES_FLAGS;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeBackgroundContentRect(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, pBoundingRect: *const RECT, pContentRect: *mut RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeBackgroundExtent(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, pContentRect: *const RECT, pExtentRect: *mut RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeBackgroundRegion(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, pRect: *const RECT, pRegion: *mut HRGN) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
-        extern fn GetThemeBitmap(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, dwFlags: u32, phBitmap: *mut HBITMAP) -> HRESULT;
+        extern fn GetThemeBitmap(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, dwFlags: GET_THEME_BITMAP_FLAGS, phBitmap: *mut HBITMAP) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeBool(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, pfVal: *mut BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeColor(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, pColor: *mut COLORREF) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeDocumentationProperty(pszThemeName: PCWSTR, pszPropertyName: PCWSTR, #[len_param(3)] #[out] pszValueBuff: PWSTR, cchMaxValChars: i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeEnumValue(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, piVal: *mut i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeFilename(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, #[len_param(5)] #[out] pszThemeFileName: PWSTR, cchMaxBuffChars: i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeFont(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, iPropId: i32, pFont: *mut LOGFONTW) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeInt(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, piVal: *mut i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeIntList(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, pIntList: *mut INTLIST) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeMargins(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, iPropId: i32, #[opt] prc: *const RECT, pMargins: *mut MARGINS) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeMetric(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, iPropId: i32, piVal: *mut i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemePartSize(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, #[opt] prc: *const RECT, eSize: THEMESIZE, psz: *mut SIZE) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemePosition(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, pPoint: *mut POINT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemePropertyOrigin(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, pOrigin: *mut PROPERTYORIGIN) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeRect(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, pRect: *mut RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeStream(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, ppvStream: *mut *mut void, #[opt] pcbStream: *mut u32, #[opt] hInst: HINSTANCE) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeString(hTheme: HTHEME, iPartId: i32, iStateId: i32, iPropId: i32, #[len_param(5)] #[out] pszBuff: PWSTR, cchMaxBuffChars: i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeSysBool(#[opt] hTheme: HTHEME, iBoolId: i32) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeSysColor(#[opt] hTheme: HTHEME, iColorId: i32) -> COLORREF;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeSysColorBrush(#[opt] hTheme: HTHEME, iColorId: i32) -> HBRUSH;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeSysFont(#[opt] hTheme: HTHEME, iFontId: i32, plf: *mut LOGFONTW) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeSysInt(hTheme: HTHEME, iIntId: i32, piValue: *mut i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeSysSize(#[opt] hTheme: HTHEME, iSizeId: i32) -> i32;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeSysString(hTheme: HTHEME, iStringId: i32, #[len_param(3)] #[out] pszStringBuff: PWSTR, cchMaxStringChars: i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeTextExtent(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, #[len_param(5)] pszText: PCWSTR, cchCharCount: i32, dwTextFlags: u32, #[opt] pBoundingRect: *const RECT, pExtentRect: *mut RECT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeTextMetrics(hTheme: HTHEME, hdc: HDC, iPartId: i32, iStateId: i32, ptm: *mut TEXTMETRICW) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("UxTheme.dll")]
         extern fn GetThemeTimingFunction(hTheme: HTHEME, iTimingFunctionId: i32, #[size_param(3)] #[opt] pTimingFunction: *mut TA_TIMINGFUNCTION, cbSize: u32, pcbSizeOut: *mut u32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetThemeTransitionDuration(hTheme: HTHEME, iPartId: i32, iStateIdFrom: i32, iStateIdTo: i32, iPropId: i32, pdwDuration: *mut u32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn GetWindowTheme(hwnd: HWND) -> HTHEME;
         type HANIMATIONBUFFER = HANDLE;
+        #[repr(i32)]
+        #[scoped]
+        enum HIT_TEST_BACKGROUND_OPTIONS {
+            HTTB_BACKGROUNDSEG = 0,
+            HTTB_FIXEDBORDER = 2,
+            HTTB_CAPTION = 4,
+            HTTB_RESIZINGBORDER_LEFT = 16,
+            HTTB_RESIZINGBORDER_TOP = 32,
+            HTTB_RESIZINGBORDER_RIGHT = 64,
+            HTTB_RESIZINGBORDER_BOTTOM = 128,
+            HTTB_RESIZINGBORDER = 240,
+            HTTB_SIZINGTEMPLATE = 256,
+            HTTB_SYSTEMSIZINGMARGINS = 512,
+        }
         type HPAINTBUFFER = HANDLE;
-        const HTTB_BACKGROUNDSEG: i32 = 0;
-        const HTTB_CAPTION: i32 = 4;
-        const HTTB_FIXEDBORDER: i32 = 2;
-        const HTTB_RESIZINGBORDER: i32 = 240;
-        const HTTB_RESIZINGBORDER_BOTTOM: i32 = 128;
-        const HTTB_RESIZINGBORDER_LEFT: i32 = 16;
-        const HTTB_RESIZINGBORDER_RIGHT: i32 = 64;
-        const HTTB_RESIZINGBORDER_TOP: i32 = 32;
-        const HTTB_SIZINGTEMPLATE: i32 = 256;
-        const HTTB_SYSTEMSIZINGMARGINS: i32 = 512;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
-        extern fn HitTestThemeBackground(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, dwOptions: u32, pRect: *const RECT, #[opt] hrgn: HRGN, ptTest: POINT, pwHitTestCode: *mut u16) -> HRESULT;
+        extern fn HitTestThemeBackground(hTheme: HTHEME, #[opt] hdc: HDC, iPartId: i32, iStateId: i32, dwOptions: HIT_TEST_BACKGROUND_OPTIONS, pRect: *const RECT, #[opt] hrgn: HRGN, ptTest: POINT, pwHitTestCode: *mut u16) -> HRESULT;
         struct INTLIST {
             iValueCount: i32,
             iValues: [i32; 402],
         }
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn IsAppThemed() -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn IsCompositionActive() -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn IsThemeActive() -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn IsThemeBackgroundPartiallyTransparent(hTheme: HTHEME, iPartId: i32, iStateId: i32) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn IsThemeDialogTextureEnabled(hwnd: HWND) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn IsThemePartDefined(hTheme: HTHEME, iPartId: i32, iStateId: i32) -> BOOL;
         struct MARGINS {
@@ -257,13 +340,22 @@ mod Windows {
         const MAX_INTLIST_COUNT: i32 = 402;
         const MAX_THEMECOLOR: i32 = 64;
         const MAX_THEMESIZE: i32 = 64;
-        const OTD_FORCE_RECT_SIZING: i32 = 1;
-        const OTD_NONCLIENT: i32 = 2;
+        #[repr(u32)]
+        #[flags]
+        #[associated_constant("OTD_VALIDBITS")]
+        #[scoped]
+        enum OPEN_THEME_DATA_FLAGS {
+            OTD_FORCE_RECT_SIZING = 1,
+            OTD_NONCLIENT = 2,
+        }
         const OTD_VALIDBITS: i32 = 3;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn OpenThemeData(#[opt] hwnd: HWND, pszClassList: PCWSTR) -> HTHEME;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
-        extern fn OpenThemeDataEx(#[opt] hwnd: HWND, pszClassList: PCWSTR, dwFlags: u32) -> HTHEME;
+        extern fn OpenThemeDataEx(#[opt] hwnd: HWND, pszClassList: PCWSTR, dwFlags: OPEN_THEME_DATA_FLAGS) -> HTHEME;
+        #[supported_os("windows10.0.15063")]
         #[library("UxTheme.dll")]
         extern fn OpenThemeDataForDpi(#[opt] hwnd: HWND, pszClassList: PCWSTR, dpi: u32) -> HTHEME;
         type PBP_ANIMATIONPARAMS = *mut BP_ANIMATIONPARAMS;
@@ -287,6 +379,15 @@ mod Windows {
         type PTA_TRANSFORM_CLIP = *mut TA_TRANSFORM_CLIP;
         type PTA_TRANSFORM_OPACITY = *mut TA_TRANSFORM_OPACITY;
         type PWTA_OPTIONS = *mut WTA_OPTIONS;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum SET_THEME_APP_PROPERTIES_FLAGS {
+            ALLOW_NONCLIENT = 1,
+            ALLOW_CONTROLS = 2,
+            ALLOW_WEBCONTENT = 4,
+            VALIDBITS = 7,
+        }
         const STAP_ALLOW_CONTROLS: u32 = 2;
         const STAP_ALLOW_NONCLIENT: u32 = 1;
         const STAP_ALLOW_WEBCONTENT: u32 = 4;
@@ -299,10 +400,13 @@ mod Windows {
         const SZ_THDOCPROP_DISPLAYNAME: String = "DisplayName";
         #[encoding("utf-16")]
         const SZ_THDOCPROP_TOOLTIP: String = "ToolTip";
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
-        extern fn SetThemeAppProperties(dwFlags: u32);
+        extern fn SetThemeAppProperties(dwFlags: SET_THEME_APP_PROPERTIES_FLAGS);
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn SetWindowTheme(hwnd: HWND, #[opt] pszSubAppName: PCWSTR, #[opt] pszSubIdList: PCWSTR) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("UxTheme.dll")]
         extern fn SetWindowThemeAttribute(hwnd: HWND, eAttribute: WINDOWTHEMEATTRIBUTETYPE, #[size_param(3)] pvAttribute: *const void, cbAttribute: u32) -> HRESULT;
         struct TA_CUBIC_BEZIER {
@@ -392,6 +496,7 @@ mod Windows {
             TS_TRUE = 1,
             TS_DRAW = 2,
         }
+        #[supported_os("windows6.1")]
         #[library("UxTheme.dll")]
         extern fn UpdatePanningFeedback(hwnd: HWND, lTotalOverpanOffsetX: i32, lTotalOverpanOffsetY: i32, fInInertia: BOOL) -> BOOL;
         #[repr(i32)]

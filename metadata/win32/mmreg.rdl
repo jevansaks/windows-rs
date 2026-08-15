@@ -1832,14 +1832,18 @@ mod Windows {
         struct MPEGLAYER3WAVEFORMAT {
             wfx: WAVEFORMATEX,
             wID: u16,
-            fdwFlags: u32,
+            fdwFlags: MPEGLAYER3WAVEFORMAT_FLAGS,
             nBlockSize: u16,
             nFramesPerBlock: u16,
             nCodecDelay: u16,
         }
-        const MPEGLAYER3_FLAG_PADDING_ISO: i32 = 0;
-        const MPEGLAYER3_FLAG_PADDING_OFF: i32 = 2;
-        const MPEGLAYER3_FLAG_PADDING_ON: i32 = 1;
+        #[repr(i32)]
+        #[scoped]
+        enum MPEGLAYER3WAVEFORMAT_FLAGS {
+            MPEGLAYER3_FLAG_PADDING_ISO = 0,
+            MPEGLAYER3_FLAG_PADDING_ON = 1,
+            MPEGLAYER3_FLAG_PADDING_OFF = 2,
+        }
         const MPEGLAYER3_ID_CONSTANTFRAMESIZE: i32 = 2;
         const MPEGLAYER3_ID_MPEG: i32 = 1;
         const MPEGLAYER3_ID_UNKNOWN: i32 = 0;

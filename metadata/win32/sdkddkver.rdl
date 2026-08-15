@@ -2,7 +2,7 @@
 mod Windows {
     mod Win32 {
         const NTDDI_LONGHORN: i32 = 100663296;
-        const NTDDI_VERSION: i32 = 167772178;
+        const NTDDI_VERSION: i32 = 167772176;
         const NTDDI_VISTA: i32 = 100663296;
         const NTDDI_VISTASP1: i32 = 100663552;
         const NTDDI_VISTASP2: i32 = 100663808;
@@ -22,8 +22,6 @@ mod Windows {
         const NTDDI_WIN10_RS5: i32 = 167772166;
         const NTDDI_WIN10_TH2: i32 = 167772161;
         const NTDDI_WIN10_VB: i32 = 167772168;
-        const NTDDI_WIN11_BR: i32 = 167772178;
-        const NTDDI_WIN11_DT: i32 = 167772177;
         const NTDDI_WIN11_GA: i32 = 167772175;
         const NTDDI_WIN11_GE: i32 = 167772176;
         const NTDDI_WIN11_ZN: i32 = 167772174;
@@ -59,7 +57,7 @@ mod Windows {
         const OSVERSION_MASK: u32 = 4294901760;
         const SPVERSION_MASK: i32 = 65280;
         const SUBVERSION_MASK: i32 = 255;
-        const WDK_NTDDI_VERSION: i32 = 167772178;
+        const WDK_NTDDI_VERSION: i32 = 167772176;
         const WINVER: i32 = 2560;
     }
 }

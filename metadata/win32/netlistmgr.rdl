@@ -5,7 +5,7 @@ mod Windows {
         interface IEnumNetworkConnections: IDispatch {
             #[special]
             fn get__NewEnum(&self, #[retval] ppEnumVar: *mut IEnumVARIANT) -> HRESULT;
-            fn Next(&self, celt: u32, rgelt: *mut INetworkConnection, #[in] #[out] pceltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, celt: u32, #[len_param(0)] rgelt: *mut INetworkConnection, #[in] #[out] pceltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, celt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, #[retval] ppEnumNetwork: *mut IEnumNetworkConnections) -> HRESULT;
@@ -14,7 +14,7 @@ mod Windows {
         interface IEnumNetworks: IDispatch {
             #[special]
             fn get__NewEnum(&self, #[retval] ppEnumVar: *mut IEnumVARIANT) -> HRESULT;
-            fn Next(&self, celt: u32, rgelt: *mut INetwork, #[in] #[out] pceltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, celt: u32, #[len_param(0)] rgelt: *mut INetwork, #[in] #[out] pceltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, celt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, #[retval] ppEnumNetwork: *mut IEnumNetworks) -> HRESULT;
@@ -76,7 +76,7 @@ mod Windows {
         interface INetworkCostManager: IUnknown {
             fn GetCost(&self, pCost: *mut u32, pDestIPAddr: *const NLM_SOCKADDR) -> HRESULT;
             fn GetDataPlanStatus(&self, pDataPlanStatus: *mut NLM_DATAPLAN_STATUS, pDestIPAddr: *const NLM_SOCKADDR) -> HRESULT;
-            fn SetDestinationAddresses(&self, length: u32, pDestIPAddrList: *const NLM_SOCKADDR, bAppend: VARIANT_BOOL) -> HRESULT;
+            fn SetDestinationAddresses(&self, length: u32, #[len_param(0)] pDestIPAddrList: *const NLM_SOCKADDR, bAppend: VARIANT_BOOL) -> HRESULT;
         }
         #[guid(0xdcb00009_570f_4a9b_8d69_199fdba5723b)]
         interface INetworkCostManagerEvents: IUnknown {

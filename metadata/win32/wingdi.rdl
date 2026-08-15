@@ -2179,8 +2179,8 @@ mod Windows {
         const FLOODFILLSURFACE: i32 = 1;
         const FLUSHOUTPUT: i32 = 6;
         type FONTENUMPROC = FONTENUMPROCA;
-        type FONTENUMPROCA = OLDFONTENUMPROCA;
-        type FONTENUMPROCW = OLDFONTENUMPROCW;
+        extern fn FONTENUMPROCA(param0: *const LOGFONTA, param1: *const TEXTMETRICA, param2: u32, param3: LPARAM) -> i32;
+        extern fn FONTENUMPROCW(param0: *const LOGFONTW, param1: *const TEXTMETRICW, param2: u32, param3: LPARAM) -> i32;
         const FONTMAPPER_MAX: i32 = 10;
         struct FONTSIGNATURE {
             fsUsb: [u32; 4],
@@ -3194,8 +3194,6 @@ mod Windows {
         const OBJ_REGION: i32 = 8;
         const OEM_CHARSET: i32 = 255;
         const OEM_FIXED_FONT: i32 = 10;
-        extern fn OLDFONTENUMPROCA(param0: *const LOGFONTA, param1: *const TEXTMETRICA, param2: u32, param3: LPARAM) -> i32;
-        extern fn OLDFONTENUMPROCW(param0: *const LOGFONTW, param1: *const TEXTMETRICW, param2: u32, param3: LPARAM) -> i32;
         const OPAQUE: i32 = 2;
         const OPENCHANNEL: i32 = 4110;
         type OUTLINETEXTMETRIC = OUTLINETEXTMETRICA;

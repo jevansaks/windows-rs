@@ -38,7 +38,6 @@ mod Windows {
         const CBA_ENGINE_PRESENT: i32 = 1610612736;
         const CBA_EVENT: i32 = 16;
         const CBA_MAP_JIT_SYMBOL: u32 = 2684354560;
-        const CBA_QUERY_IF_SYMBOL_DOWNLOAD_DISALLOWED: i32 = 64;
         const CBA_READ_MEMORY: i32 = 6;
         const CBA_SET_OPTIONS: i32 = 8;
         const CBA_SRCSRV_EVENT: i32 = 1073741824;
@@ -181,8 +180,7 @@ mod Windows {
             SYMOPT_EX_LASTVALIDDEBUGDIRECTORY = 1,
             SYMOPT_EX_NOIMPLICITPATTERNSEARCH = 2,
             SYMOPT_EX_NEVERLOADSYMBOLS = 3,
-            SYMOPT_EX_DISALLOW_NETWORK_PATHS = 4,
-            SYMOPT_EX_MAX = 5,
+            SYMOPT_EX_MAX = 4,
         }
         const IMAGEHLP_GET_TYPE_INFO_CHILDREN: i32 = 2;
         struct IMAGEHLP_GET_TYPE_INFO_PARAMS {
@@ -347,7 +345,6 @@ mod Windows {
         const IMAGEHLP_RMAP_IGNORE_MISCOMPARE: i32 = 4;
         const IMAGEHLP_RMAP_LOAD_RW_DATA_SECTIONS: i32 = 536870912;
         const IMAGEHLP_RMAP_MAPPED_FLAT: i32 = 1;
-        const IMAGEHLP_RMAP_NOBASERELOCATIONS: i32 = 134217728;
         const IMAGEHLP_RMAP_OMIT_SHARED_RW_DATA_SECTIONS: i32 = 1073741824;
         #[repr(i32)]
         enum IMAGEHLP_SF_TYPE {
@@ -838,7 +835,6 @@ mod Windows {
         const SSRVACTION_EVENTW: i32 = 4;
         const SSRVACTION_HTTPSTATUS: i32 = 6;
         const SSRVACTION_QUERYCANCEL: i32 = 2;
-        const SSRVACTION_QUERY_IF_DOWNLOAD_DISALLOWED: i32 = 9;
         const SSRVACTION_SIZE: i32 = 5;
         const SSRVACTION_TRACE: i32 = 1;
         const SSRVACTION_XMLOUTPUT: i32 = 7;
@@ -883,13 +879,11 @@ mod Windows {
         const SSRVURI_HTTP_COMPRESSED: i32 = 2;
         const SSRVURI_HTTP_FILEPTR: i32 = 4;
         const SSRVURI_HTTP_MASK: i32 = 15;
-        const SSRVURI_HTTP_MSFZ0: i32 = 8;
         const SSRVURI_HTTP_NORMAL: i32 = 1;
         const SSRVURI_NORMAL: i32 = 1;
         const SSRVURI_UNC_COMPRESSED: i32 = 32;
         const SSRVURI_UNC_FILEPTR: i32 = 64;
         const SSRVURI_UNC_MASK: i32 = 240;
-        const SSRVURI_UNC_MSFZ0: i32 = 128;
         const SSRVURI_UNC_NORMAL: i32 = 16;
         #[arch(X86)]
         struct STACKFRAME {

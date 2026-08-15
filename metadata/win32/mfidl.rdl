@@ -40,8 +40,8 @@ mod Windows {
             fn GetChannelCount(&self, pdwCount: *mut u32) -> HRESULT;
             fn SetChannelVolume(&self, dwIndex: u32, fLevel: f32) -> HRESULT;
             fn GetChannelVolume(&self, dwIndex: u32, pfLevel: *mut f32) -> HRESULT;
-            fn SetAllVolumes(&self, dwCount: u32, pfVolumes: *const f32) -> HRESULT;
-            fn GetAllVolumes(&self, dwCount: u32, pfVolumes: *mut f32) -> HRESULT;
+            fn SetAllVolumes(&self, dwCount: u32, #[len_param(0)] pfVolumes: *const f32) -> HRESULT;
+            fn GetAllVolumes(&self, dwCount: u32, #[len_param(0)] pfVolumes: *mut f32) -> HRESULT;
         }
         #[guid(0x6d66d782_1d4f_4db7_8c63_cb8c77f1ef5e)]
         interface IMFByteStreamBuffering: IUnknown {
@@ -55,7 +55,7 @@ mod Windows {
         }
         #[guid(0x71ce469c_f34b_49ea_a56b_2d2a10e51149)]
         interface IMFByteStreamCacheControl2: IMFByteStreamCacheControl {
-            fn GetByteRanges(&self, pcRanges: *mut u32, ppRanges: *mut *mut MF_BYTE_STREAM_CACHE_RANGE) -> HRESULT;
+            fn GetByteRanges(&self, pcRanges: *mut u32, #[len_param(0)] ppRanges: *mut *mut MF_BYTE_STREAM_CACHE_RANGE) -> HRESULT;
             fn SetCacheLimit(&self, qwBytes: u64) -> HRESULT;
             fn IsBackgroundTransferActive(&self, pfActive: *mut BOOL) -> HRESULT;
         }
@@ -155,8 +155,8 @@ mod Windows {
         #[guid(0xd3c4ef59_49ce_4381_9071_d5bcd044c770)]
         interface IMFContentEnabler: IUnknown {
             fn GetEnableType(&self, pType: *mut GUID) -> HRESULT;
-            fn GetEnableURL(&self, ppwszURL: *mut PWSTR, pcchURL: *mut u32, #[in] #[out] pTrustStatus: *mut MF_URL_TRUST_STATUS) -> HRESULT;
-            fn GetEnableData(&self, ppbData: *mut *mut u8, pcbData: *mut u32) -> HRESULT;
+            fn GetEnableURL(&self, #[len_param(1)] ppwszURL: *mut PWSTR, pcchURL: *mut u32, #[in] #[out] pTrustStatus: *mut MF_URL_TRUST_STATUS) -> HRESULT;
+            fn GetEnableData(&self, #[len_param(1)] ppbData: *mut *mut u8, pcbData: *mut u32) -> HRESULT;
             fn IsAutomaticSupported(&self, pfAutomatic: *mut BOOL) -> HRESULT;
             fn AutomaticEnable(&self) -> HRESULT;
             fn MonitorEnable(&self) -> HRESULT;
@@ -276,7 +276,7 @@ mod Windows {
         }
         #[guid(0x149c4d73_b4be_4f8d_8b87_079e926b6add)]
         interface IMFLocalMFTRegistration: IUnknown {
-            fn RegisterMFTs(&self, pMFTs: *const MFT_REGISTRATION_INFO, cMFTs: u32) -> HRESULT;
+            fn RegisterMFTs(&self, #[len_param(1)] pMFTs: *const MFT_REGISTRATION_INFO, cMFTs: u32) -> HRESULT;
         }
         #[guid(0x90377834_21d0_4dee_8214_ba2e3e6c1127)]
         interface IMFMediaSession: IMFMediaEventGenerator {
@@ -818,7 +818,7 @@ mod Windows {
         }
         #[guid(0x676aa6dd_238a_410d_bb99_65668d01605a)]
         interface IMFTopologyNodeAttributeEditor: IUnknown {
-            fn UpdateNodeAttributes(&self, TopoId: TOPOID, cUpdates: u32, pUpdates: *const MFTOPONODE_ATTRIBUTE_UPDATE) -> HRESULT;
+            fn UpdateNodeAttributes(&self, TopoId: TOPOID, cUpdates: u32, #[len_param(1)] pUpdates: *const MFTOPONODE_ATTRIBUTE_UPDATE) -> HRESULT;
         }
         #[guid(0x245bf8e9_0755_40f7_88a5_ae0f18d55e17)]
         interface IMFTrackedSample: IUnknown {
@@ -910,13 +910,13 @@ mod Windows {
             fn EndRegisterTopologyWorkQueuesWithMMCSS(&self, pResult: IMFAsyncResult) -> HRESULT;
             fn BeginUnregisterTopologyWorkQueuesWithMMCSS(&self, pCallback: IMFAsyncCallback, pState: IUnknown) -> HRESULT;
             fn EndUnregisterTopologyWorkQueuesWithMMCSS(&self, pResult: IMFAsyncResult) -> HRESULT;
-            fn GetTopologyWorkQueueMMCSSClass(&self, dwTopologyWorkQueueId: u32, #[out] pwszClass: PWSTR, #[in] #[out] pcchClass: *mut u32) -> HRESULT;
+            fn GetTopologyWorkQueueMMCSSClass(&self, dwTopologyWorkQueueId: u32, #[len_param(2)] #[out] pwszClass: PWSTR, #[in] #[out] pcchClass: *mut u32) -> HRESULT;
             fn GetTopologyWorkQueueMMCSSTaskId(&self, dwTopologyWorkQueueId: u32, pdwTaskId: *mut u32) -> HRESULT;
             fn BeginRegisterPlatformWorkQueueWithMMCSS(&self, dwPlatformWorkQueue: u32, wszClass: PCWSTR, dwTaskId: u32, pCallback: IMFAsyncCallback, pState: IUnknown) -> HRESULT;
             fn EndRegisterPlatformWorkQueueWithMMCSS(&self, pResult: IMFAsyncResult, pdwTaskId: *mut u32) -> HRESULT;
             fn BeginUnregisterPlatformWorkQueueWithMMCSS(&self, dwPlatformWorkQueue: u32, pCallback: IMFAsyncCallback, pState: IUnknown) -> HRESULT;
             fn EndUnregisterPlatformWorkQueueWithMMCSS(&self, pResult: IMFAsyncResult) -> HRESULT;
-            fn GetPlaftormWorkQueueMMCSSClass(&self, dwPlatformWorkQueueId: u32, #[out] pwszClass: PWSTR, #[in] #[out] pcchClass: *mut u32) -> HRESULT;
+            fn GetPlaftormWorkQueueMMCSSClass(&self, dwPlatformWorkQueueId: u32, #[len_param(2)] #[out] pwszClass: PWSTR, #[in] #[out] pcchClass: *mut u32) -> HRESULT;
             fn GetPlatformWorkQueueMMCSSTaskId(&self, dwPlatformWorkQueueId: u32, pdwTaskId: *mut u32) -> HRESULT;
         }
         #[guid(0x96bf961b_40fe_42f1_ba9d_320238b49700)]
@@ -1443,12 +1443,6 @@ mod Windows {
         }
         #[library("MF.dll")]
         extern fn MFTranscodeGetAudioOutputAvailableTypes(guidSubType: *const GUID, dwMFTFlags: u32, #[opt] pCodecConfig: IMFAttributes, ppAvailableTypes: *mut IMFCollection) -> HRESULT;
-        struct MFVideoNormalizedRect {
-            left: f32,
-            top: f32,
-            right: f32,
-            bottom: f32,
-        }
         #[repr(i32)]
         enum MFVideoSphericalFormat {
             MFVideoSphericalFormat_Unsupported = 0,

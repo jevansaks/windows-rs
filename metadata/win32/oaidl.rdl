@@ -228,12 +228,12 @@ mod Windows {
         interface IDispatch: IUnknown {
             fn GetTypeInfoCount(&self, pctinfo: *mut u32) -> HRESULT;
             fn GetTypeInfo(&self, iTInfo: u32, lcid: LCID, ppTInfo: *mut ITypeInfo) -> HRESULT;
-            fn GetIDsOfNames(&self, riid: *const GUID, rgszNames: *const PWSTR, cNames: u32, lcid: LCID, rgDispId: *mut DISPID) -> HRESULT;
+            fn GetIDsOfNames(&self, riid: *const GUID, #[len_param(2)] rgszNames: *const PWSTR, cNames: u32, lcid: LCID, #[len_param(2)] rgDispId: *mut DISPID) -> HRESULT;
             fn Invoke(&self, dispIdMember: DISPID, riid: *const GUID, lcid: LCID, wFlags: u16, pDispParams: *const DISPPARAMS, #[opt] pVarResult: *mut VARIANT, #[opt] pExcepInfo: *mut EXCEPINFO, #[opt] puArgErr: *mut u32) -> HRESULT;
         }
         #[guid(0x00020404_0000_0000_c000_000000000046)]
         interface IEnumVARIANT: IUnknown {
-            fn Next(&self, celt: u32, rgVar: *mut VARIANT, pCeltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, celt: u32, #[len_param(0)] rgVar: *mut VARIANT, pCeltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, celt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppEnum: *mut IEnumVARIANT) -> HRESULT;
@@ -312,7 +312,7 @@ mod Windows {
             fn GetNames(&self, memid: MEMBERID, rgBstrNames: *mut BSTR, cMaxNames: u32, pcNames: *mut u32) -> HRESULT;
             fn GetRefTypeOfImplType(&self, index: u32, pRefType: *mut HREFTYPE) -> HRESULT;
             fn GetImplTypeFlags(&self, index: u32, pImplTypeFlags: *mut i32) -> HRESULT;
-            fn GetIDsOfNames(&self, rgszNames: *const PWSTR, cNames: u32, pMemId: *mut MEMBERID) -> HRESULT;
+            fn GetIDsOfNames(&self, rgszNames: *const PWSTR, cNames: u32, #[len_param(1)] pMemId: *mut MEMBERID) -> HRESULT;
             fn Invoke(&self, pvInstance: *const void, memid: MEMBERID, wFlags: u16, #[in] #[out] pDispParams: *mut DISPPARAMS, pVarResult: *mut VARIANT, pExcepInfo: *mut EXCEPINFO, puArgErr: *mut u32) -> HRESULT;
             fn GetDocumentation(&self, memid: MEMBERID, pBstrName: *mut BSTR, pBstrDocString: *mut BSTR, pdwHelpContext: *mut u32, pBstrHelpFile: *mut BSTR) -> HRESULT;
             fn GetDllEntry(&self, memid: MEMBERID, invKind: INVOKEKIND, pBstrDllName: *mut BSTR, pBstrName: *mut BSTR, pwOrdinal: *mut u16) -> HRESULT;
@@ -353,7 +353,7 @@ mod Windows {
             fn GetTypeComp(&self, ppTComp: *mut ITypeComp) -> HRESULT;
             fn GetDocumentation(&self, index: i32, pBstrName: *mut BSTR, pBstrDocString: *mut BSTR, pdwHelpContext: *mut u32, pBstrHelpFile: *mut BSTR) -> HRESULT;
             fn IsName(&self, #[in] #[out] szNameBuf: PWSTR, lHashVal: u32, pfName: *mut BOOL) -> HRESULT;
-            fn FindName(&self, #[in] #[out] szNameBuf: PWSTR, lHashVal: u32, ppTInfo: *mut ITypeInfo, rgMemId: *mut MEMBERID, #[in] #[out] pcFound: *mut u16) -> HRESULT;
+            fn FindName(&self, #[in] #[out] szNameBuf: PWSTR, lHashVal: u32, #[len_param(4)] ppTInfo: *mut ITypeInfo, #[len_param(4)] rgMemId: *mut MEMBERID, #[in] #[out] pcFound: *mut u16) -> HRESULT;
             fn ReleaseTLibAttr(&self, pTLibAttr: *const TLIBATTR);
         }
         #[guid(0x00020411_0000_0000_c000_000000000046)]

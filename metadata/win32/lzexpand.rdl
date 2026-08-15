@@ -3,9 +3,9 @@ mod Windows {
     mod Win32 {
         #[library("LZ32.dll")]
         extern fn CopyLZFile(hfSource: i32, hfDest: i32) -> i32;
-        #[library("LZ32.dll")]
+        #[library("LZ32.dll", set_last_error)]
         extern fn GetExpandedNameA(lpszSource: PCSTR, #[out] lpszBuffer: PSTR) -> i32;
-        #[library("LZ32.dll")]
+        #[library("LZ32.dll", set_last_error)]
         extern fn GetExpandedNameW(lpszSource: PCWSTR, #[out] lpszBuffer: PWSTR) -> i32;
         #[library("LZ32.dll")]
         extern fn LZClose(hFile: i32);

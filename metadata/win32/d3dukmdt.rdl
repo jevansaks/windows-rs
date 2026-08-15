@@ -349,7 +349,6 @@ mod Windows {
             D3DDDI_COLOR_SPACE_YCBCR_STUDIO_G24_LEFT_P709 = 22,
             D3DDDI_COLOR_SPACE_YCBCR_STUDIO_G24_LEFT_P2020 = 23,
             D3DDDI_COLOR_SPACE_YCBCR_STUDIO_G24_TOPLEFT_P2020 = 24,
-            D3DDDI_COLOR_SPACE_RGB_FULL_G10_NONE_P2020 = 25,
             D3DDDI_COLOR_SPACE_CUSTOM = -1,
         }
         struct D3DDDI_CREATECONTEXTFLAGS {
@@ -396,28 +395,8 @@ mod Windows {
                 Value: u32,
             },
         }
-        struct D3DDDI_CREATEHWQUEUEFORUSERMODESUBMISSION_FLAGS {
-            Anonymous: union {
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        DisableGpuTimeout: 1,
-                        NoBroadcastSignal: 1,
-                        NoBroadcastWait: 1,
-                        NoKmdAccess: 1,
-                        TestQueue: 1,
-                        DoorbellRequiresSecondaryCpuVA: 1,
-                        Reserved: 26,
-                    },
-                },
-                Value: u32,
-            },
-        }
         struct D3DDDI_DESTROYPAGINGQUEUE {
             hPagingQueue: D3DKMT_HANDLE,
-        }
-        struct D3DDDI_DOORBELLMAPPING {
-            CpuVa: *mut void,
-            SecondaryCpuVa: *mut void,
         }
         #[repr(i32)]
         enum D3DDDI_DOORBELLSTATUS {
@@ -445,8 +424,6 @@ mod Windows {
             pDmaBufferPrivateData: *mut void,
             DmaBufferSize: u32,
             DmaBufferPrivateDataSize: u32,
-            HardwareProgressFenceId: u64,
-            HardwareProgressFenceGpuVa: u64,
         }
         struct D3DDDI_DRIVERESCAPE_CPUEVENTUSAGE {
             EscapeType: D3DDDI_DRIVERESCAPETYPE,
@@ -613,15 +590,7 @@ mod Windows {
             Type: D3DDDI_NATIVEFENCE_TYPE,
             Flags: D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS,
             NativeFenceMapping: D3DDDI_NATIVEFENCEMAPPING,
-            PhysicalAdapterIndex: u32,
-            Reserved: [u8; 24],
-        }
-        struct D3DDDI_NATIVEFENCELOGDETAIL {
-            WaitLogNumberOfEntries: u32,
-            SignalLogNumberOfEntries: u32,
-            WaitLogGpuBaseAddress: D3DGPU_VIRTUAL_ADDRESS,
-            SignalLogGpuBaseAddress: D3DGPU_VIRTUAL_ADDRESS,
-            Reserved: [u8; 64],
+            Reserved: [u8; 28],
         }
         struct D3DDDI_NATIVEFENCEMAPPING {
             CurrentValueCpuVa: *mut void,
@@ -983,8 +952,7 @@ mod Windows {
             D3DDDI_TESTCOMMANDBUFFEROP_FILL = 2,
             D3DDDI_TESTCOMMANDBUFFEROP_INFINITE_LOOP = 3,
             D3DDDI_TESTCOMMANDBUFFEROP_INFINITE_PREEMPTABLE_LOOP = 4,
-            D3DDDI_TESTCOMMANDBUFFEROP_FAULT_AND_STALL = 5,
-            D3DDDI_TESTCOMMANDBUFFEROP_MAX = 6,
+            D3DDDI_TESTCOMMANDBUFFEROP_MAX = 5,
         }
         struct D3DDDI_TESTCOMMANDBUFFER_COPY {
             SrcAddress: D3DGPU_VIRTUAL_ADDRESS,
@@ -1009,7 +977,6 @@ mod Windows {
                 Value: u32,
             },
         }
-        const D3DDDI_UMS_PDD_SIZE: i32 = 64;
         struct D3DDDI_UPDATEALLOCPROPERTY {
             hPagingQueue: D3DKMT_HANDLE,
             hAllocation: D3DKMT_HANDLE,
@@ -1138,7 +1105,7 @@ mod Windows {
         type D3DKMT_SIZE_T = usize;
         type D3DKMT_UINT_PTR = usize;
         type D3DKMT_ULONG_PTR = usize;
-        const D3D_UMD_INTERFACE_VERSION: i32 = 69633;
+        const D3D_UMD_INTERFACE_VERSION: i32 = 69632;
         const D3D_UMD_INTERFACE_VERSION_VISTA: i32 = 12;
         const D3D_UMD_INTERFACE_VERSION_WDDM1_3: i32 = 16386;
         const D3D_UMD_INTERFACE_VERSION_WDDM2_0: i32 = 20482;
@@ -1179,15 +1146,14 @@ mod Windows {
         const D3D_UMD_INTERFACE_VERSION_WDDM3_0_1: i32 = 61440;
         const D3D_UMD_INTERFACE_VERSION_WDDM3_1: i32 = 65536;
         const D3D_UMD_INTERFACE_VERSION_WDDM3_1_1: i32 = 65536;
-        const D3D_UMD_INTERFACE_VERSION_WDDM3_2: i32 = 69633;
+        const D3D_UMD_INTERFACE_VERSION_WDDM3_2: i32 = 69632;
         const D3D_UMD_INTERFACE_VERSION_WDDM3_2_1: i32 = 69632;
-        const D3D_UMD_INTERFACE_VERSION_WDDM3_2_2: i32 = 69633;
         const D3D_UMD_INTERFACE_VERSION_WIN7: i32 = 8195;
         const D3D_UMD_INTERFACE_VERSION_WIN8: i32 = 12292;
         const D3D_UMD_INTERFACE_VERSION_WIN8_CP: i32 = 12290;
         const D3D_UMD_INTERFACE_VERSION_WIN8_M3: i32 = 12289;
         const D3D_UMD_INTERFACE_VERSION_WIN8_RC: i32 = 12291;
-        const DXGKDDI_INTERFACE_VERSION: i32 = 69640;
+        const DXGKDDI_INTERFACE_VERSION: i32 = 69639;
         const DXGKDDI_INTERFACE_VERSION_VISTA: i32 = 4178;
         const DXGKDDI_INTERFACE_VERSION_VISTA_SP1: i32 = 4179;
         const DXGKDDI_INTERFACE_VERSION_WDDM1_3: i32 = 16386;
@@ -1206,7 +1172,7 @@ mod Windows {
         const DXGKDDI_INTERFACE_VERSION_WDDM2_9: i32 = 57347;
         const DXGKDDI_INTERFACE_VERSION_WDDM3_0: i32 = 61443;
         const DXGKDDI_INTERFACE_VERSION_WDDM3_1: i32 = 65540;
-        const DXGKDDI_INTERFACE_VERSION_WDDM3_2: i32 = 69640;
+        const DXGKDDI_INTERFACE_VERSION_WDDM3_2: i32 = 69639;
         const DXGKDDI_INTERFACE_VERSION_WIN7: i32 = 8197;
         const DXGKDDI_INTERFACE_VERSION_WIN8: i32 = 12302;
         struct DXGKVGPU_ESCAPE_HEAD {
@@ -1265,15 +1231,6 @@ mod Windows {
             Offset: u32,
             Size: u32,
         }
-        union DXGK_DETAILED_FEATURE_ID {
-            Anonymous: struct {
-                _bitfield: u32 {
-                    Feature: 28,
-                    Category: 4,
-                },
-            },
-            Value: DXGK_FEATURE_ID,
-        }
         #[repr(i32)]
         enum DXGK_DRIVER_FEATURE {
             DXGK_DRIVER_FEATURE_HWSCH = 0,
@@ -1318,9 +1275,6 @@ mod Windows {
             DXGK_DRIVER_FEATURE_FAULT_AND_STALL = 39,
             DXGK_DRIVER_FEATURE_SINGLE_ADAPTER_HYBRID_MODE = 40,
             DXGK_DRIVER_FEATURE_SYNC_PRESENT_RENDER_HWQ_ONLY = 41,
-            DXGK_DRIVER_FEATURE_UNIFIED_SCHEDULING_MODEL = 42,
-            DXGK_DRIVER_FEATURE_NOTIFY_RESIDENCY2 = 43,
-            DXGK_DRIVER_FEATURE_PROCESS_DEBUG_BLOB_COLLECTION = 45,
             DXGK_DRIVER_FEATURE_PANEL_BUFFER_CONTROL = 46,
             DXGK_DRIVER_FEATURE_MAX = 47,
         }
@@ -1344,8 +1298,6 @@ mod Windows {
             DXGK_FEATURE_CATEGORY_RESERVED15 = 15,
             DXGK_FEATURE_CATEGORY_MAX = 16,
         }
-        const DXGK_FEATURE_EXTENDED_SEGMENT_FLAGS_VERSION: i32 = 1;
-        const DXGK_FEATURE_EXTENDED_SEGMENT_FLAGS_VERSION_APERTUREPRESERVEDDURINGSTANDBY: i32 = 1;
         #[repr(i32)]
         enum DXGK_FEATURE_ID {
             DXGK_FEATURE_HWSCH = 0,
@@ -1361,13 +1313,7 @@ mod Windows {
             DXGK_FEATURE_GPUPV_PRESENT_HWQUEUE = 35,
             DXGK_FEATURE_GPUVAIOMMU = 36,
             DXGK_FEATURE_NATIVE_FENCE = 37,
-            DXGK_FEATURE_EXTENDED_SEGMENT_FLAGS = 38,
-            DXGK_FEATURE_FAULT_AND_STALL = 39,
-            DXGK_FEATURE_SINGLE_ADAPTER_HYBRID_MODE = 40,
             DXGK_FEATURE_SYNC_PRESENT_RENDER_HWQ_ONLY = 41,
-            DXGK_FEATURE_UNIFIED_SCHEDULING_MODEL = 42,
-            DXGK_FEATURE_NOTIFY_RESIDENCY2 = 43,
-            DXGK_FEATURE_PROCESS_DEBUG_BLOB_COLLECTION = 45,
             DXGK_FEATURE_PANEL_BUFFER_CONTROL = 46,
             DXGK_FEATURE_QUERYSTATISTICS_EXTENSIONS = 268435456,
             DXGK_FEATURE_RESERVE_GPUVA_ZERO_BASE_ADDRESS = 268435457,
@@ -1376,7 +1322,6 @@ mod Windows {
             DXGK_FEATURE_SUPPRESSVSYNC_INTERRUPTS = 268435460,
             DXGK_FEATURE_FEATURE_INTERFACE_EXTENSIONS = 268435461,
             DXGK_FEATURE_READONLY_EXISTINGSYSMEM = 268435462,
-            DXGK_FEATURE_OPPORTUNISTIC_64KB_PAGES = 268435463,
         }
         const DXGK_FEATURE_ID_CATEGORY_BITS: i32 = 4;
         const DXGK_FEATURE_ID_CATEGORY_SHIFT: i32 = 28;
@@ -1393,9 +1338,7 @@ mod Windows {
                         KnownFeature: 1,
                         SupportedByDriver: 1,
                         SupportedOnCurrentConfig: 1,
-                        Available: 1,
-                        Experimental: 1,
-                        Reserved: 10,
+                        Reserved: 12,
                     },
                 },
                 Value: DXGK_FEATURE_VERSION,
@@ -1473,8 +1416,7 @@ mod Windows {
             DXGK_OS_FEATURE_SUPPRESSVSYNC_INTERRUPTS = 4,
             DXGK_OS_FEATURE_FEATURE_INTERFACE_EXTENSIONS = 5,
             DXGK_OS_FEATURE_READONLY_EXISTINGSYSMEM = 6,
-            DXGK_OS_FEATURE_OPPORTUNISTIC_64KB_PAGES = 7,
-            DXGK_OS_FEATURE_MAX = 8,
+            DXGK_OS_FEATURE_MAX = 7,
         }
         struct DXGK_PTE {
             Anonymous: union {
@@ -1490,8 +1432,7 @@ mod Windows {
                         PhysicalAdapterIndex: 6,
                         PageTablePageSize: 2,
                         SystemReserved0: 1,
-                        BlockAccessMode: 2,
-                        Reserved: 42,
+                        Reserved: 44,
                     },
                 },
                 Flags: u64,
@@ -1500,12 +1441,6 @@ mod Windows {
                 PageAddress: u64,
                 PageTableAddress: u64,
             },
-        }
-        #[repr(i32)]
-        enum DXGK_PTE_BLOCK_ACCESS_MODE {
-            DXGK_PTE_BLOCK_ACCESS_NONE = 0,
-            DXGK_PTE_BLOCK_ACCESS_WRITE = 1,
-            DXGK_PTE_BLOCK_ACCESS_READWRITE = 2,
         }
         #[repr(i32)]
         enum DXGK_PTE_PAGE_SIZE {

@@ -117,6 +117,9 @@ mod Windows {
             attribute AlsoUsableForAttribute {
                 fn(otherType: String);
             }
+            attribute ProjectAsAttribute {
+                fn(typeName: String);
+            }
             attribute AssociatedEnumAttribute {
                 fn(name: String);
             }

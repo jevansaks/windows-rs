@@ -81,8 +81,6 @@ mod Windows {
         #[library("GDI32.dll")]
         extern fn D3DKMTCreateHwQueue(#[in] #[out] param0: *mut D3DKMT_CREATEHWQUEUE) -> NTSTATUS;
         #[library("GDI32.dll")]
-        extern fn D3DKMTCreateHwQueueForUserModeSubmission(#[in] #[out] param0: *mut D3DKMT_CREATEHWQUEUEFORUSERMODESUBMISSION) -> NTSTATUS;
-        #[library("GDI32.dll")]
         extern fn D3DKMTCreateKeyedMutex(#[in] #[out] param0: *mut D3DKMT_CREATEKEYEDMUTEX) -> NTSTATUS;
         #[library("GDI32.dll")]
         extern fn D3DKMTCreateKeyedMutex2(#[in] #[out] param0: *mut D3DKMT_CREATEKEYEDMUTEX2) -> NTSTATUS;
@@ -271,8 +269,6 @@ mod Windows {
         #[library("GDI32.dll")]
         extern fn D3DKMTQueryFSEBlock(#[in] #[out] param0: *mut D3DKMT_QUERYFSEBLOCK) -> NTSTATUS;
         #[library("GDI32.dll")]
-        extern fn D3DKMTQueryFeatureInterface(#[in] #[out] param0: *mut D3DKMT_QUERYFEATUREINTERFACE) -> NTSTATUS;
-        #[library("GDI32.dll")]
         extern fn D3DKMTQueryProcessOfferInfo(#[in] #[out] param0: *mut D3DKMT_QUERYPROCESSOFFERINFO) -> NTSTATUS;
         #[library("GDI32.dll")]
         extern fn D3DKMTQueryProtectedSessionInfoFromNtHandle(#[in] #[out] param0: *mut D3DKMT_QUERYPROTECTEDSESSIONINFOFROMNTHANDLE) -> NTSTATUS;
@@ -308,8 +304,6 @@ mod Windows {
         extern fn D3DKMTRender(#[in] #[out] param0: *mut D3DKMT_RENDER) -> NTSTATUS;
         #[library("GDI32.dll")]
         extern fn D3DKMTReserveGpuVirtualAddress(#[in] #[out] param0: *mut D3DDDI_RESERVEGPUVIRTUALADDRESS) -> NTSTATUS;
-        #[library("GDI32.dll")]
-        extern fn D3DKMTResizeRingBuffer(#[in] #[out] param0: *mut D3DKMT_RESIZERINGBUFFER) -> NTSTATUS;
         #[library("GDI32.dll")]
         extern fn D3DKMTSetAllocationPriority(param0: *const D3DKMT_SETALLOCATIONPRIORITY) -> NTSTATUS;
         #[library("GDI32.dll")]
@@ -458,9 +452,7 @@ mod Windows {
                         ComputeOnly: 1,
                         Prototype: 1,
                         RuntimePowerManagement: 1,
-                        TestOnly: 1,
-                        SingleAdapterHybridMode: 1,
-                        Reserved: 16,
+                        Reserved: 18,
                     },
                 },
                 Value: u32,
@@ -494,13 +486,11 @@ mod Windows {
         union D3DKMT_ADAPTER_VERIFIER_OPTION_DATA {
             VidMmFlags: D3DKMT_ADAPTER_VERIFIER_VIDMM_FLAGS,
             VidMmTrimInterval: D3DKMT_ADAPTER_VERIFIER_VIDMM_TRIM_INTERVAL,
-            VidMmPagingInfo: D3DKMT_ADAPTER_VERIFIER_VIDMM_PAGING_INFO,
         }
         #[repr(i32)]
         enum D3DKMT_ADAPTER_VERIFIER_OPTION_TYPE {
             D3DKMT_ADAPTER_VERIFIER_OPTION_VIDMM_FLAGS = 1000,
             D3DKMT_ADAPTER_VERIFIER_OPTION_VIDMM_TRIM_INTERVAL = 1001,
-            D3DKMT_ADAPTER_VERIFIER_OPTION_VIDMM_PAGING_INFO = 1002,
         }
         union D3DKMT_ADAPTER_VERIFIER_VIDMM_FLAGS {
             Anonymous: struct {
@@ -527,26 +517,15 @@ mod Windows {
                     AlwaysFailGrowVPRMoves: 1,
                     NeverFlushTemporaryResources: 1,
                     AllocateTemporaryResourcesInAperture: 1,
-                    AlwaysUseAperture: 1,
-                    DisableMigration: 1,
-                    ForceDiscardCpuHostApertureRange: 1,
-                    PeriodicTrimNeverIdle: 1,
-                    Reserved: 6,
+                    Reserved: 10,
                 },
             },
             Value: u32,
-        }
-        struct D3DKMT_ADAPTER_VERIFIER_VIDMM_PAGING_INFO {
-            FillPattern: u32,
-            MaxTransferChunkSize: u32,
         }
         struct D3DKMT_ADAPTER_VERIFIER_VIDMM_TRIM_INTERVAL {
             MinimumTrimInterval: u64,
             MaximumTrimInterval: u64,
             IdleTrimInterval: u64,
-            ForegroundTrimInterval: u64,
-            StartPeriodicTrimThreshold: u32,
-            CriticalPeriodicTrimThreshold: u32,
         }
         struct D3DKMT_ADJUSTFULLSCREENGAMMA {
             hAdapter: D3DKMT_HANDLE,
@@ -772,8 +751,7 @@ mod Windows {
             D3DKMT_CLIENTHINT_VITIS = 25,
             D3DKMT_CLIENTHINT_FFMPEG = 26,
             D3DKMT_CLIENTHINT_OPEN_VINO = 27,
-            D3DKMT_CLIENTHINT_DML_WEBNN = 28,
-            D3DKMT_CLIENTHINT_MAX = 29,
+            D3DKMT_CLIENTHINT_MAX = 28,
         }
         struct D3DKMT_CLOSEADAPTER {
             hAdapter: D3DKMT_HANDLE,
@@ -790,10 +768,8 @@ mod Windows {
             AllowAccess: bool,
         }
         struct D3DKMT_CONNECT_DOORBELL {
-            hHwQueue: D3DKMT_HANDLE,
+            hDoorbell: D3DKMT_HANDLE,
             Flags: D3DKMT_CONNECT_DOORBELL_FLAGS,
-            DoorbellMapping: D3DDDI_DOORBELLMAPPING,
-            Reserved: [u8; 64],
         }
         struct D3DKMT_CONNECT_DOORBELL_FLAGS {
             Anonymous: union {
@@ -934,20 +910,6 @@ mod Windows {
             hHwQueueProgressFence: D3DKMT_HANDLE,
             HwQueueProgressFenceCPUVirtualAddress: *mut void,
             HwQueueProgressFenceGPUVirtualAddress: D3DGPU_VIRTUAL_ADDRESS,
-        }
-        struct D3DKMT_CREATEHWQUEUEFORUSERMODESUBMISSION {
-            hHwContext: D3DKMT_HANDLE,
-            Flags: D3DDDI_CREATEHWQUEUEFORUSERMODESUBMISSION_FLAGS,
-            hRingBuffer: D3DKMT_HANDLE,
-            hRingBufferControl: D3DKMT_HANDLE,
-            PrivateDriverData: [u8; 64],
-            hHwQueue: D3DKMT_HANDLE,
-            DoorbellStatusCpuVa: *mut void,
-            hProgressFence: D3DKMT_HANDLE,
-            ProgressFenceMapping: D3DDDI_NATIVEFENCEMAPPING,
-            ProgressFenceLastQueuedValueCpuVa: *mut void,
-            LogBufferInfo: D3DDDI_NATIVEFENCELOGDETAIL,
-            Reserved: [u8; 64],
         }
         struct D3DKMT_CREATEKEYEDMUTEX {
             InitialValue: u64,
@@ -1233,44 +1195,6 @@ mod Windows {
             RevisionID: u32,
             BusType: u32,
         }
-        #[repr(i32)]
-        enum D3DKMT_DEVICE_MARKED_AS_ERROR_FAILURE_CODE {
-            D3DKMT_DEVICE_MARKED_AS_ERROR_NO_ERROR = 0,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_DEVICE_NOT_RECOVERED = 1,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_PREPARE_DMA_BUFFER = 2,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_PREPARE_DMA_BUFFER_TRY_AGAIN_LATER = 3,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_PROCESS_DEFERRED_COMMAND = 4,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FLIP_TO_ADDRESS = 5,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_DRIVER_FAULTED = 6,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_DEVICE_HUNG = 7,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_PREPARE_DMA_BUFFER_SPLIT_PACKET_PREEMPTED = 8,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_HARDWARE_PAGE_FAULT = 9,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_SOFTWARE_PAGE_FAULT = 10,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_EVICT_VALIDATION_FAILURE = 11,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILED_TO_PAGE_IN_REQUIRED_RESOURCE = 12,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILED_PROBE_AND_LOCK_TRANSFER = 13,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_DEVICE_TERMINATED_FOR_PROCESS_CLEANUP = 14,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_EVICTING_WHILE_IN_USE = 15,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_SUBMITTING_RENDER_FOR_NON_RESIDENT_ALLOCATION = 16,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_HISTORY_BUFFER_NOT_RESIDENT = 17,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_MISSED_PAGING_FENCE_SYNCHRONIZATION_FOR_RESIDENT_ALLOCATION = 18,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILED_SUBMIT_COMMAND_VIRTUAL = 19,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_INVALID_RECLAIM_USAGE = 20,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILED_UPDATE_ALLOCATION_PROPERTY = 21,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_DEVICE_RESET = 22,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILED_MOVE_VA_COMMIT = 23,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILED_MOVE_PAGING = 24,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILED_ASYNC_VMBUS_COMMAND = 25,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_DISPLAY_DISCONNECT = 26,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_GPU_VA_COMMITMENT_ERROR = 27,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FAILURE_CODE_KERNEL_MAX = 28,
-            D3DKMT_DEVICE_MARKED_AS_ERROR_FROM_USER_MODE = -2147483648,
-        }
-        struct D3DKMT_DEVICE_MARKED_AS_ERROR_INFO {
-            hDevice: D3DKMT_HANDLE,
-            DumpAssociationGUID: GUID,
-            FailureCode: D3DKMT_DEVICE_MARKED_AS_ERROR_FAILURE_CODE,
-        }
         struct D3DKMT_DIRECTFLIP_SUPPORT {
             Supported: BOOL,
         }
@@ -1371,8 +1295,7 @@ mod Windows {
                     IncludeComputeOnly: 1,
                     IncludeDisplayOnly: 1,
                     IncludeVirtualGpuOnly: 1,
-                    IncludeTestOnly: 1,
-                    Reserved: 60,
+                    Reserved: 61,
                 },
             },
             Value: u64,
@@ -1423,7 +1346,6 @@ mod Windows {
             D3DKMT_ESCAPE_QUERY_IOMMU_STATUS = 37,
             D3DKMT_ESCAPE_CCD_DATABASE = 38,
             D3DKMT_ESCAPE_QUERY_DMA_REMAPPING_STATUS = 39,
-            D3DKMT_ESCAPE_QUERY_PHYSICAL_ADAPTER = 40,
             D3DKMT_ESCAPE_WIN32K_START = 1024,
             D3DKMT_ESCAPE_WIN32K_HIP_DEVICE_INFO = 1024,
             D3DKMT_ESCAPE_WIN32K_QUERY_CD_ROTATION_BLOCK = 1025,
@@ -1437,11 +1359,6 @@ mod Windows {
             D3DKMT_ESCAPE_WIN32K_COLOR_PROFILE_INFO = 1036,
             D3DKMT_ESCAPE_WIN32K_SET_DIMMED_STATE = 1037,
             D3DKMT_ESCAPE_WIN32K_SPECIALIZED_DISPLAY_TEST = 1038,
-        }
-        #[repr(i32)]
-        enum D3DKMT_ESCAPE_COPY_CONTENT_DIRECTION {
-            D3DKMT_ESCAPE_COPY_CONTENT_DIRECTION_TO_ALLOCATION = 0,
-            D3DKMT_ESCAPE_COPY_CONTENT_DIRECTION_FROM_ALLOCATION = 1,
         }
         #[repr(i32)]
         enum D3DKMT_ESCAPE_PFN_CONTROL_COMMAND {
@@ -1883,22 +1800,6 @@ mod Windows {
             Flags: D3DDDICB_LOCK2FLAGS,
             pData: *mut void,
         }
-        struct D3DKMT_MAPPROCESSDEBUGBLOB {
-            hDevice: D3DKMT_HANDLE,
-            Flags: D3DKMT_MAPPROCESSDEBUGBLOB_FLAGS,
-            BufferSize: usize,
-            pBuffer: *mut void,
-        }
-        struct D3DKMT_MAPPROCESSDEBUGBLOB_FLAGS {
-            Anonymous: union {
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        Reserved: 32,
-                    },
-                },
-                Value: u32,
-            },
-        }
         struct D3DKMT_MARKDEVICEASERROR {
             hDevice: D3DKMT_HANDLE,
             Reason: D3DKMT_DEVICE_ERROR_REASON,
@@ -2164,9 +2065,8 @@ mod Windows {
             MaxTransitionLatency: u64,
         }
         struct D3DKMT_NOTIFY_WORK_SUBMISSION {
-            hHwQueue: D3DKMT_HANDLE,
+            hDoorbell: D3DKMT_HANDLE,
             Flags: D3DKMT_NOTIFY_WORK_SUBMISSION_FLAGS,
-            PrivateDriverData: [u8; 64],
         }
         struct D3DKMT_NOTIFY_WORK_SUBMISSION_FLAGS {
             Anonymous: union {
@@ -2764,11 +2664,7 @@ mod Windows {
                     AlwaysFailCommitOnReclaim: 1,
                     AlwaysPlaceInDemotedLocation: 1,
                     IgnoreBudgetCap: 1,
-                    AlwaysCreateLocalAlloc: 1,
-                    DisablePermanentUmVaUpgrade: 1,
-                    AlwaysUseSystemHeap: 1,
-                    SynchronousDeferredCommands: 1,
-                    Reserved: 23,
+                    Reserved: 27,
                 },
             },
             Value: u32,
@@ -2794,13 +2690,6 @@ mod Windows {
             phAllocationList: *const D3DKMT_HANDLE,
             AllocationCount: u32,
             pResidencyStatus: *mut D3DKMT_ALLOCATIONRESIDENCYSTATUS,
-        }
-        struct D3DKMT_QUERYFEATUREINTERFACE {
-            hAdapter: D3DKMT_HANDLE,
-            FeatureId: DXGK_FEATURE_ID,
-            Result: DXGK_ISFEATUREENABLED_RESULT,
-            InterfaceTableSize: u32,
-            InterfaceTable: *const FARPROC,
         }
         struct D3DKMT_QUERYFSEBLOCK {
             AdapterLuid: LUID,
@@ -3342,17 +3231,6 @@ mod Windows {
         struct D3DKMT_QUERY_MIRACAST_DRIVER_TYPE {
             MiracastDriverType: D3DKMT_MIRACAST_DRIVER_TYPE,
         }
-        struct D3DKMT_QUERY_PHYSICAL_ADAPTER {
-            PhysicalAdapterIndex: u32,
-            NumExecutionNodes: u32,
-            PagingNodeIndex: u32,
-        }
-        struct D3DKMT_QUERY_PHYSICAL_ADAPTER_1 {
-            PhysicalAdapterIndex: u32,
-            NumExecutionNodes: u32,
-            PagingNodeIndex: u32,
-            GdiNodeIndex: u32,
-        }
         struct D3DKMT_QUERY_PHYSICAL_ADAPTER_PNP_KEY {
             PhysicalAdapterIndex: u32,
             PnPKeyType: D3DKMT_PNP_KEY_TYPE,
@@ -3451,24 +3329,6 @@ mod Windows {
             Param1: D3DKMT_ULONG_PTR,
             Param2: D3DKMT_ULONG_PTR,
             Param3: D3DKMT_ULONG_PTR,
-        }
-        struct D3DKMT_RESIZERINGBUFFER {
-            hHwQueue: D3DKMT_HANDLE,
-            hRingBuffer: D3DKMT_HANDLE,
-            hRingBufferControl: D3DKMT_HANDLE,
-            Flags: D3DKMT_RESIZERINGBUFFER_FLAGS,
-            PrivateDriverData: [u8; 64],
-            Reserved: [u8; 64],
-        }
-        struct D3DKMT_RESIZERINGBUFFER_FLAGS {
-            Anonymous: union {
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        Reserved: 32,
-                    },
-                },
-                Value: u32,
-            },
         }
         struct D3DKMT_SCATTERBLT {
             hLogicalSurfaceDestination: u64,
@@ -3817,21 +3677,6 @@ mod Windows {
             hDevice: D3DKMT_HANDLE,
             hAllocation: D3DKMT_HANDLE,
         }
-        struct D3DKMT_UNMAPPROCESSDEBUGBLOB {
-            hDevice: D3DKMT_HANDLE,
-            pBuffer: *mut void,
-            Flags: D3DKMT_UNMAPPROCESSDEBUGBLOB_FLAGS,
-        }
-        struct D3DKMT_UNMAPPROCESSDEBUGBLOB_FLAGS {
-            Anonymous: union {
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        Reserved: 32,
-                    },
-                },
-                Value: u32,
-            },
-        }
         struct D3DKMT_UNPINDIRECTFLIPRESOURCES {
             hDevice: D3DKMT_HANDLE,
             ResourceCount: u32,
@@ -3927,9 +3772,6 @@ mod Windows {
             D3DKMT_VIDMMESCAPETYPE_DELAYEXECUTION = 16,
             D3DKMT_VIDMMESCAPETYPE_VALIDATE_INTEGRITY = 17,
             D3DKMT_VIDMMESCAPETYPE_SET_EVICTION_CONFIG = 18,
-            D3DKMT_VIDMMESCAPETYPE_COPY_CONTENT = 19,
-            D3DKMT_VIDMMESCAPETYPE_DEBUG = 20,
-            D3DKMT_VIDMMESCAPETYPE_QUERYSECTION = 21,
         }
         struct D3DKMT_VIDMM_ESCAPE {
             Type: D3DKMT_VIDMMESCAPETYPE,
@@ -3954,17 +3796,6 @@ mod Windows {
                                 NeverDiscardOfferedAllocation: 1,
                                 AlwaysDiscardOfferedAllocation: 1,
                                 Reserved: 17,
-                            },
-                        },
-                        Value: u32,
-                    },
-                },
-                Debug: struct {
-                    Anonymous: union {
-                        Anonymous: struct {
-                            _bitfield: u32 {
-                                TestNativeFence: 1,
-                                Reserved: 31,
                             },
                         },
                         Value: u32,
@@ -4038,17 +3869,6 @@ mod Windows {
                 },
                 DelayedEvictionConfig: struct {
                     TimerValue: i64,
-                },
-                CopyContent: struct {
-                    UserBuffer: *mut void,
-                    Direction: D3DKMT_ESCAPE_COPY_CONTENT_DIRECTION,
-                    hAllocation: D3DKMT_HANDLE,
-                    Offset: u64,
-                    Size: u64,
-                },
-                QuerySection: struct {
-                    hAllocation: D3DKMT_HANDLE,
-                    hSection: HANDLE,
                 },
             },
         }
@@ -4219,12 +4039,6 @@ mod Windows {
             VirtualAddressBitCount: u32,
             PageTableLevelCount: u32,
             PageTableLevelDesk: [D3DKMT_PAGE_TABLE_LEVEL_DESC; 6],
-        }
-        struct DXGK_FEATURE_PROCESS_DEBUG_BLOB_COLLECTION_INTERFACE_V1 {
-            pfnEnableProcessDebugBlobCollection: PFND3DKMT_ENABLEPROCESSDEBUGBLOBCOLLECTION,
-            pfnDisableProcessDebugBlobCollection: PFND3DKMT_DISABLEPROCESSDEBUGBLOBCOLLECTION,
-            pfnMapProcessDebugBlob: PFND3DKMT_MAPPROCESSDEBUGBLOB,
-            pfnUnmapProcessDebugBlob: PFND3DKMT_UNMAPPROCESSDEBUGBLOB,
         }
         type DXGK_GRAPHICSPOWER_REGISTER_INPUT = DXGK_GRAPHICSPOWER_REGISTER_INPUT_V_1_2;
         struct DXGK_GRAPHICSPOWER_REGISTER_INPUT_V_1_2 {
@@ -4412,7 +4226,6 @@ mod Windows {
         extern fn PFND3DKMT_CREATEDEVICE(#[in] #[out] param0: *mut D3DKMT_CREATEDEVICE) -> NTSTATUS;
         extern fn PFND3DKMT_CREATEDOORBELL(param0: *const D3DKMT_CREATE_DOORBELL) -> NTSTATUS;
         extern fn PFND3DKMT_CREATEHWQUEUE(#[in] #[out] param0: *mut D3DKMT_CREATEHWQUEUE) -> NTSTATUS;
-        extern fn PFND3DKMT_CREATEHWQUEUEFORUSERMODESUBMISSION(#[in] #[out] param0: *mut D3DKMT_CREATEHWQUEUEFORUSERMODESUBMISSION) -> NTSTATUS;
         extern fn PFND3DKMT_CREATEKEYEDMUTEX(#[in] #[out] param0: *mut D3DKMT_CREATEKEYEDMUTEX) -> NTSTATUS;
         extern fn PFND3DKMT_CREATEKEYEDMUTEX2(#[in] #[out] param0: *mut D3DKMT_CREATEKEYEDMUTEX2) -> NTSTATUS;
         extern fn PFND3DKMT_CREATENATIVEFENCE(#[in] #[out] param0: *mut D3DKMT_CREATENATIVEFENCE) -> NTSTATUS;
@@ -4435,8 +4248,6 @@ mod Windows {
         extern fn PFND3DKMT_DESTROYPAGINGQUEUE(#[in] #[out] param0: *mut D3DDDI_DESTROYPAGINGQUEUE) -> NTSTATUS;
         extern fn PFND3DKMT_DESTROYPROTECTEDSESSION(#[in] #[out] param0: *mut D3DKMT_DESTROYPROTECTEDSESSION) -> NTSTATUS;
         extern fn PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT(param0: *const D3DKMT_DESTROYSYNCHRONIZATIONOBJECT) -> NTSTATUS;
-        extern fn PFND3DKMT_DISABLEPROCESSDEBUGBLOBCOLLECTION() -> NTSTATUS;
-        extern fn PFND3DKMT_ENABLEPROCESSDEBUGBLOBCOLLECTION() -> NTSTATUS;
         extern fn PFND3DKMT_ENUMADAPTERS(#[in] #[out] param0: *mut D3DKMT_ENUMADAPTERS) -> NTSTATUS;
         extern fn PFND3DKMT_ENUMADAPTERS2(#[in] #[out] param0: *mut D3DKMT_ENUMADAPTERS2) -> NTSTATUS;
         extern fn PFND3DKMT_ENUMADAPTERS3(#[in] #[out] param0: *mut D3DKMT_ENUMADAPTERS3) -> NTSTATUS;
@@ -4471,7 +4282,6 @@ mod Windows {
         extern fn PFND3DKMT_LOCK2(#[in] #[out] param0: *mut D3DKMT_LOCK2) -> NTSTATUS;
         extern fn PFND3DKMT_MAKERESIDENT(#[in] #[out] param0: *mut D3DDDI_MAKERESIDENT) -> NTSTATUS;
         extern fn PFND3DKMT_MAPGPUVIRTUALADDRESS(#[in] #[out] param0: *mut D3DDDI_MAPGPUVIRTUALADDRESS) -> NTSTATUS;
-        extern fn PFND3DKMT_MAPPROCESSDEBUGBLOB(#[in] #[out] param0: *mut D3DKMT_MAPPROCESSDEBUGBLOB) -> NTSTATUS;
         extern fn PFND3DKMT_MARKDEVICEASERROR(param0: *const D3DKMT_MARKDEVICEASERROR) -> NTSTATUS;
         extern fn PFND3DKMT_NOTIFYWORKSUBMISSION(param0: *const D3DKMT_NOTIFY_WORK_SUBMISSION) -> NTSTATUS;
         extern fn PFND3DKMT_OFFERALLOCATIONS(param0: *const D3DKMT_OFFERALLOCATIONS) -> NTSTATUS;
@@ -4507,7 +4317,6 @@ mod Windows {
         extern fn PFND3DKMT_QUERYADAPTERINFO(#[in] #[out] param0: *mut D3DKMT_QUERYADAPTERINFO) -> NTSTATUS;
         extern fn PFND3DKMT_QUERYALLOCATIONRESIDENCY(param0: *const D3DKMT_QUERYALLOCATIONRESIDENCY) -> NTSTATUS;
         extern fn PFND3DKMT_QUERYCLOCKCALIBRATION(#[in] #[out] param0: *mut D3DKMT_QUERYCLOCKCALIBRATION) -> NTSTATUS;
-        extern fn PFND3DKMT_QUERYFEATUREINTERFACE(#[in] #[out] param0: *mut D3DKMT_QUERYFEATUREINTERFACE) -> NTSTATUS;
         extern fn PFND3DKMT_QUERYFSEBLOCK(#[in] #[out] param0: *mut D3DKMT_QUERYFSEBLOCK) -> NTSTATUS;
         extern fn PFND3DKMT_QUERYHYBRIDLISTVALUE(#[in] #[out] param0: *mut D3DKMT_HYBRID_LIST) -> NTSTATUS;
         extern fn PFND3DKMT_QUERYPROCESSOFFERINFO(#[in] #[out] param0: *mut D3DKMT_QUERYPROCESSOFFERINFO) -> NTSTATUS;
@@ -4528,7 +4337,6 @@ mod Windows {
         extern fn PFND3DKMT_RELEASEPROCESSVIDPNSOURCEOWNERS(param0: HANDLE) -> NTSTATUS;
         extern fn PFND3DKMT_RENDER(#[in] #[out] param0: *mut D3DKMT_RENDER) -> NTSTATUS;
         extern fn PFND3DKMT_RESERVEGPUVIRTUALADDRESS(#[in] #[out] param0: *mut D3DDDI_RESERVEGPUVIRTUALADDRESS) -> NTSTATUS;
-        extern fn PFND3DKMT_RESIZERINGBUFFER(#[in] #[out] param0: *mut D3DKMT_RESIZERINGBUFFER) -> NTSTATUS;
         extern fn PFND3DKMT_SETALLOCATIONPRIORITY(param0: *const D3DKMT_SETALLOCATIONPRIORITY) -> NTSTATUS;
         extern fn PFND3DKMT_SETCONTEXTINPROCESSSCHEDULINGPRIORITY(param0: *const D3DKMT_SETCONTEXTINPROCESSSCHEDULINGPRIORITY) -> NTSTATUS;
         extern fn PFND3DKMT_SETCONTEXTSCHEDULINGPRIORITY(param0: *const D3DKMT_SETCONTEXTSCHEDULINGPRIORITY) -> NTSTATUS;
@@ -4565,7 +4373,6 @@ mod Windows {
         extern fn PFND3DKMT_TRIMPROCESSCOMMITMENT(#[in] #[out] param0: *mut D3DKMT_TRIMPROCESSCOMMITMENT) -> NTSTATUS;
         extern fn PFND3DKMT_UNLOCK(param0: *const D3DKMT_UNLOCK) -> NTSTATUS;
         extern fn PFND3DKMT_UNLOCK2(param0: *const D3DKMT_UNLOCK2) -> NTSTATUS;
-        extern fn PFND3DKMT_UNMAPPROCESSDEBUGBLOB(#[in] #[out] param0: *mut D3DKMT_UNMAPPROCESSDEBUGBLOB) -> NTSTATUS;
         extern fn PFND3DKMT_UNPINDIRECTFLIPRESOURCES(param0: *const D3DKMT_UNPINDIRECTFLIPRESOURCES) -> NTSTATUS;
         extern fn PFND3DKMT_UNREGISTERBUDGETCHANGENOTIFICATION(#[in] #[out] param0: *mut D3DKMT_UNREGISTERBUDGETCHANGENOTIFICATION) -> NTSTATUS;
         extern fn PFND3DKMT_UNREGISTERTRIMNOTIFICATION(#[in] #[out] param0: *mut D3DKMT_UNREGISTERTRIMNOTIFICATION) -> NTSTATUS;

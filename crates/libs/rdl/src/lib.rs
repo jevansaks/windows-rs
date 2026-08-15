@@ -137,6 +137,11 @@ pub(crate) const PSEUDO_ATTRS: &[PseudoAttr] = &[
         prop: None,
     },
     PseudoAttr {
+        short: "project_as",
+        metadata: "ProjectAsAttribute",
+        prop: None,
+    },
+    PseudoAttr {
         short: "associated_enum",
         metadata: "AssociatedEnumAttribute",
         prop: None,

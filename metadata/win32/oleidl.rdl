@@ -18,11 +18,9 @@ mod Windows {
             DISCARDCACHE_SAVEIFDIRTY = 0,
             DISCARDCACHE_NOSAVE = 1,
         }
-        const DROPEFFECT_BACKGROUNDTARGET: i32 = 536870912;
         const DROPEFFECT_COPY: i32 = 1;
         const DROPEFFECT_LINK: i32 = 4;
         const DROPEFFECT_MOVE: i32 = 2;
-        const DROPEFFECT_NEWTARGET: i32 = 1073741824;
         const DROPEFFECT_NONE: i32 = 0;
         const DROPEFFECT_SCROLL: u32 = 2147483648;
         type HOLEMENU = HGLOBAL;

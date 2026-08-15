@@ -16,7 +16,7 @@ mod Windows {
             fn GetNameChoice(&self, NameIndex: i32, #[retval] pNameChoice: *mut i32) -> HRESULT;
             fn GetName(&self, NameIndex: i32, #[retval] pstrName: *mut BSTR) -> HRESULT;
             fn Reset(&self, NameCount: i32) -> HRESULT;
-            fn SetNameEntry(&self, NameIndex: i32, NameChoice: i32, strName: BSTR) -> HRESULT;
+            fn SetNameEntry(&self, NameIndex: i32, NameChoice: CERT_ALT_NAME, strName: BSTR) -> HRESULT;
             fn Encode(&self, #[retval] pstrBinary: *mut BSTR) -> HRESULT;
         }
         #[guid(0xf67fe177_5ef1_4535_b4ce_29df15e2e0c3)]
@@ -48,7 +48,7 @@ mod Windows {
             fn GetName(&self, DistPointIndex: i32, NameIndex: i32, #[retval] pstrName: *mut BSTR) -> HRESULT;
             fn Reset(&self, DistPointCount: i32) -> HRESULT;
             fn SetNameCount(&self, DistPointIndex: i32, NameCount: i32) -> HRESULT;
-            fn SetNameEntry(&self, DistPointIndex: i32, NameIndex: i32, NameChoice: i32, strName: BSTR) -> HRESULT;
+            fn SetNameEntry(&self, DistPointIndex: i32, NameIndex: i32, NameChoice: CERT_ALT_NAME, strName: BSTR) -> HRESULT;
             fn Encode(&self, #[retval] pstrBinary: *mut BSTR) -> HRESULT;
         }
         #[guid(0xb4275d4b_3e30_446f_ad36_09d03120b078)]
@@ -90,7 +90,7 @@ mod Windows {
             fn GetStringType(&self, #[retval] pStringType: *mut i32) -> HRESULT;
             fn GetCount(&self, #[retval] pCount: *mut i32) -> HRESULT;
             fn GetValue(&self, Index: i32, #[retval] pstr: *mut BSTR) -> HRESULT;
-            fn Reset(&self, Count: i32, StringType: i32) -> HRESULT;
+            fn Reset(&self, Count: i32, StringType: CERT_RDN_ATTR_VALUE_TYPE) -> HRESULT;
             fn SetValue(&self, Index: i32, str: BSTR) -> HRESULT;
             fn Encode(&self, #[retval] pstrBinary: *mut BSTR) -> HRESULT;
         }

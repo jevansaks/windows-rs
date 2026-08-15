@@ -8,55 +8,55 @@ mod Windows {
             TotalInUse: usize,
             PeakUsage: usize,
         }
-        #[library("KERNEL32.dll", import = "K32EmptyWorkingSet")]
+        #[library("KERNEL32.dll", import = "K32EmptyWorkingSet", set_last_error)]
         extern fn EmptyWorkingSet(hProcess: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32EnumDeviceDrivers")]
+        #[library("KERNEL32.dll", import = "K32EnumDeviceDrivers", set_last_error)]
         extern fn EnumDeviceDrivers(#[size_param(1)] lpImageBase: *mut *mut void, cb: u32, lpcbNeeded: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32EnumPageFilesA")]
+        #[library("KERNEL32.dll", import = "K32EnumPageFilesA", set_last_error)]
         extern fn EnumPageFilesA(pCallBackRoutine: PENUM_PAGE_FILE_CALLBACKA, pContext: *mut void) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32EnumPageFilesW")]
+        #[library("KERNEL32.dll", import = "K32EnumPageFilesW", set_last_error)]
         extern fn EnumPageFilesW(pCallBackRoutine: PENUM_PAGE_FILE_CALLBACKW, pContext: *mut void) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32EnumProcessModules")]
+        #[library("KERNEL32.dll", import = "K32EnumProcessModules", set_last_error)]
         extern fn EnumProcessModules(hProcess: HANDLE, #[size_param(2)] lphModule: *mut HMODULE, cb: u32, lpcbNeeded: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32EnumProcessModulesEx")]
+        #[library("KERNEL32.dll", import = "K32EnumProcessModulesEx", set_last_error)]
         extern fn EnumProcessModulesEx(hProcess: HANDLE, #[size_param(2)] lphModule: *mut HMODULE, cb: u32, lpcbNeeded: *mut u32, dwFilterFlag: u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32EnumProcesses")]
+        #[library("KERNEL32.dll", import = "K32EnumProcesses", set_last_error)]
         extern fn EnumProcesses(#[size_param(1)] lpidProcess: *mut u32, cb: u32, lpcbNeeded: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32GetDeviceDriverBaseNameA")]
+        #[library("KERNEL32.dll", import = "K32GetDeviceDriverBaseNameA", set_last_error)]
         extern fn GetDeviceDriverBaseNameA(ImageBase: *const void, #[len_param(2)] #[out] lpFilename: PSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetDeviceDriverBaseNameW")]
+        #[library("KERNEL32.dll", import = "K32GetDeviceDriverBaseNameW", set_last_error)]
         extern fn GetDeviceDriverBaseNameW(ImageBase: *const void, #[len_param(2)] #[out] lpBaseName: PWSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetDeviceDriverFileNameA")]
+        #[library("KERNEL32.dll", import = "K32GetDeviceDriverFileNameA", set_last_error)]
         extern fn GetDeviceDriverFileNameA(ImageBase: *const void, #[len_param(2)] #[out] lpFilename: PSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetDeviceDriverFileNameW")]
+        #[library("KERNEL32.dll", import = "K32GetDeviceDriverFileNameW", set_last_error)]
         extern fn GetDeviceDriverFileNameW(ImageBase: *const void, #[len_param(2)] #[out] lpFilename: PWSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetMappedFileNameA")]
+        #[library("KERNEL32.dll", import = "K32GetMappedFileNameA", set_last_error)]
         extern fn GetMappedFileNameA(hProcess: HANDLE, lpv: *const void, #[len_param(3)] #[out] lpFilename: PSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetMappedFileNameW")]
+        #[library("KERNEL32.dll", import = "K32GetMappedFileNameW", set_last_error)]
         extern fn GetMappedFileNameW(hProcess: HANDLE, lpv: *const void, #[len_param(3)] #[out] lpFilename: PWSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetModuleBaseNameA")]
+        #[library("KERNEL32.dll", import = "K32GetModuleBaseNameA", set_last_error)]
         extern fn GetModuleBaseNameA(hProcess: HANDLE, #[opt] hModule: HMODULE, #[len_param(3)] #[out] lpBaseName: PSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetModuleBaseNameW")]
+        #[library("KERNEL32.dll", import = "K32GetModuleBaseNameW", set_last_error)]
         extern fn GetModuleBaseNameW(hProcess: HANDLE, #[opt] hModule: HMODULE, #[len_param(3)] #[out] lpBaseName: PWSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetModuleFileNameExA")]
+        #[library("KERNEL32.dll", import = "K32GetModuleFileNameExA", set_last_error)]
         extern fn GetModuleFileNameExA(#[opt] hProcess: HANDLE, #[opt] hModule: HMODULE, lpFilename: PSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetModuleFileNameExW")]
+        #[library("KERNEL32.dll", import = "K32GetModuleFileNameExW", set_last_error)]
         extern fn GetModuleFileNameExW(#[opt] hProcess: HANDLE, #[opt] hModule: HMODULE, lpFilename: PWSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetModuleInformation")]
+        #[library("KERNEL32.dll", import = "K32GetModuleInformation", set_last_error)]
         extern fn GetModuleInformation(hProcess: HANDLE, hModule: HMODULE, lpmodinfo: *mut MODULEINFO, cb: u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32GetPerformanceInfo")]
+        #[library("KERNEL32.dll", import = "K32GetPerformanceInfo", set_last_error)]
         extern fn GetPerformanceInfo(pPerformanceInformation: *mut PERFORMANCE_INFORMATION, cb: u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32GetProcessImageFileNameA")]
+        #[library("KERNEL32.dll", import = "K32GetProcessImageFileNameA", set_last_error)]
         extern fn GetProcessImageFileNameA(hProcess: HANDLE, #[len_param(2)] #[out] lpImageFileName: PSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetProcessImageFileNameW")]
+        #[library("KERNEL32.dll", import = "K32GetProcessImageFileNameW", set_last_error)]
         extern fn GetProcessImageFileNameW(hProcess: HANDLE, #[len_param(2)] #[out] lpImageFileName: PWSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll", import = "K32GetProcessMemoryInfo")]
+        #[library("KERNEL32.dll", import = "K32GetProcessMemoryInfo", set_last_error)]
         extern fn GetProcessMemoryInfo(Process: HANDLE, #[size_param(2)] ppsmemCounters: *mut PROCESS_MEMORY_COUNTERS, cb: u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32GetWsChanges")]
+        #[library("KERNEL32.dll", import = "K32GetWsChanges", set_last_error)]
         extern fn GetWsChanges(hProcess: HANDLE, #[size_param(2)] lpWatchInfo: *mut PSAPI_WS_WATCH_INFORMATION, cb: u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32GetWsChangesEx")]
+        #[library("KERNEL32.dll", import = "K32GetWsChangesEx", set_last_error)]
         extern fn GetWsChangesEx(hProcess: HANDLE, #[size_param(2)] lpWatchInfoEx: *mut PSAPI_WS_WATCH_INFORMATION_EX, #[in] #[out] cb: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32InitializeProcessForWsWatch")]
+        #[library("KERNEL32.dll", import = "K32InitializeProcessForWsWatch", set_last_error)]
         extern fn InitializeProcessForWsWatch(hProcess: HANDLE) -> BOOL;
         const LIST_MODULES_32BIT: i32 = 1;
         const LIST_MODULES_64BIT: i32 = 2;
@@ -198,9 +198,9 @@ mod Windows {
             FaultingThreadId: usize,
             Flags: usize,
         }
-        #[library("KERNEL32.dll", import = "K32QueryWorkingSet")]
+        #[library("KERNEL32.dll", import = "K32QueryWorkingSet", set_last_error)]
         extern fn QueryWorkingSet(hProcess: HANDLE, #[size_param(2)] pv: *mut void, cb: u32) -> BOOL;
-        #[library("KERNEL32.dll", import = "K32QueryWorkingSetEx")]
+        #[library("KERNEL32.dll", import = "K32QueryWorkingSetEx", set_last_error)]
         extern fn QueryWorkingSetEx(hProcess: HANDLE, #[size_param(2)] pv: *mut void, cb: u32) -> BOOL;
     }
 }

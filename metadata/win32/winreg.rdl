@@ -1,9 +1,9 @@
 #[win32]
 mod Windows {
     mod Win32 {
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn AbortSystemShutdownA(#[opt] lpMachineName: PCSTR) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn AbortSystemShutdownW(#[opt] lpMachineName: PCWSTR) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CheckForHiberboot(#[in] #[out] pHiberboot: *mut bool, bClearFlag: bool) -> u32;
@@ -21,13 +21,13 @@ mod Windows {
         extern fn InitiateShutdownA(#[opt] lpMachineName: PCSTR, #[opt] lpMessage: PCSTR, dwGracePeriod: u32, dwShutdownFlags: u32, dwReason: u32) -> u32;
         #[library("ADVAPI32.dll")]
         extern fn InitiateShutdownW(#[opt] lpMachineName: PCWSTR, #[opt] lpMessage: PCWSTR, dwGracePeriod: u32, dwShutdownFlags: u32, dwReason: u32) -> u32;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn InitiateSystemShutdownA(#[opt] lpMachineName: PCSTR, #[opt] lpMessage: PCSTR, dwTimeout: u32, bForceAppsClosed: BOOL, bRebootAfterShutdown: BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn InitiateSystemShutdownExA(#[opt] lpMachineName: PCSTR, #[opt] lpMessage: PCSTR, dwTimeout: u32, bForceAppsClosed: BOOL, bRebootAfterShutdown: BOOL, dwReason: u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn InitiateSystemShutdownExW(#[opt] lpMachineName: PCWSTR, #[opt] lpMessage: PCWSTR, dwTimeout: u32, bForceAppsClosed: BOOL, bRebootAfterShutdown: BOOL, dwReason: u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn InitiateSystemShutdownW(#[opt] lpMachineName: PCWSTR, #[opt] lpMessage: PCWSTR, dwTimeout: u32, bForceAppsClosed: BOOL, bRebootAfterShutdown: BOOL) -> BOOL;
         type LSTATUS = i32;
         const MAX_SHUTDOWN_TIMEOUT: i32 = 315360000;

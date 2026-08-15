@@ -40,7 +40,6 @@ mod Windows {
                 VmQuery: MINIDUMP_VM_QUERY_CALLBACK,
                 VmPreRead: MINIDUMP_VM_PRE_READ_CALLBACK,
                 VmPostRead: MINIDUMP_VM_POST_READ_CALLBACK,
-                CompressedMemoryStreamFinish: MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK,
             },
         }
         #[arch(X64 | Arm64)]
@@ -70,7 +69,6 @@ mod Windows {
                     VmReadStatus: HRESULT,
                     VmReadBytesCompleted: u32,
                 },
-                CompressedMemoryStreamStart: MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK,
                 Status: HRESULT,
             },
         }
@@ -101,7 +99,6 @@ mod Windows {
                     VmReadStatus: HRESULT,
                     VmReadBytesCompleted: u32,
                 },
-                CompressedMemoryStreamStart: MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK,
                 Status: HRESULT,
             },
         }
@@ -129,30 +126,6 @@ mod Windows {
             VmQueryCallback = 18,
             VmPreReadCallback = 19,
             VmPostReadCallback = 20,
-            CompressedMemoryStreamStartCallback = 21,
-            CompressedMemoryStreamFinishCallback = 22,
-        }
-        #[packed(4)]
-        struct MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK {
-            CompressedStreamSize: u64,
-            StreamCompressionRate: u32,
-        }
-        #[arch(X86)]
-        struct MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK {
-            MaxParallelism: u32,
-            MaxTransferSize: u32,
-            NumaNodeInfoArray: PNUMA_NODE_RELATIONSHIP,
-            NumaNodeInfoArraySize: u32,
-            Reserved: u32,
-        }
-        #[packed(4)]
-        #[arch(X64 | Arm64)]
-        struct MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK {
-            MaxParallelism: u32,
-            MaxTransferSize: u32,
-            NumaNodeInfoArray: PNUMA_NODE_RELATIONSHIP,
-            NumaNodeInfoArraySize: u32,
-            Reserved: u32,
         }
         struct MINIDUMP_DIRECTORY {
             StreamType: u32,
@@ -541,8 +514,6 @@ mod Windows {
             ProcessVmCountersStream = 22,
             IptTraceStream = 23,
             ThreadNamesStream = 24,
-            CompressedMemoryStream = 25,
-            CompressedMemoryStreamSQL = 28672,
             ceStreamNull = 32768,
             ceStreamSystemInfo = 32769,
             ceStreamException = 32770,
@@ -974,10 +945,9 @@ mod Windows {
             MiniDumpWithIptTrace = 4194304,
             MiniDumpScanInaccessiblePartialPages = 8388608,
             MiniDumpFilterWriteCombinedMemory = 16777216,
-            MiniDumpWithMemoryCompressed = 67108864,
-            MiniDumpValidTypeFlags = 100663295,
+            MiniDumpValidTypeFlags = 33554431,
             MiniDumpNoIgnoreInaccessibleMemory = 33554432,
-            MiniDumpValidTypeFlagsEx = 134217727,
+            MiniDumpValidTypeFlagsEx = 67108863,
         }
         #[packed(4)]
         struct MINIDUMP_UNLOADED_MODULE {
@@ -1057,8 +1027,6 @@ mod Windows {
         type PMINIDUMP_CALLBACK_INFORMATION = *mut MINIDUMP_CALLBACK_INFORMATION;
         type PMINIDUMP_CALLBACK_INPUT = *mut MINIDUMP_CALLBACK_INPUT;
         type PMINIDUMP_CALLBACK_OUTPUT = *mut MINIDUMP_CALLBACK_OUTPUT;
-        type PMINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK = *mut MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK;
-        type PMINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK = *mut MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK;
         type PMINIDUMP_DIRECTORY = *mut MINIDUMP_DIRECTORY;
         type PMINIDUMP_EXCEPTION = *mut MINIDUMP_EXCEPTION;
         type PMINIDUMP_EXCEPTION_INFORMATION = *mut MINIDUMP_EXCEPTION_INFORMATION;

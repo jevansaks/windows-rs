@@ -151,7 +151,7 @@ mod Windows {
             FullPtrXlatTables: *mut FULL_PTR_XLAT_TABLES,
             FullPtrRefId: u32,
             PointerLength: u32,
-            _bitfield: u32 {
+            _bitfield: i32 {
                 fInDontFree: 1,
                 fDontCallFreeInst: 1,
                 fUnused1: 1,

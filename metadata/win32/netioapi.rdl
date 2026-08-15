@@ -218,8 +218,6 @@ mod Windows {
         #[library("IPHLPAPI.DLL")]
         extern fn GetAnycastIpAddressTable(Family: ADDRESS_FAMILY, Table: *mut PMIB_ANYCASTIPADDRESS_TABLE) -> NTSTATUS;
         #[library("IPHLPAPI.DLL")]
-        extern fn GetBestInterfaceEx(DestinationAddress: *const SOCKADDR, BestIfIndex: *mut u32) -> NTSTATUS;
-        #[library("IPHLPAPI.DLL")]
         extern fn GetBestRoute2(#[opt] InterfaceLuid: *const NET_LUID, InterfaceIndex: NET_IFINDEX, #[opt] SourceAddress: *const SOCKADDR_INET, DestinationAddress: *const SOCKADDR_INET, AddressSortOptions: u32, BestRoute: *mut MIB_IPFORWARD_ROW2, BestSourceAddress: *mut SOCKADDR_INET) -> NTSTATUS;
         #[library("IPHLPAPI.DLL")]
         extern fn GetCurrentThreadCompartmentId() -> NET_IF_COMPARTMENT_ID;

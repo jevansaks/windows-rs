@@ -108,7 +108,7 @@ mod Windows {
         }
         #[guid(0x28724c91_df35_4856_9f76_d6a26413f3df)]
         interface IAudioAmbisonicsControl: IUnknown {
-            fn SetData(&self, pAmbisonicsParams: *const AMBISONICS_PARAMS, cbAmbisonicsParams: u32) -> HRESULT;
+            fn SetData(&self, #[len_param(1)] pAmbisonicsParams: *const AMBISONICS_PARAMS, cbAmbisonicsParams: u32) -> HRESULT;
             fn SetHeadTracking(&self, bEnableHeadTracking: BOOL) -> HRESULT;
             fn GetHeadTracking(&self, pbEnableHeadTracking: *mut BOOL) -> HRESULT;
             fn SetRotation(&self, X: f32, Y: f32, Z: f32, W: f32) -> HRESULT;

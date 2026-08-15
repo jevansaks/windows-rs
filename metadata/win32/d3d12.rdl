@@ -1,12 +1,16 @@
 #[win32]
 mod Windows {
     mod Win32 {
+        const CLSID_D3D12ApplicationIdentity: GUID = 0x08d8e1e8_75a6_42a7_bf3a_d05fe529c47c;
         const CLSID_D3D12DSRDeviceFactory: GUID = 0xbb6dd27e_94a9_41a6_9f1b_133772172428;
         const CLSID_D3D12Debug: GUID = 0xf2352aeb_dd84_49fe_b97b_a9dcfdcc1b4f;
         const CLSID_D3D12DeviceFactory: GUID = 0x114863bf_c386_4aee_b39d_8f0bbb062955;
         const CLSID_D3D12DeviceRemovedExtendedData: GUID = 0x4a75bbc4_9ff4_4ad8_9f18_abae84dc5ff2;
+        const CLSID_D3D12RuntimeValidationControl: GUID = 0xe5b53e74_3fca_47b4_88b9_a8b41ef8fb73;
         const CLSID_D3D12SDKConfiguration: GUID = 0x7cda6aca_a03e_49c8_9458_0334d20e07ce;
+        const CLSID_D3D12StateObjectFactory: GUID = 0x54e1c9f3_1303_4112_bf8e_7bf2bb606a73;
         const CLSID_D3D12Tools: GUID = 0xe38216b1_3c8c_4833_aa09_0a06b65d96c8;
+        extern fn D3D12ApplicationDescFunc(pApplicationDesc: *const D3D12_APPLICATION_DESC, #[in] #[out] #[opt] pContext: *mut void);
         #[library("d3d12.dll")]
         extern fn D3D12CreateDevice(#[opt] pAdapter: IUnknown, MinimumFeatureLevel: D3D_FEATURE_LEVEL, riid: *const GUID, #[iid_is] #[opt] ppDevice: *mut *mut void) -> HRESULT;
         #[library("d3d12.dll")]
@@ -19,15 +23,24 @@ mod Windows {
         extern fn D3D12GetDebugInterface(riid: *const GUID, #[iid_is] #[opt] ppvDebug: *mut *mut void) -> HRESULT;
         #[library("d3d12.dll")]
         extern fn D3D12GetInterface(rclsid: *const GUID, riid: *const GUID, #[iid_is] #[opt] ppvDebug: *mut *mut void) -> HRESULT;
+        extern fn D3D12PipelineStateFunc(#[size_param(1)] pKey: *const void, KeySize: u32, Version: u32, pDesc: *const D3D12_PIPELINE_STATE_STREAM_DESC, #[in] #[out] #[opt] pContext: *mut void);
         #[library("d3d12.dll")]
         extern fn D3D12SerializeRootSignature(pRootSignature: *const D3D12_ROOT_SIGNATURE_DESC, Version: D3D_ROOT_SIGNATURE_VERSION, ppBlob: *mut ID3D10Blob, ppErrorBlob: *mut ID3D10Blob) -> HRESULT;
         #[library("d3d12.dll")]
         extern fn D3D12SerializeVersionedRootSignature(pRootSignature: *const D3D12_VERSIONED_ROOT_SIGNATURE_DESC, ppBlob: *mut ID3D10Blob, ppErrorBlob: *mut ID3D10Blob) -> HRESULT;
+        extern fn D3D12StateObjectFunc(#[size_param(1)] pKey: *const void, KeySize: u32, Version: u32, pDesc: *const D3D12_STATE_OBJECT_DESC, #[size_param(5)] pParentKey: *const void, ParentKeySize: u32, #[in] #[out] #[opt] pContext: *mut void);
         const D3D12_16BIT_INDEX_STRIP_CUT_VALUE: i32 = 65535;
         const D3D12_32BIT_INDEX_STRIP_CUT_VALUE: u32 = 4294967295;
         const D3D12_8BIT_INDEX_STRIP_CUT_VALUE: i32 = 255;
         const D3D12_ANISOTROPIC_FILTERING_BIT: i32 = 64;
         const D3D12_APPEND_ALIGNED_ELEMENT: u32 = 4294967295;
+        struct D3D12_APPLICATION_DESC {
+            pExeFilename: PCWSTR,
+            pName: PCWSTR,
+            Version: D3D12_VERSION_NUMBER,
+            pEngineName: PCWSTR,
+            EngineVersion: D3D12_VERSION_NUMBER,
+        }
         #[repr(i32)]
         enum D3D12_APPLICATION_SPECIFIC_DRIVER_BLOB_STATUS {
             D3D12_APPLICATION_SPECIFIC_DRIVER_BLOB_UNKNOWN = 1,
@@ -36,10 +49,11 @@ mod Windows {
             D3D12_APPLICATION_SPECIFIC_DRIVER_BLOB_NOT_SPECIFIED = 4,
         }
         const D3D12_ARRAY_AXIS_ADDRESS_RANGE_BIT_COUNT: i32 = 9;
+        const D3D12_AS_TGSM_BYTES_MINIMUM_SUPPORT: i32 = 32768;
         struct D3D12_AUTO_BREADCRUMB_NODE {
-            pCommandListDebugNameA: *const i8,
+            pCommandListDebugNameA: *const u8,
             pCommandListDebugNameW: *const u16,
-            pCommandQueueDebugNameA: *const i8,
+            pCommandQueueDebugNameA: *const u8,
             pCommandQueueDebugNameW: *const u16,
             pCommandList: ID3D12GraphicsCommandList,
             pCommandQueue: ID3D12CommandQueue,
@@ -49,9 +63,9 @@ mod Windows {
             pNext: *const D3D12_AUTO_BREADCRUMB_NODE,
         }
         struct D3D12_AUTO_BREADCRUMB_NODE1 {
-            pCommandListDebugNameA: *const i8,
+            pCommandListDebugNameA: *const u8,
             pCommandListDebugNameW: *const u16,
-            pCommandQueueDebugNameA: *const i8,
+            pCommandQueueDebugNameA: *const u8,
             pCommandQueueDebugNameW: *const u16,
             pCommandList: ID3D12GraphicsCommandList,
             pCommandQueue: ID3D12CommandQueue,
@@ -321,6 +335,12 @@ mod Windows {
             StructureByteStride: u32,
             Flags: D3D12_BUFFER_SRV_FLAGS,
         }
+        struct D3D12_BUFFER_SRV_BYTE_OFFSET {
+            Offset: u64,
+            Size: u64,
+            StructureByteStride: u32,
+            Flags: D3D12_BUFFER_SRV_FLAGS,
+        }
         #[repr(u32)]
         #[flags]
         enum D3D12_BUFFER_SRV_FLAGS {
@@ -330,6 +350,13 @@ mod Windows {
         struct D3D12_BUFFER_UAV {
             FirstElement: u64,
             NumElements: u32,
+            StructureByteStride: u32,
+            CounterOffsetInBytes: u64,
+            Flags: D3D12_BUFFER_UAV_FLAGS,
+        }
+        struct D3D12_BUFFER_UAV_BYTE_OFFSET {
+            Offset: u64,
+            Size: u64,
             StructureByteStride: u32,
             CounterOffsetInBytes: u64,
             Flags: D3D12_BUFFER_UAV_FLAGS,
@@ -441,12 +468,39 @@ mod Windows {
         enum D3D12_COMMAND_QUEUE_FLAGS {
             D3D12_COMMAND_QUEUE_FLAG_NONE = 0,
             D3D12_COMMAND_QUEUE_FLAG_DISABLE_GPU_TIMEOUT = 1,
+            D3D12_COMMAND_QUEUE_FLAG_ALLOW_DYNAMIC_PRIORITY = 2,
+        }
+        #[repr(i32)]
+        enum D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY {
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_IDLE = 0,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_DEFAULT = 1,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_NORMAL_0 = 2,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_0 = 18,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_1 = 19,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_2 = 20,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_3 = 21,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_4 = 22,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_5 = 23,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_6 = 24,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_7 = 25,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_8 = 26,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_9 = 27,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_10 = 28,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_11 = 29,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_12 = 30,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_SOFT_REALTIME_13 = 31,
+            D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY_HARD_REALTIME = 32,
         }
         #[repr(i32)]
         enum D3D12_COMMAND_QUEUE_PRIORITY {
             D3D12_COMMAND_QUEUE_PRIORITY_NORMAL = 0,
             D3D12_COMMAND_QUEUE_PRIORITY_HIGH = 100,
             D3D12_COMMAND_QUEUE_PRIORITY_GLOBAL_REALTIME = 10000,
+        }
+        #[repr(i32)]
+        enum D3D12_COMMAND_QUEUE_PROCESS_PRIORITY {
+            D3D12_COMMAND_QUEUE_PROCESS_PRIORITY_NORMAL = 0,
+            D3D12_COMMAND_QUEUE_PROCESS_PRIORITY_HIGH = 1,
         }
         #[repr(u32)]
         #[flags]
@@ -548,6 +602,12 @@ mod Windows {
             D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE = 2,
             D3D12_CPU_PAGE_PROPERTY_WRITE_BACK = 3,
         }
+        struct D3D12_CREATE_STATE_OBJECT_STATISTICS {
+            NumCreated: u32,
+            NumPSDBCacheMissed: u32,
+            NumTotalCacheMissed: u32,
+            NumCacheUnknown: u32,
+        }
         #[repr(i32)]
         enum D3D12_CROSS_NODE_SHARING_TIER {
             D3D12_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED = 0,
@@ -595,6 +655,7 @@ mod Windows {
         const D3D12_CS_4_X_THREAD_GROUP_MAX_Y: i32 = 768;
         const D3D12_CS_4_X_UAV_REGISTER_COUNT: i32 = 1;
         const D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION: i32 = 65535;
+        const D3D12_CS_TGSM_BYTES_MINIMUM_SUPPORT: i32 = 32768;
         const D3D12_CS_TGSM_REGISTER_COUNT: i32 = 8192;
         const D3D12_CS_TGSM_REGISTER_READS_PER_INST: i32 = 1;
         const D3D12_CS_TGSM_RESOURCE_REGISTER_COMPONENTS: i32 = 1;
@@ -877,13 +938,13 @@ mod Windows {
             StartInstanceLocation: u32,
         }
         struct D3D12_DRED_ALLOCATION_NODE {
-            ObjectNameA: *const i8,
+            ObjectNameA: *const u8,
             ObjectNameW: *const u16,
             AllocationType: D3D12_DRED_ALLOCATION_TYPE,
             pNext: *const D3D12_DRED_ALLOCATION_NODE,
         }
         struct D3D12_DRED_ALLOCATION_NODE1 {
-            ObjectNameA: *const i8,
+            ObjectNameA: *const u8,
             ObjectNameW: *const u16,
             AllocationType: D3D12_DRED_ALLOCATION_TYPE,
             pNext: *const D3D12_DRED_ALLOCATION_NODE1,
@@ -1050,6 +1111,12 @@ mod Windows {
             D3D12_EXECUTE_INDIRECT_TIER_1_0 = 10,
             D3D12_EXECUTE_INDIRECT_TIER_1_1 = 11,
         }
+        struct D3D12_EXISTING_COLLECTION_BY_KEY_DESC {
+            pKey: *const void,
+            KeySize: u32,
+            NumExports: u32,
+            pExports: *const D3D12_EXPORT_DESC,
+        }
         struct D3D12_EXISTING_COLLECTION_DESC {
             pExistingCollection: ID3D12StateObject,
             NumExports: u32,
@@ -1115,6 +1182,8 @@ mod Windows {
             D3D12_FEATURE_APPLICATION_SPECIFIC_DRIVER_STATE = 56,
             D3D12_FEATURE_BYTECODE_BYPASS_HASH_SUPPORTED = 57,
             D3D12_FEATURE_SHADER_CACHE_ABI_SUPPORT = 61,
+            D3D12_FEATURE_BARRIER_LAYOUT = 64,
+            D3D12_FEATURE_D3D12_OPTIONS22 = 65,
         }
         struct D3D12_FEATURE_DATA_APPLICATION_SPECIFIC_DRIVER_STATE {
             Supported: BOOL,
@@ -1131,6 +1200,11 @@ mod Windows {
             UMA: BOOL,
             CacheCoherentUMA: BOOL,
             IsolatedMMU: BOOL,
+        }
+        struct D3D12_FEATURE_DATA_BARRIER_LAYOUT {
+            CommandListType: D3D12_COMMAND_LIST_TYPE,
+            Layout: D3D12_BARRIER_LAYOUT,
+            Supported: BOOL,
         }
         struct D3D12_FEATURE_DATA_BYTECODE_BYPASS_HASH_SUPPORTED {
             Supported: BOOL,
@@ -1235,6 +1309,12 @@ mod Windows {
             SampleCmpGradientAndBiasSupported: BOOL,
             ExtendedCommandInfoSupported: BOOL,
         }
+        struct D3D12_FEATURE_DATA_D3D12_OPTIONS22 {
+            ShaderExecutionReorderingActuallyReorders: BOOL,
+            CreateByteOffsetViewsSupported: BOOL,
+            Max1DDispatchSize: u32,
+            Max1DDispatchMeshSize: u32,
+        }
         struct D3D12_FEATURE_DATA_D3D12_OPTIONS3 {
             CopyQueueTimestampQueriesSupported: BOOL,
             CastingFullyTypedFormatSupported: BOOL,
@@ -1301,6 +1381,9 @@ mod Windows {
         }
         struct D3D12_FEATURE_DATA_HARDWARE_COPY {
             Supported: BOOL,
+        }
+        struct D3D12_FEATURE_DATA_HARDWARE_SCHEDULING_QUEUE_GROUPINGS {
+            ComputeQueuesPer3DQueue: u32,
         }
         struct D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS {
             Format: DXGI_FORMAT,
@@ -1599,6 +1682,9 @@ mod Windows {
         const D3D12_GS_OUTPUT_REGISTER_COMPONENTS: i32 = 4;
         const D3D12_GS_OUTPUT_REGISTER_COMPONENT_BIT_COUNT: i32 = 32;
         const D3D12_GS_OUTPUT_REGISTER_COUNT: i32 = 32;
+        const D3D12_GUID_TEXTURE_LAYOUT_ROW_MAJOR_HEIGHT_ALIGNMENT: i32 = 4;
+        const D3D12_GUID_TEXTURE_LAYOUT_ROW_MAJOR_PITCH_ALIGNMENT: i32 = 256;
+        const D3D12_GUID_TEXTURE_LAYOUT_ROW_MAJOR_PLANE_ALIGNMENT: i32 = 4096;
         struct D3D12_HEAP_DESC {
             SizeInBytes: u64,
             Properties: D3D12_HEAP_PROPERTIES,
@@ -1968,6 +2054,8 @@ mod Windows {
             Height: u32,
             Depth: u32,
         }
+        const D3D12_MS_DISPATCH_MAX_THREAD_GROUPS_PER_GRID: i32 = 4194303;
+        const D3D12_MS_TGSM_BYTES_MINIMUM_SUPPORT: i32 = 28672;
         #[repr(u32)]
         #[flags]
         enum D3D12_MULTIPLE_FENCE_WAIT_FLAGS {
@@ -2044,6 +2132,7 @@ mod Windows {
             StartTileIndexInOverallResource: u32,
         }
         const D3D12_PACKED_TILE: u32 = 4294967295;
+        extern fn D3D12_PFN_TRIM_NOTIFICATION_CALLBACK(param0: *const D3D12_TRIM_NOTIFICATION);
         #[repr(u32)]
         #[flags]
         enum D3D12_PIPELINE_STATE_FLAGS {
@@ -2051,6 +2140,7 @@ mod Windows {
             D3D12_PIPELINE_STATE_FLAG_TOOL_DEBUG = 1,
             D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS = 4,
             D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT = 8,
+            D3D12_PIPELINE_STATE_FLAG_DISABLE_CACHED_BLOB = 16,
         }
         struct D3D12_PIPELINE_STATE_STREAM_DESC {
             SizeInBytes: usize,
@@ -2099,7 +2189,7 @@ mod Windows {
             D3D12_PREDICATION_OP_EQUAL_ZERO = 0,
             D3D12_PREDICATION_OP_NOT_EQUAL_ZERO = 1,
         }
-        const D3D12_PREVIEW_SDK_VERSION: i32 = 718;
+        const D3D12_PREVIEW_SDK_VERSION: i32 = 719;
         const D3D12_PRE_SCISSOR_PIXEL_ADDRESS_RANGE_BIT_COUNT: i32 = 16;
         type D3D12_PRIMITIVE = D3D_PRIMITIVE;
         type D3D12_PRIMITIVE_TOPOLOGY = D3D_PRIMITIVE_TOPOLOGY;
@@ -2215,6 +2305,11 @@ mod Windows {
             Type: D3D12_QUERY_HEAP_TYPE,
             Count: u32,
             NodeMask: u32,
+        }
+        #[repr(i32)]
+        enum D3D12_QUERY_HEAP_FLAGS {
+            D3D12_QUERY_HEAP_FLAG_NONE = 0,
+            D3D12_QUERY_HEAP_FLAG_CPU_RESOLVE = 1,
         }
         #[repr(i32)]
         enum D3D12_QUERY_HEAP_TYPE {
@@ -2547,6 +2642,11 @@ mod Windows {
             D3D12_RECREATE_AT_TIER_1 = 1,
         }
         type D3D12_RECT = RECT;
+        struct D3D12_REGISTER_TRIM_NOTIFICATION {
+            pfnCallback: D3D12_PFN_TRIM_NOTIFICATION_CALLBACK,
+            pContext: *mut void,
+            CallbackCookie: u32,
+        }
         struct D3D12_RENDER_PASS_BEGINNING_ACCESS {
             Type: D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE,
             Anonymous: union {
@@ -3011,7 +3111,7 @@ mod Windows {
             X: i8,
             Y: i8,
         }
-        const D3D12_SDK_VERSION: i32 = 617;
+        const D3D12_SDK_VERSION: i32 = 619;
         struct D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER {
             DriverOpaqueGUID: GUID,
             DriverOpaqueVersioningData: [u8; 16],
@@ -3177,6 +3277,7 @@ mod Windows {
                 TextureCube: D3D12_TEXCUBE_SRV,
                 TextureCubeArray: D3D12_TEXCUBE_ARRAY_SRV,
                 RaytracingAccelerationStructure: D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV,
+                BufferByteOffset: D3D12_BUFFER_SRV_BYTE_OFFSET,
             },
         }
         #[repr(i32)]
@@ -3261,6 +3362,7 @@ mod Windows {
             D3D12_SRV_DIMENSION_TEXTURECUBE = 9,
             D3D12_SRV_DIMENSION_TEXTURECUBEARRAY = 10,
             D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE = 11,
+            D3D12_SRV_DIMENSION_BUFFER_BYTE_OFFSET = 12,
         }
         const D3D12_STANDARD_COMPONENT_BIT_COUNT: i32 = 32;
         const D3D12_STANDARD_COMPONENT_BIT_COUNT_DOUBLED: i32 = 64;
@@ -3278,6 +3380,12 @@ mod Windows {
         struct D3D12_STATE_OBJECT_CONFIG {
             Flags: D3D12_STATE_OBJECT_FLAGS,
         }
+        #[repr(u32)]
+        #[flags]
+        enum D3D12_STATE_OBJECT_DATABASE_FLAGS {
+            D3D12_STATE_OBJECT_DATABASE_FLAG_NONE = 0,
+            D3D12_STATE_OBJECT_DATABASE_FLAG_READ_ONLY = 1,
+        }
         struct D3D12_STATE_OBJECT_DESC {
             Type: D3D12_STATE_OBJECT_TYPE,
             NumSubobjects: u32,
@@ -3290,6 +3398,11 @@ mod Windows {
             D3D12_STATE_OBJECT_FLAG_ALLOW_LOCAL_DEPENDENCIES_ON_EXTERNAL_DEFINITIONS = 1,
             D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS = 2,
             D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS = 4,
+        }
+        struct D3D12_STATE_OBJECT_STATISTICS {
+            DefaultPSDBRegistered: BOOL,
+            PipelineStateObjectStatistics: D3D12_CREATE_STATE_OBJECT_STATISTICS,
+            StateObjectStatistics: D3D12_CREATE_STATE_OBJECT_STATISTICS,
         }
         #[repr(i32)]
         enum D3D12_STATE_OBJECT_TYPE {
@@ -3334,8 +3447,9 @@ mod Windows {
             D3D12_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL2 = 30,
             D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_SERIALIZED_ROOT_SIGNATURE = 31,
             D3D12_STATE_SUBOBJECT_TYPE_LOCAL_SERIALIZED_ROOT_SIGNATURE = 32,
-            D3D12_STATE_SUBOBJECT_TYPE_COMPILER_EXISITING_COLLECTION = 33,
-            D3D12_STATE_SUBOBJECT_TYPE_MAX_VALID = 34,
+            D3D12_STATE_SUBOBJECT_TYPE_COMPILER_EXISTING_COLLECTION = 33,
+            D3D12_STATE_SUBOBJECT_TYPE_EXISTING_COLLECTION_BY_KEY = 36,
+            D3D12_STATE_SUBOBJECT_TYPE_MAX_VALID = 37,
         }
         #[repr(i32)]
         enum D3D12_STATIC_BORDER_COLOR {
@@ -3687,6 +3801,19 @@ mod Windows {
             DepthInTexels: u32,
         }
         const D3D12_TRACKED_WORKLOAD_MAX_INSTANCES: i32 = 32;
+        struct D3D12_TRIM_NOTIFICATION {
+            pContext: *mut void,
+            Flags: D3D12_TRIM_NOTIFICATION_FLAGS,
+            NumBytesToTrim: u64,
+        }
+        #[repr(u32)]
+        #[flags]
+        enum D3D12_TRIM_NOTIFICATION_FLAGS {
+            D3D12_TRIM_NOTIFICATION_FLAG_NONE = 0,
+            D3D12_TRIM_NOTIFICATION_FLAG_PERIODIC_TRIM = 1,
+            D3D12_TRIM_NOTIFICATION_FLAG_RESTART_PERIODIC_TRIM = 2,
+            D3D12_TRIM_NOTIFICATION_FLAG_TRIM_TO_BUDGET = 4,
+        }
         #[repr(i32)]
         enum D3D12_TRI_STATE {
             D3D12_TRI_STATE_UNKNOWN = -1,
@@ -3705,6 +3832,7 @@ mod Windows {
             D3D12_UAV_DIMENSION_TEXTURE2DMS = 6,
             D3D12_UAV_DIMENSION_TEXTURE2DMSARRAY = 7,
             D3D12_UAV_DIMENSION_TEXTURE3D = 8,
+            D3D12_UAV_DIMENSION_BUFFER_BYTE_OFFSET = 9,
         }
         const D3D12_UAV_SLOT_COUNT: i32 = 64;
         const D3D12_UNBOUND_MEMORY_ACCESS_RESULT: i32 = 0;
@@ -3720,6 +3848,7 @@ mod Windows {
                 Texture2DMS: D3D12_TEX2DMS_UAV,
                 Texture2DMSArray: D3D12_TEX2DMS_ARRAY_UAV,
                 Texture3D: D3D12_TEX3D_UAV,
+                BufferByteOffset: D3D12_BUFFER_UAV_BYTE_OFFSET,
             },
         }
         #[repr(i32)]
@@ -3817,6 +3946,7 @@ mod Windows {
         const D3D12_WHQL_DRAWINDEXED_INDEX_COUNT_2_TO_EXP: i32 = 25;
         const D3D12_WHQL_DRAW_VERTEX_COUNT_2_TO_EXP: i32 = 25;
         const D3D12_WORK_GRAPHS_BACKING_MEMORY_ALIGNMENT_IN_BYTES: i32 = 8;
+        const D3D12_WORK_GRAPHS_DISPATCH_MAX_THREAD_GROUPS_PER_GRID: i32 = 16777215;
         const D3D12_WORK_GRAPHS_MAX_NODE_DEPTH: i32 = 32;
         #[repr(i32)]
         enum D3D12_WORK_GRAPHS_TIER {
@@ -3873,7 +4003,12 @@ mod Windows {
             D3D_SHADER_MODEL_6_7 = 103,
             D3D_SHADER_MODEL_6_8 = 104,
             D3D_SHADER_MODEL_6_9 = 105,
-            D3D_HIGHEST_SHADER_MODEL = 105,
+            D3D_SHADER_MODEL_6_10 = 106,
+            D3D_HIGHEST_SHADER_MODEL = 106,
+        }
+        #[guid(0x82dc6c85_727b_4a8d_9169_db6ce3e975a0)]
+        interface ID3D12ApplicationIdentity: IUnknown {
+            fn SetApplicationIdentity(&self, pDesc: *const D3D12_APPLICATION_DESC, AppId: *const GUID) -> HRESULT;
         }
         #[guid(0x6102dee4_af59_4b09_b999_b44d73f09b24)]
         interface ID3D12CommandAllocator: ID3D12Pageable {
@@ -3896,6 +4031,13 @@ mod Windows {
             fn GetTimestampFrequency(&self, pFrequency: *mut u64) -> HRESULT;
             fn GetClockCalibration(&self, pGpuTimestamp: *mut u64, pCpuTimestamp: *mut u64) -> HRESULT;
             fn GetDesc(&self) -> D3D12_COMMAND_QUEUE_DESC;
+        }
+        #[guid(0x3a3c3165_0ee7_4b8e_a0af_6356b4c3bbb9)]
+        interface ID3D12CommandQueue1: ID3D12CommandQueue {
+            fn SetProcessPriority(&self, Priority: D3D12_COMMAND_QUEUE_PROCESS_PRIORITY) -> HRESULT;
+            fn GetProcessPriority(&self, pOutValue: *mut D3D12_COMMAND_QUEUE_PROCESS_PRIORITY) -> HRESULT;
+            fn SetGlobalPriority(&self, Priority: D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY) -> HRESULT;
+            fn GetGlobalPriority(&self, pOutValue: *mut D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY) -> HRESULT;
         }
         #[guid(0xc36a797c_ec80_4f0a_8985_a7b2475082d1)]
         interface ID3D12CommandSignature: ID3D12Pageable {}
@@ -3976,6 +4118,20 @@ mod Windows {
         #[guid(0x5f6e592d_d895_44c2_8e4a_88ad4926d323)]
         interface ID3D12Device14: ID3D12Device13 {
             fn CreateRootSignatureFromSubobjectInLibrary(&self, nodeMask: u32, #[len_param(2)] pLibraryBlob: *const void, blobLengthInBytes: usize, #[opt] subobjectName: PCWSTR, riid: *const GUID, #[iid_is] ppvRootSignature: *mut *mut void) -> HRESULT;
+        }
+        #[guid(0x76cff76f_1e9b_4450_8cdc_34f1af788e5b)]
+        interface ID3D12Device15: ID3D12Device14 {
+            fn RegisterTrimNotificationCallback(&self, #[in] #[out] pData: *mut D3D12_REGISTER_TRIM_NOTIFICATION) -> HRESULT;
+            fn UnregisterTrimNotificationCallback(&self, CallbackCookie: u32) -> HRESULT;
+            fn TryCreateShaderResourceView(&self, #[opt] pResource: ID3D12Resource, #[opt] pDesc: *const D3D12_SHADER_RESOURCE_VIEW_DESC, DestDescriptor: D3D12_CPU_DESCRIPTOR_HANDLE) -> HRESULT;
+            fn TryCreateUnorderedAccessView(&self, #[opt] pResource: ID3D12Resource, #[opt] pCounterResource: ID3D12Resource, #[opt] pDesc: *const D3D12_UNORDERED_ACCESS_VIEW_DESC, DestDescriptor: D3D12_CPU_DESCRIPTOR_HANDLE) -> HRESULT;
+            fn TryCreateConstantBufferView(&self, #[opt] pDesc: *const D3D12_CONSTANT_BUFFER_VIEW_DESC, DestDescriptor: D3D12_CPU_DESCRIPTOR_HANDLE) -> HRESULT;
+            fn TryCreateSampler2(&self, pDesc: *const D3D12_SAMPLER_DESC2, DestDescriptor: D3D12_CPU_DESCRIPTOR_HANDLE) -> HRESULT;
+            fn TryCreateRenderTargetView(&self, #[opt] pResource: ID3D12Resource, #[opt] pDesc: *const D3D12_RENDER_TARGET_VIEW_DESC, DestDescriptor: D3D12_CPU_DESCRIPTOR_HANDLE) -> HRESULT;
+            fn TryCreateDepthStencilView(&self, #[opt] pResource: ID3D12Resource, #[opt] pDesc: *const D3D12_DEPTH_STENCIL_VIEW_DESC, DestDescriptor: D3D12_CPU_DESCRIPTOR_HANDLE) -> HRESULT;
+            fn TryCreateSamplerFeedbackUnorderedAccessView(&self, #[opt] pTargetedResource: ID3D12Resource, #[opt] pFeedbackResource: ID3D12Resource, DestDescriptor: D3D12_CPU_DESCRIPTOR_HANDLE) -> HRESULT;
+            fn CreateQueryHeap1(&self, pDesc: *const D3D12_QUERY_HEAP_DESC, Flags: D3D12_QUERY_HEAP_FLAGS, riid: *const GUID, #[iid_is] ppvHeap: *mut *mut void) -> HRESULT;
+            fn ResolveQueryData(&self, pQueryHeap: ID3D12QueryHeap, Type: D3D12_QUERY_TYPE, StartIndex: u32, NumQueries: u32, #[in] #[out] pResolvedQueryData: *mut void) -> HRESULT;
         }
         #[guid(0x30baa41e_b15b_475c_a0bb_1af5c5b64328)]
         interface ID3D12Device2: ID3D12Device1 {
@@ -4083,6 +4239,10 @@ mod Windows {
         #[guid(0x61552388_01ab_4008_a436_83db189566ea)]
         interface ID3D12DeviceRemovedExtendedDataSettings2: ID3D12DeviceRemovedExtendedDataSettings1 {
             fn UseMarkersOnlyAutoBreadcrumbs(&self, MarkersOnly: BOOL);
+        }
+        #[guid(0x3d5ca1a8_a39e_4619_95e0_f9b0a40340f5)]
+        interface ID3D12DeviceStatistics: IUnknown {
+            fn GetStateObjectStatistics(&self, pStatistics: *mut D3D12_STATE_OBJECT_STATISTICS) -> HRESULT;
         }
         #[guid(0x2ea68e9c_19c3_4e47_a109_6cdadff0aca9)]
         interface ID3D12DeviceTools: IUnknown {
@@ -4310,9 +4470,19 @@ mod Windows {
         }
         #[guid(0xc54a6b66_72df_4ee8_8be5_a946a1429214)]
         interface ID3D12RootSignature: ID3D12DeviceChild {}
+        #[guid(0xc390bd7d_9142_4a95_b072_6d3439ade5c4)]
+        interface ID3D12RootSignature1: ID3D12RootSignature {
+            fn GetSerializedSize(&self) -> usize;
+            fn GetSerializedData(&self, #[size_param(1)] pData: *mut void, Size: usize) -> HRESULT;
+        }
         #[guid(0x34ab647b_3cc8_46ac_841b_c0965645c046)]
         interface ID3D12RootSignatureDeserializer: IUnknown {
             fn GetRootSignatureDesc(&self) -> *const D3D12_ROOT_SIGNATURE_DESC;
+        }
+        #[guid(0xc706c811_3663_4bf1_91b9_1e8a7c114ab9)]
+        interface ID3D12RuntimeValidationControl: IUnknown {
+            fn DisableFailuresFromStricterValidationInAppLocalRuntime(&self, bDisable: BOOL);
+            fn FailuresFromStricterValidationInAppLocalRuntimeDisabled(&self) -> BOOL;
         }
         #[guid(0xe9eb5314_33aa_42b2_a718_d77f58b1f1c7)]
         interface ID3D12SDKConfiguration: IUnknown {
@@ -4332,6 +4502,20 @@ mod Windows {
         }
         #[guid(0x47016943_fca8_4594_93ea_af258b55346d)]
         interface ID3D12StateObject: ID3D12Pageable {}
+        #[guid(0xc56060b7_b5fc_4135_98e0_a1e9997eace0)]
+        interface ID3D12StateObjectDatabase: IUnknown {
+            fn SetApplicationDesc(&self, pApplicationDesc: *const D3D12_APPLICATION_DESC) -> HRESULT;
+            fn GetApplicationDesc(&self, CallbackFunc: D3D12ApplicationDescFunc, #[in] #[out] #[opt] pContext: *mut void) -> HRESULT;
+            fn StorePipelineStateDesc(&self, #[len_param(1)] pKey: *const void, KeySize: u32, Version: u32, pDesc: *const D3D12_PIPELINE_STATE_STREAM_DESC) -> HRESULT;
+            fn FindPipelineStateDesc(&self, #[len_param(1)] pKey: *const void, KeySize: u32, CallbackFunc: D3D12PipelineStateFunc, #[in] #[out] #[opt] pContext: *mut void) -> HRESULT;
+            fn StoreStateObjectDesc(&self, #[len_param(1)] pKey: *const void, KeySize: u32, Version: u32, pDesc: *const D3D12_STATE_OBJECT_DESC, #[len_param(5)] #[opt] pStateObjectToGrowFromKey: *const void, StateObjectToGrowFromKeySize: u32) -> HRESULT;
+            fn FindStateObjectDesc(&self, pKey: *const void, KeySize: u32, CallbackFunc: D3D12StateObjectFunc, #[in] #[out] #[opt] pContext: *mut void) -> HRESULT;
+            fn FindObjectVersion(&self, pKey: *const void, KeySize: u32, pVersion: *mut u32) -> HRESULT;
+        }
+        #[guid(0xf5b066f0_648a_4611_bd41_27fd0948b9eb)]
+        interface ID3D12StateObjectDatabaseFactory: IUnknown {
+            fn CreateStateObjectDatabaseFromFile(&self, pDatabaseFile: PCWSTR, flags: D3D12_STATE_OBJECT_DATABASE_FLAGS, riid: *const GUID, #[iid_is] ppvStateObjectDatabase: *mut *mut void) -> HRESULT;
+        }
         #[guid(0xde5fa827_9bf9_4f26_89ff_d7f56fde3860)]
         interface ID3D12StateObjectProperties: IUnknown {
             fn GetShaderIdentifier(&self, pExportName: PCWSTR) -> *mut void;

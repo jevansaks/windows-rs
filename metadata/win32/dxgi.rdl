@@ -3,6 +3,7 @@ mod Windows {
     mod Win32 {
         #[library("dxgi.dll")]
         extern fn CreateDXGIFactory(riid: *const GUID, #[iid_is] ppFactory: *mut *mut void) -> HRESULT;
+        #[supported_os("windows6.1")]
         #[library("dxgi.dll")]
         extern fn CreateDXGIFactory1(riid: *const GUID, #[iid_is] ppFactory: *mut *mut void) -> HRESULT;
         struct DXGI_ADAPTER_DESC {
@@ -121,7 +122,6 @@ mod Windows {
             DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED = 1024,
             DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING = 2048,
             DXGI_SWAP_CHAIN_FLAG_RESTRICTED_TO_ALL_HOLOGRAPHIC_DISPLAYS = 4096,
-            DXGI_SWAP_CHAIN_FLAG_USE_DEFAULT_COLOR_SPACE = 32768,
         }
         #[repr(i32)]
         enum DXGI_SWAP_EFFECT {

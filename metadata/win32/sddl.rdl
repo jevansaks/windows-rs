@@ -1,21 +1,21 @@
 #[win32]
 mod Windows {
     mod Win32 {
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertSecurityDescriptorToStringSecurityDescriptorA(SecurityDescriptor: PSECURITY_DESCRIPTOR, RequestedStringSDRevision: u32, SecurityInformation: SECURITY_INFORMATION, StringSecurityDescriptor: *mut PSTR, #[opt] StringSecurityDescriptorLen: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertSecurityDescriptorToStringSecurityDescriptorW(SecurityDescriptor: PSECURITY_DESCRIPTOR, RequestedStringSDRevision: u32, SecurityInformation: SECURITY_INFORMATION, StringSecurityDescriptor: *mut PWSTR, #[opt] StringSecurityDescriptorLen: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertSidToStringSidA(Sid: PSID, StringSid: *mut PSTR) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertSidToStringSidW(Sid: PSID, StringSid: *mut PWSTR) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertStringSecurityDescriptorToSecurityDescriptorA(StringSecurityDescriptor: PCSTR, StringSDRevision: u32, SecurityDescriptor: *mut PSECURITY_DESCRIPTOR, #[opt] SecurityDescriptorSize: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertStringSecurityDescriptorToSecurityDescriptorW(StringSecurityDescriptor: PCWSTR, StringSDRevision: u32, SecurityDescriptor: *mut PSECURITY_DESCRIPTOR, #[opt] SecurityDescriptorSize: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertStringSidToSidA(StringSid: PCSTR, Sid: *mut PSID) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ConvertStringSidToSidW(StringSid: PCWSTR, Sid: *mut PSID) -> BOOL;
         const SDDL_ACE_BEGINC: u32 = 40;
         const SDDL_ACE_COND_BEGINC: u32 = 40;

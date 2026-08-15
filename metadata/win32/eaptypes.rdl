@@ -185,7 +185,6 @@ mod Windows {
             pRepairString: PWSTR,
         }
         const EAP_FLAG_CONFG_READONLY: i32 = 524288;
-        const EAP_FLAG_DISABLE_SESSION_RESUMPTION: i32 = 67108864;
         const EAP_FLAG_FULL_AUTH: i32 = 4096;
         const EAP_FLAG_GUEST_ACCESS: i32 = 64;
         const EAP_FLAG_LOGON: i32 = 4;

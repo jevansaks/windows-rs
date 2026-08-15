@@ -78,7 +78,7 @@ mod Windows {
         #[guid(0x51973c50_cb0c_11d0_b5c9_00a0244a0e7a)]
         interface IDebugProperty: IUnknown {
             fn GetPropertyInfo(&self, dwFieldSpec: u32, nRadix: u32, pPropertyInfo: *mut DebugPropertyInfo) -> HRESULT;
-            fn GetExtendedInfo(&self, cInfos: u32, rgguidExtendedInfo: *const GUID, rgvar: *mut VARIANT) -> HRESULT;
+            fn GetExtendedInfo(&self, cInfos: u32, #[len_param(0)] rgguidExtendedInfo: *const GUID, #[len_param(0)] rgvar: *mut VARIANT) -> HRESULT;
             fn SetValueAsString(&self, pszValue: PCWSTR, nRadix: u32) -> HRESULT;
             fn EnumMembers(&self, dwFieldSpec: u32, nRadix: u32, refiid: *const GUID, ppepi: *mut IEnumDebugPropertyInfo) -> HRESULT;
             fn GetParent(&self, ppDebugProp: *mut IDebugProperty) -> HRESULT;
@@ -97,7 +97,7 @@ mod Windows {
         interface IDebugPropertyEnumType_Registers: IDebugPropertyEnumType_All {}
         #[guid(0x51973c53_cb0c_11d0_b5c9_00a0244a0e7a)]
         interface IEnumDebugExtendedPropertyInfo: IUnknown {
-            fn Next(&self, celt: u32, rgExtendedPropertyInfo: *mut ExtendedDebugPropertyInfo, pceltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, celt: u32, #[len_param(0)] rgExtendedPropertyInfo: *mut ExtendedDebugPropertyInfo, pceltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, celt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, pedpe: *mut IEnumDebugExtendedPropertyInfo) -> HRESULT;

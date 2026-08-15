@@ -568,11 +568,11 @@ mod Windows {
         const GLOBAL_LOGGER_NAMEA: String = "GlobalLogger";
         #[encoding("utf-16")]
         const GLOBAL_LOGGER_NAMEW: String = "GlobalLogger";
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetTraceEnableFlags(TraceHandle: TRACELOGGER_HANDLE) -> u32;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetTraceEnableLevel(TraceHandle: TRACELOGGER_HANDLE) -> u8;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetTraceLoggerHandle(Buffer: *const void) -> TRACELOGGER_HANDLE;
         #[arch(X64 | Arm64)]
         const INVALID_PROCESSTRACE_HANDLE: u64 = 18446744073709551615;
@@ -589,7 +589,7 @@ mod Windows {
             Length: u32,
             DataType: u32,
         }
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn OpenTraceA(#[in] #[out] Logfile: *mut EVENT_TRACE_LOGFILEA) -> PROCESSTRACE_HANDLE;
         #[library("api-ms-win-eventing-consumer-l1-1-2.dll")]
         extern fn OpenTraceFromBufferStream(Options: *const ETW_OPEN_TRACE_OPTIONS, BufferCompletionCallback: PETW_BUFFER_COMPLETION_CALLBACK, #[opt] BufferCompletionContext: *const void) -> PROCESSTRACE_HANDLE;
@@ -599,7 +599,7 @@ mod Windows {
         extern fn OpenTraceFromRealTimeLogger(LoggerName: PCWSTR, Options: *const ETW_OPEN_TRACE_OPTIONS, #[opt] LogFileHeader: *mut TRACE_LOGFILE_HEADER) -> PROCESSTRACE_HANDLE;
         #[library("api-ms-win-eventing-consumer-l1-1-2.dll")]
         extern fn OpenTraceFromRealTimeLoggerWithAllocationOptions(LoggerName: PCWSTR, Options: *const ETW_OPEN_TRACE_OPTIONS, AllocationSize: usize, #[opt] MemoryPartitionHandle: HANDLE, #[opt] LogFileHeader: *mut TRACE_LOGFILE_HEADER) -> PROCESSTRACE_HANDLE;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn OpenTraceW(#[in] #[out] Logfile: *mut EVENT_TRACE_LOGFILEW) -> PROCESSTRACE_HANDLE;
         type PCLASSIC_EVENT_ID = *mut CLASSIC_EVENT_ID;
         type PENABLE_TRACE_PARAMETERS = *mut ENABLE_TRACE_PARAMETERS;

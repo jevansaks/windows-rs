@@ -73,6 +73,8 @@ pub(crate) struct Parser<'a> {
     /// Per-symbol DLL overrides recovered from the SDK import libraries.
     pub libraries: &'a HashMap<String, String>,
     pub ref_map: &'a HashMap<String, String>,
+    /// Names emitted locally even though references resolve to another metadata namespace.
+    pub force_emit: &'a HashMap<String, String>,
     /// Per-header mode: resolves token-only const casts whose type has no cursor.
     pub header_names: Option<&'a HashMap<String, String>>,
     pub tag_rename: &'a HashMap<String, String>,
@@ -94,6 +96,8 @@ pub(crate) struct Parser<'a> {
     pub alias_map: HashMap<String, String>,
     /// Source typedef spelling -> metadata public name selected by an annotation.
     pub canonical_names: HashMap<String, String>,
+    /// Sidecar source spelling -> metadata public name mappings.
+    pub type_remaps: &'a HashMap<String, String>,
     /// Non-empty means only listed functions are roots; dependencies still flow in later.
     pub symbols: &'a HashSet<String>,
     /// Drops functions with no resolved import library; off for fixtures without `.lib` inputs.
@@ -104,11 +108,28 @@ pub(crate) struct Parser<'a> {
 
 /// Per-namespace inputs for one emission pass over cached translation units.
 struct NamespaceSpec<'a> {
+    input: Option<&'a str>,
+    flatten_namespaces: bool,
     namespace: &'a str,
     library: &'a str,
     libraries: &'a HashMap<String, String>,
     filter: &'a [String],
+    exclude: &'a HashSet<String>,
     symbols: &'a HashSet<String>,
+}
+
+/// One translation unit and its output namespace for partitioned metadata generation.
+pub struct PartitionSpec {
+    /// Stable output file stem.
+    pub name: String,
+    /// Translation unit to parse.
+    pub input: PathBuf,
+    /// Metadata namespace assigned to declarations selected by `filters`.
+    pub namespace: String,
+    /// Defining header path suffixes included in this partition.
+    pub filters: Vec<String>,
+    /// Declaration names intentionally omitted from this partition.
+    pub exclude: HashSet<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -118,6 +139,8 @@ impl<'a> Parser<'a> {
         library: &'a str,
         libraries: &'a HashMap<String, String>,
         ref_map: &'a HashMap<String, String>,
+        force_emit: &'a HashMap<String, String>,
+        type_remaps: &'a HashMap<String, String>,
         tag_rename: &'a HashMap<String, String>,
         enum_merge: &'a HashMap<String, &'static str>,
         macro_defs: &'a HashMap<String, Vec<String>>,
@@ -130,6 +153,8 @@ impl<'a> Parser<'a> {
             library,
             libraries,
             ref_map,
+            force_emit,
+            type_remaps,
             header_names: None,
             tag_rename,
             enum_merge,
@@ -149,7 +174,12 @@ impl<'a> Parser<'a> {
     }
 
     pub fn canonical_name(&self, name: String) -> String {
-        self.canonical_names.get(&name).cloned().unwrap_or(name)
+        let name = self.canonical_names.get(&name).cloned().unwrap_or(name);
+        self.type_remaps.get(&name).cloned().unwrap_or(name)
+    }
+
+    fn should_emit(&self, name: &str) -> bool {
+        self.force_emit.contains_key(name) || !self.ref_map.contains_key(name)
     }
 
     /// Applies the lib-less drop policy before inserting a function.
@@ -192,7 +222,7 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         match child.kind() {
-            CXCursor_StructDecl if child.is_definition() => {
+            CXCursor_StructDecl | CXCursor_ClassDecl if child.is_definition() => {
                 let tag_name = child.name();
                 let name = if is_anonymous_name(&tag_name) {
                     self.tag_rename
@@ -202,6 +232,7 @@ impl<'a> Parser<'a> {
                 } else {
                     self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name)
                 };
+                let name = self.canonical_name(name);
                 // Numerics aliases collapse to shared value types; skip before lifting overlays.
                 if numerics_alias(&name).is_some() {
                     return Ok(());
@@ -219,10 +250,10 @@ impl<'a> Parser<'a> {
                     || child.extract_uuid(self.tu).is_some()
                     || (child.has_interface_base() && !child.has_data_fields())
                 {
-                    if !self.ref_map.contains_key(&name) {
+                    if self.should_emit(&name) {
                         collector.insert(Item::Interface(Interface::parse(child, self)?));
                     }
-                } else if !self.ref_map.contains_key(&name) {
+                } else if self.should_emit(&name) {
                     collector.insert(Item::Struct(Struct::parse(child, self, false)?));
                 }
             }
@@ -234,7 +265,7 @@ impl<'a> Parser<'a> {
                 if !is_anonymous_name(&tag_name) && !tag_name.ends_with("__") {
                     let name = self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name);
                     // Do not clobber a real definition aliased by another tag.
-                    if !self.ref_map.contains_key(&name) && !collector.contains_key(&name) {
+                    if self.should_emit(&name) && !collector.contains_key(&name) {
                         collector.insert(Item::Struct(Struct::opaque(&name)));
                     }
                 }
@@ -249,6 +280,7 @@ impl<'a> Parser<'a> {
                 } else {
                     self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name)
                 };
+                let name = self.canonical_name(name);
                 // Scalar overlay unions collapse to scalars; skip before lifting overlays.
                 if semantic_scalar(&name).is_some() {
                     return Ok(());
@@ -258,7 +290,7 @@ impl<'a> Parser<'a> {
                 if child.is_anonymous_record() || is_named_instance_record(&child) {
                     return Ok(());
                 }
-                if !is_anonymous_name(&name) && !self.ref_map.contains_key(&name) {
+                if !is_anonymous_name(&name) && self.should_emit(&name) {
                     collector.insert(Item::Struct(Struct::parse(child, self, true)?));
                 }
             }
@@ -269,8 +301,9 @@ impl<'a> Parser<'a> {
                         || (child.has_interface_base() && !child.has_data_fields())) =>
             {
                 let tag_name = child.name();
-                let name = self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name);
-                if !self.ref_map.contains_key(&name) {
+                let name = self
+                    .canonical_name(self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name));
+                if self.should_emit(&name) {
                     collector.insert(Item::Interface(Interface::parse(child, self)?));
                 }
             }
@@ -279,7 +312,7 @@ impl<'a> Parser<'a> {
                 if let Some(uuid) = child.extract_uuid(self.tu) {
                     let tag_name = child.name();
                     let name = self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name);
-                    if !name.is_empty() && !self.ref_map.contains_key(&name) {
+                    if !name.is_empty() && self.should_emit(&name) {
                         collector.insert(Item::GuidConst(GuidConst { name, uuid }));
                     }
                 }
@@ -304,7 +337,7 @@ impl<'a> Parser<'a> {
                             annotations: vec![],
                         }));
                     }
-                } else if !self.ref_map.contains_key(&e.name) {
+                } else if self.should_emit(&e.name) {
                     // The flag macro may have used the internal tag before the rename.
                     if self.flag_enums.contains(&e.name) || self.flag_enums.contains(&tag) {
                         e.flags = true;
@@ -318,7 +351,7 @@ impl<'a> Parser<'a> {
             }
             CXCursor_TypedefDecl if child.is_definition() => {
                 let name = child.name();
-                if !self.ref_map.contains_key(&name) {
+                if self.should_emit(&name) {
                     if let Some(cb) = Callback::parse(child, self)? {
                         collector.insert(Item::Callback(cb));
                     } else if let Some(td) = Typedef::parse(child, self)? {
@@ -418,7 +451,7 @@ impl<'a> Parser<'a> {
                             .entry(iface_name.to_string())
                             .or_insert_with(|| uuid.clone());
                     }
-                    if !self.ref_map.contains_key(&name) {
+                    if self.should_emit(&name) {
                         collector.insert(Item::GuidConst(GuidConst { name, uuid }));
                     }
                 }
@@ -438,7 +471,7 @@ impl<'a> Parser<'a> {
                 let tokens = self.tu.tokenize(child.extent());
                 if let Some((name, uuid, pid)) = parse_define_property_key_tokens(&tokens)
                     && !name.is_empty()
-                    && !self.ref_map.contains_key(&name)
+                    && self.should_emit(&name)
                     && !collector.contains_key(&name)
                 {
                     collector.insert(Item::PropertyKeyConst(PropertyKeyConst {
@@ -465,7 +498,7 @@ impl<'a> Parser<'a> {
                         }
                     }
                 } else if let Some(c) = Const::parse_var_decl(&child, self)
-                    && !self.ref_map.contains_key(&c.name)
+                    && self.should_emit(&c.name)
                     && !collector.contains_key(&c.name)
                 {
                     collector.insert(Item::Const(c));
@@ -520,6 +553,10 @@ pub struct Clang {
     library: String,
     /// Per-symbol DLL overrides recovered from SDK import libraries.
     libraries: HashMap<String, String>,
+    /// Per-name metadata namespace overrides applied after partition scraping.
+    namespace_overrides: HashMap<String, String>,
+    /// Source type spelling -> canonical metadata type name.
+    type_remaps: HashMap<String, String>,
     filter: Vec<String>,
     target: Option<String>,
     /// Header directory segments treated as roots for the reachability sweep.
@@ -558,6 +595,36 @@ impl Clang {
     /// Adds an input header (`.h`) file or directory.
     pub fn input(&mut self, input: impl AsRef<Path>) -> &mut Self {
         self.input.push(input.as_ref().to_path_buf());
+        self
+    }
+
+    /// Adds source type spelling -> canonical metadata type name remaps.
+    pub fn type_remaps<I, K, V>(&mut self, remaps: I) -> &mut Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.type_remaps.extend(
+            remaps
+                .into_iter()
+                .map(|(from, to)| (from.into(), to.into())),
+        );
+        self
+    }
+
+    /// Adds declaration-name -> metadata-namespace overrides.
+    pub fn namespace_overrides<I, K, V>(&mut self, overrides: I) -> &mut Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.namespace_overrides.extend(
+            overrides
+                .into_iter()
+                .map(|(name, namespace)| (name.into(), namespace.into())),
+        );
         self
     }
 
@@ -858,10 +925,13 @@ impl Clang {
         self.validate_output()?;
         let reference = self.load_reference()?;
         let spec = NamespaceSpec {
+            input: None,
+            flatten_namespaces: false,
             namespace: &self.namespace,
             library: &self.library,
             libraries: &self.libraries,
             filter: &self.filter,
+            exclude: &HashSet::new(),
             symbols: &self.symbols,
         };
         let rdl = self.parse_and_emit(&reference, std::slice::from_ref(&spec))?;
@@ -884,6 +954,38 @@ impl Clang {
         Ok(())
     }
 
+    /// Writes one RDL file per explicit translation-unit partition.
+    pub fn write_partitions(&self, partitions: &[PartitionSpec]) -> Result<(), Error> {
+        self.validate_output()?;
+        let reference = self.load_reference()?;
+        let inputs: Vec<String> = partitions
+            .iter()
+            .map(|partition| normalize_path(&partition.input))
+            .collect();
+        let specs: Vec<NamespaceSpec<'_>> = partitions
+            .iter()
+            .zip(&inputs)
+            .map(|(partition, input)| NamespaceSpec {
+                input: Some(input),
+                flatten_namespaces: true,
+                namespace: &partition.namespace,
+                library: &self.library,
+                libraries: &self.libraries,
+                filter: &partition.filters,
+                exclude: &partition.exclude,
+                symbols: &self.symbols,
+            })
+            .collect();
+        let outputs = self.parse_and_emit(&reference, &specs)?;
+        for (partition, rdl) in partitions.iter().zip(outputs) {
+            write_to_file(
+                self.output.join(format!("{}.rdl", partition.name)),
+                formatter::format(&rdl),
+            )?;
+        }
+        Ok(())
+    }
+
     fn validate_output(&self) -> Result<(), Error> {
         if self.output.as_os_str().is_empty() {
             Err(Error::new("output is required", "", 0, 0))
@@ -894,7 +996,7 @@ impl Clang {
 
     /// Parses inputs once and returns the libclang state that keeps the TUs valid.
     fn parse_inputs(&self) -> Result<ParsedInputs, Error> {
-        let h_paths = expand_input_files(&self.input, "h")?;
+        let h_paths = expand_source_inputs(&self.input)?;
         let library = Library::new()?;
         let index = Index::new()?;
 
@@ -909,7 +1011,15 @@ impl Clang {
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
         let mut h_tus = vec![];
-        for input in &h_paths {
+        for (input_index, input) in h_paths.iter().enumerate() {
+            if h_paths.len() > 20 && (input_index % 25 == 0 || input_index + 1 == h_paths.len()) {
+                eprintln!(
+                    "Parsing translation unit {}/{}: {}",
+                    input_index + 1,
+                    h_paths.len(),
+                    input.display()
+                );
+            }
             let source = input.to_str().ok_or_else(|| {
                 Error::new(
                     "input path is not valid UTF-8",
@@ -918,7 +1028,7 @@ impl Clang {
                     0,
                 )
             })?;
-            h_tus.push((source.replace('\\', "/"), index.parse(source, &arg_refs)?));
+            h_tus.push((normalize_path(input), index.parse(source, &arg_refs)?));
         }
         let mut str_tus = vec![];
         for content in &self.input_text {
@@ -1248,11 +1358,15 @@ impl Clang {
 
         for (stem, cursors) in buckets {
             let collector = collectors.entry(stem.clone()).or_default();
+            let mut type_remaps = self.type_remaps.clone();
+            collect_interface_aliases(tu.cursor(), &mut type_remaps);
             let mut parser = Parser::new(
                 root,
                 &self.library,
                 &self.libraries,
                 &empty_ref,
+                &empty_ref,
+                &type_remaps,
                 &tag_rename,
                 &enum_merge,
                 &macro_defs,
@@ -1379,28 +1493,70 @@ impl Clang {
         // Reuse translation units across all specs.
         let parsed = self.parse_inputs()?;
         let arg_refs: Vec<&str> = parsed.args.iter().map(String::as_str).collect();
+        let winrt_types = self.load_winrt_types()?;
+        let winrt_types = (!winrt_types.is_empty()).then_some(&winrt_types);
 
         // Pass 1: learn unique type-name owners across specs. Shared typedef artifacts stay
         // local by being dropped from the owner table.
         let mut owners: HashMap<String, Option<String>> = HashMap::new();
-        for spec in specs {
-            let ref_map = build_ref_map(reference, spec.namespace);
+        for (index, spec) in specs.iter().enumerate() {
+            if specs.len() > 20 && (index % 25 == 0 || index + 1 == specs.len()) {
+                eprintln!(
+                    "Resolving partition ownership {}/{}",
+                    index + 1,
+                    specs.len()
+                );
+            }
+            let mut ref_map = build_ref_map(reference, spec.namespace);
+            apply_canonical_owners(&mut ref_map, spec.namespace);
+            let required = reference
+                .iter()
+                .filter(|(namespace, _, _)| *namespace == spec.namespace)
+                .map(|(_, name, _)| name.to_string())
+                .collect::<HashSet<_>>();
             let mut collector = Collector::new();
-            for (_, tu) in &parsed.h_tus {
-                self.process_tu(tu, &mut collector, &ref_map, spec)?;
+            for (input, tu) in &parsed.h_tus {
+                if spec.input.is_some_and(|expected| expected != input) {
+                    continue;
+                }
+                self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    &required,
+                    spec,
+                    winrt_types,
+                    false,
+                )?;
             }
-            for (_, tu) in &parsed.str_tus {
-                self.process_tu(tu, &mut collector, &ref_map, spec)?;
+            for (input, tu) in &parsed.str_tus {
+                if spec.input.is_some_and(|expected| expected != input) {
+                    continue;
+                }
+                self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    &required,
+                    spec,
+                    winrt_types,
+                    false,
+                )?;
             }
+            apply_exclusions(&mut collector, spec.exclude);
             for name in collector.keys() {
+                let namespace = self
+                    .namespace_overrides
+                    .get(name)
+                    .map_or(spec.namespace, String::as_str);
                 owners
                     .entry(name.clone())
                     .and_modify(|owner| {
-                        if owner.as_deref() != Some(spec.namespace) {
+                        if owner.as_deref() != Some(namespace) {
                             *owner = None;
                         }
                     })
-                    .or_insert_with(|| Some(spec.namespace.to_string()));
+                    .or_insert_with(|| Some(namespace.to_string()));
             }
         }
         let in_house: HashMap<String, String> = owners
@@ -1411,25 +1567,73 @@ impl Clang {
         // Pass 2: emit with in-house owners preferred over the upstream reference.
         let mut outputs = Vec::with_capacity(specs.len());
 
-        for spec in specs {
-            let ref_map = build_resolution_map(reference, &in_house, spec.namespace);
+        for (index, spec) in specs.iter().enumerate() {
+            if specs.len() > 20 && (index % 25 == 0 || index + 1 == specs.len()) {
+                eprintln!("Emitting partition {}/{}", index + 1, specs.len());
+            }
+            let mut ref_map = build_resolution_map(reference, &in_house, spec.namespace);
+            apply_canonical_owners(&mut ref_map, spec.namespace);
+            let required = reference
+                .iter()
+                .filter(|(namespace, _, _)| *namespace == spec.namespace)
+                .map(|(_, name, _)| name.to_string())
+                .collect::<HashSet<_>>();
             let mut collector = Collector::new();
 
             for (input, tu) in &parsed.h_tus {
-                let pending = self.process_tu(tu, &mut collector, &ref_map, spec)?;
+                if spec.input.is_some_and(|expected| expected != input) {
+                    continue;
+                }
+                let pending = self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    &required,
+                    spec,
+                    winrt_types,
+                    true,
+                )?;
                 for c in Const::evaluate_macros(input, &pending, &parsed.index, &arg_refs)? {
                     collector.insert(Item::Const(c));
                 }
             }
 
             for (content, tu) in &parsed.str_tus {
-                let pending = self.process_tu(tu, &mut collector, &ref_map, spec)?;
+                if spec.input.is_some_and(|expected| expected != content) {
+                    continue;
+                }
+                let pending = self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    &required,
+                    spec,
+                    winrt_types,
+                    true,
+                )?;
                 for c in Const::evaluate_macros_str(content, &pending, &parsed.index, &arg_refs)? {
                     collector.insert(Item::Const(c));
                 }
             }
 
-            outputs.push(emit_module(spec.namespace, &collector)?);
+            apply_exclusions(&mut collector, spec.exclude);
+            seed_native_string_typedefs(&mut collector, spec.namespace);
+            let mut groups = BTreeMap::<String, Collector>::new();
+            for (name, item) in collector.into_items() {
+                let namespace = self
+                    .namespace_overrides
+                    .get(&name)
+                    .map_or(spec.namespace, String::as_str);
+                groups
+                    .entry(namespace.to_string())
+                    .or_default()
+                    .insert(item);
+            }
+            let mut output = String::new();
+            for (namespace, collector) in groups {
+                output.push_str(&emit_module(&namespace, &collector)?);
+            }
+            outputs.push(output);
         }
 
         Ok(outputs)
@@ -1441,7 +1645,10 @@ impl Clang {
         tu: &TranslationUnit,
         collector: &mut Collector,
         ref_map: &HashMap<String, String>,
+        required: &HashSet<String>,
         spec: &NamespaceSpec<'_>,
+        winrt_types: Option<&HashSet<String>>,
+        include_dependency_closure: bool,
     ) -> Result<Vec<String>, Error> {
         for diag in tu.diagnostics() {
             if diag.is_err() {
@@ -1462,19 +1669,35 @@ impl Clang {
         let enum_merge = merge_enum_typedef_idiom(tu, &mut tag_rename);
         let macro_defs = collect_macro_defs(tu);
 
+        let mut type_remaps = self.type_remaps.clone();
+        collect_interface_aliases(tu.cursor(), &mut type_remaps);
+        let mut force_emit = self.namespace_overrides.clone();
+        force_emit.extend(
+            required
+                .iter()
+                .map(|name| (name.clone(), spec.namespace.to_string())),
+        );
         let mut parser = Parser::new(
             spec.namespace,
             spec.library,
             spec.libraries,
             ref_map,
+            &force_emit,
+            &type_remaps,
             &tag_rename,
             &enum_merge,
             &macro_defs,
             tu,
             spec.symbols,
         );
+        parser.winrt_types = winrt_types;
 
         for child in tu.cursor().children() {
+            if spec.flatten_namespaces {
+                process_partition_cursor(child, &mut parser, collector, tu, spec.filter, false)?;
+                continue;
+            }
+
             // Process main-file cursors plus headers matched by this spec.
             if !child.is_from_main_file() {
                 let passes_filter = !spec.filter.is_empty() && {
@@ -1519,11 +1742,157 @@ impl Clang {
             }
         }
 
+        // Pull referenced declarations owned by this partition even when their defining header
+        // is only transitive. The reference map omits the current namespace, so external types
+        // remain qualified while local dependencies such as NMHDR are materialized here.
+        let mut declarations = HashMap::<String, Cursor>::new();
+        let mut decls = Vec::new();
+        flatten_decls(tu.cursor(), false, false, None, None, &mut decls);
+        for (cursor, _) in decls {
+            if !matches!(
+                cursor.kind(),
+                CXCursor_EnumDecl
+                    | CXCursor_StructDecl
+                    | CXCursor_UnionDecl
+                    | CXCursor_TypedefDecl
+                    | CXCursor_ClassDecl
+            ) {
+                continue;
+            }
+            let raw = cursor.name();
+            let name = parser.canonical_name(parser.tag_rename.get(&raw).cloned().unwrap_or(raw));
+            declarations
+                .entry(name)
+                .and_modify(|existing| {
+                    let cursor_is_record = matches!(
+                        cursor.kind(),
+                        CXCursor_EnumDecl
+                            | CXCursor_StructDecl
+                            | CXCursor_UnionDecl
+                            | CXCursor_ClassDecl
+                    );
+                    let existing_is_typedef = existing.kind() == CXCursor_TypedefDecl;
+                    if (cursor_is_record && existing_is_typedef)
+                        || (cursor.is_definition() && !existing.is_definition())
+                    {
+                        *existing = cursor;
+                    }
+                })
+                .or_insert(cursor);
+        }
+
+        loop {
+            let mut referenced = HashSet::new();
+            if include_dependency_closure {
+                for item in collector.values() {
+                    item_refs(item, &mut referenced);
+                }
+            }
+            referenced.extend(required.iter().cloned());
+            let pending = referenced
+                .into_iter()
+                .filter(|name| !collector.contains_key(name) && !parser.ref_map.contains_key(name))
+                .filter_map(|name| declarations.get(&name).copied())
+                .collect::<Vec<_>>();
+            if pending.is_empty() {
+                break;
+            }
+            let before = collector.len();
+            for cursor in pending {
+                parser.process_cursor(cursor, collector, false)?;
+            }
+            if collector.len() == before || !include_dependency_closure {
+                break;
+            }
+        }
+
         // Apply `IID_IFoo` variables to interfaces that lack `uuid` attributes.
         collector.apply_iid_vars(&parser.iid_vars);
 
         Ok(parser.pending_macros)
     }
+}
+
+fn seed_native_string_typedefs(collector: &mut Collector, namespace: &str) {
+    if namespace != "Windows.Win32.Foundation" {
+        return;
+    }
+
+    for (name, ty) in [
+        (
+            "PSTR",
+            metadata::Type::PtrMut(Box::new(metadata::Type::U8), 1),
+        ),
+        (
+            "PWSTR",
+            metadata::Type::PtrMut(Box::new(metadata::Type::U16), 1),
+        ),
+    ] {
+        if !collector.contains_key(name) {
+            collector.insert(Item::Typedef(Typedef {
+                name: name.to_string(),
+                ty,
+                annotations: vec![],
+            }));
+        }
+    }
+}
+
+fn process_partition_cursor(
+    cursor: Cursor,
+    parser: &mut Parser<'_>,
+    collector: &mut Collector,
+    tu: &TranslationUnit,
+    filters: &[String],
+    extern_c: bool,
+) -> Result<(), Error> {
+    if cursor.kind() == CXCursor_Namespace {
+        for child in cursor.children() {
+            process_partition_cursor(child, parser, collector, tu, filters, extern_c)?;
+        }
+        Ok(())
+    } else if cursor.kind() == CXCursor_LinkageSpec {
+        for child in cursor.children() {
+            process_partition_cursor(child, parser, collector, tu, filters, true)?;
+        }
+        Ok(())
+    } else {
+        let selected = cursor.is_from_main_file()
+            || filters
+                .iter()
+                .any(|filter| matches_filter(&cursor.file_name(), filter))
+            || (cursor.is_expansion_from_main_file(tu)
+                || filters
+                    .iter()
+                    .any(|filter| matches_filter(&cursor.expansion_file_name(), filter)));
+        if selected {
+            parser.process_cursor(cursor, collector, extern_c)?;
+        }
+        Ok(())
+    }
+}
+
+fn normalize_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn expand_source_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
+    let mut paths = Vec::new();
+    for input in inputs {
+        if input.is_file() {
+            paths.push(input.clone());
+        } else if input.is_dir() {
+            paths.extend(expand_input_files(std::slice::from_ref(input), "h")?);
+        } else {
+            return Err(Error::new(
+                "input source does not exist",
+                &input.to_string_lossy(),
+                0,
+                0,
+            ));
+        }
+    }
+    Ok(paths)
 }
 
 /// Owns libclang state; field order ensures TUs drop before the library unloads.
@@ -1726,13 +2095,34 @@ fn enum_member_eq(member: i64, constant: i128) -> bool {
     member as i128 == constant || member as u32 as i128 == constant
 }
 
+fn apply_exclusions(collector: &mut Collector, exclude: &HashSet<String>) {
+    let mut unavailable = exclude.clone();
+    loop {
+        let removed = collector
+            .iter()
+            .filter_map(|(name, item)| {
+                let mut referenced = HashSet::new();
+                item_refs(item, &mut referenced);
+                (unavailable.contains(name)
+                    || referenced.iter().any(|name| unavailable.contains(name)))
+                .then(|| name.clone())
+            })
+            .collect::<Vec<_>>();
+        if removed.is_empty() {
+            break;
+        }
+        unavailable.extend(removed);
+        collector.retain(|name| !unavailable.contains(name));
+    }
+}
+
 /// Emits a collector under the nested `mod` path for `namespace`.
 fn emit_module(namespace: &str, collector: &Collector) -> Result<String, Error> {
     let parts: Vec<&str> = namespace.split('.').collect();
-    let mut output = format!("#[win32] mod {} {{", parts[0]);
+    let mut output = format!("#[win32] mod {} {{", write_ident(parts[0]));
 
     for part in &parts[1..] {
-        output.push_str(&format!("mod {part} {{"));
+        output.push_str(&format!("mod {} {{", write_ident(part)));
     }
 
     for item in collector.values() {

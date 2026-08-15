@@ -16,18 +16,18 @@ mod Windows {
             NameGivenName = 13,
             NameSurname = 14,
         }
-        #[library("Secur32.dll")]
+        #[library("Secur32.dll", set_last_error)]
         extern fn GetComputerObjectNameA(NameFormat: EXTENDED_NAME_FORMAT, #[len_param(2)] #[out] #[opt] lpNameBuffer: PSTR, #[in] #[out] nSize: *mut u32) -> bool;
-        #[library("Secur32.dll")]
+        #[library("Secur32.dll", set_last_error)]
         extern fn GetComputerObjectNameW(NameFormat: EXTENDED_NAME_FORMAT, #[len_param(2)] #[out] #[opt] lpNameBuffer: PWSTR, #[in] #[out] nSize: *mut u32) -> bool;
-        #[library("Secur32.dll")]
+        #[library("Secur32.dll", set_last_error)]
         extern fn GetUserNameExA(NameFormat: EXTENDED_NAME_FORMAT, #[len_param(2)] #[out] #[opt] lpNameBuffer: PSTR, #[in] #[out] nSize: *mut u32) -> bool;
-        #[library("Secur32.dll")]
+        #[library("Secur32.dll", set_last_error)]
         extern fn GetUserNameExW(NameFormat: EXTENDED_NAME_FORMAT, #[len_param(2)] #[out] #[opt] lpNameBuffer: PWSTR, #[in] #[out] nSize: *mut u32) -> bool;
         type PEXTENDED_NAME_FORMAT = *mut EXTENDED_NAME_FORMAT;
-        #[library("Secur32.dll")]
+        #[library("Secur32.dll", set_last_error)]
         extern fn TranslateNameA(lpAccountName: PCSTR, AccountNameFormat: EXTENDED_NAME_FORMAT, DesiredNameFormat: EXTENDED_NAME_FORMAT, #[len_param(4)] #[out] #[opt] lpTranslatedName: PSTR, #[in] #[out] nSize: *mut u32) -> bool;
-        #[library("Secur32.dll")]
+        #[library("Secur32.dll", set_last_error)]
         extern fn TranslateNameW(lpAccountName: PCWSTR, AccountNameFormat: EXTENDED_NAME_FORMAT, DesiredNameFormat: EXTENDED_NAME_FORMAT, #[len_param(4)] #[out] #[opt] lpTranslatedName: PWSTR, #[in] #[out] nSize: *mut u32) -> bool;
     }
 }

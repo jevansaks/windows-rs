@@ -3,10 +3,12 @@ mod Windows {
     mod Win32 {
         #[library("d2d1.dll")]
         extern fn D2D1ConvertColorSpace(sourceColorSpace: D2D1_COLOR_SPACE, destinationColorSpace: D2D1_COLOR_SPACE, color: *const D2D_COLOR_F) -> D2D_COLOR_F;
+        #[supported_os("windows8.0")]
         #[library("d2d1.dll")]
-        extern fn D2D1CreateDevice(dxgiDevice: IDXGIDevice, #[opt] creationProperties: *const D2D1_CREATION_PROPERTIES, d2dDevice: *mut ID2D1Device) -> HRESULT;
+        extern "C" fn D2D1CreateDevice(dxgiDevice: IDXGIDevice, #[opt] creationProperties: *const D2D1_CREATION_PROPERTIES, d2dDevice: *mut ID2D1Device) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("d2d1.dll")]
-        extern fn D2D1CreateDeviceContext(dxgiSurface: IDXGISurface, #[opt] creationProperties: *const D2D1_CREATION_PROPERTIES, d2dDeviceContext: *mut ID2D1DeviceContext) -> HRESULT;
+        extern "C" fn D2D1CreateDeviceContext(dxgiSurface: IDXGISurface, #[opt] creationProperties: *const D2D1_CREATION_PROPERTIES, d2dDeviceContext: *mut ID2D1DeviceContext) -> HRESULT;
         #[library("d2d1.dll")]
         extern fn D2D1SinCos(angle: f32, s: *mut f32, c: *mut f32);
         #[library("d2d1.dll")]

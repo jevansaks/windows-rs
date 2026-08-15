@@ -30,7 +30,7 @@ mod Windows {
             fn GetCertificateEnumerator(&self, #[retval] certificateEnumerator: *mut IOpcCertificateEnumerator) -> HRESULT;
             fn GetCustomReferenceEnumerator(&self, #[retval] customReferenceEnumerator: *mut IOpcSignatureReferenceEnumerator) -> HRESULT;
             fn GetCustomObjectEnumerator(&self, #[retval] customObjectEnumerator: *mut IOpcSignatureCustomObjectEnumerator) -> HRESULT;
-            fn GetSignatureXml(&self, signatureXml: *mut *mut u8, count: *mut u32) -> HRESULT;
+            fn GetSignatureXml(&self, #[len_param(1)] signatureXml: *mut *mut u8, count: *mut u32) -> HRESULT;
         }
         #[guid(0x967b6882_0ba3_4358_b9e7_b64c75063c5e)]
         interface IOpcDigitalSignatureEnumerator: IUnknown {
@@ -48,7 +48,7 @@ mod Windows {
             fn CreateSigningOptions(&self, #[retval] signingOptions: *mut IOpcSigningOptions) -> HRESULT;
             fn Validate(&self, signature: IOpcDigitalSignature, certificate: *const CERT_CONTEXT, #[retval] validationResult: *mut OPC_SIGNATURE_VALIDATION_RESULT) -> HRESULT;
             fn Sign(&self, certificate: *const CERT_CONTEXT, signingOptions: IOpcSigningOptions, #[retval] digitalSignature: *mut IOpcDigitalSignature) -> HRESULT;
-            fn ReplaceSignatureXml(&self, signaturePartName: IOpcPartUri, newSignatureXml: *const u8, count: u32, #[retval] digitalSignature: *mut IOpcDigitalSignature) -> HRESULT;
+            fn ReplaceSignatureXml(&self, signaturePartName: IOpcPartUri, #[len_param(2)] newSignatureXml: *const u8, count: u32, #[retval] digitalSignature: *mut IOpcDigitalSignature) -> HRESULT;
         }
         #[guid(0x6d0b4446_cd73_4ab3_94f4_8ccdf6116154)]
         interface IOpcFactory: IUnknown {
@@ -139,7 +139,7 @@ mod Windows {
         }
         #[guid(0x5d77a19e_62c1_44e7_becd_45da5ae51a56)]
         interface IOpcSignatureCustomObject: IUnknown {
-            fn GetXml(&self, xmlMarkup: *mut *mut u8, count: *mut u32) -> HRESULT;
+            fn GetXml(&self, #[len_param(1)] xmlMarkup: *mut *mut u8, count: *mut u32) -> HRESULT;
         }
         #[guid(0x5ee4fe1d_e1b0_4683_8079_7ea0fcf80b4c)]
         interface IOpcSignatureCustomObjectEnumerator: IUnknown {
@@ -150,7 +150,7 @@ mod Windows {
         }
         #[guid(0x8f792ac5_7947_4e11_bc3d_2659ff046ae1)]
         interface IOpcSignatureCustomObjectSet: IUnknown {
-            fn Create(&self, xmlMarkup: *const u8, count: u32, #[retval] customObject: *mut IOpcSignatureCustomObject) -> HRESULT;
+            fn Create(&self, #[len_param(1)] xmlMarkup: *const u8, count: u32, #[retval] customObject: *mut IOpcSignatureCustomObject) -> HRESULT;
             fn Delete(&self, customObject: IOpcSignatureCustomObject) -> HRESULT;
             fn GetEnumerator(&self, #[retval] customObjectEnumerator: *mut IOpcSignatureCustomObjectEnumerator) -> HRESULT;
         }
@@ -159,7 +159,7 @@ mod Windows {
             fn GetPartName(&self, #[retval] partName: *mut IOpcPartUri) -> HRESULT;
             fn GetContentType(&self, #[retval] contentType: *mut PWSTR) -> HRESULT;
             fn GetDigestMethod(&self, #[retval] digestMethod: *mut PWSTR) -> HRESULT;
-            fn GetDigestValue(&self, digestValue: *mut *mut u8, count: *mut u32) -> HRESULT;
+            fn GetDigestValue(&self, #[len_param(1)] digestValue: *mut *mut u8, count: *mut u32) -> HRESULT;
             fn GetTransformMethod(&self, #[retval] transformMethod: *mut OPC_CANONICALIZATION_METHOD) -> HRESULT;
         }
         #[guid(0x80eb1561_8c77_49cf_8266_459b356ee99a)]
@@ -182,7 +182,7 @@ mod Windows {
             fn GetType(&self, #[retval] r#type: *mut PWSTR) -> HRESULT;
             fn GetTransformMethod(&self, #[retval] transformMethod: *mut OPC_CANONICALIZATION_METHOD) -> HRESULT;
             fn GetDigestMethod(&self, #[retval] digestMethod: *mut PWSTR) -> HRESULT;
-            fn GetDigestValue(&self, digestValue: *mut *mut u8, count: *mut u32) -> HRESULT;
+            fn GetDigestValue(&self, #[len_param(1)] digestValue: *mut *mut u8, count: *mut u32) -> HRESULT;
         }
         #[guid(0xcfa59a45_28b1_4868_969e_fa8097fdc12a)]
         interface IOpcSignatureReferenceEnumerator: IUnknown {
@@ -201,7 +201,7 @@ mod Windows {
         interface IOpcSignatureRelationshipReference: IUnknown {
             fn GetSourceUri(&self, #[retval] sourceUri: *mut IOpcUri) -> HRESULT;
             fn GetDigestMethod(&self, #[retval] digestMethod: *mut PWSTR) -> HRESULT;
-            fn GetDigestValue(&self, digestValue: *mut *mut u8, count: *mut u32) -> HRESULT;
+            fn GetDigestValue(&self, #[len_param(1)] digestValue: *mut *mut u8, count: *mut u32) -> HRESULT;
             fn GetTransformMethod(&self, #[retval] transformMethod: *mut OPC_CANONICALIZATION_METHOD) -> HRESULT;
             fn GetRelationshipSigningOption(&self, #[retval] relationshipSigningOption: *mut OPC_RELATIONSHIPS_SIGNING_OPTION) -> HRESULT;
             fn GetRelationshipSelectorEnumerator(&self, #[retval] selectorEnumerator: *mut IOpcRelationshipSelectorEnumerator) -> HRESULT;

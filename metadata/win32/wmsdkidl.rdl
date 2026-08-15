@@ -50,9 +50,9 @@ mod Windows {
         #[guid(0x3c8e0da6_996f_4ff3_a1af_4838f9377e2e)]
         interface IWMBackupRestoreProps: IUnknown {
             fn GetPropCount(&self, pcProps: *mut u16) -> HRESULT;
-            fn GetPropByIndex(&self, wIndex: u16, pwszName: *mut u16, #[in] #[out] pcchNameLen: *mut u16, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
-            fn GetPropByName(&self, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
-            fn SetProp(&self, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, pValue: *const u8, cbLength: u16) -> HRESULT;
+            fn GetPropByIndex(&self, wIndex: u16, #[len_param(2)] pwszName: *mut u16, #[in] #[out] pcchNameLen: *mut u16, pType: *mut WMT_ATTR_DATATYPE, #[len_param(5)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn GetPropByName(&self, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(3)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn SetProp(&self, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, #[len_param(3)] pValue: *const u8, cbLength: u16) -> HRESULT;
             fn RemoveProp(&self, pcwszName: PCWSTR) -> HRESULT;
             fn RemoveAllProps(&self) -> HRESULT;
         }
@@ -70,7 +70,7 @@ mod Windows {
         }
         #[guid(0x4091571e_4701_4593_bb3d_d5f5f0c74246)]
         interface IWMClientConnections2: IWMClientConnections {
-            fn GetClientInfo(&self, dwClientNum: u32, pwszNetworkAddress: *mut u16, #[in] #[out] pcchNetworkAddress: *mut u32, pwszPort: *mut u16, #[in] #[out] pcchPort: *mut u32, pwszDNSName: *mut u16, #[in] #[out] pcchDNSName: *mut u32) -> HRESULT;
+            fn GetClientInfo(&self, dwClientNum: u32, #[len_param(2)] pwszNetworkAddress: *mut u16, #[in] #[out] pcchNetworkAddress: *mut u32, #[len_param(4)] pwszPort: *mut u16, #[in] #[out] pcchPort: *mut u32, #[len_param(6)] pwszDNSName: *mut u16, #[in] #[out] pcchDNSName: *mut u32) -> HRESULT;
         }
         #[guid(0xa970f41e_34de_4a98_b3ba_e4b3ca7528f0)]
         interface IWMCodecInfo: IUnknown {
@@ -80,28 +80,28 @@ mod Windows {
         }
         #[guid(0xaa65e273_b686_4056_91ec_dd768d4df710)]
         interface IWMCodecInfo2: IWMCodecInfo {
-            fn GetCodecName(&self, guidType: *const GUID, dwCodecIndex: u32, wszName: *mut u16, #[in] #[out] pcchName: *mut u32) -> HRESULT;
-            fn GetCodecFormatDesc(&self, guidType: *const GUID, dwCodecIndex: u32, dwFormatIndex: u32, ppIStreamConfig: *mut IWMStreamConfig, wszDesc: *mut u16, #[in] #[out] pcchDesc: *mut u32) -> HRESULT;
+            fn GetCodecName(&self, guidType: *const GUID, dwCodecIndex: u32, #[len_param(3)] wszName: *mut u16, #[in] #[out] pcchName: *mut u32) -> HRESULT;
+            fn GetCodecFormatDesc(&self, guidType: *const GUID, dwCodecIndex: u32, dwFormatIndex: u32, ppIStreamConfig: *mut IWMStreamConfig, #[len_param(5)] wszDesc: *mut u16, #[in] #[out] pcchDesc: *mut u32) -> HRESULT;
         }
         #[guid(0x7e51f487_4d93_4f98_8ab4_27d0565adc51)]
         interface IWMCodecInfo3: IWMCodecInfo2 {
-            fn GetCodecFormatProp(&self, guidType: *const GUID, dwCodecIndex: u32, dwFormatIndex: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
-            fn GetCodecProp(&self, guidType: *const GUID, dwCodecIndex: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
-            fn SetCodecEnumerationSetting(&self, guidType: *const GUID, dwCodecIndex: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, pValue: *const u8, dwSize: u32) -> HRESULT;
-            fn GetCodecEnumerationSetting(&self, guidType: *const GUID, dwCodecIndex: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
+            fn GetCodecFormatProp(&self, guidType: *const GUID, dwCodecIndex: u32, dwFormatIndex: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(6)] pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
+            fn GetCodecProp(&self, guidType: *const GUID, dwCodecIndex: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(5)] pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
+            fn SetCodecEnumerationSetting(&self, guidType: *const GUID, dwCodecIndex: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, #[len_param(5)] pValue: *const u8, dwSize: u32) -> HRESULT;
+            fn GetCodecEnumerationSetting(&self, guidType: *const GUID, dwCodecIndex: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(5)] pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
         }
         #[guid(0x342e0eb7_e651_450c_975b_2ace2c90c48e)]
         interface IWMCredentialCallback: IUnknown {
-            fn AcquireCredentials(&self, pwszRealm: *const u16, pwszSite: *const u16, pwszUser: *mut u16, cchUser: u32, pwszPassword: *mut u16, cchPassword: u32, hrStatus: HRESULT, pdwFlags: *mut u32) -> HRESULT;
+            fn AcquireCredentials(&self, pwszRealm: *const u16, pwszSite: *const u16, #[len_param(3)] pwszUser: *mut u16, cchUser: u32, #[len_param(5)] pwszPassword: *mut u16, cchPassword: u32, hrStatus: HRESULT, pdwFlags: *mut u32) -> HRESULT;
         }
         #[guid(0xff130ebc_a6c3_42a6_b401_c3382c3e08b3)]
         interface IWMDRMEditor: IUnknown {
-            fn GetDRMProperty(&self, pwstrName: PCWSTR, pdwType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn GetDRMProperty(&self, pwstrName: PCWSTR, pdwType: *mut WMT_ATTR_DATATYPE, #[len_param(3)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
         }
         #[guid(0xa73a0072_25a0_4c99_b4a5_ede8101a6c39)]
         interface IWMDRMMessageParser: IUnknown {
-            fn ParseRegistrationReqMsg(&self, pbRegistrationReqMsg: *const u8, cbRegistrationReqMsg: u32, ppDeviceCert: *mut INSSBuffer, pDeviceSerialNumber: *mut DRM_VAL16) -> HRESULT;
-            fn ParseLicenseRequestMsg(&self, pbLicenseRequestMsg: *const u8, cbLicenseRequestMsg: u32, ppDeviceCert: *mut INSSBuffer, pDeviceSerialNumber: *mut DRM_VAL16, pbstrAction: *mut BSTR) -> HRESULT;
+            fn ParseRegistrationReqMsg(&self, #[len_param(1)] pbRegistrationReqMsg: *const u8, cbRegistrationReqMsg: u32, ppDeviceCert: *mut INSSBuffer, pDeviceSerialNumber: *mut DRM_VAL16) -> HRESULT;
+            fn ParseLicenseRequestMsg(&self, #[len_param(0)] pbLicenseRequestMsg: *const u8, cbLicenseRequestMsg: u32, ppDeviceCert: *mut INSSBuffer, pDeviceSerialNumber: *mut DRM_VAL16, pbstrAction: *mut BSTR) -> HRESULT;
         }
         #[guid(0xd2827540_3ee7_432c_b14c_dc17f085d3b3)]
         interface IWMDRMReader: IUnknown {
@@ -111,14 +111,14 @@ mod Windows {
             fn CancelIndividualization(&self) -> HRESULT;
             fn MonitorLicenseAcquisition(&self) -> HRESULT;
             fn CancelMonitorLicenseAcquisition(&self) -> HRESULT;
-            fn SetDRMProperty(&self, pwstrName: PCWSTR, dwType: WMT_ATTR_DATATYPE, pValue: *const u8, cbLength: u16) -> HRESULT;
-            fn GetDRMProperty(&self, pwstrName: PCWSTR, pdwType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn SetDRMProperty(&self, pwstrName: PCWSTR, dwType: WMT_ATTR_DATATYPE, #[len_param(3)] pValue: *const u8, cbLength: u16) -> HRESULT;
+            fn GetDRMProperty(&self, pwstrName: PCWSTR, pdwType: *mut WMT_ATTR_DATATYPE, #[len_param(3)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
         }
         #[guid(0xbefe7a75_9f1d_4075_b9d9_a3c37bda49a0)]
         interface IWMDRMReader2: IWMDRMReader {
             fn SetEvaluateOutputLevelLicenses(&self, fEvaluate: BOOL) -> HRESULT;
-            fn GetPlayOutputLevels(&self, pPlayOPL: *mut DRM_PLAY_OPL, #[in] #[out] pcbLength: *mut u32, pdwMinAppComplianceLevel: *mut u32) -> HRESULT;
-            fn GetCopyOutputLevels(&self, pCopyOPL: *mut DRM_COPY_OPL, #[in] #[out] pcbLength: *mut u32, pdwMinAppComplianceLevel: *mut u32) -> HRESULT;
+            fn GetPlayOutputLevels(&self, #[len_param(1)] pPlayOPL: *mut DRM_PLAY_OPL, #[in] #[out] pcbLength: *mut u32, pdwMinAppComplianceLevel: *mut u32) -> HRESULT;
+            fn GetCopyOutputLevels(&self, #[len_param(1)] pCopyOPL: *mut DRM_COPY_OPL, #[in] #[out] pcbLength: *mut u32, pdwMinAppComplianceLevel: *mut u32) -> HRESULT;
             fn TryNextLicense(&self) -> HRESULT;
         }
         #[guid(0xe08672de_f1e7_4ff4_a0a3_fc4b08e4caf8)]
@@ -145,10 +145,10 @@ mod Windows {
         }
         #[guid(0xd6ea5dd0_12a0_43f4_90ab_a3fd451e6a07)]
         interface IWMDRMWriter: IUnknown {
-            fn GenerateKeySeed(&self, pwszKeySeed: *mut u16, #[in] #[out] pcwchLength: *mut u32) -> HRESULT;
-            fn GenerateKeyID(&self, pwszKeyID: *mut u16, #[in] #[out] pcwchLength: *mut u32) -> HRESULT;
-            fn GenerateSigningKeyPair(&self, pwszPrivKey: *mut u16, #[in] #[out] pcwchPrivKeyLength: *mut u32, pwszPubKey: *mut u16, #[in] #[out] pcwchPubKeyLength: *mut u32) -> HRESULT;
-            fn SetDRMAttribute(&self, wStreamNum: u16, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, pValue: *const u8, cbLength: u16) -> HRESULT;
+            fn GenerateKeySeed(&self, #[len_param(1)] pwszKeySeed: *mut u16, #[in] #[out] pcwchLength: *mut u32) -> HRESULT;
+            fn GenerateKeyID(&self, #[len_param(1)] pwszKeyID: *mut u16, #[in] #[out] pcwchLength: *mut u32) -> HRESULT;
+            fn GenerateSigningKeyPair(&self, #[len_param(1)] pwszPrivKey: *mut u16, #[in] #[out] pcwchPrivKeyLength: *mut u32, #[len_param(3)] pwszPubKey: *mut u16, #[in] #[out] pcwchPubKeyLength: *mut u32) -> HRESULT;
+            fn SetDRMAttribute(&self, wStreamNum: u16, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *const u8, cbLength: u16) -> HRESULT;
         }
         #[guid(0x38ee7a94_40e2_4e10_aa3f_33fd3210ed5b)]
         interface IWMDRMWriter2: IWMDRMWriter {
@@ -160,51 +160,51 @@ mod Windows {
         }
         #[guid(0xf6211f03_8d21_4e94_93e6_8510805f2d99)]
         interface IWMDeviceRegistration: IUnknown {
-            fn RegisterDevice(&self, dwRegisterType: u32, pbCertificate: *const u8, cbCertificate: u32, SerialNumber: DRM_VAL16, ppDevice: *mut IWMRegisteredDevice) -> HRESULT;
-            fn UnregisterDevice(&self, dwRegisterType: u32, pbCertificate: *const u8, cbCertificate: u32, SerialNumber: DRM_VAL16) -> HRESULT;
+            fn RegisterDevice(&self, dwRegisterType: u32, #[len_param(2)] pbCertificate: *const u8, cbCertificate: u32, SerialNumber: DRM_VAL16, ppDevice: *mut IWMRegisteredDevice) -> HRESULT;
+            fn UnregisterDevice(&self, dwRegisterType: u32, #[len_param(2)] pbCertificate: *const u8, cbCertificate: u32, SerialNumber: DRM_VAL16) -> HRESULT;
             fn GetRegistrationStats(&self, dwRegisterType: u32, pcRegisteredDevices: *mut u32) -> HRESULT;
             fn GetFirstRegisteredDevice(&self, dwRegisterType: u32, ppDevice: *mut IWMRegisteredDevice) -> HRESULT;
             fn GetNextRegisteredDevice(&self, ppDevice: *mut IWMRegisteredDevice) -> HRESULT;
-            fn GetRegisteredDeviceByID(&self, dwRegisterType: u32, pbCertificate: *const u8, cbCertificate: u32, SerialNumber: DRM_VAL16, ppDevice: *mut IWMRegisteredDevice) -> HRESULT;
+            fn GetRegisteredDeviceByID(&self, dwRegisterType: u32, #[len_param(2)] pbCertificate: *const u8, cbCertificate: u32, SerialNumber: DRM_VAL16, ppDevice: *mut IWMRegisteredDevice) -> HRESULT;
         }
         #[guid(0x96406bda_2b2b_11d3_b36b_00c04f6108ff)]
         interface IWMHeaderInfo: IUnknown {
             fn GetAttributeCount(&self, wStreamNum: u16, pcAttributes: *mut u16) -> HRESULT;
-            fn GetAttributeByIndex(&self, wIndex: u16, #[in] #[out] pwStreamNum: *mut u16, pwszName: *mut u16, #[in] #[out] pcchNameLen: *mut u16, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
-            fn GetAttributeByName(&self, #[in] #[out] pwStreamNum: *mut u16, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
-            fn SetAttribute(&self, wStreamNum: u16, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, pValue: *const u8, cbLength: u16) -> HRESULT;
+            fn GetAttributeByIndex(&self, wIndex: u16, #[in] #[out] pwStreamNum: *mut u16, #[len_param(3)] pwszName: *mut u16, #[in] #[out] pcchNameLen: *mut u16, pType: *mut WMT_ATTR_DATATYPE, #[len_param(6)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn GetAttributeByName(&self, #[in] #[out] pwStreamNum: *mut u16, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn SetAttribute(&self, wStreamNum: u16, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *const u8, cbLength: u16) -> HRESULT;
             fn GetMarkerCount(&self, pcMarkers: *mut u16) -> HRESULT;
-            fn GetMarker(&self, wIndex: u16, pwszMarkerName: *mut u16, #[in] #[out] pcchMarkerNameLen: *mut u16, pcnsMarkerTime: *mut u64) -> HRESULT;
+            fn GetMarker(&self, wIndex: u16, #[len_param(2)] pwszMarkerName: *mut u16, #[in] #[out] pcchMarkerNameLen: *mut u16, pcnsMarkerTime: *mut u64) -> HRESULT;
             fn AddMarker(&self, pwszMarkerName: PCWSTR, cnsMarkerTime: u64) -> HRESULT;
             fn RemoveMarker(&self, wIndex: u16) -> HRESULT;
             fn GetScriptCount(&self, pcScripts: *mut u16) -> HRESULT;
-            fn GetScript(&self, wIndex: u16, pwszType: *mut u16, #[in] #[out] pcchTypeLen: *mut u16, pwszCommand: *mut u16, #[in] #[out] pcchCommandLen: *mut u16, pcnsScriptTime: *mut u64) -> HRESULT;
+            fn GetScript(&self, wIndex: u16, #[len_param(2)] pwszType: *mut u16, #[in] #[out] pcchTypeLen: *mut u16, #[len_param(4)] pwszCommand: *mut u16, #[in] #[out] pcchCommandLen: *mut u16, pcnsScriptTime: *mut u64) -> HRESULT;
             fn AddScript(&self, pwszType: PCWSTR, pwszCommand: PCWSTR, cnsScriptTime: u64) -> HRESULT;
             fn RemoveScript(&self, wIndex: u16) -> HRESULT;
         }
         #[guid(0x15cf9781_454e_482e_b393_85fae487a810)]
         interface IWMHeaderInfo2: IWMHeaderInfo {
             fn GetCodecInfoCount(&self, pcCodecInfos: *mut u32) -> HRESULT;
-            fn GetCodecInfo(&self, wIndex: u32, #[in] #[out] pcchName: *mut u16, pwszName: *mut u16, #[in] #[out] pcchDescription: *mut u16, pwszDescription: *mut u16, pCodecType: *mut WMT_CODEC_INFO_TYPE, #[in] #[out] pcbCodecInfo: *mut u16, pbCodecInfo: *mut u8) -> HRESULT;
+            fn GetCodecInfo(&self, wIndex: u32, #[in] #[out] pcchName: *mut u16, #[len_param(1)] pwszName: *mut u16, #[in] #[out] pcchDescription: *mut u16, #[len_param(3)] pwszDescription: *mut u16, pCodecType: *mut WMT_CODEC_INFO_TYPE, #[in] #[out] pcbCodecInfo: *mut u16, #[len_param(6)] pbCodecInfo: *mut u8) -> HRESULT;
         }
         #[guid(0x15cc68e3_27cc_4ecd_b222_3f5d02d80bd5)]
         interface IWMHeaderInfo3: IWMHeaderInfo2 {
             fn GetAttributeCountEx(&self, wStreamNum: u16, pcAttributes: *mut u16) -> HRESULT;
-            fn GetAttributeIndices(&self, wStreamNum: u16, pwszName: PCWSTR, pwLangIndex: *const u16, pwIndices: *mut u16, #[in] #[out] pwCount: *mut u16) -> HRESULT;
-            fn GetAttributeByIndexEx(&self, wStreamNum: u16, wIndex: u16, #[out] pwszName: PWSTR, #[in] #[out] pwNameLen: *mut u16, pType: *mut WMT_ATTR_DATATYPE, pwLangIndex: *mut u16, pValue: *mut u8, #[in] #[out] pdwDataLength: *mut u32) -> HRESULT;
-            fn ModifyAttribute(&self, wStreamNum: u16, wIndex: u16, Type: WMT_ATTR_DATATYPE, wLangIndex: u16, pValue: *const u8, dwLength: u32) -> HRESULT;
-            fn AddAttribute(&self, wStreamNum: u16, pszName: PCWSTR, pwIndex: *mut u16, Type: WMT_ATTR_DATATYPE, wLangIndex: u16, pValue: *const u8, dwLength: u32) -> HRESULT;
+            fn GetAttributeIndices(&self, wStreamNum: u16, pwszName: PCWSTR, pwLangIndex: *const u16, #[len_param(4)] pwIndices: *mut u16, #[in] #[out] pwCount: *mut u16) -> HRESULT;
+            fn GetAttributeByIndexEx(&self, wStreamNum: u16, wIndex: u16, #[len_param(3)] #[out] pwszName: PWSTR, #[in] #[out] pwNameLen: *mut u16, pType: *mut WMT_ATTR_DATATYPE, pwLangIndex: *mut u16, #[len_param(7)] pValue: *mut u8, #[in] #[out] pdwDataLength: *mut u32) -> HRESULT;
+            fn ModifyAttribute(&self, wStreamNum: u16, wIndex: u16, Type: WMT_ATTR_DATATYPE, wLangIndex: u16, #[len_param(5)] pValue: *const u8, dwLength: u32) -> HRESULT;
+            fn AddAttribute(&self, wStreamNum: u16, pszName: PCWSTR, pwIndex: *mut u16, Type: WMT_ATTR_DATATYPE, wLangIndex: u16, #[len_param(6)] pValue: *const u8, dwLength: u32) -> HRESULT;
             fn DeleteAttribute(&self, wStreamNum: u16, wIndex: u16) -> HRESULT;
-            fn AddCodecInfo(&self, pwszName: PCWSTR, pwszDescription: PCWSTR, codecType: WMT_CODEC_INFO_TYPE, cbCodecInfo: u16, pbCodecInfo: *const u8) -> HRESULT;
+            fn AddCodecInfo(&self, pwszName: PCWSTR, pwszDescription: PCWSTR, codecType: WMT_CODEC_INFO_TYPE, cbCodecInfo: u16, #[len_param(3)] pbCodecInfo: *const u8) -> HRESULT;
         }
         #[guid(0x6816dad3_2b4b_4c8e_8149_874c3483a753)]
         interface IWMIStreamProps: IUnknown {
-            fn GetProperty(&self, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
+            fn GetProperty(&self, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(3)] pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
         }
         #[guid(0x9f0aa3b6_7267_4d89_88f2_ba915aa5c4c6)]
         interface IWMImageInfo: IUnknown {
             fn GetImageCount(&self, pcImages: *mut u32) -> HRESULT;
-            fn GetImage(&self, wIndex: u32, #[in] #[out] pcchMIMEType: *mut u16, pwszMIMEType: *mut u16, #[in] #[out] pcchDescription: *mut u16, pwszDescription: *mut u16, pImageType: *mut u16, #[in] #[out] pcbImageData: *mut u32, pbImageData: *mut u8) -> HRESULT;
+            fn GetImage(&self, wIndex: u32, #[in] #[out] pcchMIMEType: *mut u16, #[len_param(1)] pwszMIMEType: *mut u16, #[in] #[out] pcchDescription: *mut u16, #[len_param(3)] pwszDescription: *mut u16, pImageType: *mut u16, #[in] #[out] pcbImageData: *mut u32, #[len_param(6)] pbImageData: *mut u8) -> HRESULT;
         }
         #[guid(0x6d7cdc71_9888_11d3_8edc_00c04f6109cf)]
         interface IWMIndexer: IUnknown {
@@ -217,13 +217,13 @@ mod Windows {
         }
         #[guid(0x96406bd5_2b2b_11d3_b36b_00c04f6108ff)]
         interface IWMInputMediaProps: IWMMediaProps {
-            fn GetConnectionName(&self, pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
-            fn GetGroupName(&self, pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
+            fn GetConnectionName(&self, #[len_param(1)] pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
+            fn GetGroupName(&self, #[len_param(1)] pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
         }
         #[guid(0xdf683f00_2d49_4d8e_92b7_fb19f6a0dc57)]
         interface IWMLanguageList: IUnknown {
             fn GetLanguageCount(&self, pwCount: *mut u16) -> HRESULT;
-            fn GetLanguageDetails(&self, wIndex: u16, pwszLanguageString: *mut u16, #[in] #[out] pcchLanguageStringLength: *mut u16) -> HRESULT;
+            fn GetLanguageDetails(&self, wIndex: u16, #[len_param(2)] pwszLanguageString: *mut u16, #[in] #[out] pcchLanguageStringLength: *mut u16) -> HRESULT;
             fn AddLanguageByRFC1766String(&self, pwszLanguageString: PCWSTR, pwIndex: *mut u16) -> HRESULT;
         }
         #[guid(0x05e5ac9f_3fb6_4508_bb43_a4067ba1ebe8)]
@@ -264,21 +264,21 @@ mod Windows {
         }
         #[guid(0x0302b57d_89d1_4ba2_85c9_166f2c53eb91)]
         interface IWMMutualExclusion2: IWMMutualExclusion {
-            fn GetName(&self, pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
+            fn GetName(&self, #[len_param(1)] pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
             fn SetName(&self, pwszName: PCWSTR) -> HRESULT;
             fn GetRecordCount(&self, pwRecordCount: *mut u16) -> HRESULT;
             fn AddRecord(&self) -> HRESULT;
             fn RemoveRecord(&self, wRecordNumber: u16) -> HRESULT;
-            fn GetRecordName(&self, wRecordNumber: u16, pwszRecordName: *mut u16, #[in] #[out] pcchRecordName: *mut u16) -> HRESULT;
+            fn GetRecordName(&self, wRecordNumber: u16, #[len_param(2)] pwszRecordName: *mut u16, #[in] #[out] pcchRecordName: *mut u16) -> HRESULT;
             fn SetRecordName(&self, wRecordNumber: u16, pwszRecordName: PCWSTR) -> HRESULT;
-            fn GetStreamsForRecord(&self, wRecordNumber: u16, pwStreamNumArray: *mut u16, #[in] #[out] pcStreams: *mut u16) -> HRESULT;
+            fn GetStreamsForRecord(&self, wRecordNumber: u16, #[len_param(2)] pwStreamNumArray: *mut u16, #[in] #[out] pcStreams: *mut u16) -> HRESULT;
             fn AddStreamForRecord(&self, wRecordNumber: u16, wStreamNumber: u16) -> HRESULT;
             fn RemoveStreamForRecord(&self, wRecordNumber: u16, wStreamNumber: u16) -> HRESULT;
         }
         #[guid(0x96406bd7_2b2b_11d3_b36b_00c04f6108ff)]
         interface IWMOutputMediaProps: IWMMediaProps {
-            fn GetStreamGroupName(&self, pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
-            fn GetConnectionName(&self, pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
+            fn GetStreamGroupName(&self, #[len_param(1)] pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
+            fn GetConnectionName(&self, #[len_param(1)] pwszName: *mut u16, #[in] #[out] pcchName: *mut u16) -> HRESULT;
         }
         #[guid(0xcdfb97ab_188f_40b3_b643_5b7903975c59)]
         interface IWMPacketSize: IUnknown {
@@ -297,9 +297,9 @@ mod Windows {
         #[guid(0x96406bdb_2b2b_11d3_b36b_00c04f6108ff)]
         interface IWMProfile: IUnknown {
             fn GetVersion(&self, pdwVersion: *mut WMT_VERSION) -> HRESULT;
-            fn GetName(&self, pwszName: *mut u16, #[in] #[out] pcchName: *mut u32) -> HRESULT;
+            fn GetName(&self, #[len_param(1)] pwszName: *mut u16, #[in] #[out] pcchName: *mut u32) -> HRESULT;
             fn SetName(&self, pwszName: *const u16) -> HRESULT;
-            fn GetDescription(&self, pwszDescription: *mut u16, #[in] #[out] pcchDescription: *mut u32) -> HRESULT;
+            fn GetDescription(&self, #[len_param(1)] pwszDescription: *mut u16, #[in] #[out] pcchDescription: *mut u32) -> HRESULT;
             fn SetDescription(&self, pwszDescription: *const u16) -> HRESULT;
             fn GetStreamCount(&self, pcStreams: *mut u32) -> HRESULT;
             fn GetStream(&self, dwStreamIndex: u32, ppConfig: *mut IWMStreamConfig) -> HRESULT;
@@ -356,15 +356,15 @@ mod Windows {
         #[guid(0x72995a79_5090_42a4_9c8c_d9d0b6d34be5)]
         interface IWMPropertyVault: IUnknown {
             fn GetPropertyCount(&self, pdwCount: *const u32) -> HRESULT;
-            fn GetPropertyByName(&self, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
+            fn GetPropertyByName(&self, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(3)] pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
             fn SetProperty(&self, pszName: PCWSTR, pType: WMT_ATTR_DATATYPE, pValue: *const u8, dwSize: u32) -> HRESULT;
-            fn GetPropertyByIndex(&self, dwIndex: u32, #[out] pszName: PWSTR, #[in] #[out] pdwNameLen: *mut u32, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
+            fn GetPropertyByIndex(&self, dwIndex: u32, #[len_param(2)] #[out] pszName: PWSTR, #[in] #[out] pdwNameLen: *mut u32, pType: *mut WMT_ATTR_DATATYPE, #[len_param(5)] pValue: *mut u8, #[in] #[out] pdwSize: *mut u32) -> HRESULT;
             fn CopyPropertiesFrom(&self, pIWMPropertyVault: IWMPropertyVault) -> HRESULT;
             fn Clear(&self) -> HRESULT;
         }
         #[guid(0x6a9fd8ee_b651_4bf0_b849_7d4ece79a2b1)]
         interface IWMProximityDetection: IUnknown {
-            fn StartDetection(&self, pbRegistrationMsg: *const u8, cbRegistrationMsg: u32, pbLocalAddress: *const u8, cbLocalAddress: u32, dwExtraPortsAllowed: u32, ppRegistrationResponseMsg: *mut INSSBuffer, pCallback: IWMStatusCallback, pvContext: *const void) -> HRESULT;
+            fn StartDetection(&self, #[len_param(1)] pbRegistrationMsg: *const u8, cbRegistrationMsg: u32, #[len_param(3)] pbLocalAddress: *const u8, cbLocalAddress: u32, dwExtraPortsAllowed: u32, ppRegistrationResponseMsg: *mut INSSBuffer, pCallback: IWMStatusCallback, pvContext: *const void) -> HRESULT;
         }
         #[guid(0x96406bd6_2b2b_11d3_b36b_00c04f6108ff)]
         interface IWMReader: IUnknown {
@@ -416,10 +416,10 @@ mod Windows {
             fn GetDownloadProgress(&self, pdwPercent: *mut u32, pqwBytesDownloaded: *mut u64, pcnsDownload: *mut u64) -> HRESULT;
             fn GetSaveAsProgress(&self, pdwPercent: *mut u32) -> HRESULT;
             fn SaveFileAs(&self, pwszFilename: *const u16) -> HRESULT;
-            fn GetProtocolName(&self, pwszProtocol: *mut u16, #[in] #[out] pcchProtocol: *mut u32) -> HRESULT;
+            fn GetProtocolName(&self, #[len_param(1)] pwszProtocol: *mut u16, #[in] #[out] pcchProtocol: *mut u32) -> HRESULT;
             fn StartAtMarker(&self, wMarkerIndex: u16, cnsDuration: u64, fRate: f32, pvContext: *const void) -> HRESULT;
-            fn GetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
-            fn SetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, pValue: *const u8, cbLength: u16) -> HRESULT;
+            fn GetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn SetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *const u8, cbLength: u16) -> HRESULT;
             fn Preroll(&self, cnsStart: u64, cnsDuration: u64, fRate: f32) -> HRESULT;
             fn SetLogClientID(&self, fLogClientID: BOOL) -> HRESULT;
             fn GetLogClientID(&self, pfLogClientID: *mut BOOL) -> HRESULT;
@@ -434,14 +434,14 @@ mod Windows {
         #[guid(0x945a76a2_12ae_4d48_bd3c_cd1d90399b85)]
         interface IWMReaderAdvanced4: IWMReaderAdvanced3 {
             fn GetLanguageCount(&self, dwOutputNum: u32, pwLanguageCount: *mut u16) -> HRESULT;
-            fn GetLanguage(&self, dwOutputNum: u32, wLanguage: u16, pwszLanguageString: *mut u16, #[in] #[out] pcchLanguageStringLength: *mut u16) -> HRESULT;
+            fn GetLanguage(&self, dwOutputNum: u32, wLanguage: u16, #[len_param(3)] pwszLanguageString: *mut u16, #[in] #[out] pcchLanguageStringLength: *mut u16) -> HRESULT;
             fn GetMaxSpeedFactor(&self, pdblFactor: *mut f64) -> HRESULT;
             fn IsUsingFastCache(&self, pfUsingFastCache: *mut BOOL) -> HRESULT;
             fn AddLogParam(&self, wszNameSpace: PCWSTR, wszName: PCWSTR, wszValue: PCWSTR) -> HRESULT;
             fn SendLogParams(&self) -> HRESULT;
             fn CanSaveFileAs(&self, pfCanSave: *mut BOOL) -> HRESULT;
             fn CancelSaveFileAs(&self) -> HRESULT;
-            fn GetURL(&self, pwszURL: *mut u16, #[in] #[out] pcchURL: *mut u32) -> HRESULT;
+            fn GetURL(&self, #[len_param(1)] pwszURL: *mut u16, #[in] #[out] pcchURL: *mut u32) -> HRESULT;
         }
         #[guid(0x24c44db0_55d1_49ae_a5cc_f13815e36363)]
         interface IWMReaderAdvanced5: IWMReaderAdvanced4 {
@@ -449,7 +449,7 @@ mod Windows {
         }
         #[guid(0x18a2e7f8_428f_4acd_8a00_e64639bc93de)]
         interface IWMReaderAdvanced6: IWMReaderAdvanced5 {
-            fn SetProtectStreamSamples(&self, pbCertificate: *const u8, cbCertificate: u32, dwCertificateType: u32, dwFlags: u32, pbInitializationVector: *mut u8, #[in] #[out] pcbInitializationVector: *mut u32) -> HRESULT;
+            fn SetProtectStreamSamples(&self, #[len_param(1)] pbCertificate: *const u8, cbCertificate: u32, dwCertificateType: u32, dwFlags: u32, #[len_param(5)] pbInitializationVector: *mut u8, #[in] #[out] pcbInitializationVector: *mut u32) -> HRESULT;
         }
         #[guid(0x9f762fa7_a22e_428d_93c9_ac82f3aafe5a)]
         interface IWMReaderAllocatorEx: IUnknown {
@@ -473,15 +473,15 @@ mod Windows {
         interface IWMReaderNetworkConfig: IUnknown {
             fn GetBufferingTime(&self, pcnsBufferingTime: *mut u64) -> HRESULT;
             fn SetBufferingTime(&self, cnsBufferingTime: u64) -> HRESULT;
-            fn GetUDPPortRanges(&self, pRangeArray: *mut WM_PORT_NUMBER_RANGE, #[in] #[out] pcRanges: *mut u32) -> HRESULT;
-            fn SetUDPPortRanges(&self, pRangeArray: *const WM_PORT_NUMBER_RANGE, cRanges: u32) -> HRESULT;
+            fn GetUDPPortRanges(&self, #[len_param(1)] pRangeArray: *mut WM_PORT_NUMBER_RANGE, #[in] #[out] pcRanges: *mut u32) -> HRESULT;
+            fn SetUDPPortRanges(&self, #[len_param(1)] pRangeArray: *const WM_PORT_NUMBER_RANGE, cRanges: u32) -> HRESULT;
             fn GetProxySettings(&self, pwszProtocol: PCWSTR, pProxySetting: *mut WMT_PROXY_SETTINGS) -> HRESULT;
             fn SetProxySettings(&self, pwszProtocol: PCWSTR, ProxySetting: WMT_PROXY_SETTINGS) -> HRESULT;
-            fn GetProxyHostName(&self, pwszProtocol: PCWSTR, pwszHostName: *mut u16, #[in] #[out] pcchHostName: *mut u32) -> HRESULT;
+            fn GetProxyHostName(&self, pwszProtocol: PCWSTR, #[len_param(2)] pwszHostName: *mut u16, #[in] #[out] pcchHostName: *mut u32) -> HRESULT;
             fn SetProxyHostName(&self, pwszProtocol: PCWSTR, pwszHostName: PCWSTR) -> HRESULT;
             fn GetProxyPort(&self, pwszProtocol: PCWSTR, pdwPort: *mut u32) -> HRESULT;
             fn SetProxyPort(&self, pwszProtocol: PCWSTR, dwPort: u32) -> HRESULT;
-            fn GetProxyExceptionList(&self, pwszProtocol: PCWSTR, pwszExceptionList: *mut u16, #[in] #[out] pcchExceptionList: *mut u32) -> HRESULT;
+            fn GetProxyExceptionList(&self, pwszProtocol: PCWSTR, #[len_param(2)] pwszExceptionList: *mut u16, #[in] #[out] pcchExceptionList: *mut u32) -> HRESULT;
             fn SetProxyExceptionList(&self, pwszProtocol: PCWSTR, pwszExceptionList: PCWSTR) -> HRESULT;
             fn GetProxyBypassForLocal(&self, pwszProtocol: PCWSTR, pfBypassForLocal: *mut BOOL) -> HRESULT;
             fn SetProxyBypassForLocal(&self, pwszProtocol: PCWSTR, fBypassForLocal: BOOL) -> HRESULT;
@@ -499,9 +499,9 @@ mod Windows {
             fn GetConnectionBandwidth(&self, pdwConnectionBandwidth: *mut u32) -> HRESULT;
             fn SetConnectionBandwidth(&self, dwConnectionBandwidth: u32) -> HRESULT;
             fn GetNumProtocolsSupported(&self, pcProtocols: *mut u32) -> HRESULT;
-            fn GetSupportedProtocolName(&self, dwProtocolNum: u32, pwszProtocolName: *mut u16, #[in] #[out] pcchProtocolName: *mut u32) -> HRESULT;
+            fn GetSupportedProtocolName(&self, dwProtocolNum: u32, #[len_param(2)] pwszProtocolName: *mut u16, #[in] #[out] pcchProtocolName: *mut u32) -> HRESULT;
             fn AddLoggingUrl(&self, pwszUrl: PCWSTR) -> HRESULT;
-            fn GetLoggingUrl(&self, dwIndex: u32, #[out] pwszUrl: PWSTR, #[in] #[out] pcchUrl: *mut u32) -> HRESULT;
+            fn GetLoggingUrl(&self, dwIndex: u32, #[len_param(2)] #[out] pwszUrl: PWSTR, #[in] #[out] pcchUrl: *mut u32) -> HRESULT;
             fn GetLoggingUrlCount(&self, pdwUrlCount: *mut u32) -> HRESULT;
             fn ResetLoggingUrlList(&self) -> HRESULT;
         }
@@ -574,9 +574,9 @@ mod Windows {
             fn GetStreamType(&self, pguidStreamType: *mut GUID) -> HRESULT;
             fn GetStreamNumber(&self, pwStreamNum: *mut u16) -> HRESULT;
             fn SetStreamNumber(&self, wStreamNum: u16) -> HRESULT;
-            fn GetStreamName(&self, pwszStreamName: *mut u16, #[in] #[out] pcchStreamName: *mut u16) -> HRESULT;
+            fn GetStreamName(&self, #[len_param(1)] pwszStreamName: *mut u16, #[in] #[out] pcchStreamName: *mut u16) -> HRESULT;
             fn SetStreamName(&self, pwszStreamName: PCWSTR) -> HRESULT;
-            fn GetConnectionName(&self, pwszInputName: *mut u16, #[in] #[out] pcchInputName: *mut u16) -> HRESULT;
+            fn GetConnectionName(&self, #[len_param(1)] pwszInputName: *mut u16, #[in] #[out] pcchInputName: *mut u16) -> HRESULT;
             fn SetConnectionName(&self, pwszInputName: PCWSTR) -> HRESULT;
             fn GetBitrate(&self, pdwBitrate: *mut u32) -> HRESULT;
             fn SetBitrate(&self, pdwBitrate: u32) -> HRESULT;
@@ -587,25 +587,25 @@ mod Windows {
         interface IWMStreamConfig2: IWMStreamConfig {
             fn GetTransportType(&self, pnTransportType: *mut WMT_TRANSPORT_TYPE) -> HRESULT;
             fn SetTransportType(&self, nTransportType: WMT_TRANSPORT_TYPE) -> HRESULT;
-            fn AddDataUnitExtension(&self, guidExtensionSystemID: GUID, cbExtensionDataSize: u16, pbExtensionSystemInfo: *const u8, cbExtensionSystemInfo: u32) -> HRESULT;
+            fn AddDataUnitExtension(&self, guidExtensionSystemID: GUID, cbExtensionDataSize: u16, #[len_param(3)] pbExtensionSystemInfo: *const u8, cbExtensionSystemInfo: u32) -> HRESULT;
             fn GetDataUnitExtensionCount(&self, pcDataUnitExtensions: *mut u16) -> HRESULT;
-            fn GetDataUnitExtension(&self, wDataUnitExtensionNumber: u16, pguidExtensionSystemID: *mut GUID, pcbExtensionDataSize: *mut u16, pbExtensionSystemInfo: *mut u8, #[in] #[out] pcbExtensionSystemInfo: *mut u32) -> HRESULT;
+            fn GetDataUnitExtension(&self, wDataUnitExtensionNumber: u16, pguidExtensionSystemID: *mut GUID, pcbExtensionDataSize: *mut u16, #[len_param(4)] pbExtensionSystemInfo: *mut u8, #[in] #[out] pcbExtensionSystemInfo: *mut u32) -> HRESULT;
             fn RemoveAllDataUnitExtensions(&self) -> HRESULT;
         }
         #[guid(0xcb164104_3aa9_45a7_9ac9_4daee131d6e1)]
         interface IWMStreamConfig3: IWMStreamConfig2 {
-            fn GetLanguage(&self, pwszLanguageString: *mut u16, #[in] #[out] pcchLanguageStringLength: *mut u16) -> HRESULT;
+            fn GetLanguage(&self, #[len_param(1)] pwszLanguageString: *mut u16, #[in] #[out] pcchLanguageStringLength: *mut u16) -> HRESULT;
             fn SetLanguage(&self, pwszLanguageString: PCWSTR) -> HRESULT;
         }
         #[guid(0x96406bdd_2b2b_11d3_b36b_00c04f6108ff)]
         interface IWMStreamList: IUnknown {
-            fn GetStreams(&self, pwStreamNumArray: *mut u16, #[in] #[out] pcStreams: *mut u16) -> HRESULT;
+            fn GetStreams(&self, #[len_param(1)] pwStreamNumArray: *mut u16, #[in] #[out] pcStreams: *mut u16) -> HRESULT;
             fn AddStream(&self, wStreamNum: u16) -> HRESULT;
             fn RemoveStream(&self, wStreamNum: u16) -> HRESULT;
         }
         #[guid(0x8c1c6090_f9a8_4748_8ec3_dd1108ba1e77)]
         interface IWMStreamPrioritization: IUnknown {
-            fn GetPriorityRecords(&self, pRecordArray: *mut WM_STREAM_PRIORITY_RECORD, #[in] #[out] pcRecords: *mut u16) -> HRESULT;
+            fn GetPriorityRecords(&self, #[len_param(1)] pRecordArray: *mut WM_STREAM_PRIORITY_RECORD, #[in] #[out] pcRecords: *mut u16) -> HRESULT;
             fn SetPriorityRecords(&self, pRecordArray: *const WM_STREAM_PRIORITY_RECORD, cRecords: u16) -> HRESULT;
         }
         #[guid(0x9397f121_7705_4dc9_b049_98b698188414)]
@@ -619,8 +619,8 @@ mod Windows {
             fn GetStreamSelected(&self, wStreamNum: u16, pSelection: *mut WMT_STREAM_SELECTION) -> HRESULT;
             fn SetReadStreamSamples(&self, wStreamNum: u16, fCompressed: BOOL) -> HRESULT;
             fn GetReadStreamSamples(&self, wStreamNum: u16, pfCompressed: *mut BOOL) -> HRESULT;
-            fn GetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
-            fn SetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, pValue: *const u8, cbLength: u16) -> HRESULT;
+            fn GetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn SetOutputSetting(&self, dwOutputNum: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *const u8, cbLength: u16) -> HRESULT;
             fn GetOutputCount(&self, pcOutputs: *mut u32) -> HRESULT;
             fn GetOutputProps(&self, dwOutputNum: u32, ppOutput: *mut IWMOutputMediaProps) -> HRESULT;
             fn SetOutputProps(&self, dwOutputNum: u32, pOutput: IWMOutputMediaProps) -> HRESULT;
@@ -685,8 +685,8 @@ mod Windows {
         }
         #[guid(0x962dc1ec_c046_4db8_9cc7_26ceae500817)]
         interface IWMWriterAdvanced2: IWMWriterAdvanced {
-            fn GetInputSetting(&self, dwInputNum: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
-            fn SetInputSetting(&self, dwInputNum: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, pValue: *const u8, cbLength: u16) -> HRESULT;
+            fn GetInputSetting(&self, dwInputNum: u32, pszName: PCWSTR, pType: *mut WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *mut u8, #[in] #[out] pcbLength: *mut u16) -> HRESULT;
+            fn SetInputSetting(&self, dwInputNum: u32, pszName: PCWSTR, Type: WMT_ATTR_DATATYPE, #[len_param(4)] pValue: *const u8, cbLength: u16) -> HRESULT;
         }
         #[guid(0x2cd6492d_7c37_4e76_9d3b_59261183a22e)]
         interface IWMWriterAdvanced3: IWMWriterAdvanced2 {

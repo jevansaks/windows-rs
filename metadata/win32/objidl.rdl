@@ -318,7 +318,7 @@ mod Windows {
         }
         #[guid(0xf29f6bc0_5021_11ce_aa15_00006901293f)]
         interface IROTData: IUnknown {
-            fn GetComparisonData(&self, pbData: *mut byte, cbMax: u32, pcbData: *mut u32) -> HRESULT;
+            fn GetComparisonData(&self, #[len_param(1)] pbData: *mut byte, cbMax: u32, pcbData: *mut u32) -> HRESULT;
         }
         #[guid(0x00000012_0000_0000_c000_000000000046)]
         interface IRootStorage: IUnknown {

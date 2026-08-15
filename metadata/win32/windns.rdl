@@ -510,31 +510,31 @@ mod Windows {
         extern fn DnsReplaceRecordSetUTF8(pReplaceSet: *const DNS_RECORDA, Options: u32, #[opt] hContext: HANDLE, #[in] #[out] #[opt] pExtraInfo: *mut void, #[in] #[out] #[opt] pReserved: *mut void) -> DNS_STATUS;
         #[library("DNSAPI.dll")]
         extern fn DnsReplaceRecordSetW(pReplaceSet: *const DNS_RECORDA, Options: u32, #[opt] hContext: HANDLE, #[in] #[out] #[opt] pExtraInfo: *mut void, #[in] #[out] #[opt] pReserved: *mut void) -> DNS_STATUS;
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsServiceBrowse(pRequest: *const DNS_SERVICE_BROWSE_REQUEST, #[in] #[out] pCancel: *mut DNS_SERVICE_CANCEL) -> DNS_STATUS;
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsServiceBrowseCancel(pCancelHandle: *const DNS_SERVICE_CANCEL) -> DNS_STATUS;
         #[library("DNSAPI.dll")]
         extern fn DnsServiceConstructInstance(pServiceName: PCWSTR, pHostName: PCWSTR, #[opt] pIp4: *const u32, #[opt] pIp6: *const IP6_ADDRESS, wPort: u16, wPriority: u16, wWeight: u16, dwPropertiesCount: u32, #[len_param(7)] keys: *const PCWSTR, #[len_param(7)] values: *const PCWSTR) -> PDNS_SERVICE_INSTANCE;
         #[library("DNSAPI.dll")]
         extern fn DnsServiceCopyInstance(pOrig: *const DNS_SERVICE_INSTANCE) -> PDNS_SERVICE_INSTANCE;
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsServiceDeRegister(pRequest: *const DNS_SERVICE_REGISTER_REQUEST, #[in] #[out] #[opt] pCancel: *mut DNS_SERVICE_CANCEL) -> u32;
         #[library("DNSAPI.dll")]
         extern fn DnsServiceFreeInstance(pInstance: *const DNS_SERVICE_INSTANCE);
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsServiceRegister(pRequest: *const DNS_SERVICE_REGISTER_REQUEST, #[in] #[out] #[opt] pCancel: *mut DNS_SERVICE_CANCEL) -> u32;
         #[library("DNSAPI.dll")]
         extern fn DnsServiceRegisterCancel(pCancelHandle: *const DNS_SERVICE_CANCEL) -> u32;
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsServiceResolve(pRequest: *const DNS_SERVICE_RESOLVE_REQUEST, #[in] #[out] pCancel: *mut DNS_SERVICE_CANCEL) -> DNS_STATUS;
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsServiceResolveCancel(pCancelHandle: *const DNS_SERVICE_CANCEL) -> DNS_STATUS;
         #[library("DNSAPI.dll")]
         extern "C" fn DnsSetApplicationSettings(cServers: u32, #[len_param(0)] pServers: *const DNS_CUSTOM_SERVER, #[opt] pSettings: *const DNS_APPLICATION_SETTINGS) -> u32;
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsStartMulticastQuery(pQueryRequest: *const MDNS_QUERY_REQUEST, #[in] #[out] pHandle: *mut MDNS_QUERY_HANDLE) -> DNS_STATUS;
-        #[library("DNSAPI.dll")]
+        #[library("DNSAPI.dll", set_last_error)]
         extern fn DnsStopMulticastQuery(#[in] #[out] pHandle: *mut MDNS_QUERY_HANDLE) -> DNS_STATUS;
         #[library("DNSAPI.dll")]
         extern "C" fn DnsValidateName_A(pszName: PCSTR, Format: DNS_NAME_FORMAT) -> DNS_STATUS;

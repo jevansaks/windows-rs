@@ -6,14 +6,19 @@ mod Windows {
             DEVICE_PRIMARY = 0,
             DEVICE_IMMERSIVE = 1,
         }
+        #[supported_os("windows8.1")]
         #[library("api-ms-win-shcore-scaling-l1-1-1.dll")]
         extern fn GetDpiForMonitor(hmonitor: HMONITOR, dpiType: MONITOR_DPI_TYPE, dpiX: *mut u32, dpiY: *mut u32) -> HRESULT;
+        #[supported_os("windows8.1")]
         #[library("api-ms-win-shcore-scaling-l1-1-2.dll")]
         extern fn GetDpiForShellUIComponent(param0: SHELL_UI_COMPONENT) -> u32;
+        #[supported_os("windows8.1")]
         #[library("api-ms-win-shcore-scaling-l1-1-1.dll")]
         extern fn GetProcessDpiAwareness(#[opt] hprocess: HANDLE, value: *mut PROCESS_DPI_AWARENESS) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("api-ms-win-shcore-scaling-l1-1-0.dll")]
         extern fn GetScaleFactorForDevice(deviceType: DISPLAY_DEVICE_TYPE) -> DEVICE_SCALE_FACTOR;
+        #[supported_os("windows8.1")]
         #[library("api-ms-win-shcore-scaling-l1-1-1.dll")]
         extern fn GetScaleFactorForMonitor(hMon: HMONITOR, pScale: *mut DEVICE_SCALE_FACTOR) -> HRESULT;
         #[repr(i32)]
@@ -29,10 +34,13 @@ mod Windows {
             PROCESS_SYSTEM_DPI_AWARE = 1,
             PROCESS_PER_MONITOR_DPI_AWARE = 2,
         }
+        #[supported_os("windows8.1")]
         #[library("api-ms-win-shcore-scaling-l1-1-1.dll")]
         extern fn RegisterScaleChangeEvent(hEvent: HANDLE, pdwCookie: *mut usize) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("api-ms-win-shcore-scaling-l1-1-0.dll")]
         extern fn RegisterScaleChangeNotifications(displayDevice: DISPLAY_DEVICE_TYPE, hwndNotify: HWND, uMsgNotify: u32, pdwCookie: *mut u32) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("api-ms-win-shcore-scaling-l1-1-0.dll")]
         extern fn RevokeScaleChangeNotifications(displayDevice: DISPLAY_DEVICE_TYPE, dwCookie: u32) -> HRESULT;
         #[repr(u32)]
@@ -48,8 +56,10 @@ mod Windows {
             SHELL_UI_COMPONENT_NOTIFICATIONAREA = 1,
             SHELL_UI_COMPONENT_DESKBAND = 2,
         }
+        #[supported_os("windows8.1")]
         #[library("api-ms-win-shcore-scaling-l1-1-1.dll")]
         extern fn SetProcessDpiAwareness(value: PROCESS_DPI_AWARENESS) -> HRESULT;
+        #[supported_os("windows8.1")]
         #[library("api-ms-win-shcore-scaling-l1-1-1.dll")]
         extern fn UnregisterScaleChangeEvent(dwCookie: usize) -> HRESULT;
     }

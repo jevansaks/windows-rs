@@ -96,20 +96,16 @@ impl Typedef {
                 underlying
             };
             let tag = inner.ty().name();
-            if parser.header_root.is_none() || is_anonymous_name(&tag) {
-                // Legacy mode or an anonymous tag already emitted under this typedef name.
-                return Ok(None);
-            }
             let public = parser
                 .tag_rename
                 .get(&tag)
                 .cloned()
                 .unwrap_or_else(|| tag.clone());
-            if name == public
-                || (name == tag
-                    && inner_kind == CXType_Enum
-                    && parser.enum_merge.contains_key(&public))
-            {
+            if is_anonymous_name(&tag) || name == public {
+                // An anonymous or canonical tag is already emitted under this typedef name.
+                return Ok(None);
+            }
+            if name == tag && inner_kind == CXType_Enum && parser.enum_merge.contains_key(&public) {
                 // The record/enum is already emitted under this public name.
                 return Ok(None);
             }
@@ -147,6 +143,16 @@ impl Typedef {
         }
 
         let ty = underlying.to_type(parser);
+        let projected_interface_alias = matches!(
+            &ty,
+            metadata::Type::ValueName(target)
+                if name.starts_with('P') && target.name.starts_with('I')
+        );
+        if parser.header_root.is_none()
+            && (matches!(&ty, metadata::Type::ClassName(_)) || projected_interface_alias)
+        {
+            return Ok(None);
+        }
 
         // Base pointer-sized ABI typedefs become `usize`/`isize`; chained aliases inherit.
         let ty = match (pointer_sized_abi(&name), &ty) {

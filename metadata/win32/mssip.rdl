@@ -11,11 +11,11 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptSIPGetSealedDigest(pSubjectInfo: *const SIP_SUBJECTINFO, pSig: *const u8, dwSig: u32, #[len_param(4)] #[opt] pbDigest: *mut u8, #[in] #[out] pcbDigest: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptSIPGetSignedDataMsg(pSubjectInfo: *const SIP_SUBJECTINFO, pdwEncodingType: *mut u32, dwIndex: u32, #[in] #[out] pcbSignedDataMsg: *mut u32, pbSignedDataMsg: *mut u8) -> BOOL;
+        extern fn CryptSIPGetSignedDataMsg(pSubjectInfo: *const SIP_SUBJECTINFO, pdwEncodingType: *mut CERT_QUERY_ENCODING_TYPE, dwIndex: u32, #[in] #[out] pcbSignedDataMsg: *mut u32, pbSignedDataMsg: *mut u8) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptSIPLoad(pgSubject: *const GUID, dwFlags: u32, #[in] #[out] pSipDispatch: *mut SIP_DISPATCH_INFO) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptSIPPutSignedDataMsg(pSubjectInfo: *const SIP_SUBJECTINFO, dwEncodingType: u32, pdwIndex: *mut u32, cbSignedDataMsg: u32, pbSignedDataMsg: *const u8) -> BOOL;
+        extern fn CryptSIPPutSignedDataMsg(pSubjectInfo: *const SIP_SUBJECTINFO, dwEncodingType: CERT_QUERY_ENCODING_TYPE, pdwIndex: *mut u32, cbSignedDataMsg: u32, pbSignedDataMsg: *const u8) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptSIPRemoveProvider(pgProv: *const GUID) -> BOOL;
         #[library("CRYPT32.dll")]

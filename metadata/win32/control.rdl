@@ -280,12 +280,18 @@ mod Windows {
             fn GetMinIdealImageSize(&self, pWidth: *mut i32, pHeight: *mut i32) -> HRESULT;
             fn GetMaxIdealImageSize(&self, pWidth: *mut i32, pHeight: *mut i32) -> HRESULT;
             fn GetRestorePosition(&self, pLeft: *mut i32, pTop: *mut i32, pWidth: *mut i32, pHeight: *mut i32) -> HRESULT;
-            fn HideCursor(&self, HideCursor: i32) -> HRESULT;
+            fn HideCursor(&self, HideCursor: OA_BOOL) -> HRESULT;
             fn IsCursorHidden(&self, CursorHidden: *mut i32) -> HRESULT;
         }
         const LIBID_QuartzTypeLib: GUID = 0x56a868b0_0ad4_11ce_b03a_0020af0ba770;
         type OAEVENT = isize;
         type OAFilterState = i32;
         type OAHWND = isize;
+        #[repr(i32)]
+        #[scoped]
+        enum OA_BOOL {
+            OATRUE = -1,
+            OAFALSE = 0,
+        }
     }
 }

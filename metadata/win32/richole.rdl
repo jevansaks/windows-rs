@@ -31,7 +31,7 @@ mod Windows {
             fn ContextSensitiveHelp(&self, fEnterMode: BOOL) -> HRESULT;
             fn GetClipboardData(&self, lpchrg: *mut CHARRANGE, reco: u32, lplpdataobj: *mut IDataObject) -> HRESULT;
             fn GetDragDropEffect(&self, fDrag: BOOL, grfKeyState: u32, pdwEffect: *mut u32) -> HRESULT;
-            fn GetContextMenu(&self, seltype: u16, lpoleobj: IOleObject, lpchrg: *mut CHARRANGE, lphmenu: *mut HMENU) -> HRESULT;
+            fn GetContextMenu(&self, seltype: RICH_EDIT_GET_CONTEXT_MENU_SEL_TYPE, lpoleobj: IOleObject, lpchrg: *mut CHARRANGE, lphmenu: *mut HMENU) -> HRESULT;
         }
         const RECO_COPY: i32 = 2;
         const RECO_CUT: i32 = 3;

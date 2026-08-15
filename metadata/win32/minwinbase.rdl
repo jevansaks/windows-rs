@@ -175,7 +175,7 @@ mod Windows {
         type LPRIP_INFO = *mut RIP_INFO;
         type LPSECURITY_ATTRIBUTES = *mut SECURITY_ATTRIBUTES;
         type LPSYSTEMTIME = *mut SYSTEMTIME;
-        type LPTHREAD_START_ROUTINE = PTHREAD_START_ROUTINE;
+        extern fn LPTHREAD_START_ROUTINE(lpThreadParameter: *mut void) -> u32;
         const LPTR: i32 = 64;
         type LPUNLOAD_DLL_DEBUG_INFO = *mut UNLOAD_DLL_DEBUG_INFO;
         type LPWIN32_FIND_DATA = LPWIN32_FIND_DATAA;
@@ -243,7 +243,6 @@ mod Windows {
         const PROCESS_HEAP_UNCOMMITTED_RANGE: i32 = 2;
         type PSECURITY_ATTRIBUTES = *mut SECURITY_ATTRIBUTES;
         type PSYSTEMTIME = *mut SYSTEMTIME;
-        extern fn PTHREAD_START_ROUTINE(lpThreadParameter: *mut void) -> u32;
         type PWIN32_FIND_DATA = PWIN32_FIND_DATAA;
         type PWIN32_FIND_DATAA = *mut WIN32_FIND_DATAA;
         type PWIN32_FIND_DATAW = *mut WIN32_FIND_DATAW;

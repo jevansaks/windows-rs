@@ -42,6 +42,25 @@ impl Const {
         else {
             return Ok(None);
         };
+        let interface_alias_cast = body.iter().any(|(kind, token)| {
+            *kind == CXToken_Identifier
+                && parser.type_remaps.get(token).is_some_and(|target| {
+                    target.starts_with('I') && parser.ref_map.contains_key(target)
+                })
+        });
+        let value_ty = value.ty();
+        let unsupported_pointer_alias = match &value_ty {
+            metadata::Type::ValueName(name) | metadata::Type::ClassName(name) => {
+                name.name.starts_with("LP") && string_alias_canonical(&name.name).is_none()
+            }
+            _ => false,
+        };
+        if interface_alias_cast
+            || unsupported_pointer_alias
+            || matches!(value_ty, metadata::Type::ClassName(_))
+        {
+            return Ok(None);
+        }
 
         Ok(Some(Self {
             name,
@@ -197,9 +216,12 @@ pub struct PropertyKeyConst {
 }
 
 impl PropertyKeyConst {
-    pub fn write(&self) -> Result<TokenStream, Error> {
+    pub fn write(&self, namespace: &str) -> Result<TokenStream, Error> {
         let name = write_ident(&self.name);
-        let ty = write_ident(&self.ty);
+        let ty = write_type(
+            namespace,
+            &metadata::Type::value_named("Windows.Win32.Foundation", &self.ty),
+        );
         let guid = syn::LitInt::new(&uuid_to_u128_literal(&self.uuid), Span::call_site());
         let pid = syn::LitInt::new(&format!("{}u32", self.pid), Span::call_site());
         Ok(quote! {
@@ -599,7 +621,7 @@ fn parse_body(
             let (digits, _suffix) = split_int_suffix(lit);
             let raw: u64 = parse_int_digits(digits)?;
             Some(metadata::Value::EnumValue(
-                metadata::TypeName::named(namespace, makeintresource_macro(w)?),
+                metadata::TypeName::named("Windows.Win32.Foundation", makeintresource_macro(w)?),
                 Box::new(metadata::Value::I32(raw as i32)),
             ))
         }
@@ -615,7 +637,7 @@ fn parse_body(
             let (digits, _suffix) = split_int_suffix(lit);
             let raw: u64 = parse_int_digits(digits)?;
             Some(metadata::Value::EnumValue(
-                metadata::TypeName::named(namespace, makeintresource_macro(w)?),
+                metadata::TypeName::named("Windows.Win32.Foundation", makeintresource_macro(w)?),
                 Box::new(metadata::Value::I32((raw as u16).wrapping_neg() as i32)),
             ))
         }
@@ -645,7 +667,7 @@ fn parse_body(
             let (digits, _suffix) = split_int_suffix(lit);
             let raw: u64 = parse_int_digits(digits)?;
             Some(metadata::Value::EnumValue(
-                metadata::TypeName::named(namespace, char_pointer_target(ptr_ty)?),
+                metadata::TypeName::named("Windows.Win32.Foundation", char_pointer_target(ptr_ty)?),
                 Box::new(inner_scalar_value(inner, raw, true)),
             ))
         }
@@ -968,6 +990,9 @@ fn parse_named_cast(
     let raw: u64 = parse_int_digits(digits)?;
 
     // Collapsed scalar typedefs have no emitted name; preserved seed scalars/enums stay named.
+    if let Some(ty) = semantic_scalar(type_name) {
+        return scalar_value(&ty, raw, negate);
+    }
     if !ref_map.contains_key(type_name)
         && let Some(ty) = fundamental_scalar(type_name)
     {
@@ -986,13 +1011,18 @@ fn parse_named_cast(
     }
 
     // String-pointer aliases normalize because redundant `LP*` alias definitions are suppressed.
-    let type_name = string_alias_canonical(type_name).unwrap_or(type_name);
+    let string_type = string_alias_canonical(type_name);
+    let type_name = string_type.unwrap_or(type_name);
 
     // Token casts have no cursor in per-header mode; `header_names` locates the type partition.
-    let ns = header_names
-        .and_then(|m| m.get(type_name))
-        .or_else(|| ref_map.get(type_name))
-        .map_or(namespace, |s| s.as_str());
+    let ns = if string_type.is_some() {
+        "Windows.Win32.Foundation"
+    } else {
+        header_names
+            .and_then(|m| m.get(type_name))
+            .or_else(|| ref_map.get(type_name))
+            .map_or(namespace, |s| s.as_str())
+    };
     let v = if negate {
         (raw as i64).wrapping_neg()
     } else {
@@ -1118,7 +1148,8 @@ fn parse_nested_cast(
         return None;
     }
     // Normalize suppressed string-pointer aliases, as in `parse_named_cast`.
-    let outer = string_alias_canonical(outer).unwrap_or(outer);
+    let string_type = string_alias_canonical(outer);
+    let outer = string_type.unwrap_or(outer);
 
     // Void-pointer aliases have no emitted name, and arithmetic inner expressions are outside
     // this token parser; drop them rather than dangling on the collapsed alias.
@@ -1130,10 +1161,14 @@ fn parse_nested_cast(
     let raw: u64 = parse_int_digits(digits)?;
     let inner_value = inner_scalar_value(inner, raw, negate);
 
-    let ns = header_names
-        .and_then(|m| m.get(outer))
-        .or_else(|| ref_map.get(outer))
-        .map_or(namespace, |s| s.as_str());
+    let ns = if string_type.is_some() {
+        "Windows.Win32.Foundation"
+    } else {
+        header_names
+            .and_then(|m| m.get(outer))
+            .or_else(|| ref_map.get(outer))
+            .map_or(namespace, |s| s.as_str())
+    };
     Some(metadata::Value::EnumValue(
         metadata::TypeName::named(ns, outer),
         Box::new(inner_value),
@@ -1173,6 +1208,8 @@ fn scalar_value(ty: &metadata::Type, raw: u64, negate: bool) -> Option<metadata:
         metadata::Type::I64 => metadata::Value::I64(signed),
         metadata::Type::USize => metadata::Value::USize(signed as u64),
         metadata::Type::ISize => metadata::Value::ISize(signed),
+        metadata::Type::F32 => metadata::Value::F32(signed as f32),
+        metadata::Type::F64 => metadata::Value::F64(signed as f64),
         _ => return None,
     })
 }

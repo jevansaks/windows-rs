@@ -1330,8 +1330,7 @@ mod Windows {
                         SupportTrackedWorkload: 1,
                         UserModeSubmission: 1,
                         SupportBuildTestCommandBuffer: 1,
-                        SupportFaultAndStall: 1,
-                        Reserved: 10,
+                        Reserved: 11,
                         MaxInFlightHwQueueBuffers: 16,
                     },
                 },
@@ -1358,8 +1357,6 @@ mod Windows {
             DXGK_PAGE_FAULT_IOMMU = 32,
             DXGK_PAGE_FAULT_HW_CONTEXT_VALID = 64,
             DXGK_PAGE_FAULT_PROCESS_HANDLE_VALID = 128,
-            DXGK_PAGE_FAULT_AND_STALL = 256,
-            DXGK_PAGE_FAULT_FIRST_INVALID = 512,
         }
         const DXGK_PRIMITIVE_API_SEQUENCE_NUMBER_UNKNOWN: u64 = 18446744073709551615;
         #[repr(i32)]
@@ -1378,7 +1375,6 @@ mod Windows {
             TimingId: u32,
             DetailTiming: DISPLAYID_DETAILED_TIMING_TYPE_I,
         }
-        const DXGK_VALID_FAULT_AND_STALL_FLAGS: i32 = 268;
         type PD3DKMDT_WIRE_FORMAT_AND_PREFERENCE = *mut D3DKMDT_WIRE_FORMAT_AND_PREFERENCE;
         type PDXGKMDT_OPM_CONFIGURE_PARAMETERS = *mut DXGKMDT_OPM_CONFIGURE_PARAMETERS;
         type PDXGKMDT_OPM_COPP_COMPATIBLE_GET_INFO_PARAMETERS = *mut DXGKMDT_OPM_COPP_COMPATIBLE_GET_INFO_PARAMETERS;

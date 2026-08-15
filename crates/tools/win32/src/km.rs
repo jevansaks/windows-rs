@@ -130,6 +130,7 @@ pub fn scrape() -> Summary {
         resolution_winmds: Vec::new(),
         seed: None,
         parallel: true,
+        partitions: None,
     });
 
     print!("{summary}");

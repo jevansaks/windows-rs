@@ -205,6 +205,7 @@ mod Windows {
         extern fn ChooseFontA(param0: *mut CHOOSEFONTA) -> BOOL;
         #[library("COMDLG32.dll")]
         extern fn ChooseFontW(param0: *mut CHOOSEFONTW) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn CommDlgExtendedError() -> u32;
         #[arch(X64 | Arm64)]
@@ -318,20 +319,28 @@ mod Windows {
         const FR_SHOWWRAPAROUND: i32 = 262144;
         const FR_WHOLEWORD: i32 = 2;
         const FR_WRAPAROUND: i32 = 1048576;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn FindTextA(param0: *mut FINDREPLACEA) -> HWND;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn FindTextW(param0: *mut FINDREPLACEW) -> HWND;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn GetFileTitleA(param0: PCSTR, #[len_param(2)] #[out] Buf: PSTR, cchSize: u16) -> i16;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn GetFileTitleW(param0: PCWSTR, #[len_param(2)] #[out] Buf: PWSTR, cchSize: u16) -> i16;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn GetOpenFileNameA(param0: *mut OPENFILENAMEA) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn GetOpenFileNameW(param0: *mut OPENFILENAMEW) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn GetSaveFileNameA(param0: *mut OPENFILENAMEA) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn GetSaveFileNameW(param0: *mut OPENFILENAMEW) -> BOOL;
         #[encoding("ansi")]
@@ -1040,8 +1049,10 @@ mod Windows {
         #[library("COMDLG32.dll")]
         extern fn PrintDlgW(#[in] #[out] pPD: *mut PRINTDLGW) -> BOOL;
         const REGULAR_FONTTYPE: i32 = 1024;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn ReplaceTextA(param0: *mut FINDREPLACEA) -> HWND;
+        #[supported_os("windows5.0")]
         #[library("COMDLG32.dll")]
         extern fn ReplaceTextW(param0: *mut FINDREPLACEW) -> HWND;
         const SCREEN_FONTTYPE: i32 = 8192;

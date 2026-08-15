@@ -33,31 +33,36 @@ mod Windows {
         const CERICHEDIT_CLASSA: String = "RichEditCEA";
         #[encoding("utf-16")]
         const CERICHEDIT_CLASSW: String = "RichEditCEW";
-        const CFE_ALLCAPS: i32 = 128;
-        const CFE_AUTOBACKCOLOR: i32 = 67108864;
-        const CFE_AUTOCOLOR: i32 = 1073741824;
-        const CFE_BOLD: i32 = 1;
-        const CFE_DISABLED: i32 = 8192;
-        const CFE_EMBOSS: i32 = 2048;
-        const CFE_EXTENDED: i32 = 33554432;
-        const CFE_FONTBOUND: i32 = 1048576;
-        const CFE_HIDDEN: i32 = 256;
-        const CFE_IMPRINT: i32 = 4096;
-        const CFE_ITALIC: i32 = 2;
-        const CFE_LINK: i32 = 32;
-        const CFE_LINKPROTECTED: i32 = 8388608;
-        const CFE_MATH: i32 = 268435456;
-        const CFE_MATHNOBUILDUP: i32 = 134217728;
-        const CFE_MATHORDINARY: i32 = 536870912;
-        const CFE_OUTLINE: i32 = 512;
-        const CFE_PROTECTED: i32 = 16;
-        const CFE_REVISED: i32 = 16384;
-        const CFE_SHADOW: i32 = 1024;
-        const CFE_SMALLCAPS: i32 = 64;
-        const CFE_STRIKEOUT: i32 = 8;
-        const CFE_SUBSCRIPT: i32 = 65536;
-        const CFE_SUPERSCRIPT: i32 = 131072;
-        const CFE_UNDERLINE: i32 = 4;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CFE_EFFECTS {
+            CFE_ALLCAPS = 128,
+            CFE_AUTOBACKCOLOR = 67108864,
+            CFE_DISABLED = 8192,
+            CFE_EMBOSS = 2048,
+            CFE_HIDDEN = 256,
+            CFE_IMPRINT = 4096,
+            CFE_OUTLINE = 512,
+            CFE_REVISED = 16384,
+            CFE_SHADOW = 1024,
+            CFE_SMALLCAPS = 64,
+            CFE_AUTOCOLOR = 1073741824,
+            CFE_BOLD = 1,
+            CFE_ITALIC = 2,
+            CFE_STRIKEOUT = 8,
+            CFE_UNDERLINE = 4,
+            CFE_PROTECTED = 16,
+            CFE_LINK = 32,
+            CFE_SUBSCRIPT = 65536,
+            CFE_SUPERSCRIPT = 131072,
+            CFE_FONTBOUND = 1048576,
+            CFE_LINKPROTECTED = 8388608,
+            CFE_EXTENDED = 33554432,
+            CFE_MATHNOBUILDUP = 134217728,
+            CFE_MATH = 268435456,
+            CFE_MATHORDINARY = 536870912,
+        }
         const CFM_ALL: u32 = 4160749631;
         const CFM_ALL2: u32 = 4294967295;
         const CFM_ALLCAPS: i32 = 128;
@@ -159,7 +164,7 @@ mod Windows {
         struct CHARFORMATA {
             cbSize: u32,
             dwMask: u32,
-            dwEffects: u32,
+            dwEffects: CFE_EFFECTS,
             yHeight: i32,
             yOffset: i32,
             crTextColor: COLORREF,
@@ -170,7 +175,7 @@ mod Windows {
         struct CHARFORMATW {
             cbSize: u32,
             dwMask: u32,
-            dwEffects: u32,
+            dwEffects: CFE_EFFECTS,
             yHeight: i32,
             yOffset: i32,
             crTextColor: COLORREF,
@@ -211,8 +216,6 @@ mod Windows {
         const CTFMODEBIAS_NAME: i32 = 2;
         const CTFMODEBIAS_NUMERIC: i32 = 6;
         const CTFMODEBIAS_READING: i32 = 3;
-        const ECN_ENDCOMPOSITION: i32 = 1;
-        const ECN_NEWTEXT: i32 = 2;
         const ECOOP_AND: i32 = 3;
         const ECOOP_OR: i32 = 2;
         const ECOOP_SET: i32 = 1;
@@ -367,25 +370,31 @@ mod Windows {
         struct ENCORRECTTEXT {
             nmhdr: NMHDR,
             chrg: CHARRANGE,
-            seltyp: u16,
+            seltyp: RICH_EDIT_GET_CONTEXT_MENU_SEL_TYPE,
         }
         #[packed(4)]
         #[arch(X64 | Arm64)]
         struct ENCORRECTTEXT {
             nmhdr: NMHDR,
             chrg: CHARRANGE,
-            seltyp: u16,
+            seltyp: RICH_EDIT_GET_CONTEXT_MENU_SEL_TYPE,
         }
         #[arch(X86)]
         struct ENDCOMPOSITIONNOTIFY {
             nmhdr: NMHDR,
-            dwCode: u32,
+            dwCode: ENDCOMPOSITIONNOTIFY_CODE,
         }
         #[packed(4)]
         #[arch(X64 | Arm64)]
         struct ENDCOMPOSITIONNOTIFY {
             nmhdr: NMHDR,
-            dwCode: u32,
+            dwCode: ENDCOMPOSITIONNOTIFY_CODE,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum ENDCOMPOSITIONNOTIFY_CODE {
+            ECN_ENDCOMPOSITION = 1,
+            ECN_NEWTEXT = 2,
         }
         #[arch(X86)]
         struct ENDROPFILES {
@@ -625,7 +634,7 @@ mod Windows {
         #[arch(X86)]
         struct GETTEXTEX {
             cb: u32,
-            flags: u32,
+            flags: GETTEXTEX_FLAGS,
             codepage: u32,
             lpDefaultChar: PCSTR,
             lpUsedDefChar: LPBOOL,
@@ -634,14 +643,34 @@ mod Windows {
         #[arch(X64 | Arm64)]
         struct GETTEXTEX {
             cb: u32,
-            flags: u32,
+            flags: GETTEXTEX_FLAGS,
             codepage: u32,
             lpDefaultChar: PCSTR,
             lpUsedDefChar: LPBOOL,
         }
+        #[repr(i32)]
+        #[scoped]
+        enum GETTEXTEX_FLAGS {
+            GT_DEFAULT = 0,
+            GT_NOHIDDENTEXT = 8,
+            GT_RAWTEXT = 4,
+            GT_SELECTION = 2,
+            GT_USECRLF = 1,
+        }
         struct GETTEXTLENGTHEX {
-            flags: u32,
+            flags: GETTEXTLENGTHEX_FLAGS,
             codepage: u32,
+        }
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum GETTEXTLENGTHEX_FLAGS {
+            GTL_DEFAULT = 0,
+            GTL_USECRLF = 1,
+            GTL_PRECISE = 2,
+            GTL_CLOSE = 4,
+            GTL_NUMCHARS = 8,
+            GTL_NUMBYTES = 16,
         }
         #[arch(X86)]
         struct GROUPTYPINGCHANGE {
@@ -654,17 +683,6 @@ mod Windows {
             nmhdr: NMHDR,
             fGroupTyping: BOOL,
         }
-        const GTL_CLOSE: i32 = 4;
-        const GTL_DEFAULT: i32 = 0;
-        const GTL_NUMBYTES: i32 = 16;
-        const GTL_NUMCHARS: i32 = 8;
-        const GTL_PRECISE: i32 = 2;
-        const GTL_USECRLF: i32 = 1;
-        const GT_DEFAULT: i32 = 0;
-        const GT_NOHIDDENTEXT: i32 = 8;
-        const GT_RAWTEXT: i32 = 4;
-        const GT_SELECTION: i32 = 2;
-        const GT_USECRLF: i32 = 1;
         #[arch(X86)]
         struct HYPHENATEINFO {
             cbSize: i16,
@@ -689,10 +707,14 @@ mod Windows {
         const ICM_LEVEL2_SUI: i32 = 4;
         const ICM_LEVEL3: i32 = 1;
         const ICM_NOTOPEN: i32 = 0;
-        const ICT_RESULTREADSTR: i32 = 1;
         struct IMECOMPTEXT {
             cb: i32,
-            flags: u32,
+            flags: IMECOMPTEXT_FLAGS,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum IMECOMPTEXT_FLAGS {
+            ICT_RESULTREADSTR = 1,
         }
         const IMF_AUTOFONT: i32 = 2;
         const IMF_AUTOFONTSIZEADJUST: i32 = 16;
@@ -763,8 +785,8 @@ mod Windows {
         const OLEOP_DOVERB: i32 = 1;
         struct PARAFORMAT {
             cbSize: u32,
-            dwMask: u32,
-            wNumbering: u16,
+            dwMask: PARAFORMAT_MASK,
+            wNumbering: PARAFORMAT_NUMBERING,
             Anonymous: union {
                 wReserved: u16,
                 wEffects: u16,
@@ -772,7 +794,7 @@ mod Windows {
             dxStartIndent: i32,
             dxRightIndent: i32,
             dxOffset: i32,
-            wAlignment: u16,
+            wAlignment: PARAFORMAT_ALIGNMENT,
             cTabCount: i16,
             rgxTabs: [i32; 32],
         }
@@ -785,27 +807,120 @@ mod Windows {
             bLineSpacingRule: u8,
             bOutlineLevel: u8,
             wShadingWeight: u16,
-            wShadingStyle: u16,
+            wShadingStyle: PARAFORMAT_SHADING_STYLE,
             wNumberingStart: u16,
-            wNumberingStyle: u16,
+            wNumberingStyle: PARAFORMAT_NUMBERING_STYLE,
             wNumberingTab: u16,
             wBorderSpace: u16,
             wBorderWidth: u16,
-            wBorders: u16,
+            wBorders: PARAFORMAT_BORDERS,
+        }
+        #[repr(u16)]
+        #[scoped]
+        enum PARAFORMAT_ALIGNMENT {
+            PFA_LEFT = 1,
+            PFA_RIGHT = 2,
+            PFA_CENTER = 3,
+            PFA_JUSTIFY = 4,
+            PFA_FULL_INTERWORD = 4,
+            PFA_FULL_NEWSPAPER = 5,
+            PFA_FULL_INTERLETTER = 6,
+            PFA_FULL_SCALED = 7,
+            PFA_FULL_GLYPHS = 8,
+        }
+        #[repr(u16)]
+        #[flags]
+        #[scoped]
+        enum PARAFORMAT_BORDERS {
+            PARAFORMAT_BORDERS_LEFT = 1,
+            PARAFORMAT_BORDERS_RIGHT = 2,
+            PARAFORMAT_BORDERS_TOP = 4,
+            PARAFORMAT_BORDERS_BOTTOM = 8,
+            PARAFORMAT_BORDERS_INSIDE = 16,
+            PARAFORMAT_BORDERS_OUTSIDE = 32,
+            PARAFORMAT_BORDERS_AUTOCOLOR = 64,
+        }
+        #[repr(u32)]
+        #[flags]
+        #[associated_constant("PFM_ALL")]
+        #[associated_constant("PFM_ALL2")]
+        #[associated_constant("PFM_EFFECTS")]
+        #[scoped]
+        enum PARAFORMAT_MASK {
+            PFM_STARTINDENT = 1,
+            PFM_RIGHTINDENT = 2,
+            PFM_OFFSET = 4,
+            PFM_ALIGNMENT = 8,
+            PFM_TABSTOPS = 16,
+            PFM_NUMBERING = 32,
+            PFM_OFFSETINDENT = 2147483648,
+            PFM_SPACEBEFORE = 64,
+            PFM_SPACEAFTER = 128,
+            PFM_LINESPACING = 256,
+            PFM_STYLE = 1024,
+            PFM_BORDER = 2048,
+            PFM_SHADING = 4096,
+            PFM_NUMBERINGSTYLE = 8192,
+            PFM_NUMBERINGTAB = 16384,
+            PFM_NUMBERINGSTART = 32768,
+            PFM_RTLPARA = 65536,
+            PFM_KEEP = 131072,
+            PFM_KEEPNEXT = 262144,
+            PFM_PAGEBREAKBEFORE = 524288,
+            PFM_NOLINENUMBER = 1048576,
+            PFM_NOWIDOWCONTROL = 2097152,
+            PFM_DONOTHYPHEN = 4194304,
+            PFM_SIDEBYSIDE = 8388608,
+            PFM_COLLAPSED = 16777216,
+            PFM_OUTLINELEVEL = 33554432,
+            PFM_BOX = 67108864,
+            PFM_RESERVED2 = 134217728,
+            PFM_TABLEROWDELIMITER = 268435456,
+            PFM_TEXTWRAPPINGBREAK = 536870912,
+            PFM_TABLE = 1073741824,
+        }
+        #[repr(u16)]
+        #[flags]
+        #[scoped]
+        enum PARAFORMAT_NUMBERING {
+            PFN_BULLET = 1,
+            PFN_ARABIC = 2,
+            PFN_LCLETTER = 3,
+            PFN_UCLETTER = 4,
+            PFN_LCROMAN = 5,
+            PFN_UCROMAN = 6,
+        }
+        #[repr(u16)]
+        #[scoped]
+        enum PARAFORMAT_NUMBERING_STYLE {
+            PFNS_PAREN = 0,
+            PFNS_PARENS = 256,
+            PFNS_PERIOD = 512,
+            PFNS_PLAIN = 768,
+            PFNS_NONUMBER = 1024,
+            PFNS_NEWNUMBER = 32768,
+        }
+        #[repr(u16)]
+        #[scoped]
+        enum PARAFORMAT_SHADING_STYLE {
+            PARAFORMAT_SHADING_STYLE_NONE = 0,
+            PARAFORMAT_SHADING_STYLE_DARK_HORIZ = 1,
+            PARAFORMAT_SHADING_STYLE_DARK_VERT = 2,
+            PARAFORMAT_SHADING_STYLE_DARK_DOWN_DIAG = 3,
+            PARAFORMAT_SHADING_STYLE_DARK_UP_DIAG = 4,
+            PARAFORMAT_SHADING_STYLE_DARK_GRID = 5,
+            PARAFORMAT_SHADING_STYLE_DARK_TRELLIS = 6,
+            PARAFORMAT_SHADING_STYLE_LIGHT_HORZ = 7,
+            PARAFORMAT_SHADING_STYLE_LIGHT_VERT = 8,
+            PARAFORMAT_SHADING_STYLE_LIGHT_DOWN_DIAG = 9,
+            PARAFORMAT_SHADING_STYLE_LIGHT_UP_DIAG = 10,
+            PARAFORMAT_SHADING_STYLE_LIGHT_GRID = 11,
+            PARAFORMAT_SHADING_STYLE_LIGHT_TRELLIS = 12,
         }
         const PC_DELIMITER: i32 = 4;
         const PC_FOLLOWING: i32 = 1;
         const PC_LEADING: i32 = 2;
         const PC_OVERFLOW: i32 = 3;
-        const PFA_CENTER: i32 = 3;
-        const PFA_FULL_GLYPHS: i32 = 8;
-        const PFA_FULL_INTERLETTER: i32 = 6;
-        const PFA_FULL_INTERWORD: i32 = 4;
-        const PFA_FULL_NEWSPAPER: i32 = 5;
-        const PFA_FULL_SCALED: i32 = 7;
-        const PFA_JUSTIFY: i32 = 4;
-        const PFA_LEFT: i32 = 1;
-        const PFA_RIGHT: i32 = 2;
         const PFE_BOX: i32 = 1024;
         const PFE_COLLAPSED: i32 = 256;
         const PFE_DONOTHYPHEN: i32 = 64;
@@ -819,52 +934,10 @@ mod Windows {
         const PFE_TABLE: i32 = 16384;
         const PFE_TABLEROWDELIMITER: i32 = 4096;
         const PFE_TEXTWRAPPINGBREAK: i32 = 8192;
-        const PFM_ALIGNMENT: i32 = 8;
         const PFM_ALL: u32 = 2147549247;
         const PFM_ALL2: u32 = 3506437631;
-        const PFM_BORDER: i32 = 2048;
-        const PFM_BOX: i32 = 67108864;
-        const PFM_COLLAPSED: i32 = 16777216;
-        const PFM_DONOTHYPHEN: i32 = 4194304;
         const PFM_EFFECTS: i32 = 1358888960;
-        const PFM_KEEP: i32 = 131072;
-        const PFM_KEEPNEXT: i32 = 262144;
-        const PFM_LINESPACING: i32 = 256;
-        const PFM_NOLINENUMBER: i32 = 1048576;
-        const PFM_NOWIDOWCONTROL: i32 = 2097152;
-        const PFM_NUMBERING: i32 = 32;
-        const PFM_NUMBERINGSTART: i32 = 32768;
-        const PFM_NUMBERINGSTYLE: i32 = 8192;
-        const PFM_NUMBERINGTAB: i32 = 16384;
-        const PFM_OFFSET: i32 = 4;
-        const PFM_OFFSETINDENT: u32 = 2147483648;
-        const PFM_OUTLINELEVEL: i32 = 33554432;
-        const PFM_PAGEBREAKBEFORE: i32 = 524288;
-        const PFM_RESERVED2: i32 = 134217728;
-        const PFM_RIGHTINDENT: i32 = 2;
-        const PFM_RTLPARA: i32 = 65536;
-        const PFM_SHADING: i32 = 4096;
-        const PFM_SIDEBYSIDE: i32 = 8388608;
-        const PFM_SPACEAFTER: i32 = 128;
-        const PFM_SPACEBEFORE: i32 = 64;
-        const PFM_STARTINDENT: i32 = 1;
-        const PFM_STYLE: i32 = 1024;
-        const PFM_TABLE: i32 = 1073741824;
-        const PFM_TABLEROWDELIMITER: i32 = 268435456;
-        const PFM_TABSTOPS: i32 = 16;
-        const PFM_TEXTWRAPPINGBREAK: i32 = 536870912;
         const PFNS_NEWNUMBER: i32 = 32768;
-        const PFNS_NONUMBER: i32 = 1024;
-        const PFNS_PAREN: i32 = 0;
-        const PFNS_PARENS: i32 = 256;
-        const PFNS_PERIOD: i32 = 512;
-        const PFNS_PLAIN: i32 = 768;
-        const PFN_ARABIC: i32 = 2;
-        const PFN_BULLET: i32 = 1;
-        const PFN_LCLETTER: i32 = 3;
-        const PFN_LCROMAN: i32 = 5;
-        const PFN_UCLETTER: i32 = 4;
-        const PFN_UCROMAN: i32 = 6;
         #[arch(X86)]
         struct PUNCTUATION {
             iSize: u32,
@@ -925,6 +998,17 @@ mod Windows {
             pwszAlternateText: PCWSTR,
             pIStream: IStream,
         }
+        #[repr(u16)]
+        #[flags]
+        #[scoped]
+        enum RICH_EDIT_GET_CONTEXT_MENU_SEL_TYPE {
+            SEL_EMPTY = 0,
+            SEL_TEXT = 1,
+            SEL_OBJECT = 2,
+            SEL_MULTICHAR = 4,
+            SEL_MULTIOBJECT = 8,
+            GCM_RIGHTMOUSEDROP = 32768,
+        }
         const RTO_DISABLEHANDLES: i32 = 2;
         const RTO_READINGMODE: i32 = 3;
         const RTO_SHOWHANDLES: i32 = 1;
@@ -942,20 +1026,15 @@ mod Windows {
         struct SELCHANGE {
             nmhdr: NMHDR,
             chrg: CHARRANGE,
-            seltyp: u16,
+            seltyp: RICH_EDIT_GET_CONTEXT_MENU_SEL_TYPE,
         }
         #[packed(4)]
         #[arch(X64 | Arm64)]
         struct SELCHANGE {
             nmhdr: NMHDR,
             chrg: CHARRANGE,
-            seltyp: u16,
+            seltyp: RICH_EDIT_GET_CONTEXT_MENU_SEL_TYPE,
         }
-        const SEL_EMPTY: i32 = 0;
-        const SEL_MULTICHAR: i32 = 4;
-        const SEL_MULTIOBJECT: i32 = 8;
-        const SEL_OBJECT: i32 = 2;
-        const SEL_TEXT: i32 = 1;
         const SES_ALLOWBEEPS: i32 = 256;
         const SES_BEEPONMAXTEXT: i32 = 2;
         const SES_BIDI: i32 = 4096;

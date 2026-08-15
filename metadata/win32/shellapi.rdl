@@ -1,7 +1,6 @@
 #[win32]
 mod Windows {
     mod Win32 {
-        const ABC_OVERLAYDESKTOPICONS: i32 = 1;
         const ABE_BOTTOM: i32 = 3;
         const ABE_LEFT: i32 = 0;
         const ABE_RIGHT: i32 = 2;
@@ -72,8 +71,10 @@ mod Windows {
             hkClass: HKEY,
             pszClass: PCWSTR,
         }
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn AssocCreateForClasses(#[len_param(1)] rgClasses: *const ASSOCIATIONELEMENT, cClasses: u32, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn CommandLineToArgvW(lpCmdLine: PCWSTR, pNumArgs: *mut i32) -> *mut PWSTR;
         type DRAGINFO = DRAGINFOA;
@@ -111,36 +112,52 @@ mod Windows {
             lpFileList: PZZWSTR,
             grfKeyState: u32,
         }
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DoEnvironmentSubstA(#[len_param(1)] #[in] #[out] pszSrc: PSTR, cchSrc: u32) -> u32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DoEnvironmentSubstW(#[len_param(1)] #[in] #[out] pszSrc: PWSTR, cchSrc: u32) -> u32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DragAcceptFiles(hWnd: HWND, fAccept: BOOL);
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DragFinish(hDrop: HDROP);
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DragQueryFileA(hDrop: HDROP, iFile: u32, #[len_param(3)] #[out] #[opt] lpszFile: PSTR, cch: u32) -> u32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DragQueryFileW(hDrop: HDROP, iFile: u32, #[len_param(3)] #[out] #[opt] lpszFile: PWSTR, cch: u32) -> u32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DragQueryPoint(hDrop: HDROP, ppt: *mut POINT) -> BOOL;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn DuplicateIcon(#[reserved] hInst: HINSTANCE, hIcon: HICON) -> HICON;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractAssociatedIconA(#[reserved] hInst: HINSTANCE, #[len_const(128)] #[in] #[out] pszIconPath: PSTR, #[in] #[out] piIcon: *mut u16) -> HICON;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractAssociatedIconExA(#[reserved] hInst: HINSTANCE, #[len_const(128)] #[in] #[out] pszIconPath: PSTR, #[in] #[out] piIconIndex: *mut u16, #[in] #[out] piIconId: *mut u16) -> HICON;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractAssociatedIconExW(#[reserved] hInst: HINSTANCE, #[len_const(128)] #[in] #[out] pszIconPath: PWSTR, #[in] #[out] piIconIndex: *mut u16, #[in] #[out] piIconId: *mut u16) -> HICON;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractAssociatedIconW(#[reserved] hInst: HINSTANCE, #[len_const(128)] #[in] #[out] pszIconPath: PWSTR, #[in] #[out] piIcon: *mut u16) -> HICON;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractIconA(#[reserved] hInst: HINSTANCE, pszExeFileName: PCSTR, nIconIndex: u32) -> HICON;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractIconExA(lpszFile: PCSTR, nIconIndex: i32, #[len_param(4)] #[opt] phiconLarge: *mut HICON, #[len_param(4)] #[opt] phiconSmall: *mut HICON, nIcons: u32) -> u32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractIconExW(lpszFile: PCWSTR, nIconIndex: i32, #[len_param(4)] #[opt] phiconLarge: *mut HICON, #[len_param(4)] #[opt] phiconSmall: *mut HICON, nIcons: u32) -> u32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ExtractIconW(#[reserved] hInst: HINSTANCE, pszExeFileName: PCWSTR, nIconIndex: u32) -> HICON;
         type FILEOP_FLAGS = u16;
@@ -165,11 +182,14 @@ mod Windows {
         const FO_DELETE: i32 = 3;
         const FO_MOVE: i32 = 1;
         const FO_RENAME: i32 = 4;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn FindExecutableA(lpFile: PCSTR, #[opt] lpDirectory: PCSTR, #[out] lpResult: PSTR) -> HINSTANCE;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn FindExecutableW(lpFile: PCWSTR, #[opt] lpDirectory: PCWSTR, #[out] lpResult: PWSTR) -> HINSTANCE;
         type HDROP = *mut void;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn InitNetworkAddressControl() -> BOOL;
         #[library("SHELL32.dll")]
@@ -478,6 +498,7 @@ mod Windows {
         const SE_ERR_OOM: i32 = 8;
         const SE_ERR_PNF: i32 = 3;
         const SE_ERR_SHARE: i32 = 26;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHAppBarMessage(dwMessage: u32, #[in] #[out] pData: *mut APPBARDATA) -> usize;
         #[arch(X64 | Arm64)]
@@ -513,6 +534,7 @@ mod Windows {
             lpStartupInfo: LPSTARTUPINFOW,
             lpProcessInformation: LPPROCESS_INFORMATION,
         }
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHCreateProcessAsUserW(#[in] #[out] pscpi: *mut SHCREATEPROCESSINFOW) -> BOOL;
         type SHELLEXECUTEINFO = SHELLEXECUTEINFOA;
@@ -605,12 +627,16 @@ mod Windows {
         const SHERB_NOCONFIRMATION: i32 = 1;
         const SHERB_NOPROGRESSUI: i32 = 2;
         const SHERB_NOSOUND: i32 = 4;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHEmptyRecycleBinA(#[opt] hwnd: HWND, #[opt] pszRootPath: PCSTR, dwFlags: u32) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHEmptyRecycleBinW(#[opt] hwnd: HWND, #[opt] pszRootPath: PCWSTR, dwFlags: u32) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHEnumerateUnreadMailAccountsW(#[opt] hKeyUser: HKEY, dwIndex: u32, #[len_param(3)] #[out] pszMailAddress: PWSTR, cchMailAddress: i32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHEvaluateSystemCommandTemplate(pszCmdTemplate: PCWSTR, ppszApplication: *mut PWSTR, ppszCommandLine: *mut PWSTR, ppszParameters: *mut PWSTR) -> HRESULT;
         type SHFILEINFO = SHFILEINFOA;
@@ -695,10 +721,13 @@ mod Windows {
             hNameMappings: *mut void,
             lpszProgressTitle: PCWSTR,
         }
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHFileOperationA(#[in] #[out] lpFileOp: *mut SHFILEOPSTRUCTA) -> i32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHFileOperationW(#[in] #[out] lpFileOp: *mut SHFILEOPSTRUCTW) -> i32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHFreeNameMappings(#[opt] hNameMappings: HANDLE);
         const SHGFI_ADDOVERLAYS: i32 = 32;
@@ -733,28 +762,40 @@ mod Windows {
         const SHGSI_SHELLICONSIZE: i32 = 4;
         const SHGSI_SMALLICON: i32 = 1;
         const SHGSI_SYSICONINDEX: i32 = 16384;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHGetDiskFreeSpaceExA(pszDirectoryName: PCSTR, #[opt] pulFreeBytesAvailableToCaller: *mut u64, #[opt] pulTotalNumberOfBytes: *mut u64, #[opt] pulTotalNumberOfFreeBytes: *mut u64) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHGetDiskFreeSpaceExW(pszDirectoryName: PCWSTR, #[opt] pulFreeBytesAvailableToCaller: *mut u64, #[opt] pulTotalNumberOfBytes: *mut u64, #[opt] pulTotalNumberOfFreeBytes: *mut u64) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHGetDriveMedia(pszDrive: PCWSTR, pdwMediaContent: *mut u32) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHGetFileInfoA(pszPath: PCSTR, dwFileAttributes: u32, #[size_param(3)] #[in] #[out] #[opt] psfi: *mut SHFILEINFOA, cbFileInfo: u32, uFlags: u32) -> usize;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHGetFileInfoW(pszPath: PCWSTR, dwFileAttributes: u32, #[size_param(3)] #[in] #[out] #[opt] psfi: *mut SHFILEINFOW, cbFileInfo: u32, uFlags: u32) -> usize;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHGetImageList(iImageList: i32, riid: *const GUID, #[iid_is] ppvObj: *mut *mut void) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHGetLocalizedName(pszPath: PCWSTR, #[len_param(2)] #[out] pszResModule: PWSTR, cch: u32, pidsRes: *mut i32) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHGetNewLinkInfoA(pszLinkTo: PCSTR, pszDir: PCSTR, #[out] pszName: PSTR, pfMustCopy: *mut BOOL, uFlags: u32) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHGetNewLinkInfoW(pszLinkTo: PCWSTR, pszDir: PCWSTR, #[out] pszName: PWSTR, pfMustCopy: *mut BOOL, uFlags: u32) -> BOOL;
+        #[supported_os("windows6.1")]
         #[library("SHELL32.dll")]
         extern fn SHGetPropertyStoreForWindow(hwnd: HWND, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHGetStockIconInfo(siid: SHSTOCKICONID, uFlags: u32, #[in] #[out] psii: *mut SHSTOCKICONINFO) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHGetUnreadMailCountW(#[opt] hKeyUser: HKEY, #[opt] pszMailAddress: PCWSTR, #[opt] pdwCount: *mut u32, #[opt] pFileTime: *mut FILETIME, #[len_param(5)] #[out] #[opt] pszShellExecuteCommand: PWSTR, cchShellExecuteCommand: i32) -> HRESULT;
         const SHIL_EXTRALARGE: i32 = 2;
@@ -763,12 +804,16 @@ mod Windows {
         const SHIL_LAST: i32 = 4;
         const SHIL_SMALL: i32 = 1;
         const SHIL_SYSSMALL: i32 = 3;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHInvokePrinterCommandA(#[opt] hwnd: HWND, uAction: u32, lpBuf1: PCSTR, #[opt] lpBuf2: PCSTR, fModal: BOOL) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHInvokePrinterCommandW(#[opt] hwnd: HWND, uAction: u32, lpBuf1: PCWSTR, #[opt] lpBuf2: PCWSTR, fModal: BOOL) -> BOOL;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHIsFileAvailableOffline(pwszPath: PCWSTR, #[opt] pdwStatus: *mut u32) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHLoadNonloadedIconOverlayIdentifiers() -> HRESULT;
         type SHNAMEMAPPING = SHNAMEMAPPINGA;
@@ -815,12 +860,16 @@ mod Windows {
             i64Size: i64,
             i64NumItems: i64,
         }
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHQueryRecycleBinA(#[opt] pszRootPath: PCSTR, #[in] #[out] pSHQueryRBInfo: *mut SHQUERYRBINFO) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHQueryRecycleBinW(#[opt] pszRootPath: PCWSTR, #[in] #[out] pSHQueryRBInfo: *mut SHQUERYRBINFO) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHQueryUserNotificationState(pquns: *mut QUERY_USER_NOTIFICATION_STATE) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHRemoveLocalizedName(pszPath: PCWSTR) -> HRESULT;
         #[repr(i32)]
@@ -937,33 +986,47 @@ mod Windows {
             iIcon: i32,
             szPath: [u16; 260],
         }
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHSetLocalizedName(pszPath: PCWSTR, pszResModule: PCWSTR, idsRes: i32) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHSetUnreadMailCountW(pszMailAddress: PCWSTR, dwCount: u32, pszShellExecuteCommand: PCWSTR) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHTestTokenMembership(#[opt] hToken: HANDLE, ulRID: u32) -> BOOL;
         const SIID_INVALID: SHSTOCKICONID = -1;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ShellAboutA(#[opt] hWnd: HWND, szApp: PCSTR, #[opt] szOtherStuff: PCSTR, #[opt] hIcon: HICON) -> i32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ShellAboutW(#[opt] hWnd: HWND, szApp: PCWSTR, #[opt] szOtherStuff: PCWSTR, #[opt] hIcon: HICON) -> i32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ShellExecuteA(#[opt] hwnd: HWND, #[opt] lpOperation: PCSTR, lpFile: PCSTR, #[opt] lpParameters: PCSTR, #[opt] lpDirectory: PCSTR, nShowCmd: i32) -> HINSTANCE;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ShellExecuteExA(#[in] #[out] pExecInfo: *mut SHELLEXECUTEINFOA) -> BOOL;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ShellExecuteExW(#[in] #[out] pExecInfo: *mut SHELLEXECUTEINFOW) -> BOOL;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn ShellExecuteW(#[opt] hwnd: HWND, #[opt] lpOperation: PCWSTR, lpFile: PCWSTR, #[opt] lpParameters: PCWSTR, #[opt] lpDirectory: PCWSTR, nShowCmd: i32) -> HINSTANCE;
+        #[supported_os("windows5.1.2600")]
         #[library("SHLWAPI.dll")]
         extern "C" fn ShellMessageBoxA(#[opt] hAppInst: HINSTANCE, #[opt] hWnd: HWND, lpcText: PCSTR, #[opt] lpcTitle: PCSTR, fuStyle: u32, ...) -> i32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHLWAPI.dll")]
         extern "C" fn ShellMessageBoxW(#[opt] hAppInst: HINSTANCE, #[opt] hWnd: HWND, lpcText: PCWSTR, #[opt] lpcTitle: PCWSTR, fuStyle: u32, ...) -> i32;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn Shell_NotifyIconA(dwMessage: u32, lpData: *const NOTIFYICONDATAA) -> BOOL;
+        #[supported_os("windows6.1")]
         #[library("SHELL32.dll")]
         extern fn Shell_NotifyIconGetRect(identifier: *const NOTIFYICONIDENTIFIER, iconLocation: *mut RECT) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn Shell_NotifyIconW(dwMessage: u32, lpData: *const NOTIFYICONDATAW) -> BOOL;
         #[encoding("utf-16")]

@@ -202,6 +202,13 @@ mod Windows {
         const FWPM_LAYER_FLAG_BUILTIN: i32 = 2;
         const FWPM_LAYER_FLAG_CLASSIFY_MOSTLY: i32 = 4;
         const FWPM_LAYER_FLAG_KERNEL: i32 = 1;
+        struct FWPM_LAYER_STATISTICS0 {
+            layerId: GUID,
+            classifyPermitCount: u32,
+            classifyBlockCount: u32,
+            classifyVetoCount: u32,
+            numCacheEntries: u32,
+        }
         struct FWPM_LAYER_STATISTICS1 {
             layerId: GUID,
             classifyPermitCount: u32,
@@ -827,6 +834,44 @@ mod Windows {
         }
         const FWPM_SESSION_FLAG_DYNAMIC: i32 = 1;
         const FWPM_SESSION_FLAG_RESERVED: i32 = 268435456;
+        struct FWPM_STATISTICS0 {
+            numLayerStatistics: u32,
+            layerStatistics: *mut FWPM_LAYER_STATISTICS0,
+            inboundAllowedConnectionsV4: u32,
+            inboundBlockedConnectionsV4: u32,
+            outboundAllowedConnectionsV4: u32,
+            outboundBlockedConnectionsV4: u32,
+            inboundAllowedConnectionsV6: u32,
+            inboundBlockedConnectionsV6: u32,
+            outboundAllowedConnectionsV6: u32,
+            outboundBlockedConnectionsV6: u32,
+            inboundActiveConnectionsV4: u32,
+            outboundActiveConnectionsV4: u32,
+            inboundActiveConnectionsV6: u32,
+            outboundActiveConnectionsV6: u32,
+            reauthDirInbound: u64,
+            reauthDirOutbound: u64,
+            reauthFamilyV4: u64,
+            reauthFamilyV6: u64,
+            reauthProtoOther: u64,
+            reauthProtoIPv4: u64,
+            reauthProtoIPv6: u64,
+            reauthProtoICMP: u64,
+            reauthProtoICMP6: u64,
+            reauthProtoUDP: u64,
+            reauthProtoTCP: u64,
+            reauthReasonPolicyChange: u64,
+            reauthReasonNewArrivalInterface: u64,
+            reauthReasonNewNextHopInterface: u64,
+            reauthReasonProfileCrossing: u64,
+            reauthReasonClassifyCompletion: u64,
+            reauthReasonIPSecPropertiesChanged: u64,
+            reauthReasonMidStreamInspection: u64,
+            reauthReasonSocketPropertyChanged: u64,
+            reauthReasonNewInboundMCastBCastPacket: u64,
+            reauthReasonEDPPolicyChanged: u64,
+            reauthReasonProxyHandleChanged: u64,
+        }
         struct FWPM_STATISTICS1 {
             numLayerStatistics: u32,
             layerStatistics: *mut FWPM_LAYER_STATISTICS1,

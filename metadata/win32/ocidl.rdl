@@ -92,21 +92,21 @@ mod Windows {
         }
         #[guid(0xb196b285_bab4_101a_b69c_00aa00341d07)]
         interface IEnumConnectionPoints: IUnknown {
-            fn Next(&self, cConnections: u32, ppCP: *mut IConnectionPoint, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, cConnections: u32, #[len_param(0)] ppCP: *mut IConnectionPoint, pcFetched: *mut u32) -> HRESULT;
             fn Skip(&self, cConnections: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppEnum: *mut IEnumConnectionPoints) -> HRESULT;
         }
         #[guid(0xb196b287_bab4_101a_b69c_00aa00341d07)]
         interface IEnumConnections: IUnknown {
-            fn Next(&self, cConnections: u32, rgcd: *mut CONNECTDATA, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, cConnections: u32, #[len_param(0)] rgcd: *mut CONNECTDATA, pcFetched: *mut u32) -> HRESULT;
             fn Skip(&self, cConnections: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppEnum: *mut IEnumConnections) -> HRESULT;
         }
         #[guid(0xb3e7c340_ef97_11ce_9bc9_00aa00608e01)]
         interface IEnumOleUndoUnits: IUnknown {
-            fn Next(&self, cElt: u32, rgElt: *mut IOleUndoUnit, pcEltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, cElt: u32, #[len_param(0)] rgElt: *mut IOleUndoUnit, pcEltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, cElt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppEnum: *mut IEnumOleUndoUnits) -> HRESULT;
@@ -230,8 +230,8 @@ mod Windows {
         #[guid(0xbd1ae5e0_a6ae_11ce_bd37_504200c10000)]
         interface IPersistMemory: IPersist {
             fn IsDirty(&self) -> HRESULT;
-            fn Load(&self, pMem: *const void, cbSize: u32) -> HRESULT;
-            fn Save(&self, pMem: *mut void, fClearDirty: BOOL, cbSize: u32) -> HRESULT;
+            fn Load(&self, #[len_param(1)] pMem: *const void, cbSize: u32) -> HRESULT;
+            fn Save(&self, #[len_param(2)] pMem: *mut void, fClearDirty: BOOL, cbSize: u32) -> HRESULT;
             fn GetSizeMax(&self, pCbSize: *mut u32) -> HRESULT;
             fn InitNew(&self) -> HRESULT;
         }
@@ -300,10 +300,10 @@ mod Windows {
         }
         #[guid(0x22f55882_280b_11d0_a8a9_00a0c90c2004)]
         interface IPropertyBag2: IUnknown {
-            fn Read(&self, cProperties: u32, pPropBag: *const PROPBAG2, pErrLog: IErrorLog, pvarValue: *mut VARIANT, #[in] #[out] phrError: *mut HRESULT) -> HRESULT;
-            fn Write(&self, cProperties: u32, pPropBag: *const PROPBAG2, pvarValue: *const VARIANT) -> HRESULT;
+            fn Read(&self, cProperties: u32, #[len_param(0)] pPropBag: *const PROPBAG2, pErrLog: IErrorLog, #[len_param(0)] pvarValue: *mut VARIANT, #[len_param(0)] #[in] #[out] phrError: *mut HRESULT) -> HRESULT;
+            fn Write(&self, cProperties: u32, #[len_param(0)] pPropBag: *const PROPBAG2, #[len_param(0)] pvarValue: *const VARIANT) -> HRESULT;
             fn CountProperties(&self, pcProperties: *mut u32) -> HRESULT;
-            fn GetPropertyInfo(&self, iProperty: u32, cProperties: u32, pPropBag: *mut PROPBAG2, pcProperties: *mut u32) -> HRESULT;
+            fn GetPropertyInfo(&self, iProperty: u32, cProperties: u32, #[len_param(1)] pPropBag: *mut PROPBAG2, pcProperties: *mut u32) -> HRESULT;
             fn LoadObject(&self, pstrName: PCWSTR, dwHint: u32, pUnkObject: IUnknown, pErrLog: IErrorLog) -> HRESULT;
         }
         #[guid(0x9bfbbc02_eff1_101a_84ed_00aa00341d07)]
@@ -317,7 +317,7 @@ mod Windows {
             fn Activate(&self, hWndParent: HWND, pRect: *const RECT, bModal: BOOL) -> HRESULT;
             fn Deactivate(&self) -> HRESULT;
             fn GetPageInfo(&self, pPageInfo: *mut PROPPAGEINFO) -> HRESULT;
-            fn SetObjects(&self, cObjects: u32, ppUnk: *const IUnknown) -> HRESULT;
+            fn SetObjects(&self, cObjects: u32, #[len_param(0)] ppUnk: *const IUnknown) -> HRESULT;
             fn Show(&self, nCmdShow: u32) -> HRESULT;
             fn Move(&self, pRect: *const RECT) -> HRESULT;
             fn IsPageDirty(&self) -> HRESULT;

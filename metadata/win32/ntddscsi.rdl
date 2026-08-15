@@ -65,28 +65,6 @@ mod Windows {
             PreviousTaskFile: [u8; 8],
             CurrentTaskFile: [u8; 8],
         }
-        const BOOT_PARTITION_FUNCTION_ACTIVATE: i32 = 2;
-        const BOOT_PARTITION_FUNCTION_DOWNLOAD: i32 = 1;
-        const BOOT_PARTITION_FUNCTION_GET_INFO: i32 = 3;
-        struct BOOT_PARTITION_REQUEST_BLOCK {
-            Version: u32,
-            Size: u32,
-            Function: u32,
-            Flags: u32,
-            DataBufferOffset: u32,
-            DataBufferLength: u32,
-        }
-        const BOOT_PARTITION_REQUEST_BLOCK_STRUCTURE_VERSION: i32 = 1;
-        const BOOT_PARTITION_STATUS_ERROR: i32 = 1;
-        const BOOT_PARTITION_STATUS_ILLEGAL_REQUEST: i32 = 2;
-        const BOOT_PARTITION_STATUS_INPUT_BUFFER_TOO_BIG: i32 = 4;
-        const BOOT_PARTITION_STATUS_INVALID_ALIGNMENT: i32 = 8;
-        const BOOT_PARTITION_STATUS_INVALID_IMAGE: i32 = 7;
-        const BOOT_PARTITION_STATUS_INVALID_PARAMETER: i32 = 3;
-        const BOOT_PARTITION_STATUS_INVALID_SLOT: i32 = 6;
-        const BOOT_PARTITION_STATUS_OUTPUT_BUFFER_TOO_SMALL: i32 = 5;
-        const BOOT_PARTITION_STATUS_SUCCESS: i32 = 0;
-        const BOOT_PARTITION_STATUS_WRITE_PROHIBITED: i32 = 9;
         #[encoding("ansi")]
         const DD_SCSI_DEVICE_NAME: String = "\\Device\\ScsiPort";
         struct DSM_NOTIFICATION_REQUEST_BLOCK {
@@ -290,8 +268,6 @@ mod Windows {
         const IOCTL_IDE_PASS_THROUGH: i32 = 315432;
         const IOCTL_MINIPORT_PROCESS_SERVICE_IRP: i32 = 315448;
         #[encoding("ansi")]
-        const IOCTL_MINIPORT_SIGNATURE_BOOT_PARTITION: String = "BOOTPINF";
-        #[encoding("ansi")]
         const IOCTL_MINIPORT_SIGNATURE_DSM_GENERAL: String = "MPDSMGEN";
         #[encoding("ansi")]
         const IOCTL_MINIPORT_SIGNATURE_DSM_NOTIFICATION: String = "MPDSM   ";
@@ -324,7 +300,6 @@ mod Windows {
         const IOCTL_SCSI_GET_DUMP_POINTERS: i32 = 266272;
         const IOCTL_SCSI_GET_INQUIRY_DATA: i32 = 266252;
         const IOCTL_SCSI_MINIPORT: i32 = 315400;
-        const IOCTL_SCSI_MINIPORT_BOOT_PARTITION: i32 = 1771408;
         const IOCTL_SCSI_MINIPORT_DIAGNOSTIC: i32 = 1771776;
         const IOCTL_SCSI_MINIPORT_FIRMWARE: i32 = 1771392;
         const IOCTL_SCSI_MINIPORT_HYBRID: i32 = 1771040;
@@ -562,7 +537,6 @@ mod Windows {
         type PATA_PASS_THROUGH_EX = *mut ATA_PASS_THROUGH_EX;
         #[arch(X64 | Arm64)]
         type PATA_PASS_THROUGH_EX32 = *mut ATA_PASS_THROUGH_EX32;
-        type PBOOT_PARTITION_REQUEST_BLOCK = *mut BOOT_PARTITION_REQUEST_BLOCK;
         type PDSM_NOTIFICATION_REQUEST_BLOCK = *mut DSM_NOTIFICATION_REQUEST_BLOCK;
         type PDUMP_DEVICE_POWERON_ROUTINE = *mut DUMP_DEVICE_POWERON_ROUTINE;
         type PDUMP_DRIVER = *mut DUMP_DRIVER;
@@ -616,9 +590,6 @@ mod Windows {
         type PSCSI_PASS_THROUGH_DIRECT_EX = *mut SCSI_PASS_THROUGH_DIRECT_EX;
         type PSCSI_PASS_THROUGH_EX = *mut SCSI_PASS_THROUGH_EX;
         type PSRB_IO_CONTROL = *mut SRB_IO_CONTROL;
-        type PSTORAGE_BOOT_PARTITION_ACTIVATE = *mut STORAGE_BOOT_PARTITION_ACTIVATE;
-        type PSTORAGE_BOOT_PARTITION_DOWNLOAD = *mut STORAGE_BOOT_PARTITION_DOWNLOAD;
-        type PSTORAGE_BOOT_PARTITION_INFO = *mut STORAGE_BOOT_PARTITION_INFO;
         type PSTORAGE_DIAGNOSTIC_MP_REQUEST = *mut STORAGE_DIAGNOSTIC_MP_REQUEST;
         type PSTORAGE_ENDURANCE_DATA_DESCRIPTOR = *mut STORAGE_ENDURANCE_DATA_DESCRIPTOR;
         type PSTORAGE_ENDURANCE_INFO = *mut STORAGE_ENDURANCE_INFO;
@@ -801,32 +772,6 @@ mod Windows {
             ControlCode: u32,
             ReturnCode: u32,
             Length: u32,
-        }
-        struct STORAGE_BOOT_PARTITION_ACTIVATE {
-            Version: u32,
-            Size: u32,
-            BPID: u8,
-            Reserved0: [u8; 3],
-        }
-        const STORAGE_BOOT_PARTITION_ACTIVATE_STRUCTURE_VERSION: i32 = 1;
-        struct STORAGE_BOOT_PARTITION_DOWNLOAD {
-            Version: u32,
-            Size: u32,
-            BPID: u8,
-            Offset: u64,
-            BufferSize: u64,
-            ImageBuffer: [u8; 1],
-        }
-        const STORAGE_BOOT_PARTITION_DOWNLOAD_STRUCTURE_VERSION: i32 = 1;
-        const STORAGE_BOOT_PARTITION_GET_INFO_STRUCTURE_VERSION_V1: i32 = 1;
-        struct STORAGE_BOOT_PARTITION_INFO {
-            Version: u32,
-            Size: u32,
-            BPSZ: u64,
-            ImagePayloadAlignment: u32,
-            ImagePayloadMaxSize: u32,
-            SlotCount: u8,
-            ABPID: u8,
         }
         struct STORAGE_DIAGNOSTIC_MP_REQUEST {
             Version: u32,

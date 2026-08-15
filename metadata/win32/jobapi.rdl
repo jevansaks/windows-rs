@@ -1,7 +1,7 @@
 #[win32]
 mod Windows {
     mod Win32 {
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn IsProcessInJob(ProcessHandle: HANDLE, #[opt] JobHandle: HANDLE, Result: *mut BOOL) -> BOOL;
     }
 }

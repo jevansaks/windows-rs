@@ -571,21 +571,6 @@ mod Windows {
             },
         }
         #[arch(Arm64)]
-        const ARM64_SVCR: i32 = 23058;
-        #[arch(Arm64)]
-        const ARM64_SVCR_SM: i32 = 1;
-        #[arch(Arm64)]
-        const ARM64_SVCR_ZA: i32 = 2;
-        struct ARM64_TPIDR2_BLOCK {
-            ZaSaveBuffer: *mut void,
-            NumZaSaveSlices: u16,
-            Reserved1: u16,
-            Reserved2: u32,
-        }
-        const ARM64_TPIDR2_BLOCK_ALIGN: i32 = 16;
-        #[arch(Arm64)]
-        const ARM64_TPIDR2_EL0: i32 = 24197;
-        #[arch(Arm64)]
         const ARM64_TPIDRRO_EL0: i32 = 24195;
         #[arch(Arm64)]
         const ARM64_TPIDR_EL0: i32 = 24194;
@@ -730,25 +715,6 @@ mod Windows {
         const CM_SERVICE_VERIFIER_BOOT_LOAD: i32 = 64;
         const CM_SERVICE_VIRTUAL_DISK_BOOT_LOAD: i32 = 2;
         const CM_SERVICE_WINPE_BOOT_LOAD: i32 = 128;
-        struct CODE_INTEGRITY_REPORT_GENERATION_HEADER {
-            Version: u16,
-            Reserved: u16,
-            RecordSize: u32,
-            CommitTime: u64,
-        }
-        const CODE_INTEGRITY_REPORT_GENERATION_VERSION_CURRENT: i32 = 1;
-        struct CODE_INTEGRITY_REPORT_RECORD_HEADER {
-            Version: u16,
-            Reserved: u16,
-            RecordSize: u32,
-            SipaEventCode: u32,
-        }
-        const CODE_INTEGRITY_REPORT_RECORD_VERSION_CURRENT: i32 = 1;
-        struct CODE_INTEGRITY_RUNTIME_REPORT {
-            Header: RUNTIME_REPORT_HEADER,
-            CurrentGeneration: u64,
-            NumberOfGenerations: u32,
-        }
         #[repr(i32)]
         enum COMPARTMENT_ID {
             UNSPECIFIED_COMPARTMENT_ID = 0,
@@ -1134,7 +1100,6 @@ mod Windows {
         const DOMAIN_ALIAS_RID_CACHEABLE_PRINCIPALS_GROUP: i32 = 571;
         const DOMAIN_ALIAS_RID_CERTSVC_DCOM_ACCESS_GROUP: i32 = 574;
         const DOMAIN_ALIAS_RID_CRYPTO_OPERATORS: i32 = 569;
-        const DOMAIN_ALIAS_RID_CUA_USERS: i32 = 586;
         const DOMAIN_ALIAS_RID_DCOM_USERS: i32 = 562;
         const DOMAIN_ALIAS_RID_DEFAULT_ACCOUNT: i32 = 581;
         const DOMAIN_ALIAS_RID_DEVICE_OWNERS: i32 = 583;
@@ -1195,7 +1160,7 @@ mod Windows {
             PublisherThumbprintHashAlgorithm: u16,
             ImageHashOffset: u32,
             PublisherThumbprintOffset: u32,
-            NumberOfLoadingTimes: u16,
+            LoadCount: u16,
             OemNameSize: u16,
             OemNameOffset: u32,
             Flags: union {
@@ -1493,7 +1458,6 @@ mod Windows {
         const FAST_FAIL_INVALID_PFN: i32 = 63;
         const FAST_FAIL_INVALID_REFERENCE_COUNT: i32 = 14;
         const FAST_FAIL_INVALID_SET_OF_CONTEXT: i32 = 13;
-        const FAST_FAIL_INVALID_SME_STATE: i32 = 78;
         const FAST_FAIL_INVALID_SYSCALL_NUMBER: i32 = 41;
         const FAST_FAIL_INVALID_THREAD: i32 = 40;
         const FAST_FAIL_INVALID_THREAD_STATE: i32 = 74;
@@ -1925,9 +1889,6 @@ mod Windows {
         const GUID_PROCESSOR_FREQUENCY_LIMIT: GUID = 0x75b0ae3f_bce0_45a7_8c89_c9611c25e100;
         const GUID_PROCESSOR_FREQUENCY_LIMIT_1: GUID = 0x75b0ae3f_bce0_45a7_8c89_c9611c25e101;
         const GUID_PROCESSOR_FREQUENCY_LIMIT_2: GUID = 0x75b0ae3f_bce0_45a7_8c89_c9611c25e102;
-        const GUID_PROCESSOR_FREQUENCY_MINIMUM: GUID = 0x2ac92cea_5efa_4a1b_bed5_1a2bd9aa0b94;
-        const GUID_PROCESSOR_FREQUENCY_MINIMUM_1: GUID = 0x2ac92cea_5efa_4a1b_bed5_1a2bd9aa0b95;
-        const GUID_PROCESSOR_FREQUENCY_MINIMUM_2: GUID = 0x2ac92cea_5efa_4a1b_bed5_1a2bd9aa0b96;
         const GUID_PROCESSOR_HETEROGENEOUS_POLICY: GUID = 0x7f2f5cfa_f10c_4823_b5e1_e93ae85f46b5;
         const GUID_PROCESSOR_HETERO_CONTAINMENT_DECREASE_TIME: GUID = 0x6ff13aeb_7897_4356_9999_dd9930af065f;
         const GUID_PROCESSOR_HETERO_CONTAINMENT_EFFICIENCY_IMP_UTIL_THRESHOLD: GUID = 0x6ece9e1f_b6dd_42bf_b1b7_5a512b10c092;
@@ -1954,7 +1915,6 @@ mod Windows {
         const GUID_PROCESSOR_LONG_THREAD_ARCH_CLASS_LOWER_THRESHOLD: GUID = 0x43f278bc_0f8a_46d0_8b31_9a23e615d713;
         const GUID_PROCESSOR_LONG_THREAD_ARCH_CLASS_UPPER_THRESHOLD: GUID = 0xbf903d33_9d24_49d3_a468_e65e0325046a;
         const GUID_PROCESSOR_MODULE_PARKING_POLICY: GUID = 0xb0deaf6b_59c0_4523_8a45_ca7f40244114;
-        const GUID_PROCESSOR_PACKAGE_C6_POLICY: GUID = 0xfc1b015c_eb75_496a_ab47_028b0459c8f8;
         const GUID_PROCESSOR_PARKING_CONCURRENCY_THRESHOLD: GUID = 0x2430ab6f_a520_44a2_9601_f7f23b5134b1;
         const GUID_PROCESSOR_PARKING_CORE_OVERRIDE: GUID = 0xa55612aa_f624_42c6_a443_7397d064c04f;
         const GUID_PROCESSOR_PARKING_DISTRIBUTION_THRESHOLD: GUID = 0x4bdaf4e9_d103_46d7_a5f0_6280121616ef;
@@ -1990,9 +1950,6 @@ mod Windows {
         const GUID_PROCESSOR_PERF_LATENCY_HINT_EPP: GUID = 0x4b70f900_cdd9_4e66_aa26_ae8417f98173;
         const GUID_PROCESSOR_PERF_LATENCY_HINT_EPP_1: GUID = 0x4b70f900_cdd9_4e66_aa26_ae8417f98174;
         const GUID_PROCESSOR_PERF_LATENCY_HINT_EPP_2: GUID = 0x4b70f900_cdd9_4e66_aa26_ae8417f98175;
-        const GUID_PROCESSOR_PERF_LATENCY_HINT_FREQ: GUID = 0x81202931_acbb_405c_a7ee_3e2ba4866f6f;
-        const GUID_PROCESSOR_PERF_LATENCY_HINT_FREQ_1: GUID = 0x81202931_acbb_405c_a7ee_3e2ba4866f70;
-        const GUID_PROCESSOR_PERF_LATENCY_HINT_FREQ_2: GUID = 0x81202931_acbb_405c_a7ee_3e2ba4866f71;
         const GUID_PROCESSOR_PERF_LATENCY_HINT_PERF: GUID = 0x619b7505_003b_4e82_b7a6_4dd29c300971;
         const GUID_PROCESSOR_PERF_LATENCY_HINT_PERF_1: GUID = 0x619b7505_003b_4e82_b7a6_4dd29c300972;
         const GUID_PROCESSOR_PERF_LATENCY_HINT_PERF_2: GUID = 0x619b7505_003b_4e82_b7a6_4dd29c300973;
@@ -2085,20 +2042,8 @@ mod Windows {
             HeapEnableTerminationOnCorruption = 1,
             HeapOptimizeResources = 3,
             HeapTag = 7,
-            HeapMemoryUsageInformation = 8,
         }
         const HEAP_MAXIMUM_TAG: i32 = 4095;
-        struct HEAP_MEMORY_USAGE_ENTRY {
-            HeapHandle: *mut void,
-            TotalCommittedBytes: usize,
-            TotalReservedBytes: usize,
-        }
-        struct HEAP_MEMORY_USAGE_INFORMATION {
-            Version: u16,
-            EntryCount: usize,
-            Entries: [HEAP_MEMORY_USAGE_ENTRY; 1],
-        }
-        const HEAP_MEMORY_USAGE_INFO_CURRENT_VERSION: i32 = 1;
         const HEAP_NO_SERIALIZE: i32 = 1;
         const HEAP_OPTIMIZE_RESOURCES_CURRENT_VERSION: i32 = 1;
         struct HEAP_OPTIMIZE_RESOURCES_INFORMATION {
@@ -2643,20 +2588,6 @@ mod Windows {
         const IMAGE_FILE_LARGE_ADDRESS_AWARE: i32 = 32;
         const IMAGE_FILE_LINE_NUMS_STRIPPED: i32 = 4;
         const IMAGE_FILE_LOCAL_SYMS_STRIPPED: i32 = 8;
-        struct IMAGE_FILE_MACHINES {
-            Anonymous: union {
-                Value: u32,
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        MachineX86: 1,
-                        MachineAmd64: 1,
-                        MachineArm: 1,
-                        MachineArm64: 1,
-                        MachineArm64EC: 1,
-                    },
-                },
-            },
-        }
         const IMAGE_FILE_MACHINE_ALPHA: i32 = 388;
         const IMAGE_FILE_MACHINE_ALPHA64: i32 = 644;
         const IMAGE_FILE_MACHINE_AM33: i32 = 467;
@@ -2746,64 +2677,6 @@ mod Windows {
         const IMAGE_GUARD_RF_STRICT: i32 = 524288;
         const IMAGE_GUARD_SECURITY_COOKIE_UNUSED: i32 = 2048;
         const IMAGE_GUARD_XFG_ENABLED: i32 = 8388608;
-        #[repr(i32)]
-        enum IMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_CC_RETURN {
-            EndpointReturnTypeNone = 0,
-            EndpointReturnTypeX0 = 1,
-            EndpointReturnTypeX0_X1 = 2,
-            EndpointReturnTypeX0_X2 = 3,
-            EndpointReturnTypeX0_X3 = 4,
-            EndpointReturnTypeQ0 = 5,
-            EndpointReturnTypeQ0_Q1 = 6,
-            EndpointReturnTypeQ0_Q2 = 7,
-            EndpointReturnTypeQ0_Q3 = 8,
-            EndpointReturnTypeX8 = 9,
-        }
-        struct IMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_ENTRY_V2 {
-            Common: IMAGE_HOTSWAP_ENDPOINT_INFO_ENTRY_COMMON,
-            IntArgs: u32,
-            FloatArgs: u32,
-            ArgStackSize: u32,
-            ReturnType: IMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_CC_RETURN,
-            Name: [u8; 1],
-        }
-        struct IMAGE_HOTSWAP_ENDPOINT_INFO_ENTRY_COMMON {
-            Size: u32,
-            Rva: u32,
-            NameSize: u32,
-            NameOffset: u32,
-        }
-        struct IMAGE_HOTSWAP_ENDPOINT_INFO_HEADER_COMMON {
-            Version: u32,
-            Size: u32,
-        }
-        struct IMAGE_HOTSWAP_ENDPOINT_INFO_HEADER_V2 {
-            Common: IMAGE_HOTSWAP_ENDPOINT_INFO_HEADER_COMMON,
-            Count: u32,
-        }
-        const IMAGE_HOTSWAP_ENDPOINT_INFO_V2: i32 = 2;
-        #[encoding("ansi")]
-        const IMAGE_HOTSWAP_ENDPOINT_TABLE_SECTION: String = ".shsept";
-        #[repr(i32)]
-        enum IMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG {
-            EndpointParamRegNone = 0,
-            EndpointParamRegRAX = 1,
-            EndpointParamRegRCX = 2,
-            EndpointParamRegRDX = 3,
-            EndpointParamRegR8 = 9,
-            EndpointParamRegR9 = 10,
-            EndpointParamRegXMM0 = 200,
-            EndpointParamRegXMM1 = 201,
-            EndpointParamRegXMM2 = 202,
-            EndpointParamRegXMM3 = 203,
-        }
-        struct IMAGE_HOTSWAP_X64_ENDPOINT_INFO_ENTRY_V2 {
-            Common: IMAGE_HOTSWAP_ENDPOINT_INFO_ENTRY_COMMON,
-            ArgRegs: [IMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG; 4],
-            ArgStackSize: u32,
-            RetReg: IMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG,
-            Name: [u8; 1],
-        }
         const IMAGE_HOT_PATCH_ABSOLUTE: i32 = 180224;
         struct IMAGE_HOT_PATCH_BASE {
             SequenceNumber: u32,
@@ -4042,8 +3915,7 @@ mod Windows {
             JobObjectReserved27Information = 49,
             JobObjectReserved28Information = 50,
             JobObjectNetworkAccountingInformation = 51,
-            JobObjectCpuPartition = 52,
-            MaxJobObjectInfoClass = 53,
+            MaxJobObjectInfoClass = 52,
         }
         struct JOBOBJECT_ASSOCIATE_COMPLETION_PORT {
             CompletionKey: *mut void,
@@ -4698,7 +4570,6 @@ mod Windows {
             RelationProcessorDie = 5,
             RelationNumaNodeEx = 6,
             RelationProcessorModule = 7,
-            RelationProcessorSharedComputeUnit = 8,
             RelationAll = 65535,
         }
         type LPCCH = *const i8;
@@ -4898,9 +4769,7 @@ mod Windows {
         const MEM_EXTENDED_PARAMETER_NONPAGED_HUGE: i32 = 16;
         const MEM_EXTENDED_PARAMETER_NONPAGED_LARGE: i32 = 8;
         const MEM_EXTENDED_PARAMETER_NUMA_NODE_MANDATORY: i64 = -9223372036854775808;
-        const MEM_EXTENDED_PARAMETER_SECURE_PAGES: i32 = 128;
         const MEM_EXTENDED_PARAMETER_SOFT_FAULT_PAGES: i32 = 32;
-        const MEM_EXTENDED_PARAMETER_TAGGED: i32 = 256;
         #[repr(i32)]
         enum MEM_EXTENDED_PARAMETER_TYPE {
             MemExtendedParameterInvalidType = 0,
@@ -4928,15 +4797,13 @@ mod Windows {
         const MEM_RESET: i32 = 524288;
         const MEM_RESET_UNDO: i32 = 16777216;
         const MEM_ROTATE: i32 = 8388608;
-        const MEM_SECTION_ATTRIBUTE_SECURE_PAGES: i32 = 1;
         #[repr(i32)]
         enum MEM_SECTION_EXTENDED_PARAMETER_TYPE {
             MemSectionExtendedParameterInvalidType = 0,
             MemSectionExtendedParameterUserPhysicalFlags = 1,
             MemSectionExtendedParameterNumaNode = 2,
             MemSectionExtendedParameterSigningLevel = 3,
-            MemSectionExtendedParameterAttributeFlags = 4,
-            MemSectionExtendedParameterMax = 5,
+            MemSectionExtendedParameterMax = 4,
         }
         const MEM_TOP_DOWN: i32 = 1048576;
         const MEM_UNMAP_WITH_TRANSIENT_BOOST: i32 = 1;
@@ -5183,16 +5050,11 @@ mod Windows {
         type PAPPLICATIONLAUNCH_SETTING_VALUE = *mut APPLICATIONLAUNCH_SETTING_VALUE;
         const PARKING_TOPOLOGY_POLICY_DISABLED: i32 = 0;
         const PARKING_TOPOLOGY_POLICY_ROUNDROBIN: i32 = 1;
-        const PARKING_TOPOLOGY_POLICY_ROUNDROBIN_P_ROUNDROBIN_E: i32 = 3;
-        const PARKING_TOPOLOGY_POLICY_ROUNDROBIN_P_SEQUENTIAL_E: i32 = 5;
         const PARKING_TOPOLOGY_POLICY_SEQUENTIAL: i32 = 2;
-        const PARKING_TOPOLOGY_POLICY_SEQUENTIAL_P_ROUNDROBIN_E: i32 = 6;
-        const PARKING_TOPOLOGY_POLICY_SEQUENTIAL_P_SEQUENTIAL_E: i32 = 4;
         type PARM64EC_NT_CONTEXT = *mut ARM64EC_NT_CONTEXT;
         type PARM64_NT_CONTEXT = *mut ARM64_NT_CONTEXT;
         type PARM64_NT_NEON128 = *mut ARM64_NT_NEON128;
         type PARM64_RUNTIME_FUNCTION = *mut ARM64_RUNTIME_FUNCTION;
-        type PARM64_TPIDR2_BLOCK = *mut ARM64_TPIDR2_BLOCK;
         type PASSEMBLY_FILE_DETAILED_INFORMATION = *mut ASSEMBLY_FILE_DETAILED_INFORMATION;
         type PATTRIBUTES_AND_SID = *mut ATTRIBUTES_AND_SID;
         type PAUDIT_EVENT_TYPE = *mut AUDIT_EVENT_TYPE;
@@ -5437,7 +5299,6 @@ mod Windows {
         const PF_TEMPORAL_LEVEL_3: i32 = 2;
         #[arch(X86 | X64)]
         const PF_TEMPORAL_LEVEL_3: i32 = 3;
-        const PF_UMONITOR_INSTRUCTION_AVAILABLE: i32 = 89;
         const PF_VIRT_FIRMWARE_ENABLED: i32 = 21;
         const PF_XMMI64_INSTRUCTIONS_AVAILABLE: i32 = 10;
         const PF_XMMI_INSTRUCTIONS_AVAILABLE: i32 = 6;
@@ -5452,8 +5313,6 @@ mod Windows {
         type PHANDLE = *mut HANDLE;
         type PHARDWARE_COUNTER_DATA = *mut HARDWARE_COUNTER_DATA;
         type PHARDWARE_COUNTER_TYPE = *mut HARDWARE_COUNTER_TYPE;
-        type PHEAP_MEMORY_USAGE_ENTRY = *mut HEAP_MEMORY_USAGE_ENTRY;
-        type PHEAP_MEMORY_USAGE_INFORMATION = *mut HEAP_MEMORY_USAGE_INFORMATION;
         type PHEAP_OPTIMIZE_RESOURCES_INFORMATION = *mut HEAP_OPTIMIZE_RESOURCES_INFORMATION;
         type PHIBERFILE_BUCKET = *mut HIBERFILE_BUCKET;
         type PHIBERFILE_BUCKET_SIZE = *mut HIBERFILE_BUCKET_SIZE;
@@ -5508,13 +5367,6 @@ mod Windows {
         type PIMAGE_FUNCTION_ENTRY64 = *mut IMAGE_FUNCTION_ENTRY64;
         type PIMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION = *mut IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION;
         type PIMAGE_FUNCTION_OVERRIDE_HEADER = *mut IMAGE_FUNCTION_OVERRIDE_HEADER;
-        type PIMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_CC_RETURN = *mut IMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_CC_RETURN;
-        type PIMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_ENTRY_V2 = *mut IMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_ENTRY_V2;
-        type PIMAGE_HOTSWAP_ENDPOINT_INFO_ENTRY_COMMON = *mut IMAGE_HOTSWAP_ENDPOINT_INFO_ENTRY_COMMON;
-        type PIMAGE_HOTSWAP_ENDPOINT_INFO_HEADER_COMMON = *mut IMAGE_HOTSWAP_ENDPOINT_INFO_HEADER_COMMON;
-        type PIMAGE_HOTSWAP_ENDPOINT_INFO_HEADER_V2 = *mut IMAGE_HOTSWAP_ENDPOINT_INFO_HEADER_V2;
-        type PIMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG = *mut IMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG;
-        type PIMAGE_HOTSWAP_X64_ENDPOINT_INFO_ENTRY_V2 = *mut IMAGE_HOTSWAP_X64_ENDPOINT_INFO_ENTRY_V2;
         type PIMAGE_HOT_PATCH_BASE = *mut IMAGE_HOT_PATCH_BASE;
         type PIMAGE_HOT_PATCH_HASHES = *mut IMAGE_HOT_PATCH_HASHES;
         type PIMAGE_HOT_PATCH_INFO = *mut IMAGE_HOT_PATCH_INFO;
@@ -5923,7 +5775,7 @@ mod Windows {
             MonitorRequestReasonPdcSignalSensorsHumanPresence = 52,
             MonitorRequestReasonBatteryPreCritical = 53,
             MonitorRequestReasonUserInputTouch = 54,
-            MonitorRequestReasonRestrictedStandbyBatteryDrain = 55,
+            MonitorRequestReasonAusterityBatteryDrain = 55,
             MonitorRequestReasonDozeRestrictedStandby = 56,
             MonitorRequestReasonSmartRestrictedStandby = 57,
             MonitorRequestReasonMax = 58,
@@ -6262,7 +6114,6 @@ mod Windows {
         type PPROCESSOR_POWER_POLICY = *mut PROCESSOR_POWER_POLICY;
         type PPROCESSOR_POWER_POLICY_INFO = *mut PROCESSOR_POWER_POLICY_INFO;
         type PPROCESSOR_RELATIONSHIP = *mut PROCESSOR_RELATIONSHIP;
-        type PPROCESSOR_SHARED_COMPUTE_UNIT_TYPE = *mut PROCESSOR_SHARED_COMPUTE_UNIT_TYPE;
         type PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET = *mut PROCESS_DYNAMIC_EH_CONTINUATION_TARGET;
         type PPROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION = *mut PROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION;
         type PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE = *mut PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE;
@@ -6455,10 +6306,6 @@ mod Windows {
             Reserved: [u8; 20],
             GroupCount: u16,
             GroupMask: [GROUP_AFFINITY; 1],
-        }
-        #[repr(i32)]
-        enum PROCESSOR_SHARED_COMPUTE_UNIT_TYPE {
-            SharedComputeUnitArm64SMCU = 0,
         }
         const PROCESSOR_SHx_SH3: i32 = 103;
         const PROCESSOR_SHx_SH4: i32 = 104;
@@ -6656,8 +6503,7 @@ mod Windows {
             ProcessRedirectionTrustPolicy = 16,
             ProcessUserPointerAuthPolicy = 17,
             ProcessSEHOPPolicy = 18,
-            ProcessActivationContextTrustPolicy = 19,
-            MaxProcessMitigationPolicy = 20,
+            MaxProcessMitigationPolicy = 19,
         }
         struct PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY {
             Anonymous: union {
@@ -7017,7 +6863,6 @@ mod Windows {
         type PSE_SID = *mut SE_SID;
         type PSE_SIGNING_LEVEL = *mut u8;
         type PSE_TOKEN_USER = SE_TOKEN_USER;
-        type PSHARED_COMPUTE_UNIT_RELATIONSHIP = *mut SHARED_COMPUTE_UNIT_RELATIONSHIP;
         type PSHARED_VIRTUAL_DISK_SUPPORT = *mut SHARED_VIRTUAL_DISK_SUPPORT;
         type PSHORT = *mut i16;
         type PSHUFFLE_FILE_DATA = *mut SHUFFLE_FILE_DATA;
@@ -7164,9 +7009,6 @@ mod Windows {
         type PXMM_SAVE_AREA32 = *mut XSAVE_FORMAT;
         type PXSAVE_AREA = *mut XSAVE_AREA;
         type PXSAVE_AREA_HEADER = *mut XSAVE_AREA_HEADER;
-        type PXSAVE_ARM64_SME_TPIDR2_HEADER = *mut XSAVE_ARM64_SME_TPIDR2_HEADER;
-        type PXSAVE_ARM64_SME_ZA_HEADER = *mut XSAVE_ARM64_SME_ZA_HEADER;
-        type PXSAVE_ARM64_SME_ZT_HEADER = *mut XSAVE_ARM64_SME_ZT_HEADER;
         type PXSAVE_ARM64_SVE_HEADER = *mut XSAVE_ARM64_SVE_HEADER;
         type PXSAVE_CET_U_FORMAT = *mut XSAVE_CET_U_FORMAT;
         type PXSAVE_FORMAT = *mut XSAVE_FORMAT;
@@ -7477,10 +7319,9 @@ mod Windows {
         #[repr(i32)]
         enum RUNTIME_REPORT_TYPE {
             RuntimeReportTypeDriver = 0,
-            RuntimeReportTypeCodeIntegrity = 1,
-            RuntimeReportTypeMax = 2,
+            RuntimeReportTypeMax = 1,
         }
-        const RUNTIME_REPORT_TYPE_MASK_ALL: u64 = 3;
+        const RUNTIME_REPORT_TYPE_MASK_ALL: u64 = 1;
         #[repr(i32)]
         enum ReplacesCorHdrNumericDefines {
             COMIMAGE_FLAGS_ILONLY = 1,
@@ -7527,10 +7368,7 @@ mod Windows {
         #[arch(X86 | X64)]
         #[library("KERNEL32.dll")]
         extern fn RtlCaptureContext(ContextRecord: *mut CONTEXT);
-        #[arch(Arm64)]
-        #[library("ntdll.dll")]
-        extern fn RtlCaptureContext2(#[in] #[out] ContextRecord: *mut ARM64_NT_CONTEXT);
-        #[arch(X86 | X64)]
+        #[arch(X64)]
         #[library("ntdll.dll")]
         extern fn RtlCaptureContext2(#[in] #[out] ContextRecord: *mut CONTEXT);
         #[library("KERNEL32.dll")]
@@ -7573,8 +7411,6 @@ mod Windows {
         extern fn RtlFreeNonVolatileToken(NvToken: *const void) -> u32;
         #[library("ntdll.dll")]
         extern fn RtlGetDeviceFamilyInfoEnum(#[opt] pullUAPInfo: *mut u64, #[opt] pulDeviceFamily: *mut u32, #[opt] pulDeviceForm: *mut u32);
-        #[library("ntdll.dll")]
-        extern "C" fn RtlGetImageFileMachines(DosFileName: PCWSTR, MachineTypeFlags: *mut IMAGE_FILE_MACHINES) -> u32;
         #[arch(X64 | Arm64)]
         #[library("ntdll.dll")]
         extern fn RtlGetNonVolatileToken(#[size_param(1)] NvBuffer: *const void, Size: usize, NvToken: *mut *mut void) -> u32;
@@ -7659,12 +7495,6 @@ mod Windows {
         #[arch(X64)]
         #[library("KERNEL32.dll")]
         extern fn RtlVirtualUnwind(HandlerType: u32, ImageBase: u64, ControlPc: u64, FunctionEntry: *const RUNTIME_FUNCTION, #[in] #[out] ContextRecord: *mut CONTEXT, HandlerData: *mut *mut void, EstablisherFrame: *mut u64, #[in] #[out] #[opt] ContextPointers: *mut KNONVOLATILE_CONTEXT_POINTERS) -> PEXCEPTION_ROUTINE;
-        #[arch(Arm64)]
-        #[library("KERNEL32.dll")]
-        extern fn RtlVirtualUnwind2(HandlerType: u32, ImageBase: usize, ControlPc: usize, #[opt] FunctionEntry: *const ARM64_RUNTIME_FUNCTION, #[in] #[out] ContextRecord: *mut ARM64_NT_CONTEXT, #[in] #[out] #[opt] MachineFrameUnwound: *mut bool, HandlerData: *mut *mut void, EstablisherFrame: *mut u64, #[in] #[out] #[opt] ContextPointers: *mut KNONVOLATILE_CONTEXT_POINTERS_ARM64, #[opt] LowLimit: *const u64, #[opt] HighLimit: *const u64, HandlerRoutine: *mut PEXCEPTION_ROUTINE, UnwindFlags: u32) -> u32;
-        #[arch(X64)]
-        #[library("KERNEL32.dll")]
-        extern fn RtlVirtualUnwind2(HandlerType: u32, ImageBase: u64, ControlPc: u64, #[opt] FunctionEntry: *const RUNTIME_FUNCTION, #[in] #[out] ContextRecord: *mut CONTEXT, #[in] #[out] #[opt] MachineFrameUnwound: *mut bool, HandlerData: *mut *mut void, EstablisherFrame: *mut u64, #[in] #[out] #[opt] ContextPointers: *mut KNONVOLATILE_CONTEXT_POINTERS, #[opt] LowLimit: *const u64, #[opt] HighLimit: *const u64, HandlerRoutine: *mut PEXCEPTION_ROUTINE, UnwindFlags: u32) -> u32;
         #[arch(X64 | Arm64)]
         #[library("ntdll.dll")]
         extern fn RtlWriteNonVolatileMemory(NvToken: *const void, #[size_param(3)] NvDestination: *mut void, #[size_param(3)] Source: *const void, Size: usize, Flags: u32) -> u32;
@@ -7772,7 +7602,6 @@ mod Windows {
         const SECTION_MAP_READ: i32 = 4;
         const SECTION_MAP_WRITE: i32 = 2;
         const SECTION_QUERY: i32 = 1;
-        const SECURITY_AGENTIC_PLATFORM_BASE_RID: i32 = 101;
         const SECURITY_ANONYMOUS_LOGON_RID: i32 = 7;
         const SECURITY_APPPOOL_ID_BASE_RID: i32 = 82;
         const SECURITY_APPPOOL_ID_RID_COUNT: i32 = 6;
@@ -7939,7 +7768,6 @@ mod Windows {
         const SECURITY_SERVICE_ID_BASE_RID: i32 = 80;
         const SECURITY_SERVICE_ID_RID_COUNT: i32 = 6;
         const SECURITY_SERVICE_RID: i32 = 6;
-        const SECURITY_SHADOWADMINACCOUNT_RID: i32 = 100;
         const SECURITY_STATIC_TRACKING: i32 = 0;
         const SECURITY_TASK_ID_BASE_RID: i32 = 87;
         const SECURITY_TERMINAL_SERVER_RID: i32 = 13;
@@ -8107,8 +7935,6 @@ mod Windows {
         #[encoding("utf-16")]
         const SE_APP_SILO_PROMPT_FOR_ACCESS_CAPABILITY: String = "isolatedWin32-promptForAccess";
         #[encoding("utf-16")]
-        const SE_APP_SILO_SCANNER_CAPABILITY: String = "isolatedWin32-scanner";
-        #[encoding("utf-16")]
         const SE_APP_SILO_USER_PROFILE_MINIMAL_CAPABILITY: String = "isolatedWin32-userProfileMinimal";
         #[encoding("utf-16")]
         const SE_APP_SILO_VOLUME_ROOT_MINIMAL_CAPABILITY: String = "isolatedWin32-volumeRootMinimal";
@@ -8211,13 +8037,6 @@ mod Windows {
                 Sid: SID,
                 Buffer: [u8; 68],
             },
-        }
-        struct SHARED_COMPUTE_UNIT_RELATIONSHIP {
-            Type: u32,
-            ComputeUnitCount: u32,
-            Reserved: [u8; 14],
-            GroupCount: u16,
-            GroupMasks: [GROUP_AFFINITY; 1],
         }
         struct SHARED_VIRTUAL_DISK_SUPPORT {
             SharedVirtualDiskSupport: SharedVirtualDiskSupportType,
@@ -8756,7 +8575,6 @@ mod Windows {
                 NumaNode: NUMA_NODE_RELATIONSHIP,
                 Cache: CACHE_RELATIONSHIP,
                 Group: GROUP_RELATIONSHIP,
-                SharedComputeUnit: SHARED_COMPUTE_UNIT_RELATIONSHIP,
             },
         }
         struct SYSTEM_MANDATORY_LABEL_ACE {
@@ -9245,9 +9063,7 @@ mod Windows {
             TokenIsAppSilo = 48,
             TokenLoggingInformation = 49,
             TokenLearningMode = 50,
-            TokenIsSystemManagedAdmin = 51,
-            TokenIsInstaller = 52,
-            MaxTokenInfoClass = 53,
+            MaxTokenInfoClass = 51,
         }
         struct TOKEN_LINKED_TOKEN {
             LinkedToken: HANDLE,
@@ -9717,7 +9533,6 @@ mod Windows {
             WinBuiltinDeviceOwnersSid = 119,
             WinBuiltinUserModeHardwareOperatorsSid = 120,
             WinBuiltinOpenSSHUsersSid = 121,
-            WinBuiltinCUAUsersSid = 122,
         }
         extern fn WORKERCALLBACKFUNC(param0: *mut void);
         struct WOW64_CONTEXT {
@@ -9877,40 +9692,11 @@ mod Windows {
             CompactionMask: u64,
             Reserved2: [u64; 6],
         }
-        struct XSAVE_ARM64_SME_TPIDR2_HEADER {
-            Reserved: [u32; 8],
-        }
-        struct XSAVE_ARM64_SME_ZA_HEADER {
-            VectorLength: u32,
-            Anonymous: union {
-                Flags: u32,
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        Za: 1,
-                        ReservedFlags: 31,
-                    },
-                },
-            },
-            Reserved: [u32; 6],
-        }
-        struct XSAVE_ARM64_SME_ZT_HEADER {
-            RegisterCount: u32,
-            Reserved: [u32; 7],
-        }
         struct XSAVE_ARM64_SVE_HEADER {
             VectorLength: u32,
             VectorRegisterOffset: u32,
             PredicateRegisterOffset: u32,
-            Anonymous: union {
-                Flags: u32,
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        Sm: 1,
-                        ReservedFlags: 31,
-                    },
-                },
-            },
-            Reserved: [u32; 4],
+            Reserved: [u32; 5],
         }
         struct XSAVE_CET_U_FORMAT {
             Ia32CetUMsr: u64,
@@ -9958,9 +9744,6 @@ mod Windows {
         const XSTATE_ALIGN_MASK: u64 = 2;
         const XSTATE_AMX_TILE_CONFIG: i32 = 17;
         const XSTATE_AMX_TILE_DATA: i32 = 18;
-        const XSTATE_ARM64_SME_TPIDR2: i32 = 4;
-        const XSTATE_ARM64_SME_ZA: i32 = 3;
-        const XSTATE_ARM64_SME_ZT: i32 = 5;
         const XSTATE_ARM64_SVE: i32 = 2;
         const XSTATE_AVX: i32 = 2;
         const XSTATE_AVX512_KMASK: i32 = 5;
@@ -9992,27 +9775,8 @@ mod Windows {
             EnabledUserVisibleSupervisorFeatures: u64,
             ExtendedFeatureDisableFeatures: u64,
             AllNonLargeFeatureSize: u32,
-            Anonymous2: union {
-                Anonymous: struct {
-                    Amd64Spare1: [u32; 3],
-                },
-                Anonymous2: struct {
-                    MaxSveVectorLength: u16,
-                    MaxSmeVectorLength: u16,
-                    SmeZTRegisterCount: u16,
-                    Anonymous: union {
-                        Arm64Flags: u16,
-                        Anonymous: struct {
-                            _bitfield: u16 {
-                                SmeFa64: 1,
-                            },
-                        },
-                    },
-                    SupportedSmeVectorLengths: u8,
-                    Arm64Spare: [u8; 3],
-                },
-            },
-            Spare: u64,
+            MaxSveVectorLength: u16,
+            Spare1: u16,
         }
         #[arch(X64 | Arm64)]
         struct XSTATE_CONTEXT {
@@ -10050,17 +9814,14 @@ mod Windows {
         const XSTATE_LEGACY_SSE: i32 = 1;
         const XSTATE_LWP: i32 = 62;
         #[arch(Arm64)]
-        const XSTATE_MASK_ALLOWED: u64 = 60;
+        const XSTATE_MASK_ALLOWED: u64 = 4;
         #[arch(X64)]
         const XSTATE_MASK_ALLOWED: u64 = 4611686018427784703;
         #[arch(X86)]
-        const XSTATE_MASK_ALLOWED: u64 = 4611686018427388415;
+        const XSTATE_MASK_ALLOWED: u64 = 4611686018427390463;
         const XSTATE_MASK_AMD64_LEGACY: u64 = 3;
         const XSTATE_MASK_AMX_TILE_CONFIG: u64 = 131072;
         const XSTATE_MASK_AMX_TILE_DATA: u64 = 262144;
-        const XSTATE_MASK_ARM64_SME_TPIDR2: u64 = 16;
-        const XSTATE_MASK_ARM64_SME_ZA: u64 = 8;
-        const XSTATE_MASK_ARM64_SME_ZT: u64 = 32;
         const XSTATE_MASK_ARM64_SVE: u64 = 4;
         const XSTATE_MASK_AVX: u64 = 4;
         const XSTATE_MASK_AVX512: u64 = 224;

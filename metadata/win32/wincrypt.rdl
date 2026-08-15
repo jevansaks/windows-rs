@@ -8,7 +8,63 @@ mod Windows {
         const ALG_CLASS_KEY_EXCHANGE: i32 = 40960;
         const ALG_CLASS_MSG_ENCRYPT: i32 = 16384;
         const ALG_CLASS_SIGNATURE: i32 = 8192;
-        type ALG_ID = u32;
+        #[repr(i32)]
+        #[scoped]
+        enum ALG_ID {
+            CALG_MD2 = 32769,
+            CALG_MD4 = 32770,
+            CALG_MD5 = 32771,
+            CALG_SHA = 32772,
+            CALG_SHA1 = 32772,
+            CALG_MAC = 32773,
+            CALG_RSA_SIGN = 9216,
+            CALG_DSS_SIGN = 8704,
+            CALG_NO_SIGN = 8192,
+            CALG_RSA_KEYX = 41984,
+            CALG_DES = 26113,
+            CALG_3DES_112 = 26121,
+            CALG_3DES = 26115,
+            CALG_DESX = 26116,
+            CALG_RC2 = 26114,
+            CALG_RC4 = 26625,
+            CALG_SEAL = 26626,
+            CALG_DH_SF = 43521,
+            CALG_DH_EPHEM = 43522,
+            CALG_AGREEDKEY_ANY = 43523,
+            CALG_KEA_KEYX = 43524,
+            CALG_HUGHES_MD5 = 40963,
+            CALG_SKIPJACK = 26122,
+            CALG_TEK = 26123,
+            CALG_CYLINK_MEK = 26124,
+            CALG_SSL3_SHAMD5 = 32776,
+            CALG_SSL3_MASTER = 19457,
+            CALG_SCHANNEL_MASTER_HASH = 19458,
+            CALG_SCHANNEL_MAC_KEY = 19459,
+            CALG_SCHANNEL_ENC_KEY = 19463,
+            CALG_PCT1_MASTER = 19460,
+            CALG_SSL2_MASTER = 19461,
+            CALG_TLS1_MASTER = 19462,
+            CALG_RC5 = 26125,
+            CALG_HMAC = 32777,
+            CALG_TLS1PRF = 32778,
+            CALG_HASH_REPLACE_OWF = 32779,
+            CALG_AES_128 = 26126,
+            CALG_AES_192 = 26127,
+            CALG_AES_256 = 26128,
+            CALG_AES = 26129,
+            CALG_SHA_256 = 32780,
+            CALG_SHA_384 = 32781,
+            CALG_SHA_512 = 32782,
+            CALG_ECDH = 43525,
+            CALG_ECDH_EPHEM = 44550,
+            CALG_ECMQV = 40961,
+            CALG_ECDSA = 8707,
+            CALG_NULLCIPHER = 24576,
+            CALG_THIRDPARTY_KEY_EXCHANGE = 45056,
+            CALG_THIRDPARTY_SIGNATURE = 12288,
+            CALG_THIRDPARTY_CIPHER = 28672,
+            CALG_THIRDPARTY_HASH = 36864,
+        }
         const ALG_SID_3DES: i32 = 3;
         const ALG_SID_3DES_112: i32 = 9;
         const ALG_SID_AES: i32 = 17;
@@ -78,8 +134,6 @@ mod Windows {
         const ALG_TYPE_SECURECHANNEL: i32 = 3072;
         const ALG_TYPE_STREAM: i32 = 2048;
         const ALG_TYPE_THIRDPARTY: i32 = 4096;
-        const AT_KEYEXCHANGE: i32 = 1;
-        const AT_SIGNATURE: i32 = 2;
         struct AUTHENTICODE_EXTRA_CERT_CHAIN_POLICY_PARA {
             cbSize: u32,
             dwRegPolicySettings: u32,
@@ -94,72 +148,15 @@ mod Windows {
             dwRegPolicySettings: u32,
             fCommercial: BOOL,
         }
-        const AUTHTYPE_CLIENT: i32 = 1;
-        const AUTHTYPE_SERVER: i32 = 2;
-        const BASIC_CONSTRAINTS_CERT_CHAIN_POLICY_CA_FLAG: u32 = 2147483648;
-        const BASIC_CONSTRAINTS_CERT_CHAIN_POLICY_END_ENTITY_FLAG: i32 = 1073741824;
         struct BLOBHEADER {
             bType: u8,
             bVersion: u8,
             reserved: u16,
             aiKeyAlg: ALG_ID,
         }
-        const CALG_3DES: i32 = 26115;
-        const CALG_3DES_112: i32 = 26121;
-        const CALG_AES: i32 = 26129;
-        const CALG_AES_128: i32 = 26126;
-        const CALG_AES_192: i32 = 26127;
-        const CALG_AES_256: i32 = 26128;
-        const CALG_AGREEDKEY_ANY: i32 = 43523;
-        const CALG_CYLINK_MEK: i32 = 26124;
-        const CALG_DES: i32 = 26113;
-        const CALG_DESX: i32 = 26116;
-        const CALG_DH_EPHEM: i32 = 43522;
-        const CALG_DH_SF: i32 = 43521;
-        const CALG_DSS_SIGN: i32 = 8704;
-        const CALG_ECDH: i32 = 43525;
-        const CALG_ECDH_EPHEM: i32 = 44550;
-        const CALG_ECDSA: i32 = 8707;
-        const CALG_ECMQV: i32 = 40961;
-        const CALG_HASH_REPLACE_OWF: i32 = 32779;
-        const CALG_HMAC: i32 = 32777;
-        const CALG_HUGHES_MD5: i32 = 40963;
-        const CALG_KEA_KEYX: i32 = 43524;
-        const CALG_MAC: i32 = 32773;
-        const CALG_MD2: i32 = 32769;
-        const CALG_MD4: i32 = 32770;
-        const CALG_MD5: i32 = 32771;
-        const CALG_NO_SIGN: i32 = 8192;
-        const CALG_NULLCIPHER: i32 = 24576;
         const CALG_OID_INFO_CNG_ONLY: u32 = 4294967295;
         const CALG_OID_INFO_PARAMETERS: u32 = 4294967294;
         const CALG_OID_INFO_PQ: u32 = 4294967293;
-        const CALG_PCT1_MASTER: i32 = 19460;
-        const CALG_RC2: i32 = 26114;
-        const CALG_RC4: i32 = 26625;
-        const CALG_RC5: i32 = 26125;
-        const CALG_RSA_KEYX: i32 = 41984;
-        const CALG_RSA_SIGN: i32 = 9216;
-        const CALG_SCHANNEL_ENC_KEY: i32 = 19463;
-        const CALG_SCHANNEL_MAC_KEY: i32 = 19459;
-        const CALG_SCHANNEL_MASTER_HASH: i32 = 19458;
-        const CALG_SEAL: i32 = 26626;
-        const CALG_SHA: i32 = 32772;
-        const CALG_SHA1: i32 = 32772;
-        const CALG_SHA_256: i32 = 32780;
-        const CALG_SHA_384: i32 = 32781;
-        const CALG_SHA_512: i32 = 32782;
-        const CALG_SKIPJACK: i32 = 26122;
-        const CALG_SSL2_MASTER: i32 = 19461;
-        const CALG_SSL3_MASTER: i32 = 19457;
-        const CALG_SSL3_SHAMD5: i32 = 32776;
-        const CALG_TEK: i32 = 26123;
-        const CALG_THIRDPARTY_CIPHER: i32 = 28672;
-        const CALG_THIRDPARTY_HASH: i32 = 36864;
-        const CALG_THIRDPARTY_KEY_EXCHANGE: i32 = 45056;
-        const CALG_THIRDPARTY_SIGNATURE: i32 = 12288;
-        const CALG_TLS1PRF: i32 = 32778;
-        const CALG_TLS1_MASTER: i32 = 19462;
         type CCERT_STORE_PROV_FIND_INFO = CERT_STORE_PROV_FIND_INFO;
         type CCRYPT_OID_INFO = CRYPT_OID_INFO;
         struct CERT_ACCESS_DESCRIPTION {
@@ -173,8 +170,17 @@ mod Windows {
         const CERT_ACCESS_STATE_SYSTEM_STORE_FLAG: i32 = 2;
         const CERT_ACCESS_STATE_WRITE_PERSIST_FLAG: i32 = 1;
         const CERT_AIA_URL_RETRIEVED_PROP_ID: i32 = 67;
-        const CERT_ALT_NAME_DIRECTORY_NAME: i32 = 5;
-        const CERT_ALT_NAME_DNS_NAME: i32 = 3;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_ALT_NAME {
+            CERT_ALT_NAME_RFC822_NAME = 2,
+            CERT_ALT_NAME_DNS_NAME = 3,
+            CERT_ALT_NAME_URL = 7,
+            CERT_ALT_NAME_REGISTERED_ID = 9,
+            CERT_ALT_NAME_DIRECTORY_NAME = 5,
+            CERT_ALT_NAME_IP_ADDRESS = 8,
+            CERT_ALT_NAME_OTHER_NAME = 1,
+        }
         const CERT_ALT_NAME_EDI_PARTY_NAME: i32 = 6;
         struct CERT_ALT_NAME_ENTRY {
             dwAltNameChoice: u32,
@@ -194,11 +200,6 @@ mod Windows {
             cAltEntry: u32,
             rgAltEntry: PCERT_ALT_NAME_ENTRY,
         }
-        const CERT_ALT_NAME_IP_ADDRESS: i32 = 8;
-        const CERT_ALT_NAME_OTHER_NAME: i32 = 1;
-        const CERT_ALT_NAME_REGISTERED_ID: i32 = 9;
-        const CERT_ALT_NAME_RFC822_NAME: i32 = 2;
-        const CERT_ALT_NAME_URL: i32 = 7;
         const CERT_ALT_NAME_VALUE_ERR_INDEX_MASK: i32 = 65535;
         const CERT_ALT_NAME_VALUE_ERR_INDEX_SHIFT: i32 = 0;
         const CERT_ALT_NAME_X400_ADDRESS: i32 = 4;
@@ -261,20 +262,24 @@ mod Windows {
             rgSubtreesConstraint: *mut CERT_NAME_BLOB,
         }
         struct CERT_BIOMETRIC_DATA {
-            dwTypeOfBiometricDataChoice: u32,
+            dwTypeOfBiometricDataChoice: CERT_BIOMETRIC_DATA_TYPE,
             Anonymous: union {
                 dwPredefined: u32,
                 pszObjId: PSTR,
             },
             HashedUrl: CERT_HASHED_URL,
         }
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_BIOMETRIC_DATA_TYPE {
+            CERT_BIOMETRIC_PREDEFINED_DATA_CHOICE = 1,
+            CERT_BIOMETRIC_OID_DATA_CHOICE = 2,
+        }
         struct CERT_BIOMETRIC_EXT_INFO {
             cBiometricData: u32,
             rgBiometricData: PCERT_BIOMETRIC_DATA,
         }
-        const CERT_BIOMETRIC_OID_DATA_CHOICE: i32 = 2;
         const CERT_BIOMETRIC_PICTURE_TYPE: i32 = 0;
-        const CERT_BIOMETRIC_PREDEFINED_DATA_CHOICE: i32 = 1;
         const CERT_BIOMETRIC_SIGNATURE_TYPE: i32 = 1;
         type CERT_BLOB = CRYPT_INTEGER_BLOB;
         const CERT_BUNDLE_CERTIFICATE: i32 = 0;
@@ -416,12 +421,6 @@ mod Windows {
         }
         const CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG: i32 = 1;
         const CERT_CHAIN_FIND_BY_ISSUER: i32 = 1;
-        const CERT_CHAIN_FIND_BY_ISSUER_CACHE_ONLY_FLAG: i32 = 32768;
-        const CERT_CHAIN_FIND_BY_ISSUER_CACHE_ONLY_URL_FLAG: i32 = 4;
-        const CERT_CHAIN_FIND_BY_ISSUER_COMPARE_KEY_FLAG: i32 = 1;
-        const CERT_CHAIN_FIND_BY_ISSUER_COMPLEX_CHAIN_FLAG: i32 = 2;
-        const CERT_CHAIN_FIND_BY_ISSUER_LOCAL_MACHINE_FLAG: i32 = 8;
-        const CERT_CHAIN_FIND_BY_ISSUER_NO_KEY_FLAG: i32 = 16384;
         type CERT_CHAIN_FIND_BY_ISSUER_PARA = CERT_CHAIN_FIND_ISSUER_PARA;
         struct CERT_CHAIN_FIND_ISSUER_PARA {
             cbSize: u32,
@@ -482,8 +481,6 @@ mod Windows {
             cbSize: u32,
             RequestedUsage: CERT_USAGE_MATCH,
         }
-        const CERT_CHAIN_POLICY_ALLOW_TESTROOT_FLAG: i32 = 32768;
-        const CERT_CHAIN_POLICY_ALLOW_UNKNOWN_CA_FLAG: i32 = 16;
         const CERT_CHAIN_POLICY_AUTHENTICODE: PCSTR = 2;
         const CERT_CHAIN_POLICY_AUTHENTICODE_TS: PCSTR = 3;
         const CERT_CHAIN_POLICY_BASE: PCSTR = 1;
@@ -520,27 +517,40 @@ mod Windows {
         const CERT_CHAIN_POLICY_CT_WARNING_UNABLE_TO_DECODE_EXT: i32 = 62;
         const CERT_CHAIN_POLICY_CT_WARNING_UNABLE_TO_DECODE_PARAMETERS: i32 = 70;
         const CERT_CHAIN_POLICY_EV: PCSTR = 8;
-        const CERT_CHAIN_POLICY_IGNORE_ALL_NOT_TIME_VALID_FLAGS: i32 = 7;
-        const CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS: i32 = 3840;
-        const CERT_CHAIN_POLICY_IGNORE_CA_REV_UNKNOWN_FLAG: i32 = 1024;
-        const CERT_CHAIN_POLICY_IGNORE_CTL_NOT_TIME_VALID_FLAG: i32 = 2;
-        const CERT_CHAIN_POLICY_IGNORE_CTL_SIGNER_REV_UNKNOWN_FLAG: i32 = 512;
-        const CERT_CHAIN_POLICY_IGNORE_END_REV_UNKNOWN_FLAG: i32 = 256;
-        const CERT_CHAIN_POLICY_IGNORE_INVALID_BASIC_CONSTRAINTS_FLAG: i32 = 8;
-        const CERT_CHAIN_POLICY_IGNORE_INVALID_NAME_FLAG: i32 = 64;
-        const CERT_CHAIN_POLICY_IGNORE_INVALID_POLICY_FLAG: i32 = 128;
-        const CERT_CHAIN_POLICY_IGNORE_NOT_SUPPORTED_CRITICAL_EXT_FLAG: i32 = 8192;
-        const CERT_CHAIN_POLICY_IGNORE_NOT_TIME_NESTED_FLAG: i32 = 4;
-        const CERT_CHAIN_POLICY_IGNORE_NOT_TIME_VALID_FLAG: i32 = 1;
-        const CERT_CHAIN_POLICY_IGNORE_PEER_TRUST_FLAG: i32 = 4096;
-        const CERT_CHAIN_POLICY_IGNORE_ROOT_REV_UNKNOWN_FLAG: i32 = 2048;
-        const CERT_CHAIN_POLICY_IGNORE_WEAK_SIGNATURE_FLAG: i32 = 134217728;
-        const CERT_CHAIN_POLICY_IGNORE_WRONG_USAGE_FLAG: i32 = 32;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_CHAIN_POLICY_FLAGS {
+            CERT_CHAIN_POLICY_IGNORE_NOT_TIME_VALID_FLAG = 1,
+            CERT_CHAIN_POLICY_IGNORE_CTL_NOT_TIME_VALID_FLAG = 2,
+            CERT_CHAIN_POLICY_IGNORE_NOT_TIME_NESTED_FLAG = 4,
+            CERT_CHAIN_POLICY_IGNORE_INVALID_BASIC_CONSTRAINTS_FLAG = 8,
+            CERT_CHAIN_POLICY_IGNORE_ALL_NOT_TIME_VALID_FLAGS = 7,
+            CERT_CHAIN_POLICY_ALLOW_UNKNOWN_CA_FLAG = 16,
+            CERT_CHAIN_POLICY_IGNORE_WRONG_USAGE_FLAG = 32,
+            CERT_CHAIN_POLICY_IGNORE_INVALID_NAME_FLAG = 64,
+            CERT_CHAIN_POLICY_IGNORE_INVALID_POLICY_FLAG = 128,
+            CERT_CHAIN_POLICY_IGNORE_END_REV_UNKNOWN_FLAG = 256,
+            CERT_CHAIN_POLICY_IGNORE_CTL_SIGNER_REV_UNKNOWN_FLAG = 512,
+            CERT_CHAIN_POLICY_IGNORE_CA_REV_UNKNOWN_FLAG = 1024,
+            CERT_CHAIN_POLICY_IGNORE_ROOT_REV_UNKNOWN_FLAG = 2048,
+            CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS = 3840,
+            CERT_CHAIN_POLICY_ALLOW_TESTROOT_FLAG = 32768,
+            CERT_CHAIN_POLICY_TRUST_TESTROOT_FLAG = 16384,
+            CERT_CHAIN_POLICY_IGNORE_NOT_SUPPORTED_CRITICAL_EXT_FLAG = 8192,
+            CERT_CHAIN_POLICY_IGNORE_PEER_TRUST_FLAG = 4096,
+            CERT_CHAIN_POLICY_IGNORE_WEAK_SIGNATURE_FLAG = 134217728,
+            BASIC_CONSTRAINTS_CERT_CHAIN_POLICY_CA_FLAG = 2147483648,
+            BASIC_CONSTRAINTS_CERT_CHAIN_POLICY_END_ENTITY_FLAG = 1073741824,
+            MICROSOFT_ROOT_CERT_CHAIN_POLICY_ENABLE_TEST_ROOT_FLAG = 65536,
+            MICROSOFT_ROOT_CERT_CHAIN_POLICY_CHECK_APPLICATION_ROOT_FLAG = 131072,
+            MICROSOFT_ROOT_CERT_CHAIN_POLICY_DISABLE_FLIGHT_ROOT_FLAG = 262144,
+        }
         const CERT_CHAIN_POLICY_MICROSOFT_ROOT: PCSTR = 7;
         const CERT_CHAIN_POLICY_NT_AUTH: PCSTR = 6;
         struct CERT_CHAIN_POLICY_PARA {
             cbSize: u32,
-            dwFlags: u32,
+            dwFlags: CERT_CHAIN_POLICY_FLAGS,
             pvExtraPolicyPara: *mut void,
         }
         const CERT_CHAIN_POLICY_SSL: PCSTR = 4;
@@ -566,7 +576,6 @@ mod Windows {
             pvExtraPolicyStatus: *mut void,
         }
         const CERT_CHAIN_POLICY_THIRD_PARTY_ROOT: PCSTR = 11;
-        const CERT_CHAIN_POLICY_TRUST_TESTROOT_FLAG: i32 = 16384;
         const CERT_CHAIN_RETURN_LOWER_QUALITY_CONTEXTS: i32 = 128;
         const CERT_CHAIN_REVOCATION_ACCUMULATIVE_TIMEOUT: i32 = 134217728;
         const CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY: u32 = 2147483648;
@@ -645,13 +654,20 @@ mod Windows {
         const CERT_COMPARE_SUBJECT_CERT: i32 = 11;
         const CERT_COMPARE_SUBJECT_INFO_ACCESS: i32 = 19;
         struct CERT_CONTEXT {
-            dwCertEncodingType: u32,
+            dwCertEncodingType: CERT_QUERY_ENCODING_TYPE,
             pbCertEncoded: *mut u8,
             cbCertEncoded: u32,
             pCertInfo: PCERT_INFO,
             hCertStore: HCERTSTORE,
         }
         const CERT_CONTEXT_REVOCATION_TYPE: i32 = 1;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_CONTROL_STORE_FLAGS {
+            CERT_STORE_CTRL_COMMIT_FORCE_FLAG = 1,
+            CERT_STORE_CTRL_COMMIT_CLEAR_FLAG = 2,
+            CERT_STORE_CTRL_INHIBIT_DUPLICATE_HANDLE_FLAG = 1,
+        }
         const CERT_CREATE_CONTEXT_NOCOPY_FLAG: i32 = 1;
         const CERT_CREATE_CONTEXT_NO_ENTRY_FLAG: i32 = 8;
         const CERT_CREATE_CONTEXT_NO_HCRYPTMSG_FLAG: i32 = 4;
@@ -663,8 +679,13 @@ mod Windows {
             pvSort: *mut void,
         }
         const CERT_CREATE_CONTEXT_SORTED_FLAG: i32 = 2;
-        const CERT_CREATE_SELFSIGN_NO_KEY_INFO: i32 = 2;
-        const CERT_CREATE_SELFSIGN_NO_SIGN: i32 = 1;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_CREATE_SELFSIGN_FLAGS {
+            CERT_CREATE_SELFSIGN_NO_KEY_INFO = 2,
+            CERT_CREATE_SELFSIGN_NO_SIGN = 1,
+        }
         struct CERT_CRL_CONTEXT_PAIR {
             pCertContext: PCCERT_CONTEXT,
             pCrlContext: PCCRL_CONTEXT,
@@ -738,50 +759,77 @@ mod Windows {
         }
         const CERT_FILE_HASH_USE_TYPE: i32 = 1;
         const CERT_FILE_STORE_COMMIT_ENABLE_FLAG: i32 = 65536;
-        const CERT_FIND_ANY: i32 = 0;
-        const CERT_FIND_CERT_ID: i32 = 1048576;
-        const CERT_FIND_CROSS_CERT_DIST_POINTS: i32 = 1114112;
-        const CERT_FIND_CTL_USAGE: i32 = 655360;
-        const CERT_FIND_ENHKEY_USAGE: i32 = 655360;
-        const CERT_FIND_EXISTING: i32 = 851968;
-        const CERT_FIND_EXT_ONLY_CTL_USAGE_FLAG: i32 = 2;
-        const CERT_FIND_EXT_ONLY_ENHKEY_USAGE_FLAG: i32 = 2;
-        const CERT_FIND_HASH: i32 = 65536;
-        const CERT_FIND_HASH_STR: i32 = 1310720;
-        const CERT_FIND_HAS_PRIVATE_KEY: i32 = 1376256;
-        const CERT_FIND_ISSUER_ATTR: i32 = 196612;
-        const CERT_FIND_ISSUER_NAME: i32 = 131076;
-        const CERT_FIND_ISSUER_OF: i32 = 786432;
-        const CERT_FIND_ISSUER_STR: i32 = 524292;
-        const CERT_FIND_ISSUER_STR_A: i32 = 458756;
-        const CERT_FIND_ISSUER_STR_W: i32 = 524292;
-        const CERT_FIND_KEY_IDENTIFIER: i32 = 983040;
-        const CERT_FIND_KEY_SPEC: i32 = 589824;
-        const CERT_FIND_MD5_HASH: i32 = 262144;
-        const CERT_FIND_NO_CTL_USAGE_FLAG: i32 = 8;
-        const CERT_FIND_NO_ENHKEY_USAGE_FLAG: i32 = 8;
-        const CERT_FIND_OPTIONAL_CTL_USAGE_FLAG: i32 = 1;
-        const CERT_FIND_OPTIONAL_ENHKEY_USAGE_FLAG: i32 = 1;
-        const CERT_FIND_OR_CTL_USAGE_FLAG: i32 = 16;
-        const CERT_FIND_OR_ENHKEY_USAGE_FLAG: i32 = 16;
-        const CERT_FIND_PROPERTY: i32 = 327680;
-        const CERT_FIND_PROP_ONLY_CTL_USAGE_FLAG: i32 = 4;
-        const CERT_FIND_PROP_ONLY_ENHKEY_USAGE_FLAG: i32 = 4;
-        const CERT_FIND_PUBKEY_MD5_HASH: i32 = 1179648;
-        const CERT_FIND_PUBLIC_KEY: i32 = 393216;
-        const CERT_FIND_SHA1_HASH: i32 = 65536;
-        const CERT_FIND_SHA1_SHA256_HASH: i32 = 1507328;
-        const CERT_FIND_SHA256_HASH: i32 = 1441792;
-        const CERT_FIND_SIGNATURE_HASH: i32 = 917504;
-        const CERT_FIND_SUBJECT_ATTR: i32 = 196615;
-        const CERT_FIND_SUBJECT_CERT: i32 = 720896;
-        const CERT_FIND_SUBJECT_INFO_ACCESS: i32 = 1245184;
-        const CERT_FIND_SUBJECT_NAME: i32 = 131079;
-        const CERT_FIND_SUBJECT_STR: i32 = 524295;
-        const CERT_FIND_SUBJECT_STR_A: i32 = 458759;
-        const CERT_FIND_SUBJECT_STR_W: i32 = 524295;
-        const CERT_FIND_VALID_CTL_USAGE_FLAG: i32 = 32;
-        const CERT_FIND_VALID_ENHKEY_USAGE_FLAG: i32 = 32;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_FIND_CHAIN_IN_STORE_FLAGS {
+            CERT_CHAIN_FIND_BY_ISSUER_COMPARE_KEY_FLAG = 1,
+            CERT_CHAIN_FIND_BY_ISSUER_COMPLEX_CHAIN_FLAG = 2,
+            CERT_CHAIN_FIND_BY_ISSUER_CACHE_ONLY_FLAG = 32768,
+            CERT_CHAIN_FIND_BY_ISSUER_CACHE_ONLY_URL_FLAG = 4,
+            CERT_CHAIN_FIND_BY_ISSUER_LOCAL_MACHINE_FLAG = 8,
+            CERT_CHAIN_FIND_BY_ISSUER_NO_KEY_FLAG = 16384,
+        }
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_FIND_FLAGS {
+            CERT_FIND_ANY = 0,
+            CERT_FIND_CERT_ID = 1048576,
+            CERT_FIND_CTL_USAGE = 655360,
+            CERT_FIND_ENHKEY_USAGE = 655360,
+            CERT_FIND_EXISTING = 851968,
+            CERT_FIND_HASH = 65536,
+            CERT_FIND_HAS_PRIVATE_KEY = 1376256,
+            CERT_FIND_ISSUER_ATTR = 196612,
+            CERT_FIND_ISSUER_NAME = 131076,
+            CERT_FIND_ISSUER_OF = 786432,
+            CERT_FIND_ISSUER_STR = 524292,
+            CERT_FIND_KEY_IDENTIFIER = 983040,
+            CERT_FIND_KEY_SPEC = 589824,
+            CERT_FIND_MD5_HASH = 262144,
+            CERT_FIND_PROPERTY = 327680,
+            CERT_FIND_PUBLIC_KEY = 393216,
+            CERT_FIND_SHA1_HASH = 65536,
+            CERT_FIND_SIGNATURE_HASH = 917504,
+            CERT_FIND_SUBJECT_ATTR = 196615,
+            CERT_FIND_SUBJECT_CERT = 720896,
+            CERT_FIND_SUBJECT_NAME = 131079,
+            CERT_FIND_SUBJECT_STR = 524295,
+            CERT_FIND_CROSS_CERT_DIST_POINTS = 1114112,
+            CERT_FIND_PUBKEY_MD5_HASH = 1179648,
+            CERT_FIND_SHA256_HASH = 1441792,
+            CERT_FIND_SHA1_SHA256_HASH = 1507328,
+            CERT_FIND_SUBJECT_STR_A = 458759,
+            CERT_FIND_SUBJECT_STR_W = 524295,
+            CERT_FIND_ISSUER_STR_A = 458756,
+            CERT_FIND_ISSUER_STR_W = 524292,
+            CERT_FIND_SUBJECT_INFO_ACCESS = 1245184,
+            CERT_FIND_HASH_STR = 1310720,
+            CERT_FIND_OPTIONAL_ENHKEY_USAGE_FLAG = 1,
+            CERT_FIND_EXT_ONLY_ENHKEY_USAGE_FLAG = 2,
+            CERT_FIND_PROP_ONLY_ENHKEY_USAGE_FLAG = 4,
+            CERT_FIND_NO_ENHKEY_USAGE_FLAG = 8,
+            CERT_FIND_OR_ENHKEY_USAGE_FLAG = 16,
+            CERT_FIND_VALID_ENHKEY_USAGE_FLAG = 32,
+            CERT_FIND_OPTIONAL_CTL_USAGE_FLAG = 1,
+            CERT_FIND_EXT_ONLY_CTL_USAGE_FLAG = 2,
+            CERT_FIND_PROP_ONLY_CTL_USAGE_FLAG = 4,
+            CERT_FIND_NO_CTL_USAGE_FLAG = 8,
+            CERT_FIND_OR_CTL_USAGE_FLAG = 16,
+            CERT_FIND_VALID_CTL_USAGE_FLAG = 32,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_FIND_TYPE {
+            CTL_FIND_ANY = 0,
+            CTL_FIND_SHA1_HASH = 1,
+            CTL_FIND_MD5_HASH = 2,
+            CTL_FIND_USAGE = 3,
+            CTL_FIND_SAME_USAGE_FLAG = 1,
+            CTL_FIND_EXISTING = 5,
+            CTL_FIND_SUBJECT = 4,
+        }
         const CERT_FIRST_RESERVED_PROP_ID: i32 = 130;
         const CERT_FIRST_USER_PROP_ID: i32 = 32768;
         struct CERT_FORTEZZA_DATA_PROP {
@@ -808,16 +856,20 @@ mod Windows {
         const CERT_HCRYPTPROV_OR_NCRYPT_KEY_HANDLE_PROP_ID: i32 = 79;
         const CERT_HCRYPTPROV_TRANSFER_PROP_ID: i32 = 100;
         struct CERT_ID {
-            dwIdChoice: u32,
+            dwIdChoice: CERT_ID_OPTION,
             Anonymous: union {
                 IssuerSerialNumber: CERT_ISSUER_SERIAL_NUMBER,
                 KeyId: CRYPT_HASH_BLOB,
                 HashId: CRYPT_HASH_BLOB,
             },
         }
-        const CERT_ID_ISSUER_SERIAL_NUMBER: i32 = 1;
-        const CERT_ID_KEY_IDENTIFIER: i32 = 2;
-        const CERT_ID_SHA1_HASH: i32 = 3;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_ID_OPTION {
+            CERT_ID_ISSUER_SERIAL_NUMBER = 1,
+            CERT_ID_KEY_IDENTIFIER = 2,
+            CERT_ID_SHA1_HASH = 3,
+        }
         const CERT_IE30_RESERVED_PROP_ID: i32 = 7;
         #[encoding("utf-16")]
         const CERT_IE_DIRTY_FLAGS_REGPATH: String = "Software\\Microsoft\\Cryptography\\IEDirtyFlags";
@@ -884,6 +936,13 @@ mod Windows {
         const CERT_KEY_PROV_HANDLE_PROP_ID: i32 = 1;
         const CERT_KEY_PROV_INFO_PROP_ID: i32 = 2;
         const CERT_KEY_REPAIR_ATTEMPTED_PROP_ID: i32 = 103;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_KEY_SPEC {
+            AT_KEYEXCHANGE = 1,
+            AT_SIGNATURE = 2,
+            CERT_NCRYPT_KEY_SPEC = -1,
+        }
         const CERT_KEY_SPEC_PROP_ID: i32 = 6;
         struct CERT_KEY_USAGE_RESTRICTION_INFO {
             cCertPolicyId: u32,
@@ -913,8 +972,13 @@ mod Windows {
             dwSampleRate: u32,
             pwszLanguage: PWSTR,
         }
-        const CERT_LOGOTYPE_BITS_IMAGE_RESOLUTION_CHOICE: i32 = 1;
-        const CERT_LOGOTYPE_COLOR_IMAGE_INFO_CHOICE: i32 = 2;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_LOGOTYPE_CHOICE {
+            CERT_LOGOTYPE_NO_IMAGE_RESOLUTION_CHOICE = 0,
+            CERT_LOGOTYPE_BITS_IMAGE_RESOLUTION_CHOICE = 1,
+            CERT_LOGOTYPE_TABLE_SIZE_IMAGE_RESOLUTION_CHOICE = 2,
+        }
         struct CERT_LOGOTYPE_DATA {
             cLogotypeImage: u32,
             rgLogotypeImage: PCERT_LOGOTYPE_IMAGE,
@@ -926,7 +990,6 @@ mod Windows {
             cHashedUrl: u32,
             rgHashedUrl: PCERT_HASHED_URL,
         }
-        const CERT_LOGOTYPE_DIRECT_INFO_CHOICE: i32 = 1;
         struct CERT_LOGOTYPE_EXT_INFO {
             cCommunityLogo: u32,
             rgCommunityLogo: PCERT_LOGOTYPE_INFO,
@@ -935,37 +998,45 @@ mod Windows {
             cOtherLogo: u32,
             rgOtherLogo: PCERT_OTHER_LOGOTYPE_INFO,
         }
-        const CERT_LOGOTYPE_GRAY_SCALE_IMAGE_INFO_CHOICE: i32 = 1;
         struct CERT_LOGOTYPE_IMAGE {
             LogotypeDetails: CERT_LOGOTYPE_DETAILS,
             pLogotypeImageInfo: PCERT_LOGOTYPE_IMAGE_INFO,
         }
         struct CERT_LOGOTYPE_IMAGE_INFO {
-            dwLogotypeImageInfoChoice: u32,
+            dwLogotypeImageInfoChoice: CERT_LOGOTYPE_IMAGE_INFO_TYPE,
             dwFileSize: u32,
             dwXSize: u32,
             dwYSize: u32,
-            dwLogotypeImageResolutionChoice: u32,
+            dwLogotypeImageResolutionChoice: CERT_LOGOTYPE_CHOICE,
             Anonymous: union {
                 dwNumBits: u32,
                 dwTableSize: u32,
             },
             pwszLanguage: PWSTR,
         }
-        const CERT_LOGOTYPE_INDIRECT_INFO_CHOICE: i32 = 2;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_LOGOTYPE_IMAGE_INFO_TYPE {
+            CERT_LOGOTYPE_GRAY_SCALE_IMAGE_INFO_CHOICE = 1,
+            CERT_LOGOTYPE_COLOR_IMAGE_INFO_CHOICE = 2,
+        }
         struct CERT_LOGOTYPE_INFO {
-            dwLogotypeInfoChoice: u32,
+            dwLogotypeInfoChoice: CERT_LOGOTYPE_OPTION,
             Anonymous: union {
                 pLogotypeDirectInfo: PCERT_LOGOTYPE_DATA,
                 pLogotypeIndirectInfo: PCERT_LOGOTYPE_REFERENCE,
             },
         }
-        const CERT_LOGOTYPE_NO_IMAGE_RESOLUTION_CHOICE: i32 = 0;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_LOGOTYPE_OPTION {
+            CERT_LOGOTYPE_DIRECT_INFO_CHOICE = 1,
+            CERT_LOGOTYPE_INDIRECT_INFO_CHOICE = 2,
+        }
         struct CERT_LOGOTYPE_REFERENCE {
             cHashedUrl: u32,
             rgHashedUrl: PCERT_HASHED_URL,
         }
-        const CERT_LOGOTYPE_TABLE_SIZE_IMAGE_RESOLUTION_CHOICE: i32 = 2;
         const CERT_MAX_ASN_ENCODED_DSS_SIGNATURE_LEN: i32 = 48;
         const CERT_MD5_HASH_PROP_ID: i32 = 4;
         const CERT_NAME_ATTR_TYPE: i32 = 3;
@@ -1009,7 +1080,6 @@ mod Windows {
         }
         const CERT_NCRYPT_KEY_HANDLE_PROP_ID: i32 = 78;
         const CERT_NCRYPT_KEY_HANDLE_TRANSFER_PROP_ID: i32 = 99;
-        const CERT_NCRYPT_KEY_SPEC: u32 = 4294967295;
         const CERT_NEW_KEY_PROP_ID: i32 = 74;
         const CERT_NEXT_UPDATE_LOCATION_PROP_ID: i32 = 10;
         const CERT_NONCOMPLIANT_ROOT_URL_PROP_ID: i32 = 123;
@@ -1026,7 +1096,6 @@ mod Windows {
         const CERT_OCSP_MUST_STAPLE_PROP_ID: i32 = 121;
         const CERT_OCSP_RESPONSE_PROP_ID: i32 = 70;
         const CERT_OFFLINE_CRL_SIGN_KEY_USAGE: i32 = 2;
-        const CERT_OID_NAME_STR: i32 = 2;
         struct CERT_OR_CRL_BLOB {
             dwChoice: u32,
             cbEncoded: u32,
@@ -1174,81 +1243,112 @@ mod Windows {
             cStatement: u32,
             rgStatement: PCERT_QC_STATEMENT,
         }
-        const CERT_QUERY_CONTENT_CERT: i32 = 1;
-        const CERT_QUERY_CONTENT_CERT_PAIR: i32 = 13;
-        const CERT_QUERY_CONTENT_CRL: i32 = 3;
-        const CERT_QUERY_CONTENT_CTL: i32 = 2;
-        const CERT_QUERY_CONTENT_FLAG_ALL: i32 = 16382;
-        const CERT_QUERY_CONTENT_FLAG_ALL_ISSUER_CERT: i32 = 818;
-        const CERT_QUERY_CONTENT_FLAG_CERT: i32 = 2;
-        const CERT_QUERY_CONTENT_FLAG_CERT_PAIR: i32 = 8192;
-        const CERT_QUERY_CONTENT_FLAG_CRL: i32 = 8;
-        const CERT_QUERY_CONTENT_FLAG_CTL: i32 = 4;
-        const CERT_QUERY_CONTENT_FLAG_PFX: i32 = 4096;
-        const CERT_QUERY_CONTENT_FLAG_PFX_AND_LOAD: i32 = 16384;
-        const CERT_QUERY_CONTENT_FLAG_PKCS10: i32 = 2048;
-        const CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED: i32 = 256;
-        const CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED: i32 = 1024;
-        const CERT_QUERY_CONTENT_FLAG_PKCS7_UNSIGNED: i32 = 512;
-        const CERT_QUERY_CONTENT_FLAG_SERIALIZED_CERT: i32 = 32;
-        const CERT_QUERY_CONTENT_FLAG_SERIALIZED_CRL: i32 = 128;
-        const CERT_QUERY_CONTENT_FLAG_SERIALIZED_CTL: i32 = 64;
-        const CERT_QUERY_CONTENT_FLAG_SERIALIZED_STORE: i32 = 16;
-        const CERT_QUERY_CONTENT_PFX: i32 = 12;
-        const CERT_QUERY_CONTENT_PFX_AND_LOAD: i32 = 14;
-        const CERT_QUERY_CONTENT_PKCS10: i32 = 11;
-        const CERT_QUERY_CONTENT_PKCS7_SIGNED: i32 = 8;
-        const CERT_QUERY_CONTENT_PKCS7_SIGNED_EMBED: i32 = 10;
-        const CERT_QUERY_CONTENT_PKCS7_UNSIGNED: i32 = 9;
-        const CERT_QUERY_CONTENT_SERIALIZED_CERT: i32 = 5;
-        const CERT_QUERY_CONTENT_SERIALIZED_CRL: i32 = 7;
-        const CERT_QUERY_CONTENT_SERIALIZED_CTL: i32 = 6;
-        const CERT_QUERY_CONTENT_SERIALIZED_STORE: i32 = 4;
-        const CERT_QUERY_FORMAT_ASN_ASCII_HEX_ENCODED: i32 = 3;
-        const CERT_QUERY_FORMAT_BASE64_ENCODED: i32 = 2;
-        const CERT_QUERY_FORMAT_BINARY: i32 = 1;
-        const CERT_QUERY_FORMAT_FLAG_ALL: i32 = 14;
-        const CERT_QUERY_FORMAT_FLAG_ASN_ASCII_HEX_ENCODED: i32 = 8;
-        const CERT_QUERY_FORMAT_FLAG_BASE64_ENCODED: i32 = 4;
-        const CERT_QUERY_FORMAT_FLAG_BINARY: i32 = 2;
-        const CERT_QUERY_OBJECT_BLOB: i32 = 2;
-        const CERT_QUERY_OBJECT_FILE: i32 = 1;
+        #[repr(u32)]
+        #[scoped]
+        enum CERT_QUERY_CONTENT_TYPE {
+            CERT_QUERY_CONTENT_CERT = 1,
+            CERT_QUERY_CONTENT_CTL = 2,
+            CERT_QUERY_CONTENT_CRL = 3,
+            CERT_QUERY_CONTENT_SERIALIZED_STORE = 4,
+            CERT_QUERY_CONTENT_SERIALIZED_CERT = 5,
+            CERT_QUERY_CONTENT_SERIALIZED_CTL = 6,
+            CERT_QUERY_CONTENT_SERIALIZED_CRL = 7,
+            CERT_QUERY_CONTENT_PKCS7_SIGNED = 8,
+            CERT_QUERY_CONTENT_PKCS7_UNSIGNED = 9,
+            CERT_QUERY_CONTENT_PKCS7_SIGNED_EMBED = 10,
+            CERT_QUERY_CONTENT_PKCS10 = 11,
+            CERT_QUERY_CONTENT_PFX = 12,
+            CERT_QUERY_CONTENT_CERT_PAIR = 13,
+            CERT_QUERY_CONTENT_PFX_AND_LOAD = 14,
+        }
+        #[repr(u32)]
+        #[scoped]
+        enum CERT_QUERY_CONTENT_TYPE_FLAGS {
+            CERT_QUERY_CONTENT_FLAG_CERT = 2,
+            CERT_QUERY_CONTENT_FLAG_CTL = 4,
+            CERT_QUERY_CONTENT_FLAG_CRL = 8,
+            CERT_QUERY_CONTENT_FLAG_SERIALIZED_STORE = 16,
+            CERT_QUERY_CONTENT_FLAG_SERIALIZED_CERT = 32,
+            CERT_QUERY_CONTENT_FLAG_SERIALIZED_CTL = 64,
+            CERT_QUERY_CONTENT_FLAG_SERIALIZED_CRL = 128,
+            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED = 256,
+            CERT_QUERY_CONTENT_FLAG_PKCS7_UNSIGNED = 512,
+            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED = 1024,
+            CERT_QUERY_CONTENT_FLAG_PKCS10 = 2048,
+            CERT_QUERY_CONTENT_FLAG_PFX = 4096,
+            CERT_QUERY_CONTENT_FLAG_CERT_PAIR = 8192,
+            CERT_QUERY_CONTENT_FLAG_PFX_AND_LOAD = 16384,
+            CERT_QUERY_CONTENT_FLAG_ALL = 16382,
+            CERT_QUERY_CONTENT_FLAG_ALL_ISSUER_CERT = 818,
+        }
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_QUERY_ENCODING_TYPE {
+            X509_ASN_ENCODING = 1,
+            PKCS_7_ASN_ENCODING = 65536,
+        }
+        #[repr(u32)]
+        #[scoped]
+        enum CERT_QUERY_FORMAT_TYPE {
+            CERT_QUERY_FORMAT_BINARY = 1,
+            CERT_QUERY_FORMAT_BASE64_ENCODED = 2,
+            CERT_QUERY_FORMAT_ASN_ASCII_HEX_ENCODED = 3,
+        }
+        #[repr(u32)]
+        #[scoped]
+        enum CERT_QUERY_FORMAT_TYPE_FLAGS {
+            CERT_QUERY_FORMAT_FLAG_BINARY = 2,
+            CERT_QUERY_FORMAT_FLAG_BASE64_ENCODED = 4,
+            CERT_QUERY_FORMAT_FLAG_ASN_ASCII_HEX_ENCODED = 8,
+            CERT_QUERY_FORMAT_FLAG_ALL = 14,
+        }
+        #[repr(u32)]
+        #[scoped]
+        enum CERT_QUERY_OBJECT_TYPE {
+            CERT_QUERY_OBJECT_FILE = 1,
+            CERT_QUERY_OBJECT_BLOB = 2,
+        }
         struct CERT_RDN {
             cRDNAttr: u32,
             rgRDNAttr: PCERT_RDN_ATTR,
         }
-        const CERT_RDN_ANY_TYPE: i32 = 0;
         struct CERT_RDN_ATTR {
             pszObjId: PSTR,
             dwValueType: u32,
             Value: CERT_RDN_VALUE_BLOB,
         }
-        const CERT_RDN_BMP_STRING: i32 = 12;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_RDN_ATTR_VALUE_TYPE {
+            CERT_RDN_ANY_TYPE = 0,
+            CERT_RDN_NUMERIC_STRING = 3,
+            CERT_RDN_PRINTABLE_STRING = 4,
+            CERT_RDN_T61_STRING = 5,
+            CERT_RDN_VIDEOTEX_STRING = 6,
+            CERT_RDN_IA5_STRING = 7,
+            CERT_RDN_GRAPHIC_STRING = 8,
+            CERT_RDN_ISO646_STRING = 9,
+            CERT_RDN_GENERAL_STRING = 10,
+            CERT_RDN_INT4_STRING = 11,
+            CERT_RDN_UNICODE_STRING = 12,
+            CERT_RDN_BMP_STRING = 12,
+            CERT_RDN_ENCODED_BLOB = 1,
+            CERT_RDN_OCTET_STRING = 2,
+            CERT_RDN_TELETEX_STRING = 5,
+            CERT_RDN_UNIVERSAL_STRING = 11,
+            CERT_RDN_UTF8_STRING = 13,
+            CERT_RDN_VISIBLE_STRING = 9,
+        }
         const CERT_RDN_DISABLE_CHECK_TYPE_FLAG: i32 = 1073741824;
         const CERT_RDN_DISABLE_IE4_UTF8_FLAG: i32 = 16777216;
         const CERT_RDN_ENABLE_PUNYCODE_FLAG: i32 = 33554432;
         const CERT_RDN_ENABLE_T61_UNICODE_FLAG: u32 = 2147483648;
         const CERT_RDN_ENABLE_UTF8_UNICODE_FLAG: i32 = 536870912;
-        const CERT_RDN_ENCODED_BLOB: i32 = 1;
         const CERT_RDN_FLAGS_MASK: u32 = 4278190080;
         const CERT_RDN_FORCE_UTF8_UNICODE_FLAG: i32 = 268435456;
-        const CERT_RDN_GENERAL_STRING: i32 = 10;
-        const CERT_RDN_GRAPHIC_STRING: i32 = 8;
-        const CERT_RDN_IA5_STRING: i32 = 7;
-        const CERT_RDN_INT4_STRING: i32 = 11;
-        const CERT_RDN_ISO646_STRING: i32 = 9;
-        const CERT_RDN_NUMERIC_STRING: i32 = 3;
-        const CERT_RDN_OCTET_STRING: i32 = 2;
-        const CERT_RDN_PRINTABLE_STRING: i32 = 4;
-        const CERT_RDN_T61_STRING: i32 = 5;
-        const CERT_RDN_TELETEX_STRING: i32 = 5;
         const CERT_RDN_TYPE_MASK: i32 = 255;
-        const CERT_RDN_UNICODE_STRING: i32 = 12;
-        const CERT_RDN_UNIVERSAL_STRING: i32 = 11;
-        const CERT_RDN_UTF8_STRING: i32 = 13;
         type CERT_RDN_VALUE_BLOB = CRYPT_INTEGER_BLOB;
-        const CERT_RDN_VIDEOTEX_STRING: i32 = 6;
-        const CERT_RDN_VISIBLE_STRING: i32 = 9;
         const CERT_REGISTRY_STORE_CLIENT_GPT_FLAG: u32 = 2147483648;
         struct CERT_REGISTRY_STORE_CLIENT_GPT_PARA {
             hKeyBase: HKEY,
@@ -1324,17 +1424,34 @@ mod Windows {
             cbSize: u32,
             dwIndex: u32,
             dwError: u32,
-            dwReason: u32,
+            dwReason: CERT_REVOCATION_STATUS_REASON,
             fHasFreshnessTime: BOOL,
             dwFreshnessTime: u32,
         }
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_REVOCATION_STATUS_REASON {
+            CRL_REASON_UNSPECIFIED = 0,
+            CRL_REASON_KEY_COMPROMISE = 1,
+            CRL_REASON_CA_COMPROMISE = 2,
+            CRL_REASON_AFFILIATION_CHANGED = 3,
+            CRL_REASON_SUPERSEDED = 4,
+            CRL_REASON_CESSATION_OF_OPERATION = 5,
+            CRL_REASON_CERTIFICATE_HOLD = 6,
+            CRL_REASON_REMOVE_FROM_CRL = 8,
+        }
         const CERT_ROOT_PROGRAM_CERT_POLICIES_PROP_ID: i32 = 83;
         const CERT_ROOT_PROGRAM_CHAIN_POLICIES_PROP_ID: i32 = 105;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_ROOT_PROGRAM_FLAGS {
+            CERT_ROOT_PROGRAM_FLAG_LSC = 64,
+            CERT_ROOT_PROGRAM_FLAG_ORG = 128,
+            CERT_ROOT_PROGRAM_FLAG_SUBJECT_LOGO = 32,
+        }
         const CERT_ROOT_PROGRAM_FLAG_ADDRESS: i32 = 8;
-        const CERT_ROOT_PROGRAM_FLAG_LSC: i32 = 64;
-        const CERT_ROOT_PROGRAM_FLAG_ORG: i32 = 128;
         const CERT_ROOT_PROGRAM_FLAG_OU: i32 = 16;
-        const CERT_ROOT_PROGRAM_FLAG_SUBJECT_LOGO: i32 = 32;
         const CERT_ROOT_PROGRAM_NAME_CONSTRAINTS_PROP_ID: i32 = 84;
         const CERT_SCARD_PIN_ID_PROP_ID: i32 = 90;
         const CERT_SCARD_PIN_INFO_PROP_ID: i32 = 91;
@@ -1349,20 +1466,9 @@ mod Windows {
         const CERT_SCEP_SIGNER_CERT_PROP_ID: i32 = 112;
         const CERT_SELECT_ALLOW_DUPLICATES: i32 = 128;
         const CERT_SELECT_ALLOW_EXPIRED: i32 = 1;
-        const CERT_SELECT_BY_ENHKEY_USAGE: i32 = 1;
-        const CERT_SELECT_BY_EXTENSION: i32 = 5;
         const CERT_SELECT_BY_FRIENDLYNAME: i32 = 13;
-        const CERT_SELECT_BY_ISSUER_ATTR: i32 = 7;
         const CERT_SELECT_BY_ISSUER_DISPLAYNAME: i32 = 12;
-        const CERT_SELECT_BY_ISSUER_NAME: i32 = 9;
-        const CERT_SELECT_BY_KEY_USAGE: i32 = 2;
-        const CERT_SELECT_BY_POLICY_OID: i32 = 3;
-        const CERT_SELECT_BY_PROV_NAME: i32 = 4;
-        const CERT_SELECT_BY_PUBLIC_KEY: i32 = 10;
-        const CERT_SELECT_BY_SUBJECT_ATTR: i32 = 8;
-        const CERT_SELECT_BY_SUBJECT_HOST_NAME: i32 = 6;
         const CERT_SELECT_BY_THUMBPRINT: i32 = 14;
-        const CERT_SELECT_BY_TLS_SIGNATURES: i32 = 11;
         struct CERT_SELECT_CHAIN_PARA {
             hChainEngine: HCERTCHAINENGINE,
             pTime: PFILETIME,
@@ -1371,9 +1477,24 @@ mod Windows {
             dwFlags: u32,
         }
         struct CERT_SELECT_CRITERIA {
-            dwType: u32,
+            dwType: CERT_SELECT_CRITERIA_TYPE,
             cPara: u32,
             ppPara: *mut *mut void,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_SELECT_CRITERIA_TYPE {
+            CERT_SELECT_BY_ENHKEY_USAGE = 1,
+            CERT_SELECT_BY_KEY_USAGE = 2,
+            CERT_SELECT_BY_POLICY_OID = 3,
+            CERT_SELECT_BY_PROV_NAME = 4,
+            CERT_SELECT_BY_EXTENSION = 5,
+            CERT_SELECT_BY_SUBJECT_HOST_NAME = 6,
+            CERT_SELECT_BY_ISSUER_ATTR = 7,
+            CERT_SELECT_BY_SUBJECT_ATTR = 8,
+            CERT_SELECT_BY_ISSUER_NAME = 9,
+            CERT_SELECT_BY_PUBLIC_KEY = 10,
+            CERT_SELECT_BY_TLS_SIGNATURES = 11,
         }
         const CERT_SELECT_DISALLOW_SELFSIGNED: i32 = 4;
         const CERT_SELECT_HARDWARE_ONLY: i32 = 64;
@@ -1404,8 +1525,6 @@ mod Windows {
         }
         const CERT_SERVER_OCSP_RESPONSE_OPEN_PARA_READ_FLAG: i32 = 1;
         const CERT_SERVER_OCSP_RESPONSE_OPEN_PARA_WRITE_FLAG: i32 = 2;
-        const CERT_SET_KEY_CONTEXT_PROP_ID: i32 = 1;
-        const CERT_SET_KEY_PROV_HANDLE_PROP_ID: i32 = 1;
         const CERT_SET_PROPERTY_IGNORE_PERSIST_ERROR_FLAG: u32 = 2147483648;
         const CERT_SET_PROPERTY_INHIBIT_PERSIST_FLAG: i32 = 1073741824;
         const CERT_SHA1_HASH_PROP_ID: i32 = 3;
@@ -1427,7 +1546,6 @@ mod Windows {
             fHasRevocationFreshnessTime: BOOL,
             dwRevocationFreshnessTime: u32,
         }
-        const CERT_SIMPLE_NAME_STR: i32 = 1;
         const CERT_SMART_CARD_DATA_PROP_ID: i32 = 16;
         const CERT_SMART_CARD_READER_NON_REMOVABLE_PROP_ID: i32 = 106;
         const CERT_SMART_CARD_READER_PROP_ID: i32 = 101;
@@ -1475,9 +1593,6 @@ mod Windows {
         const CERT_STORE_CTRL_AUTO_RESYNC: i32 = 4;
         const CERT_STORE_CTRL_CANCEL_NOTIFY: i32 = 5;
         const CERT_STORE_CTRL_COMMIT: i32 = 3;
-        const CERT_STORE_CTRL_COMMIT_CLEAR_FLAG: i32 = 2;
-        const CERT_STORE_CTRL_COMMIT_FORCE_FLAG: i32 = 1;
-        const CERT_STORE_CTRL_INHIBIT_DUPLICATE_HANDLE_FLAG: i32 = 1;
         const CERT_STORE_CTRL_NOTIFY_CHANGE: i32 = 2;
         const CERT_STORE_CTRL_RESYNC: i32 = 1;
         const CERT_STORE_DEFER_CLOSE_UNTIL_LAST_FREE_FLAG: i32 = 4;
@@ -1494,11 +1609,9 @@ mod Windows {
         const CERT_STORE_PROV_CLOSE_FUNC: i32 = 0;
         const CERT_STORE_PROV_COLLECTION: PCSTR = 11;
         const CERT_STORE_PROV_CONTROL_FUNC: i32 = 13;
-        const CERT_STORE_PROV_DELETED_FLAG: i32 = 2;
         const CERT_STORE_PROV_DELETE_CERT_FUNC: i32 = 3;
         const CERT_STORE_PROV_DELETE_CRL_FUNC: i32 = 7;
         const CERT_STORE_PROV_DELETE_CTL_FUNC: i32 = 11;
-        const CERT_STORE_PROV_EXTERNAL_FLAG: i32 = 1;
         const CERT_STORE_PROV_FILE: PCSTR = 3;
         const CERT_STORE_PROV_FILENAME_A: PCSTR = 7;
         const CERT_STORE_PROV_FILENAME_W: PCSTR = 8;
@@ -1512,6 +1625,16 @@ mod Windows {
             dwFindType: u32,
             pvFindPara: *const void,
         }
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_STORE_PROV_FLAGS {
+            CERT_STORE_PROV_EXTERNAL_FLAG = 1,
+            CERT_STORE_PROV_DELETED_FLAG = 2,
+            CERT_STORE_PROV_NO_PERSIST_FLAG = 4,
+            CERT_STORE_PROV_SYSTEM_STORE_FLAG = 8,
+            CERT_STORE_PROV_LM_SYSTEM_STORE_FLAG = 16,
+        }
         const CERT_STORE_PROV_FREE_FIND_CERT_FUNC: i32 = 15;
         const CERT_STORE_PROV_FREE_FIND_CRL_FUNC: i32 = 18;
         const CERT_STORE_PROV_FREE_FIND_CTL_FUNC: i32 = 21;
@@ -1524,14 +1647,12 @@ mod Windows {
             cStoreProvFunc: u32,
             rgpvStoreProvFunc: *mut *mut void,
             hStoreProv: HCERTSTOREPROV,
-            dwStoreProvFlags: u32,
+            dwStoreProvFlags: CERT_STORE_PROV_FLAGS,
             hStoreProvFuncAddr2: HCRYPTOIDFUNCADDR,
         }
         const CERT_STORE_PROV_LDAP_W: PCSTR = 16;
-        const CERT_STORE_PROV_LM_SYSTEM_STORE_FLAG: i32 = 16;
         const CERT_STORE_PROV_MEMORY: PCSTR = 2;
         const CERT_STORE_PROV_MSG: PCSTR = 1;
-        const CERT_STORE_PROV_NO_PERSIST_FLAG: i32 = 4;
         const CERT_STORE_PROV_PHYSICAL_W: PCSTR = 14;
         const CERT_STORE_PROV_PKCS12: PCSTR = 17;
         const CERT_STORE_PROV_PKCS7: PCSTR = 5;
@@ -1548,7 +1669,6 @@ mod Windows {
         const CERT_STORE_PROV_SYSTEM_A: PCSTR = 9;
         const CERT_STORE_PROV_SYSTEM_REGISTRY_A: PCSTR = 12;
         const CERT_STORE_PROV_SYSTEM_REGISTRY_W: PCSTR = 13;
-        const CERT_STORE_PROV_SYSTEM_STORE_FLAG: i32 = 8;
         const CERT_STORE_PROV_SYSTEM_W: PCSTR = 10;
         const CERT_STORE_PROV_WRITE_ADD_FLAG: i32 = 1;
         const CERT_STORE_PROV_WRITE_CERT_FUNC: i32 = 2;
@@ -1556,14 +1676,22 @@ mod Windows {
         const CERT_STORE_PROV_WRITE_CTL_FUNC: i32 = 10;
         const CERT_STORE_READONLY_FLAG: i32 = 32768;
         const CERT_STORE_REVOCATION_FLAG: i32 = 4;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_STORE_SAVE_AS {
+            CERT_STORE_SAVE_AS_PKCS7 = 2,
+            CERT_STORE_SAVE_AS_STORE = 1,
+        }
         const CERT_STORE_SAVE_AS_PKCS12: i32 = 3;
-        const CERT_STORE_SAVE_AS_PKCS7: i32 = 2;
-        const CERT_STORE_SAVE_AS_STORE: i32 = 1;
-        const CERT_STORE_SAVE_TO_FILE: i32 = 1;
-        const CERT_STORE_SAVE_TO_FILENAME: i32 = 4;
-        const CERT_STORE_SAVE_TO_FILENAME_A: i32 = 3;
-        const CERT_STORE_SAVE_TO_FILENAME_W: i32 = 4;
-        const CERT_STORE_SAVE_TO_MEMORY: i32 = 2;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_STORE_SAVE_TO {
+            CERT_STORE_SAVE_TO_FILE = 1,
+            CERT_STORE_SAVE_TO_FILENAME = 4,
+            CERT_STORE_SAVE_TO_FILENAME_A = 3,
+            CERT_STORE_SAVE_TO_FILENAME_W = 4,
+            CERT_STORE_SAVE_TO_MEMORY = 2,
+        }
         const CERT_STORE_SET_LOCALIZED_NAME_FLAG: i32 = 2;
         const CERT_STORE_SHARE_CONTEXT_FLAG: i32 = 128;
         const CERT_STORE_SHARE_STORE_FLAG: i32 = 64;
@@ -1571,10 +1699,22 @@ mod Windows {
         const CERT_STORE_TIME_VALIDITY_FLAG: i32 = 2;
         const CERT_STORE_UNSAFE_PHYSICAL_FLAG: i32 = 32;
         const CERT_STORE_UPDATE_KEYID_FLAG: i32 = 1024;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_STRING_TYPE {
+            CERT_SIMPLE_NAME_STR = 1,
+            CERT_OID_NAME_STR = 2,
+            CERT_X500_NAME_STR = 3,
+        }
         #[encoding("utf-16")]
         const CERT_STRONG_SIGN_ECDSA_ALGORITHM: String = "ECDSA";
-        const CERT_STRONG_SIGN_ENABLE_CRL_CHECK: i32 = 1;
-        const CERT_STRONG_SIGN_ENABLE_OCSP_CHECK: i32 = 2;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CERT_STRONG_SIGN_FLAGS {
+            CERT_STRONG_SIGN_ENABLE_CRL_CHECK = 1,
+            CERT_STRONG_SIGN_ENABLE_OCSP_CHECK = 2,
+        }
         const CERT_STRONG_SIGN_OID_INFO_CHOICE: i32 = 2;
         struct CERT_STRONG_SIGN_PARA {
             cbSize: u32,
@@ -1586,7 +1726,7 @@ mod Windows {
             },
         }
         struct CERT_STRONG_SIGN_SERIALIZED_INFO {
-            dwFlags: u32,
+            dwFlags: CERT_STRONG_SIGN_FLAGS,
             pwszCNGSignHashAlgids: PWSTR,
             pwszCNGPubKeyMinBitLengths: PWSTR,
         }
@@ -1610,6 +1750,12 @@ mod Windows {
         const CERT_SYSTEM_STORE_CURRENT_USER_GROUP_POLICY_ID: i32 = 7;
         const CERT_SYSTEM_STORE_CURRENT_USER_ID: i32 = 1;
         const CERT_SYSTEM_STORE_DEFER_READ_FLAG: i32 = 536870912;
+        #[repr(i32)]
+        #[scoped]
+        enum CERT_SYSTEM_STORE_FLAGS {
+            CERT_SYSTEM_STORE_LOCATION_MASK = 16711680,
+            CERT_SYSTEM_STORE_RELOCATE_FLAG = -2147483648,
+        }
         struct CERT_SYSTEM_STORE_INFO {
             cbSize: u32,
         }
@@ -1621,10 +1767,8 @@ mod Windows {
         const CERT_SYSTEM_STORE_LOCAL_MACHINE_ID: i32 = 2;
         const CERT_SYSTEM_STORE_LOCAL_MACHINE_WCOS: i32 = 655360;
         const CERT_SYSTEM_STORE_LOCAL_MACHINE_WCOS_ID: i32 = 10;
-        const CERT_SYSTEM_STORE_LOCATION_MASK: i32 = 16711680;
         const CERT_SYSTEM_STORE_LOCATION_SHIFT: i32 = 16;
         const CERT_SYSTEM_STORE_MASK: u32 = 4294901760;
-        const CERT_SYSTEM_STORE_RELOCATE_FLAG: u32 = 2147483648;
         struct CERT_SYSTEM_STORE_RELOCATE_PARA {
             Anonymous: union {
                 hKeyBase: HKEY,
@@ -1748,7 +1892,6 @@ mod Windows {
         const CERT_VERIFY_REV_SERVER_OCSP_WIRE_ONLY_FLAG: i32 = 32;
         const CERT_VERIFY_TRUSTED_SIGNERS_FLAG: i32 = 2;
         const CERT_VERIFY_UPDATED_CTL_FLAG: i32 = 1;
-        const CERT_X500_NAME_STR: i32 = 3;
         struct CERT_X942_DH_PARAMETERS {
             p: CRYPT_UINT_BLOB,
             g: CRYPT_UINT_BLOB,
@@ -2010,7 +2153,6 @@ mod Windows {
             dwSignerType: u32,
             pvSigner: *mut void,
         }
-        const CMSG_DATA: i32 = 1;
         const CMSG_DATA_FLAG: i32 = 2;
         const CMSG_DEFAULT_INSTALLABLE_FUNC_OID: PCSTR = 1;
         const CMSG_DETACHED_FLAG: i32 = 4;
@@ -2028,7 +2170,6 @@ mod Windows {
         }
         const CMSG_ENCRYPTED_FLAG: i32 = 64;
         const CMSG_ENCRYPT_PARAM: i32 = 26;
-        const CMSG_ENVELOPED: i32 = 3;
         const CMSG_ENVELOPED_DATA_CMS_VERSION: i32 = 2;
         const CMSG_ENVELOPED_DATA_PKCS_1_5_VERSION: i32 = 0;
         const CMSG_ENVELOPED_DATA_V0: i32 = 0;
@@ -2047,7 +2188,6 @@ mod Windows {
         const CMSG_ENVELOPED_RECIPIENT_V3: i32 = 3;
         const CMSG_ENVELOPED_RECIPIENT_V4: i32 = 4;
         const CMSG_ENVELOPE_ALGORITHM_PARAM: i32 = 15;
-        const CMSG_HASHED: i32 = 5;
         const CMSG_HASHED_DATA_CMS_VERSION: i32 = 2;
         const CMSG_HASHED_DATA_PKCS_1_5_VERSION: i32 = 0;
         const CMSG_HASHED_DATA_V0: i32 = 0;
@@ -2074,7 +2214,7 @@ mod Windows {
             dwRecipientIndex: u32,
             KeyEncryptionAlgorithm: CRYPT_ALGORITHM_IDENTIFIER,
             UserKeyingMaterial: CRYPT_DATA_BLOB,
-            dwOriginatorChoice: u32,
+            dwOriginatorChoice: CMSG_KEY_AGREE_ORIGINATOR,
             Anonymous: union {
                 OriginatorCertId: CERT_ID,
                 OriginatorPublicKeyInfo: CERT_PUBLIC_KEY_INFO,
@@ -2083,13 +2223,22 @@ mod Windows {
             rgpKeyAgreeKeyEncryptInfo: *mut PCMSG_KEY_AGREE_KEY_ENCRYPT_INFO,
             dwFlags: u32,
         }
-        const CMSG_KEY_AGREE_EPHEMERAL_KEY_CHOICE: i32 = 1;
         struct CMSG_KEY_AGREE_KEY_ENCRYPT_INFO {
             cbSize: u32,
             EncryptedKey: CRYPT_DATA_BLOB,
         }
-        const CMSG_KEY_AGREE_ORIGINATOR_CERT: i32 = 1;
-        const CMSG_KEY_AGREE_ORIGINATOR_PUBLIC_KEY: i32 = 2;
+        #[repr(i32)]
+        #[scoped]
+        enum CMSG_KEY_AGREE_OPTION {
+            CMSG_KEY_AGREE_EPHEMERAL_KEY_CHOICE = 1,
+            CMSG_KEY_AGREE_STATIC_KEY_CHOICE = 2,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum CMSG_KEY_AGREE_ORIGINATOR {
+            CMSG_KEY_AGREE_ORIGINATOR_CERT = 1,
+            CMSG_KEY_AGREE_ORIGINATOR_PUBLIC_KEY = 2,
+        }
         const CMSG_KEY_AGREE_RECIPIENT: i32 = 2;
         struct CMSG_KEY_AGREE_RECIPIENT_ENCODE_INFO {
             cbSize: u32,
@@ -2099,7 +2248,7 @@ mod Windows {
             pvKeyWrapAuxInfo: *mut void,
             hCryptProv: HCRYPTPROV_LEGACY,
             dwKeySpec: u32,
-            dwKeyChoice: u32,
+            dwKeyChoice: CMSG_KEY_AGREE_OPTION,
             Anonymous: union {
                 pEphemeralAlgorithm: PCRYPT_ALGORITHM_IDENTIFIER,
                 pSenderId: PCERT_ID,
@@ -2110,7 +2259,7 @@ mod Windows {
         }
         struct CMSG_KEY_AGREE_RECIPIENT_INFO {
             dwVersion: u32,
-            dwOriginatorChoice: u32,
+            dwOriginatorChoice: CMSG_KEY_AGREE_ORIGINATOR,
             Anonymous: union {
                 OriginatorCertId: CERT_ID,
                 OriginatorPublicKeyInfo: CERT_PUBLIC_KEY_INFO,
@@ -2120,7 +2269,6 @@ mod Windows {
             cRecipientEncryptedKeys: u32,
             rgpRecipientEncryptedKeys: *mut PCMSG_RECIPIENT_ENCRYPTED_KEY_INFO,
         }
-        const CMSG_KEY_AGREE_STATIC_KEY_CHOICE: i32 = 2;
         const CMSG_KEY_AGREE_VERSION: i32 = 3;
         const CMSG_KEY_TRANS_CMS_VERSION: i32 = 2;
         const CMSG_KEY_TRANS_ENCRYPT_FREE_OBJID_FLAG: i32 = 2;
@@ -2249,8 +2397,6 @@ mod Windows {
         }
         const CMSG_RECIPIENT_INDEX_PARAM: i32 = 18;
         const CMSG_RECIPIENT_INFO_PARAM: i32 = 19;
-        const CMSG_SIGNED: i32 = 2;
-        const CMSG_SIGNED_AND_ENVELOPED: i32 = 4;
         struct CMSG_SIGNED_AND_ENVELOPED_ENCODE_INFO {
             cbSize: u32,
             SignedInfo: CMSG_SIGNED_ENCODE_INFO,
@@ -2362,7 +2508,7 @@ mod Windows {
         const CREDENTIAL_OID_PASSWORD_CREDENTIALS_W: PCSTR = 2;
         type CRL_BLOB = CRYPT_INTEGER_BLOB;
         struct CRL_CONTEXT {
-            dwCertEncodingType: u32,
+            dwCertEncodingType: CERT_QUERY_ENCODING_TYPE,
             pbCrlEncoded: *mut u8,
             cbCrlEncoded: u32,
             pCrlInfo: PCRL_INFO,
@@ -2428,22 +2574,14 @@ mod Windows {
         }
         const CRL_REASON_AA_COMPROMISE: i32 = 10;
         const CRL_REASON_AA_COMPROMISE_FLAG: i32 = 128;
-        const CRL_REASON_AFFILIATION_CHANGED: i32 = 3;
         const CRL_REASON_AFFILIATION_CHANGED_FLAG: i32 = 16;
-        const CRL_REASON_CA_COMPROMISE: i32 = 2;
         const CRL_REASON_CA_COMPROMISE_FLAG: i32 = 32;
-        const CRL_REASON_CERTIFICATE_HOLD: i32 = 6;
         const CRL_REASON_CERTIFICATE_HOLD_FLAG: i32 = 2;
-        const CRL_REASON_CESSATION_OF_OPERATION: i32 = 5;
         const CRL_REASON_CESSATION_OF_OPERATION_FLAG: i32 = 4;
-        const CRL_REASON_KEY_COMPROMISE: i32 = 1;
         const CRL_REASON_KEY_COMPROMISE_FLAG: i32 = 64;
         const CRL_REASON_PRIVILEGE_WITHDRAWN: i32 = 9;
         const CRL_REASON_PRIVILEGE_WITHDRAWN_FLAG: i32 = 1;
-        const CRL_REASON_REMOVE_FROM_CRL: i32 = 8;
-        const CRL_REASON_SUPERSEDED: i32 = 4;
         const CRL_REASON_SUPERSEDED_FLAG: i32 = 8;
-        const CRL_REASON_UNSPECIFIED: i32 = 0;
         const CRL_REASON_UNUSED_FLAG: i32 = 128;
         struct CRL_REVOCATION_INFO {
             pCrlEntry: PCRL_ENTRY,
@@ -2578,16 +2716,21 @@ mod Windows {
             Feedback: [u8; 8],
         }
         const CRYPT_ACCUMULATIVE_TIMEOUT: i32 = 2048;
-        const CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG: i32 = 65536;
-        const CRYPT_ACQUIRE_CACHE_FLAG: i32 = 1;
-        const CRYPT_ACQUIRE_COMPARE_KEY_FLAG: i32 = 4;
-        const CRYPT_ACQUIRE_NCRYPT_KEY_FLAGS_MASK: i32 = 458752;
-        const CRYPT_ACQUIRE_NO_HEALING: i32 = 8;
-        const CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG: i32 = 262144;
-        const CRYPT_ACQUIRE_PREFER_NCRYPT_KEY_FLAG: i32 = 131072;
-        const CRYPT_ACQUIRE_SILENT_FLAG: i32 = 64;
-        const CRYPT_ACQUIRE_USE_PROV_INFO_FLAG: i32 = 2;
-        const CRYPT_ACQUIRE_WINDOW_HANDLE_FLAG: i32 = 128;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CRYPT_ACQUIRE_FLAGS {
+            CRYPT_ACQUIRE_CACHE_FLAG = 1,
+            CRYPT_ACQUIRE_USE_PROV_INFO_FLAG = 2,
+            CRYPT_ACQUIRE_COMPARE_KEY_FLAG = 4,
+            CRYPT_ACQUIRE_NO_HEALING = 8,
+            CRYPT_ACQUIRE_SILENT_FLAG = 64,
+            CRYPT_ACQUIRE_WINDOW_HANDLE_FLAG = 128,
+            CRYPT_ACQUIRE_NCRYPT_KEY_FLAGS_MASK = 458752,
+            CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG = 65536,
+            CRYPT_ACQUIRE_PREFER_NCRYPT_KEY_FLAG = 131072,
+            CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG = 262144,
+        }
         struct CRYPT_AES_128_KEY_STATE {
             Key: [u8; 16],
             IV: [u8; 16],
@@ -2607,7 +2750,6 @@ mod Windows {
             pszObjId: PSTR,
             Parameters: CRYPT_OBJID_BLOB,
         }
-        const CRYPT_ARCHIVABLE: i32 = 16384;
         const CRYPT_ARCHIVE: i32 = 256;
         const CRYPT_ASN_ENCODING: i32 = 1;
         const CRYPT_ASYNC_RETRIEVAL: i32 = 16;
@@ -2638,7 +2780,6 @@ mod Windows {
             cBlob: u32,
             rgBlob: PCRYPT_DATA_BLOB,
         }
-        const CRYPT_BLOB_VER3: i32 = 128;
         const CRYPT_CACHE_ONLY_RETRIEVAL: i32 = 2;
         const CRYPT_CHECK_FRESHNESS_TIME_VALIDITY: i32 = 1024;
         struct CRYPT_CONTENT_INFO {
@@ -2650,9 +2791,7 @@ mod Windows {
             cValue: u32,
             rgValue: PCRYPT_DER_BLOB,
         }
-        const CRYPT_CREATE_IV: i32 = 512;
         const CRYPT_CREATE_NEW_FLUSH_ENTRY: i32 = 268435456;
-        const CRYPT_CREATE_SALT: i32 = 4;
         struct CRYPT_CREDENTIALS {
             cbSize: u32,
             pszCredentialsOid: PCSTR,
@@ -2664,7 +2803,6 @@ mod Windows {
             Signature: CRYPT_BIT_BLOB,
         }
         type CRYPT_DATA_BLOB = CRYPT_INTEGER_BLOB;
-        const CRYPT_DATA_KEY: i32 = 2048;
         const CRYPT_DECODE_ALLOC_FLAG: i32 = 32768;
         const CRYPT_DECODE_ENABLE_IA5CONVERSION_FLAG: i32 = 100663296;
         const CRYPT_DECODE_ENABLE_PUNYCODE_FLAG: i32 = 33554432;
@@ -2687,21 +2825,29 @@ mod Windows {
         }
         const CRYPT_DECRYPT_RSA_NO_PADDING_CHECK: i32 = 32;
         const CRYPT_DEFAULT_CONTAINER_OPTIONAL: i32 = 128;
-        const CRYPT_DEFAULT_CONTEXT_AUTO_RELEASE_FLAG: i32 = 1;
-        const CRYPT_DEFAULT_CONTEXT_CERT_SIGN_OID: i32 = 1;
-        const CRYPT_DEFAULT_CONTEXT_MULTI_CERT_SIGN_OID: i32 = 2;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CRYPT_DEFAULT_CONTEXT_FLAGS {
+            CRYPT_DEFAULT_CONTEXT_AUTO_RELEASE_FLAG = 1,
+            CRYPT_DEFAULT_CONTEXT_PROCESS_FLAG = 2,
+        }
         struct CRYPT_DEFAULT_CONTEXT_MULTI_OID_PARA {
             cOID: u32,
             rgpszOID: *mut PSTR,
         }
-        const CRYPT_DEFAULT_CONTEXT_PROCESS_FLAG: i32 = 2;
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_DEFAULT_CONTEXT_TYPE {
+            CRYPT_DEFAULT_CONTEXT_CERT_SIGN_OID = 1,
+            CRYPT_DEFAULT_CONTEXT_MULTI_CERT_SIGN_OID = 2,
+        }
         #[encoding("ansi")]
         const CRYPT_DEFAULT_OID: String = "DEFAULT";
         const CRYPT_DELETEKEYSET: i32 = 16;
         const CRYPT_DELETE_DEFAULT: i32 = 4;
         const CRYPT_DELETE_KEYSET: i32 = 16;
         type CRYPT_DER_BLOB = CRYPT_INTEGER_BLOB;
-        const CRYPT_DESTROYKEY: i32 = 4;
         struct CRYPT_DES_KEY_STATE {
             Key: [u8; 8],
             IV: [u8; 8],
@@ -2758,14 +2904,17 @@ mod Windows {
             pwszValue: PWSTR,
         }
         const CRYPT_EXPORT: i32 = 4;
-        const CRYPT_EXPORTABLE: i32 = 1;
         const CRYPT_EXPORT_KEY: i32 = 64;
         const CRYPT_EXT_OR_ATTR_OID_GROUP_ID: i32 = 6;
         const CRYPT_FAILED: i32 = 0;
         const CRYPT_FASTSGC: i32 = 2;
-        const CRYPT_FIND_MACHINE_KEYSET_FLAG: i32 = 2;
-        const CRYPT_FIND_SILENT_KEYSET_FLAG: i32 = 64;
-        const CRYPT_FIND_USER_KEYSET_FLAG: i32 = 1;
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_FIND_FLAGS {
+            CRYPT_FIND_USER_KEYSET_FLAG = 1,
+            CRYPT_FIND_MACHINE_KEYSET_FLAG = 2,
+            CRYPT_FIND_SILENT_KEYSET_FLAG = 64,
+        }
         const CRYPT_FIRST: i32 = 1;
         const CRYPT_FIRST_ALG_OID_GROUP_ID: i32 = 1;
         const CRYPT_FLAG_IPSEC: i32 = 16;
@@ -2774,7 +2923,6 @@ mod Windows {
         const CRYPT_FLAG_SSL2: i32 = 2;
         const CRYPT_FLAG_SSL3: i32 = 4;
         const CRYPT_FLAG_TLS1: i32 = 8;
-        const CRYPT_FORCE_KEY_PROTECTION_HIGH: i32 = 32768;
         const CRYPT_FORMAT_COMMA: i32 = 4096;
         const CRYPT_FORMAT_CRLF: i32 = 512;
         const CRYPT_FORMAT_OID: i32 = 4;
@@ -2797,10 +2945,15 @@ mod Windows {
             pChainPara: PCERT_REVOCATION_CHAIN_PARA,
             pDeltaCrlIndicator: PCRYPT_INTEGER_BLOB,
         }
-        const CRYPT_GET_URL_FROM_AUTH_ATTRIBUTE: i32 = 8;
-        const CRYPT_GET_URL_FROM_EXTENSION: i32 = 2;
-        const CRYPT_GET_URL_FROM_PROPERTY: i32 = 1;
-        const CRYPT_GET_URL_FROM_UNAUTH_ATTRIBUTE: i32 = 4;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CRYPT_GET_URL_FLAGS {
+            CRYPT_GET_URL_FROM_PROPERTY = 1,
+            CRYPT_GET_URL_FROM_EXTENSION = 2,
+            CRYPT_GET_URL_FROM_UNAUTH_ATTRIBUTE = 4,
+            CRYPT_GET_URL_FROM_AUTH_ATTRIBUTE = 8,
+        }
         const CRYPT_HASH_ALG_OID_GROUP_ID: i32 = 1;
         type CRYPT_HASH_BLOB = CRYPT_INTEGER_BLOB;
         struct CRYPT_HASH_INFO {
@@ -2821,26 +2974,78 @@ mod Windows {
         const CRYPT_IMPL_SOFTWARE: i32 = 2;
         const CRYPT_IMPL_UNKNOWN: i32 = 4;
         const CRYPT_IMPORT_KEY: i32 = 128;
-        const CRYPT_INITIATOR: i32 = 64;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CRYPT_IMPORT_PUBLIC_KEY_FLAGS {
+            CRYPT_OID_INFO_PUBKEY_SIGN_KEY_FLAG = 2147483648,
+            CRYPT_OID_INFO_PUBKEY_ENCRYPT_KEY_FLAG = 1073741824,
+        }
         const CRYPT_INSTALL_OID_FUNC_BEFORE_FLAG: i32 = 1;
         const CRYPT_INSTALL_OID_INFO_BEFORE_FLAG: i32 = 1;
         struct CRYPT_INTEGER_BLOB {
             cbData: u32,
             pbData: *mut u8,
         }
-        const CRYPT_IPSEC_HMAC_KEY: i32 = 256;
         const CRYPT_KDF_OID_GROUP_ID: i32 = 10;
         const CRYPT_KEEP_TIME_VALID: i32 = 128;
-        const CRYPT_KEK: i32 = 1024;
         const CRYPT_KEYID_ALLOC_FLAG: i32 = 32768;
         const CRYPT_KEYID_DELETE_FLAG: i32 = 16;
         const CRYPT_KEYID_MACHINE_FLAG: i32 = 32;
         const CRYPT_KEYID_SET_NEW_FLAG: i32 = 8192;
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum CRYPT_KEY_FLAGS {
+            CRYPT_EXPORTABLE = 1,
+            CRYPT_USER_PROTECTED = 2,
+            CRYPT_ARCHIVABLE = 16384,
+            CRYPT_CREATE_IV = 512,
+            CRYPT_CREATE_SALT = 4,
+            CRYPT_DATA_KEY = 2048,
+            CRYPT_FORCE_KEY_PROTECTION_HIGH = 32768,
+            CRYPT_KEK = 1024,
+            CRYPT_INITIATOR = 64,
+            CRYPT_NO_SALT = 16,
+            CRYPT_ONLINE = 128,
+            CRYPT_PREGEN = 64,
+            CRYPT_RECIPIENT = 16,
+            CRYPT_SF = 256,
+            CRYPT_SGCKEY = 8192,
+            CRYPT_VOLATILE = 4096,
+            CRYPT_MACHINE_KEYSET = 32,
+            CRYPT_USER_KEYSET = 4096,
+            PKCS12_PREFER_CNG_KSP = 256,
+            PKCS12_ALWAYS_CNG_KSP = 512,
+            PKCS12_ALLOW_OVERWRITE_KEY = 16384,
+            PKCS12_NO_PERSIST_KEY = 32768,
+            PKCS12_INCLUDE_EXTENDED_PROPERTIES = 16,
+            CRYPT_OAEP = 64,
+            CRYPT_BLOB_VER3 = 128,
+            CRYPT_DESTROYKEY = 4,
+            CRYPT_SSL2_FALLBACK = 2,
+            CRYPT_Y_ONLY = 1,
+            CRYPT_IPSEC_HMAC_KEY = 256,
+            CERT_SET_KEY_PROV_HANDLE_PROP_ID = 1,
+            CERT_SET_KEY_CONTEXT_PROP_ID = 1,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_KEY_PARAM_ID {
+            KP_ALGID = 7,
+            KP_CERTIFICATE = 26,
+            KP_PERMISSIONS = 6,
+            KP_SALT = 2,
+            KP_SALT_EX = 10,
+            KP_BLOCKLEN = 8,
+            KP_GET_USE_COUNT = 42,
+            KP_KEYLEN = 9,
+        }
         struct CRYPT_KEY_PROV_INFO {
             pwszContainerName: PWSTR,
             pwszProvName: PWSTR,
             dwProvType: u32,
-            dwFlags: u32,
+            dwFlags: CRYPT_KEY_FLAGS,
             cProvParam: u32,
             rgProvParam: PCRYPT_KEY_PROV_PARAM,
             dwKeySpec: u32,
@@ -2853,12 +3058,12 @@ mod Windows {
         }
         struct CRYPT_KEY_SIGN_MESSAGE_PARA {
             cbSize: u32,
-            dwMsgAndCertEncodingType: u32,
+            dwMsgAndCertEncodingType: CERT_QUERY_ENCODING_TYPE,
             Anonymous: union {
                 hCryptProv: HCRYPTPROV,
                 hNCryptKey: NCRYPT_KEY_HANDLE,
             },
-            dwKeySpec: u32,
+            dwKeySpec: CERT_KEY_SPEC,
             HashAlgorithm: CRYPT_ALGORITHM_IDENTIFIER,
             pvHashAuxInfo: *mut void,
             PubKeyAlgorithm: CRYPT_ALGORITHM_IDENTIFIER,
@@ -2880,7 +3085,6 @@ mod Windows {
         const CRYPT_LOCALIZED_NAME_OID: String = "LocalizedNames";
         const CRYPT_MAC: i32 = 32;
         const CRYPT_MACHINE_DEFAULT: i32 = 1;
-        const CRYPT_MACHINE_KEYSET: i32 = 32;
         struct CRYPT_MASK_GEN_ALGORITHM {
             pszObjId: PSTR,
             HashAlgorithm: CRYPT_ALGORITHM_IDENTIFIER,
@@ -2901,6 +3105,15 @@ mod Windows {
         const CRYPT_MODE_ECB: i32 = 2;
         const CRYPT_MODE_OFB: i32 = 3;
         const CRYPT_MODE_OFBP: i32 = 8;
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_MSG_TYPE {
+            CMSG_DATA = 1,
+            CMSG_SIGNED = 2,
+            CMSG_ENVELOPED = 3,
+            CMSG_SIGNED_AND_ENVELOPED = 4,
+            CMSG_HASHED = 5,
+        }
         const CRYPT_NDR_ENCODING: i32 = 2;
         const CRYPT_NEWKEYSET: i32 = 8;
         const CRYPT_NEXT: i32 = 2;
@@ -2908,8 +3121,6 @@ mod Windows {
         const CRYPT_NOT_MODIFIED_RETRIEVAL: i32 = 4194304;
         const CRYPT_NO_AUTH_RETRIEVAL: i32 = 131072;
         const CRYPT_NO_OCSP_FAILOVER_TO_CRL_RETRIEVAL: i32 = 33554432;
-        const CRYPT_NO_SALT: i32 = 16;
-        const CRYPT_OAEP: i32 = 64;
         const CRYPT_OBJECT_LOCATOR_FIRST_RESERVED_USER_NAME_TYPE: i32 = 33;
         const CRYPT_OBJECT_LOCATOR_LAST_RESERVED_NAME_TYPE: i32 = 32;
         const CRYPT_OBJECT_LOCATOR_LAST_RESERVED_USER_NAME_TYPE: i32 = 65535;
@@ -2921,10 +3132,14 @@ mod Windows {
             pfnFree: PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_FREE,
             pfnFreeIdentifier: PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_FREE_IDENTIFIER,
         }
-        const CRYPT_OBJECT_LOCATOR_RELEASE_DLL_UNLOAD: i32 = 4;
-        const CRYPT_OBJECT_LOCATOR_RELEASE_PROCESS_EXIT: i32 = 3;
-        const CRYPT_OBJECT_LOCATOR_RELEASE_SERVICE_STOP: i32 = 2;
-        const CRYPT_OBJECT_LOCATOR_RELEASE_SYSTEM_SHUTDOWN: i32 = 1;
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_OBJECT_LOCATOR_RELEASE_REASON {
+            CRYPT_OBJECT_LOCATOR_RELEASE_SYSTEM_SHUTDOWN = 1,
+            CRYPT_OBJECT_LOCATOR_RELEASE_SERVICE_STOP = 2,
+            CRYPT_OBJECT_LOCATOR_RELEASE_PROCESS_EXIT = 3,
+            CRYPT_OBJECT_LOCATOR_RELEASE_DLL_UNLOAD = 4,
+        }
         const CRYPT_OBJECT_LOCATOR_SPN_NAME_TYPE: i32 = 1;
         type CRYPT_OBJID_BLOB = CRYPT_INTEGER_BLOB;
         struct CRYPT_OBJID_TABLE {
@@ -3012,10 +3227,8 @@ mod Windows {
         const CRYPT_OID_INFO_OID_KEY_FLAGS_MASK: u32 = 4294901760;
         #[encoding("utf-16")]
         const CRYPT_OID_INFO_PREHASH_ALGORITHM: String = "PreHash";
-        const CRYPT_OID_INFO_PUBKEY_ENCRYPT_KEY_FLAG: i32 = 1073741824;
         const CRYPT_OID_INFO_PUBKEY_PREHASH_KEY_FLAG: i32 = 67108864;
         const CRYPT_OID_INFO_PUBKEY_PURE_KEY_FLAG: i32 = 134217728;
-        const CRYPT_OID_INFO_PUBKEY_SIGN_KEY_FLAG: u32 = 2147483648;
         const CRYPT_OID_INFO_SIGN_KEY: i32 = 4;
         const CRYPT_OID_INHIBIT_SIGNATURE_FORMAT_FLAG: i32 = 1;
         const CRYPT_OID_NO_NULL_ALGORITHM_PARA_FLAG: i32 = 4;
@@ -3069,7 +3282,6 @@ mod Windows {
         const CRYPT_OID_VERIFY_ENCODED_SIGNATURE_FUNC: String = "CryptDllVerifyEncodedSignature";
         #[encoding("ansi")]
         const CRYPT_OID_VERIFY_REVOCATION_FUNC: String = "CertDllVerifyRevocation";
-        const CRYPT_ONLINE: i32 = 128;
         const CRYPT_OWF_REPL_LM_HASH: i32 = 1;
         const CRYPT_PARAM_ASYNC_RETRIEVAL_COMPLETION: PCSTR = 1;
         const CRYPT_PARAM_CANCEL_ASYNC_RETRIEVAL: PCSTR = 2;
@@ -3103,7 +3315,6 @@ mod Windows {
             pVoidDecryptFunc: *mut void,
         }
         const CRYPT_POLICY_OID_GROUP_ID: i32 = 8;
-        const CRYPT_PREGEN: i32 = 64;
         type CRYPT_PRIVATE_KEY_BLOB_AND_PARAMS = CRYPT_PKCS8_IMPORT_PARAMS;
         struct CRYPT_PRIVATE_KEY_INFO {
             Version: u32,
@@ -3136,7 +3347,6 @@ mod Windows {
         }
         const CRYPT_RDN_ATTR_OID_GROUP_ID: i32 = 5;
         const CRYPT_READ: i32 = 8;
-        const CRYPT_RECIPIENT: i32 = 16;
         const CRYPT_REGISTER_FIRST_INDEX: i32 = 0;
         const CRYPT_REGISTER_LAST_INDEX: u32 = 4294967295;
         struct CRYPT_RETRIEVE_AUX_INFO {
@@ -3173,9 +3383,13 @@ mod Windows {
             rgValue: PCRYPT_DER_BLOB,
         }
         const CRYPT_SERVER: i32 = 1024;
-        const CRYPT_SF: i32 = 256;
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_SET_HASH_PARAM {
+            HP_HMAC_INFO = 5,
+            HP_HASHVAL = 2,
+        }
         const CRYPT_SGC: i32 = 1;
-        const CRYPT_SGCKEY: i32 = 8192;
         const CRYPT_SGC_ENUM: i32 = 4;
         const CRYPT_SIGN_ALG_OID_GROUP_ID: i32 = 4;
         struct CRYPT_SIGN_MESSAGE_PARA {
@@ -3209,30 +3423,33 @@ mod Windows {
             Parameters: CRYPT_OBJID_BLOB,
         }
         const CRYPT_SORTED_CTL_ENCODE_HASHED_SUBJECT_IDENTIFIER_FLAG: i32 = 65536;
-        const CRYPT_SSL2_FALLBACK: i32 = 2;
         const CRYPT_STICKY_CACHE_RETRIEVAL: i32 = 4096;
-        const CRYPT_STRING_ANY: i32 = 7;
-        const CRYPT_STRING_BASE64: i32 = 1;
-        const CRYPT_STRING_BASE64HEADER: i32 = 0;
-        const CRYPT_STRING_BASE64REQUESTHEADER: i32 = 3;
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_STRING {
+            CRYPT_STRING_BASE64HEADER = 0,
+            CRYPT_STRING_BASE64 = 1,
+            CRYPT_STRING_BINARY = 2,
+            CRYPT_STRING_BASE64REQUESTHEADER = 3,
+            CRYPT_STRING_HEX = 4,
+            CRYPT_STRING_HEXASCII = 5,
+            CRYPT_STRING_BASE64X509CRLHEADER = 9,
+            CRYPT_STRING_HEXADDR = 10,
+            CRYPT_STRING_HEXASCIIADDR = 11,
+            CRYPT_STRING_HEXRAW = 12,
+            CRYPT_STRING_STRICT = 536870912,
+            CRYPT_STRING_BASE64_ANY = 6,
+            CRYPT_STRING_ANY = 7,
+            CRYPT_STRING_HEX_ANY = 8,
+        }
         const CRYPT_STRING_BASE64URI: i32 = 13;
-        const CRYPT_STRING_BASE64X509CRLHEADER: i32 = 9;
-        const CRYPT_STRING_BASE64_ANY: i32 = 6;
-        const CRYPT_STRING_BINARY: i32 = 2;
         const CRYPT_STRING_ENCODEMASK: i32 = 255;
         const CRYPT_STRING_HASHDATA: i32 = 268435456;
-        const CRYPT_STRING_HEX: i32 = 4;
-        const CRYPT_STRING_HEXADDR: i32 = 10;
-        const CRYPT_STRING_HEXASCII: i32 = 5;
-        const CRYPT_STRING_HEXASCIIADDR: i32 = 11;
-        const CRYPT_STRING_HEXRAW: i32 = 12;
-        const CRYPT_STRING_HEX_ANY: i32 = 8;
         const CRYPT_STRING_NOCR: u32 = 2147483648;
         const CRYPT_STRING_NOCRLF: i32 = 1073741824;
         const CRYPT_STRING_PERCENTESCAPE: i32 = 134217728;
         const CRYPT_STRING_RESERVED100: i32 = 256;
         const CRYPT_STRING_RESERVED200: i32 = 512;
-        const CRYPT_STRING_STRICT: i32 = 536870912;
         const CRYPT_SUCCEED: i32 = 1;
         const CRYPT_TEMPLATE_OID_GROUP_ID: i32 = 9;
         struct CRYPT_TIMESTAMP_ACCURACY {
@@ -3267,7 +3484,7 @@ mod Windows {
             rgExtension: PCERT_EXTENSION,
         }
         struct CRYPT_TIMESTAMP_REQUEST {
-            dwVersion: u32,
+            dwVersion: CRYPT_TIMESTAMP_VERSION,
             HashAlgorithm: CRYPT_ALGORITHM_IDENTIFIER,
             HashedMessage: CRYPT_DER_BLOB,
             pszTSAPolicyId: PSTR,
@@ -3277,11 +3494,26 @@ mod Windows {
             rgExtension: PCERT_EXTENSION,
         }
         struct CRYPT_TIMESTAMP_RESPONSE {
-            dwStatus: u32,
+            dwStatus: CRYPT_TIMESTAMP_RESPONSE_STATUS,
             cFreeText: u32,
             rgFreeText: *mut PWSTR,
             FailureInfo: CRYPT_BIT_BLOB,
             ContentInfo: CRYPT_DER_BLOB,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_TIMESTAMP_RESPONSE_STATUS {
+            TIMESTAMP_STATUS_GRANTED = 0,
+            TIMESTAMP_STATUS_GRANTED_WITH_MODS = 1,
+            TIMESTAMP_STATUS_REJECTED = 2,
+            TIMESTAMP_STATUS_WAITING = 3,
+            TIMESTAMP_STATUS_REVOCATION_WARNING = 4,
+            TIMESTAMP_STATUS_REVOKED = 5,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_TIMESTAMP_VERSION {
+            TIMESTAMP_VERSION = 1,
         }
         struct CRYPT_TIME_STAMP_REQUEST_INFO {
             pszTimeStampAlgorithm: PSTR,
@@ -3311,18 +3543,20 @@ mod Windows {
         }
         const CRYPT_USERDATA: i32 = 1;
         const CRYPT_USER_DEFAULT: i32 = 2;
-        const CRYPT_USER_KEYSET: i32 = 4096;
-        const CRYPT_USER_PROTECTED: i32 = 2;
         const CRYPT_USER_PROTECTED_STRONG: i32 = 1048576;
         const CRYPT_VERIFYCONTEXT: u32 = 4026531840;
+        #[repr(i32)]
+        #[scoped]
+        enum CRYPT_VERIFY_CERT_FLAGS {
+            CRYPT_VERIFY_CERT_SIGN_DISABLE_MD2_MD4_FLAG = 1,
+            CRYPT_VERIFY_CERT_SIGN_SET_STRONG_PROPERTIES_FLAG = 2,
+            CRYPT_VERIFY_CERT_SIGN_RETURN_STRONG_PROPERTIES_FLAG = 4,
+        }
         const CRYPT_VERIFY_CERT_SIGN_CHECK_WEAK_HASH_FLAG: i32 = 8;
-        const CRYPT_VERIFY_CERT_SIGN_DISABLE_MD2_MD4_FLAG: i32 = 1;
         const CRYPT_VERIFY_CERT_SIGN_ISSUER_CERT: i32 = 2;
         const CRYPT_VERIFY_CERT_SIGN_ISSUER_CHAIN: i32 = 3;
         const CRYPT_VERIFY_CERT_SIGN_ISSUER_NULL: i32 = 4;
         const CRYPT_VERIFY_CERT_SIGN_ISSUER_PUBKEY: i32 = 1;
-        const CRYPT_VERIFY_CERT_SIGN_RETURN_STRONG_PROPERTIES_FLAG: i32 = 4;
-        const CRYPT_VERIFY_CERT_SIGN_SET_STRONG_PROPERTIES_FLAG: i32 = 2;
         struct CRYPT_VERIFY_CERT_SIGN_STRONG_PROPERTIES_INFO {
             CertSignHashCNGAlgPropData: CRYPT_DATA_BLOB,
             CertIssuerPubKeyBitLengthPropData: CRYPT_DATA_BLOB,
@@ -3345,7 +3579,6 @@ mod Windows {
             pfnGetSignerCertificate: PFN_CRYPT_GET_SIGNER_CERTIFICATE,
             pvGetArg: *mut void,
         }
-        const CRYPT_VOLATILE: i32 = 4096;
         const CRYPT_WIRE_ONLY_RETRIEVAL: i32 = 4;
         const CRYPT_WRITE: i32 = 16;
         const CRYPT_X931_FORMAT: i32 = 4;
@@ -3358,7 +3591,6 @@ mod Windows {
             PubInfo: CRYPT_DATA_BLOB,
         }
         const CRYPT_X942_PUB_INFO_BYTE_LENGTH: i32 = 64;
-        const CRYPT_Y_ONLY: i32 = 1;
         struct CTL_ANY_SUBJECT_INFO {
             SubjectAlgorithm: CRYPT_ALGORITHM_IDENTIFIER,
             SubjectIdentifier: CRYPT_DATA_BLOB,
@@ -3381,21 +3613,14 @@ mod Windows {
             rgAttribute: PCRYPT_ATTRIBUTE,
         }
         const CTL_ENTRY_FROM_PROP_CHAIN_FLAG: i32 = 1;
-        const CTL_FIND_ANY: i32 = 0;
-        const CTL_FIND_EXISTING: i32 = 5;
-        const CTL_FIND_MD5_HASH: i32 = 2;
         const CTL_FIND_NO_LIST_ID_CBDATA: u32 = 4294967295;
         const CTL_FIND_NO_SIGNER_PTR: PCERT_INFO = -1;
-        const CTL_FIND_SAME_USAGE_FLAG: i32 = 1;
-        const CTL_FIND_SHA1_HASH: i32 = 1;
-        const CTL_FIND_SUBJECT: i32 = 4;
         struct CTL_FIND_SUBJECT_PARA {
             cbSize: u32,
             pUsagePara: PCTL_FIND_USAGE_PARA,
             dwSubjectType: u32,
             pvSubject: *mut void,
         }
-        const CTL_FIND_USAGE: i32 = 3;
         struct CTL_FIND_USAGE_PARA {
             cbSize: u32,
             SubjectUsage: CTL_USAGE,
@@ -3462,11 +3687,11 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertAddCertificateLinkToStore(hCertStore: HCERTSTORE, pCertContext: *const CERT_CONTEXT, dwAddDisposition: u32, ppStoreContext: *mut PCCERT_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertAddEncodedCRLToStore(#[opt] hCertStore: HCERTSTORE, dwCertEncodingType: u32, #[size_param(3)] pbCrlEncoded: *const u8, cbCrlEncoded: u32, dwAddDisposition: u32, ppCrlContext: *mut PCCRL_CONTEXT) -> BOOL;
+        extern fn CertAddEncodedCRLToStore(#[opt] hCertStore: HCERTSTORE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(3)] pbCrlEncoded: *const u8, cbCrlEncoded: u32, dwAddDisposition: u32, ppCrlContext: *mut PCCRL_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertAddEncodedCTLToStore(#[opt] hCertStore: HCERTSTORE, dwMsgAndCertEncodingType: u32, #[size_param(3)] pbCtlEncoded: *const u8, cbCtlEncoded: u32, dwAddDisposition: u32, ppCtlContext: *mut PCCTL_CONTEXT) -> BOOL;
+        extern fn CertAddEncodedCTLToStore(#[opt] hCertStore: HCERTSTORE, dwMsgAndCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(3)] pbCtlEncoded: *const u8, cbCtlEncoded: u32, dwAddDisposition: u32, ppCtlContext: *mut PCCTL_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertAddEncodedCertificateToStore(#[opt] hCertStore: HCERTSTORE, dwCertEncodingType: u32, #[size_param(3)] pbCertEncoded: *const u8, cbCertEncoded: u32, dwAddDisposition: u32, ppCertContext: *mut PCCERT_CONTEXT) -> BOOL;
+        extern fn CertAddEncodedCertificateToStore(#[opt] hCertStore: HCERTSTORE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(3)] pbCertEncoded: *const u8, cbCertEncoded: u32, dwAddDisposition: u32, ppCertContext: *mut PCCERT_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertAddEncodedCertificateToSystemStoreA(szCertStoreName: PCSTR, #[size_param(2)] pbCertEncoded: *const u8, cbCertEncoded: u32) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3488,17 +3713,17 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertCloseStore(#[opt] hCertStore: HCERTSTORE, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertCompareCertificate(dwCertEncodingType: u32, pCertId1: *const CERT_INFO, pCertId2: *const CERT_INFO) -> BOOL;
+        extern fn CertCompareCertificate(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pCertId1: *const CERT_INFO, pCertId2: *const CERT_INFO) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertCompareCertificateName(dwCertEncodingType: u32, pCertName1: *const CRYPT_INTEGER_BLOB, pCertName2: *const CRYPT_INTEGER_BLOB) -> BOOL;
+        extern fn CertCompareCertificateName(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pCertName1: *const CRYPT_INTEGER_BLOB, pCertName2: *const CRYPT_INTEGER_BLOB) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertCompareIntegerBlob(pInt1: *const CRYPT_INTEGER_BLOB, pInt2: *const CRYPT_INTEGER_BLOB) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertComparePublicKeyInfo(dwCertEncodingType: u32, pPublicKey1: *const CERT_PUBLIC_KEY_INFO, pPublicKey2: *const CERT_PUBLIC_KEY_INFO) -> BOOL;
+        extern fn CertComparePublicKeyInfo(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pPublicKey1: *const CERT_PUBLIC_KEY_INFO, pPublicKey2: *const CERT_PUBLIC_KEY_INFO) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertControlStore(hCertStore: HCERTSTORE, dwFlags: u32, dwCtrlType: u32, #[opt] pvCtrlPara: *const void) -> BOOL;
+        extern fn CertControlStore(hCertStore: HCERTSTORE, dwFlags: CERT_CONTROL_STORE_FLAGS, dwCtrlType: u32, #[opt] pvCtrlPara: *const void) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertCreateCRLContext(dwCertEncodingType: u32, #[size_param(2)] pbCrlEncoded: *const u8, cbCrlEncoded: u32) -> PCCRL_CONTEXT;
+        extern fn CertCreateCRLContext(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(2)] pbCrlEncoded: *const u8, cbCrlEncoded: u32) -> PCCRL_CONTEXT;
         #[library("CRYPT32.dll")]
         extern fn CertCreateCTLContext(dwMsgAndCertEncodingType: u32, #[size_param(2)] pbCtlEncoded: *const u8, cbCtlEncoded: u32) -> PCCTL_CONTEXT;
         #[library("CRYPT32.dll")]
@@ -3506,11 +3731,11 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertCreateCertificateChainEngine(pConfig: *const CERT_CHAIN_ENGINE_CONFIG, phChainEngine: *mut HCERTCHAINENGINE) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertCreateCertificateContext(dwCertEncodingType: u32, #[size_param(2)] pbCertEncoded: *const u8, cbCertEncoded: u32) -> PCCERT_CONTEXT;
+        extern fn CertCreateCertificateContext(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(2)] pbCertEncoded: *const u8, cbCertEncoded: u32) -> PCCERT_CONTEXT;
         #[library("CRYPT32.dll")]
         extern fn CertCreateContext(dwContextType: u32, dwEncodingType: u32, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, dwFlags: u32, #[opt] pCreatePara: *const CERT_CREATE_CONTEXT_PARA) -> *const void;
         #[library("CRYPT32.dll")]
-        extern fn CertCreateSelfSignCertificate(#[opt] hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, pSubjectIssuerBlob: *const CRYPT_INTEGER_BLOB, dwFlags: u32, #[opt] pKeyProvInfo: *const CRYPT_KEY_PROV_INFO, #[opt] pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pStartTime: *const SYSTEMTIME, #[opt] pEndTime: *const SYSTEMTIME, #[opt] pExtensions: *const CERT_EXTENSIONS) -> PCCERT_CONTEXT;
+        extern fn CertCreateSelfSignCertificate(#[opt] hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, pSubjectIssuerBlob: *const CRYPT_INTEGER_BLOB, dwFlags: CERT_CREATE_SELFSIGN_FLAGS, #[opt] pKeyProvInfo: *const CRYPT_KEY_PROV_INFO, #[opt] pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pStartTime: *const SYSTEMTIME, #[opt] pEndTime: *const SYSTEMTIME, #[opt] pExtensions: *const CERT_EXTENSIONS) -> PCCERT_CONTEXT;
         #[library("CRYPT32.dll")]
         extern fn CertDeleteCRLFromStore(pCrlContext: *const CRL_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3550,15 +3775,15 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertFindAttribute(pszObjId: PCSTR, cAttr: u32, #[len_param(1)] rgAttr: *const CRYPT_ATTRIBUTE) -> PCRYPT_ATTRIBUTE;
         #[library("CRYPT32.dll")]
-        extern fn CertFindCRLInStore(hCertStore: HCERTSTORE, dwCertEncodingType: u32, dwFindFlags: u32, dwFindType: u32, #[opt] pvFindPara: *const void, #[opt] pPrevCrlContext: *const CRL_CONTEXT) -> PCCRL_CONTEXT;
+        extern fn CertFindCRLInStore(hCertStore: HCERTSTORE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, dwFindFlags: u32, dwFindType: u32, #[opt] pvFindPara: *const void, #[opt] pPrevCrlContext: *const CRL_CONTEXT) -> PCCRL_CONTEXT;
         #[library("CRYPT32.dll")]
-        extern fn CertFindCTLInStore(hCertStore: HCERTSTORE, dwMsgAndCertEncodingType: u32, dwFindFlags: u32, dwFindType: u32, #[opt] pvFindPara: *const void, #[opt] pPrevCtlContext: *const CTL_CONTEXT) -> PCCTL_CONTEXT;
+        extern fn CertFindCTLInStore(hCertStore: HCERTSTORE, dwMsgAndCertEncodingType: u32, dwFindFlags: u32, dwFindType: CERT_FIND_TYPE, #[opt] pvFindPara: *const void, #[opt] pPrevCtlContext: *const CTL_CONTEXT) -> PCCTL_CONTEXT;
         #[library("CRYPT32.dll")]
         extern fn CertFindCertificateInCRL(pCert: *const CERT_CONTEXT, pCrlContext: *const CRL_CONTEXT, dwFlags: u32, #[reserved] pvReserved: *const void, ppCrlEntry: *mut PCRL_ENTRY) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertFindCertificateInStore(hCertStore: HCERTSTORE, dwCertEncodingType: u32, dwFindFlags: u32, dwFindType: u32, #[opt] pvFindPara: *const void, #[opt] pPrevCertContext: *const CERT_CONTEXT) -> PCCERT_CONTEXT;
+        extern fn CertFindCertificateInStore(hCertStore: HCERTSTORE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, dwFindFlags: u32, dwFindType: CERT_FIND_FLAGS, #[opt] pvFindPara: *const void, #[opt] pPrevCertContext: *const CERT_CONTEXT) -> PCCERT_CONTEXT;
         #[library("CRYPT32.dll")]
-        extern fn CertFindChainInStore(hCertStore: HCERTSTORE, dwCertEncodingType: u32, dwFindFlags: u32, dwFindType: u32, #[opt] pvFindPara: *const void, #[opt] pPrevChainContext: *const CERT_CHAIN_CONTEXT) -> PCCERT_CHAIN_CONTEXT;
+        extern fn CertFindChainInStore(hCertStore: HCERTSTORE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, dwFindFlags: CERT_FIND_CHAIN_IN_STORE_FLAGS, dwFindType: u32, #[opt] pvFindPara: *const void, #[opt] pPrevChainContext: *const CERT_CHAIN_CONTEXT) -> PCCERT_CHAIN_CONTEXT;
         #[library("CRYPT32.dll")]
         extern fn CertFindExtension(pszObjId: PCSTR, cExtensions: u32, #[len_param(1)] rgExtensions: *const CERT_EXTENSION) -> PCERT_EXTENSION;
         #[library("CRYPT32.dll")]
@@ -3594,7 +3819,7 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertGetEnhancedKeyUsage(pCertContext: *const CERT_CONTEXT, dwFlags: u32, #[size_param(3)] #[opt] pUsage: *mut CTL_USAGE, #[in] #[out] pcbUsage: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertGetIntendedKeyUsage(dwCertEncodingType: u32, pCertInfo: *const CERT_INFO, #[size_param(3)] pbKeyUsage: *mut u8, cbKeyUsage: u32) -> BOOL;
+        extern fn CertGetIntendedKeyUsage(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pCertInfo: *const CERT_INFO, #[size_param(3)] pbKeyUsage: *mut u8, cbKeyUsage: u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertGetIssuerCertificateFromStore(hCertStore: HCERTSTORE, pSubjectContext: *const CERT_CONTEXT, #[opt] pPrevIssuerContext: *const CERT_CONTEXT, #[in] #[out] pdwFlags: *mut u32) -> PCCERT_CONTEXT;
         #[library("CRYPT32.dll")]
@@ -3602,17 +3827,17 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertGetNameStringW(pCertContext: *const CERT_CONTEXT, dwType: u32, dwFlags: u32, #[opt] pvTypePara: *const void, #[len_param(5)] #[out] #[opt] pszNameString: PWSTR, cchNameString: u32) -> u32;
         #[library("CRYPT32.dll")]
-        extern fn CertGetPublicKeyLength(dwCertEncodingType: u32, pPublicKey: *const CERT_PUBLIC_KEY_INFO) -> u32;
+        extern fn CertGetPublicKeyLength(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pPublicKey: *const CERT_PUBLIC_KEY_INFO) -> u32;
         #[library("CRYPT32.dll")]
         extern fn CertGetServerOcspResponseContext(hServerOcspResponse: HCERT_SERVER_OCSP_RESPONSE, dwFlags: u32, #[reserved] pvReserved: *const void) -> PCCERT_SERVER_OCSP_RESPONSE_CONTEXT;
         #[library("CRYPT32.dll")]
         extern fn CertGetStoreProperty(hCertStore: HCERTSTORE, dwPropId: u32, #[size_param(3)] #[opt] pvData: *mut void, #[in] #[out] pcbData: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertGetSubjectCertificateFromStore(hCertStore: HCERTSTORE, dwCertEncodingType: u32, pCertId: *const CERT_INFO) -> PCCERT_CONTEXT;
+        extern fn CertGetSubjectCertificateFromStore(hCertStore: HCERTSTORE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pCertId: *const CERT_INFO) -> PCCERT_CONTEXT;
         #[library("CRYPT32.dll")]
         extern fn CertGetValidUsages(cCerts: u32, #[len_param(0)] rghCerts: *const PCCERT_CONTEXT, cNumOIDs: *mut i32, #[size_param(4)] #[opt] rghOIDs: *mut PSTR, #[in] #[out] pcbOIDs: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertIsRDNAttrsInCertificateName(dwCertEncodingType: u32, dwFlags: u32, pCertName: *const CRYPT_INTEGER_BLOB, pRDN: *const CERT_RDN) -> BOOL;
+        extern fn CertIsRDNAttrsInCertificateName(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, dwFlags: u32, pCertName: *const CRYPT_INTEGER_BLOB, pRDN: *const CERT_RDN) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertIsStrongHashToSign(pStrongSignPara: *const CERT_STRONG_SIGN_PARA, pwszCNGHashAlgid: PCWSTR, #[opt] pSigningCert: *const CERT_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3632,15 +3857,15 @@ mod Windows {
             KeyTypeSelfSigned = 8,
         }
         #[library("CRYPT32.dll")]
-        extern fn CertNameToStrA(dwCertEncodingType: u32, pName: *const CRYPT_INTEGER_BLOB, dwStrType: u32, #[len_param(4)] #[out] #[opt] psz: PSTR, csz: u32) -> u32;
+        extern fn CertNameToStrA(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pName: *const CRYPT_INTEGER_BLOB, dwStrType: CERT_STRING_TYPE, #[len_param(4)] #[out] #[opt] psz: PSTR, csz: u32) -> u32;
         #[library("CRYPT32.dll")]
-        extern fn CertNameToStrW(dwCertEncodingType: u32, pName: *const CRYPT_INTEGER_BLOB, dwStrType: u32, #[len_param(4)] #[out] #[opt] psz: PWSTR, csz: u32) -> u32;
+        extern fn CertNameToStrW(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pName: *const CRYPT_INTEGER_BLOB, dwStrType: CERT_STRING_TYPE, #[len_param(4)] #[out] #[opt] psz: PWSTR, csz: u32) -> u32;
         #[library("CRYPT32.dll")]
         extern fn CertOIDToAlgId(pszObjId: PCSTR) -> u32;
         #[library("CRYPT32.dll")]
         extern fn CertOpenServerOcspResponse(pChainContext: *const CERT_CHAIN_CONTEXT, dwFlags: u32, #[opt] pOpenPara: *const CERT_SERVER_OCSP_RESPONSE_OPEN_PARA) -> HCERT_SERVER_OCSP_RESPONSE;
         #[library("CRYPT32.dll")]
-        extern fn CertOpenStore(lpszStoreProvider: PCSTR, dwEncodingType: u32, #[opt] hCryptProv: HCRYPTPROV_LEGACY, dwFlags: u32, #[opt] pvPara: *const void) -> HCERTSTORE;
+        extern fn CertOpenStore(lpszStoreProvider: PCSTR, dwEncodingType: CERT_QUERY_ENCODING_TYPE, #[opt] hCryptProv: HCRYPTPROV_LEGACY, dwFlags: u32, #[opt] pvPara: *const void) -> HCERTSTORE;
         #[library("CRYPT32.dll")]
         extern fn CertOpenSystemStoreA(#[opt] hProv: HCRYPTPROV_LEGACY, szSubsystemProtocol: PCSTR) -> HCERTSTORE;
         #[library("CRYPT32.dll")]
@@ -3662,7 +3887,7 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertRetrieveLogoOrBiometricInfo(pCertContext: *const CERT_CONTEXT, lpszLogoOrBiometricType: PCSTR, dwRetrievalFlags: u32, dwTimeout: u32, dwFlags: u32, #[reserved] pvReserved: *const void, ppbData: *mut *mut u8, pcbData: *mut u32, ppwszMimeType: *mut PWSTR) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertSaveStore(hCertStore: HCERTSTORE, dwEncodingType: u32, dwSaveAs: u32, dwSaveTo: u32, #[in] #[out] pvSaveToPara: *mut void, dwFlags: u32) -> BOOL;
+        extern fn CertSaveStore(hCertStore: HCERTSTORE, dwEncodingType: CERT_QUERY_ENCODING_TYPE, dwSaveAs: CERT_STORE_SAVE_AS, dwSaveTo: CERT_STORE_SAVE_TO, #[in] #[out] pvSaveToPara: *mut void, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertSelectCertificateChains(#[opt] pSelectionContext: *const GUID, dwFlags: u32, #[opt] pChainParameters: *const CERT_SELECT_CHAIN_PARA, cCriteria: u32, #[len_param(3)] #[opt] rgpCriteria: *const CERT_SELECT_CRITERIA, hStore: HCERTSTORE, pcSelection: *mut u32, pprgpSelection: *mut *mut PCCERT_CHAIN_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3684,15 +3909,15 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertSetStoreProperty(hCertStore: HCERTSTORE, dwPropId: u32, dwFlags: u32, #[opt] pvData: *const void) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertStrToNameA(dwCertEncodingType: u32, pszX500: PCSTR, dwStrType: u32, #[reserved] pvReserved: *const void, #[size_param(5)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32, ppszError: *mut PCSTR) -> BOOL;
+        extern fn CertStrToNameA(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pszX500: PCSTR, dwStrType: CERT_STRING_TYPE, #[reserved] pvReserved: *const void, #[size_param(5)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32, ppszError: *mut PCSTR) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertStrToNameW(dwCertEncodingType: u32, pszX500: PCWSTR, dwStrType: u32, #[reserved] pvReserved: *const void, #[size_param(5)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32, ppszError: *mut PCWSTR) -> BOOL;
+        extern fn CertStrToNameW(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pszX500: PCWSTR, dwStrType: CERT_STRING_TYPE, #[reserved] pvReserved: *const void, #[size_param(5)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32, ppszError: *mut PCWSTR) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertUnregisterPhysicalStore(pvSystemStore: *const void, dwFlags: u32, pwszStoreName: PCWSTR) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertUnregisterSystemStore(pvSystemStore: *const void, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CertVerifyCRLRevocation(dwCertEncodingType: u32, pCertId: *const CERT_INFO, cCrlInfo: u32, #[len_param(2)] rgpCrlInfo: *const PCRL_INFO) -> BOOL;
+        extern fn CertVerifyCRLRevocation(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pCertId: *const CERT_INFO, cCrlInfo: u32, #[len_param(2)] rgpCrlInfo: *const PCRL_INFO) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CertVerifyCRLTimeValidity(#[opt] pTimeToVerify: *const FILETIME, pCrlInfo: *const CRL_INFO) -> i32;
         #[library("CRYPT32.dll")]
@@ -3708,15 +3933,15 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CertVerifyValidityNesting(pSubjectInfo: *const CERT_INFO, pIssuerInfo: *const CERT_INFO) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptAcquireCertificatePrivateKey(pCert: *const CERT_CONTEXT, dwFlags: u32, #[opt] pvParameters: *const void, phCryptProvOrNCryptKey: *mut HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] pdwKeySpec: *mut u32, #[opt] pfCallerFreeProvOrNCryptKey: *mut BOOL) -> BOOL;
+        extern fn CryptAcquireCertificatePrivateKey(pCert: *const CERT_CONTEXT, dwFlags: CRYPT_ACQUIRE_FLAGS, #[opt] pvParameters: *const void, phCryptProvOrNCryptKey: *mut HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] pdwKeySpec: *mut CERT_KEY_SPEC, #[opt] pfCallerFreeProvOrNCryptKey: *mut BOOL) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptAcquireContextA(phProv: *mut HCRYPTPROV, #[opt] szContainer: PCSTR, #[opt] szProvider: PCSTR, dwProvType: u32, dwFlags: u32) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptAcquireContextW(phProv: *mut HCRYPTPROV, #[opt] szContainer: PCWSTR, #[opt] szProvider: PCWSTR, dwProvType: u32, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptBinaryToStringA(#[size_param(1)] pbBinary: *const u8, cbBinary: u32, dwFlags: u32, #[len_param(4)] #[out] #[opt] pszString: PSTR, #[in] #[out] pcchString: *mut u32) -> BOOL;
+        extern fn CryptBinaryToStringA(#[size_param(1)] pbBinary: *const u8, cbBinary: u32, dwFlags: CRYPT_STRING, #[len_param(4)] #[out] #[opt] pszString: PSTR, #[in] #[out] pcchString: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptBinaryToStringW(#[size_param(1)] pbBinary: *const u8, cbBinary: u32, dwFlags: u32, #[len_param(4)] #[out] #[opt] pszString: PWSTR, #[in] #[out] pcchString: *mut u32) -> BOOL;
+        extern fn CryptBinaryToStringW(#[size_param(1)] pbBinary: *const u8, cbBinary: u32, dwFlags: CRYPT_STRING, #[len_param(4)] #[out] #[opt] pszString: PWSTR, #[in] #[out] pcchString: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptCloseAsyncHandle(#[opt] hAsync: HCRYPTASYNC) -> BOOL;
         #[library("ADVAPI32.dll")]
@@ -3726,13 +3951,13 @@ mod Windows {
         #[library("ADVAPI32.dll")]
         extern fn CryptCreateHash(hProv: HCRYPTPROV, Algid: ALG_ID, hKey: HCRYPTKEY, dwFlags: u32, phHash: *mut HCRYPTHASH) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptCreateKeyIdentifierFromCSP(dwCertEncodingType: u32, #[opt] pszPubKeyOID: PCSTR, #[size_param(3)] pPubKeyStruc: *const PUBLICKEYSTRUC, cbPubKeyStruc: u32, dwFlags: u32, #[reserved] pvReserved: *const void, #[size_param(7)] #[opt] pbHash: *mut u8, #[in] #[out] pcbHash: *mut u32) -> BOOL;
+        extern fn CryptCreateKeyIdentifierFromCSP(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[opt] pszPubKeyOID: PCSTR, #[size_param(3)] pPubKeyStruc: *const PUBLICKEYSTRUC, cbPubKeyStruc: u32, dwFlags: u32, #[reserved] pvReserved: *const void, #[size_param(7)] #[opt] pbHash: *mut u8, #[in] #[out] pcbHash: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptDecodeMessage(dwMsgTypeFlags: u32, #[opt] pDecryptPara: *const CRYPT_DECRYPT_MESSAGE_PARA, #[opt] pVerifyPara: *const CRYPT_VERIFY_MESSAGE_PARA, dwSignerIndex: u32, #[size_param(5)] pbEncodedBlob: *const u8, cbEncodedBlob: u32, dwPrevInnerContentType: u32, #[opt] pdwMsgType: *mut u32, #[opt] pdwInnerContentType: *mut u32, #[size_param(10)] #[opt] pbDecoded: *mut u8, #[in] #[out] #[opt] pcbDecoded: *mut u32, ppXchgCert: *mut PCCERT_CONTEXT, ppSignerCert: *mut PCCERT_CONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptDecodeObject(dwCertEncodingType: u32, lpszStructType: PCSTR, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, dwFlags: u32, #[size_param(6)] #[opt] pvStructInfo: *mut void, #[in] #[out] pcbStructInfo: *mut u32) -> BOOL;
+        extern fn CryptDecodeObject(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, lpszStructType: PCSTR, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, dwFlags: u32, #[size_param(6)] #[opt] pvStructInfo: *mut void, #[in] #[out] pcbStructInfo: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptDecodeObjectEx(dwCertEncodingType: u32, lpszStructType: PCSTR, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, dwFlags: u32, #[opt] pDecodePara: *const CRYPT_DECODE_PARA, #[opt] pvStructInfo: *mut void, #[in] #[out] pcbStructInfo: *mut u32) -> BOOL;
+        extern fn CryptDecodeObjectEx(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, lpszStructType: PCSTR, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, dwFlags: u32, #[opt] pDecodePara: *const CRYPT_DECODE_PARA, #[opt] pvStructInfo: *mut void, #[in] #[out] pcbStructInfo: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptDecrypt(hKey: HCRYPTKEY, hHash: HCRYPTHASH, Final: BOOL, dwFlags: u32, #[size_param(5)] #[in] #[out] pbData: *mut u8, #[in] #[out] pdwDataLen: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3750,9 +3975,9 @@ mod Windows {
         #[library("ADVAPI32.dll")]
         extern fn CryptDuplicateKey(hKey: HCRYPTKEY, #[reserved] pdwReserved: *const u32, dwFlags: u32, phKey: *mut HCRYPTKEY) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptEncodeObject(dwCertEncodingType: u32, lpszStructType: PCSTR, pvStructInfo: *const void, #[size_param(4)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32) -> BOOL;
+        extern fn CryptEncodeObject(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, lpszStructType: PCSTR, pvStructInfo: *const void, #[size_param(4)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptEncodeObjectEx(dwCertEncodingType: u32, lpszStructType: PCSTR, pvStructInfo: *const void, dwFlags: u32, #[opt] pEncodePara: *const CRYPT_ENCODE_PARA, #[opt] pvEncoded: *mut void, #[in] #[out] pcbEncoded: *mut u32) -> BOOL;
+        extern fn CryptEncodeObjectEx(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, lpszStructType: PCSTR, pvStructInfo: *const void, dwFlags: u32, #[opt] pEncodePara: *const CRYPT_ENCODE_PARA, #[opt] pvEncoded: *mut void, #[in] #[out] pcbEncoded: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptEncrypt(hKey: HCRYPTKEY, hHash: HCRYPTHASH, Final: BOOL, dwFlags: u32, #[size_param(6)] #[in] #[out] #[opt] pbData: *mut u8, #[in] #[out] pdwDataLen: *mut u32, dwBufLen: u32) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3772,27 +3997,27 @@ mod Windows {
         #[library("ADVAPI32.dll")]
         extern fn CryptEnumProvidersW(dwIndex: u32, #[reserved] pdwReserved: *const u32, dwFlags: u32, pdwProvType: *mut u32, #[size_param(5)] #[out] #[opt] szProvName: PWSTR, #[in] #[out] pcbProvName: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
-        extern fn CryptExportKey(hKey: HCRYPTKEY, hExpKey: HCRYPTKEY, dwBlobType: u32, dwFlags: u32, #[size_param(5)] #[opt] pbData: *mut u8, #[in] #[out] pdwDataLen: *mut u32) -> BOOL;
+        extern fn CryptExportKey(hKey: HCRYPTKEY, hExpKey: HCRYPTKEY, dwBlobType: u32, dwFlags: CRYPT_KEY_FLAGS, #[size_param(5)] #[opt] pbData: *mut u8, #[in] #[out] pdwDataLen: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptExportPKCS8(hCryptProv: HCRYPTPROV, dwKeySpec: u32, pszPrivateKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pbPrivateKeyBlob: *mut u8, #[in] #[out] pcbPrivateKeyBlob: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptExportPublicKeyInfo(hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: u32, dwCertEncodingType: u32, #[size_param(4)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
+        extern fn CryptExportPublicKeyInfo(hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: u32, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(4)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptExportPublicKeyInfoEx(hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: u32, dwCertEncodingType: u32, #[opt] pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(7)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
+        extern fn CryptExportPublicKeyInfoEx(hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: u32, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[opt] pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(7)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptExportPublicKeyInfoFromBCryptKeyHandle(hBCryptKey: BCRYPT_KEY_HANDLE, dwCertEncodingType: u32, #[opt] pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
+        extern fn CryptExportPublicKeyInfoFromBCryptKeyHandle(hBCryptKey: BCRYPT_KEY_HANDLE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[opt] pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptFindCertificateKeyProvInfo(pCert: *const CERT_CONTEXT, dwFlags: u32, #[reserved] pvReserved: *const void) -> BOOL;
+        extern fn CryptFindCertificateKeyProvInfo(pCert: *const CERT_CONTEXT, dwFlags: CRYPT_FIND_FLAGS, #[reserved] pvReserved: *const void) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptFindLocalizedName(pwszCryptName: PCWSTR) -> PCWSTR;
         #[library("CRYPT32.dll")]
         extern fn CryptFindOIDInfo(dwKeyType: u32, pvKey: *const void, dwGroupId: u32) -> PCCRYPT_OID_INFO;
         #[library("CRYPT32.dll")]
-        extern fn CryptFormatObject(dwCertEncodingType: u32, dwFormatType: u32, dwFormatStrType: u32, #[opt] pFormatStruct: *const void, #[opt] lpszStructType: PCSTR, #[size_param(6)] pbEncoded: *const u8, cbEncoded: u32, pbFormat: *mut void, #[in] #[out] pcbFormat: *mut u32) -> BOOL;
+        extern fn CryptFormatObject(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, dwFormatType: u32, dwFormatStrType: u32, #[opt] pFormatStruct: *const void, #[opt] lpszStructType: PCSTR, #[size_param(6)] pbEncoded: *const u8, cbEncoded: u32, pbFormat: *mut void, #[in] #[out] pcbFormat: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptFreeOIDFunctionAddress(hFuncAddr: HCRYPTOIDFUNCADDR, dwFlags: u32) -> BOOL;
         #[library("ADVAPI32.dll")]
-        extern fn CryptGenKey(hProv: HCRYPTPROV, Algid: ALG_ID, dwFlags: u32, phKey: *mut HCRYPTKEY) -> BOOL;
+        extern fn CryptGenKey(hProv: HCRYPTPROV, Algid: ALG_ID, dwFlags: CRYPT_KEY_FLAGS, phKey: *mut HCRYPTKEY) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptGenRandom(hProv: HCRYPTPROV, dwLen: u32, #[size_param(1)] #[in] #[out] pbBuffer: *mut u8) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3810,7 +4035,7 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptGetKeyIdentifierProperty(pKeyIdentifier: *const CRYPT_HASH_BLOB, dwPropId: u32, dwFlags: u32, #[opt] pwszComputerName: PCWSTR, #[reserved] pvReserved: *const void, #[size_param(6)] #[opt] pvData: *mut void, #[in] #[out] pcbData: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
-        extern fn CryptGetKeyParam(hKey: HCRYPTKEY, dwParam: u32, #[size_param(3)] #[opt] pbData: *mut u8, #[in] #[out] pdwDataLen: *mut u32, dwFlags: u32) -> BOOL;
+        extern fn CryptGetKeyParam(hKey: HCRYPTKEY, dwParam: CRYPT_KEY_PARAM_ID, #[size_param(3)] #[opt] pbData: *mut u8, #[in] #[out] pdwDataLen: *mut u32, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptGetMessageCertificates(dwMsgAndCertEncodingType: u32, #[opt] hCryptProv: HCRYPTPROV_LEGACY, dwFlags: u32, #[size_param(4)] pbSignedBlob: *const u8, cbSignedBlob: u32) -> HCERTSTORE;
         #[library("CRYPT32.dll")]
@@ -3820,7 +4045,7 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptGetOIDFunctionValue(dwEncodingType: u32, pszFuncName: PCSTR, pszOID: PCSTR, #[opt] pwszValueName: PCWSTR, #[opt] pdwValueType: *mut u32, #[size_param(6)] #[opt] pbValueData: *mut u8, #[in] #[out] #[opt] pcbValueData: *mut u32) -> BOOL;
         #[library("CRYPTNET.dll")]
-        extern fn CryptGetObjectUrl(pszUrlOid: PCSTR, pvPara: *const void, dwFlags: u32, #[size_param(4)] #[opt] pUrlArray: *mut CRYPT_URL_ARRAY, #[in] #[out] pcbUrlArray: *mut u32, #[size_param(6)] #[opt] pUrlInfo: *mut CRYPT_URL_INFO, #[in] #[out] #[opt] pcbUrlInfo: *mut u32, #[reserved] pvReserved: *const void) -> BOOL;
+        extern fn CryptGetObjectUrl(pszUrlOid: PCSTR, pvPara: *const void, dwFlags: CRYPT_GET_URL_FLAGS, #[size_param(4)] #[opt] pUrlArray: *mut CRYPT_URL_ARRAY, #[in] #[out] pcbUrlArray: *mut u32, #[size_param(6)] #[opt] pUrlInfo: *mut CRYPT_URL_INFO, #[in] #[out] #[opt] pcbUrlInfo: *mut u32, #[reserved] pvReserved: *const void) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptGetProvParam(hProv: HCRYPTPROV, dwParam: u32, #[size_param(3)] #[opt] pbData: *mut u8, #[in] #[out] pdwDataLen: *mut u32, dwFlags: u32) -> BOOL;
         #[library("ADVAPI32.dll")]
@@ -3834,27 +4059,27 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptHashMessage(pHashPara: *const CRYPT_HASH_MESSAGE_PARA, fDetachedHash: BOOL, cToBeHashed: u32, #[len_param(2)] rgpbToBeHashed: *const *const u8, #[len_param(2)] rgcbToBeHashed: *const u32, #[size_param(6)] #[opt] pbHashedBlob: *mut u8, #[in] #[out] #[opt] pcbHashedBlob: *mut u32, #[size_param(8)] #[opt] pbComputedHash: *mut u8, #[in] #[out] #[opt] pcbComputedHash: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptHashPublicKeyInfo(#[opt] hCryptProv: HCRYPTPROV_LEGACY, Algid: ALG_ID, dwFlags: u32, dwCertEncodingType: u32, pInfo: *const CERT_PUBLIC_KEY_INFO, #[size_param(6)] #[opt] pbComputedHash: *mut u8, #[in] #[out] pcbComputedHash: *mut u32) -> BOOL;
+        extern fn CryptHashPublicKeyInfo(#[opt] hCryptProv: HCRYPTPROV_LEGACY, Algid: ALG_ID, dwFlags: u32, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pInfo: *const CERT_PUBLIC_KEY_INFO, #[size_param(6)] #[opt] pbComputedHash: *mut u8, #[in] #[out] pcbComputedHash: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptHashSessionKey(hHash: HCRYPTHASH, hKey: HCRYPTKEY, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptHashToBeSigned(#[opt] hCryptProv: HCRYPTPROV_LEGACY, dwCertEncodingType: u32, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, #[size_param(5)] #[opt] pbComputedHash: *mut u8, #[in] #[out] pcbComputedHash: *mut u32) -> BOOL;
+        extern fn CryptHashToBeSigned(#[opt] hCryptProv: HCRYPTPROV_LEGACY, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, #[size_param(5)] #[opt] pbComputedHash: *mut u8, #[in] #[out] pcbComputedHash: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
-        extern fn CryptImportKey(hProv: HCRYPTPROV, #[size_param(2)] pbData: *const u8, dwDataLen: u32, hPubKey: HCRYPTKEY, dwFlags: u32, phKey: *mut HCRYPTKEY) -> BOOL;
+        extern fn CryptImportKey(hProv: HCRYPTPROV, #[size_param(2)] pbData: *const u8, dwDataLen: u32, hPubKey: HCRYPTKEY, dwFlags: CRYPT_KEY_FLAGS, phKey: *mut HCRYPTKEY) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptImportPKCS8(sPrivateKeyAndParams: CRYPT_PKCS8_IMPORT_PARAMS, dwFlags: u32, #[opt] phCryptProv: *mut HCRYPTPROV, #[opt] pvAuxInfo: *const void) -> BOOL;
+        extern fn CryptImportPKCS8(sPrivateKeyAndParams: CRYPT_PKCS8_IMPORT_PARAMS, dwFlags: CRYPT_KEY_FLAGS, #[opt] phCryptProv: *mut HCRYPTPROV, #[opt] pvAuxInfo: *const void) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptImportPublicKeyInfo(hCryptProv: HCRYPTPROV, dwCertEncodingType: u32, pInfo: *const CERT_PUBLIC_KEY_INFO, phKey: *mut HCRYPTKEY) -> BOOL;
+        extern fn CryptImportPublicKeyInfo(hCryptProv: HCRYPTPROV, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pInfo: *const CERT_PUBLIC_KEY_INFO, phKey: *mut HCRYPTKEY) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptImportPublicKeyInfoEx(hCryptProv: HCRYPTPROV, dwCertEncodingType: u32, pInfo: *const CERT_PUBLIC_KEY_INFO, aiKeyAlg: ALG_ID, dwFlags: u32, #[opt] pvAuxInfo: *const void, phKey: *mut HCRYPTKEY) -> BOOL;
+        extern fn CryptImportPublicKeyInfoEx(hCryptProv: HCRYPTPROV, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pInfo: *const CERT_PUBLIC_KEY_INFO, aiKeyAlg: ALG_ID, dwFlags: u32, #[opt] pvAuxInfo: *const void, phKey: *mut HCRYPTKEY) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptImportPublicKeyInfoEx2(dwCertEncodingType: u32, pInfo: *const CERT_PUBLIC_KEY_INFO, dwFlags: u32, #[opt] pvAuxInfo: *const void, phKey: *mut BCRYPT_KEY_HANDLE) -> BOOL;
+        extern fn CryptImportPublicKeyInfoEx2(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pInfo: *const CERT_PUBLIC_KEY_INFO, dwFlags: CRYPT_IMPORT_PUBLIC_KEY_FLAGS, #[opt] pvAuxInfo: *const void, phKey: *mut BCRYPT_KEY_HANDLE) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptInitOIDFunctionSet(pszFuncName: PCSTR, dwFlags: u32) -> HCRYPTOIDFUNCSET;
         #[library("CRYPTNET.dll")]
         extern fn CryptInstallCancelRetrieval(pfnCancel: PFN_CRYPT_CANCEL_RETRIEVAL, #[opt] pvArg: *const void, dwFlags: u32, #[reserved] pvReserved: *const void) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptInstallDefaultContext(hCryptProv: HCRYPTPROV, dwDefaultType: u32, #[opt] pvDefaultPara: *const void, dwFlags: u32, #[reserved] pvReserved: *const void, phDefaultContext: *mut HCRYPTDEFAULTCONTEXT) -> BOOL;
+        extern fn CryptInstallDefaultContext(hCryptProv: HCRYPTPROV, dwDefaultType: CRYPT_DEFAULT_CONTEXT_TYPE, #[opt] pvDefaultPara: *const void, dwFlags: CRYPT_DEFAULT_CONTEXT_FLAGS, #[reserved] pvReserved: *const void, phDefaultContext: *mut HCRYPTDEFAULTCONTEXT) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptInstallOIDFunctionAddress(#[opt] hModule: HMODULE, dwEncodingType: u32, pszFuncName: PCSTR, cFuncEntry: u32, #[len_param(3)] rgFuncEntry: *const CRYPT_OID_FUNC_ENTRY, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3884,7 +4109,7 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptMsgOpenToDecode(dwMsgEncodingType: u32, dwFlags: u32, dwMsgType: u32, #[opt] hCryptProv: HCRYPTPROV_LEGACY, #[reserved] pRecipientInfo: *const CERT_INFO, #[opt] pStreamInfo: *const CMSG_STREAM_INFO) -> HCRYPTMSG;
         #[library("CRYPT32.dll")]
-        extern fn CryptMsgOpenToEncode(dwMsgEncodingType: u32, dwFlags: u32, dwMsgType: u32, pvMsgEncodeInfo: *const void, #[opt] pszInnerContentObjID: PCSTR, #[opt] pStreamInfo: *const CMSG_STREAM_INFO) -> HCRYPTMSG;
+        extern fn CryptMsgOpenToEncode(dwMsgEncodingType: u32, dwFlags: u32, dwMsgType: CRYPT_MSG_TYPE, pvMsgEncodeInfo: *const void, #[opt] pszInnerContentObjID: PCSTR, #[opt] pStreamInfo: *const CMSG_STREAM_INFO) -> HCRYPTMSG;
         #[library("CRYPT32.dll")]
         extern fn CryptMsgSignCTL(dwMsgEncodingType: u32, #[size_param(2)] pbCtlContent: *const u8, cbCtlContent: u32, pSignInfo: *const CMSG_SIGNED_ENCODE_INFO, dwFlags: u32, #[size_param(6)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3894,7 +4119,7 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptMsgVerifyCountersignatureEncodedEx(#[opt] hCryptProv: HCRYPTPROV_LEGACY, dwEncodingType: u32, #[size_param(3)] pbSignerInfo: *const u8, cbSignerInfo: u32, #[size_param(5)] pbSignerInfoCountersignature: *const u8, cbSignerInfoCountersignature: u32, dwSignerType: u32, pvSigner: *const void, dwFlags: u32, #[in] #[out] #[opt] pvExtra: *mut void) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptQueryObject(dwObjectType: u32, pvObject: *const void, dwExpectedContentTypeFlags: u32, dwExpectedFormatTypeFlags: u32, dwFlags: u32, #[opt] pdwMsgAndCertEncodingType: *mut u32, #[opt] pdwContentType: *mut u32, #[opt] pdwFormatType: *mut u32, #[opt] phCertStore: *mut HCERTSTORE, #[opt] phMsg: *mut HCRYPTMSG, ppvContext: *mut *mut void) -> BOOL;
+        extern fn CryptQueryObject(dwObjectType: CERT_QUERY_OBJECT_TYPE, pvObject: *const void, dwExpectedContentTypeFlags: CERT_QUERY_CONTENT_TYPE_FLAGS, dwExpectedFormatTypeFlags: CERT_QUERY_FORMAT_TYPE_FLAGS, dwFlags: u32, #[opt] pdwMsgAndCertEncodingType: *mut CERT_QUERY_ENCODING_TYPE, #[opt] pdwContentType: *mut CERT_QUERY_CONTENT_TYPE, #[opt] pdwFormatType: *mut CERT_QUERY_FORMAT_TYPE, #[opt] phCertStore: *mut HCERTSTORE, #[opt] phMsg: *mut HCRYPTMSG, ppvContext: *mut *mut void) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptRegisterDefaultOIDFunction(dwEncodingType: u32, pszFuncName: PCSTR, dwIndex: u32, pwszDll: PCWSTR) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3912,11 +4137,11 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptSetAsyncParam(hAsync: HCRYPTASYNC, pszParamOid: PCSTR, #[opt] pvParam: *const void, pfnFree: PFN_CRYPT_ASYNC_PARAM_FREE_FUNC) -> BOOL;
         #[library("ADVAPI32.dll")]
-        extern fn CryptSetHashParam(hHash: HCRYPTHASH, dwParam: u32, pbData: *const u8, dwFlags: u32) -> BOOL;
+        extern fn CryptSetHashParam(hHash: HCRYPTHASH, dwParam: CRYPT_SET_HASH_PARAM, pbData: *const u8, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptSetKeyIdentifierProperty(pKeyIdentifier: *const CRYPT_HASH_BLOB, dwPropId: u32, dwFlags: u32, #[opt] pwszComputerName: PCWSTR, #[reserved] pvReserved: *const void, #[opt] pvData: *const void) -> BOOL;
         #[library("ADVAPI32.dll")]
-        extern fn CryptSetKeyParam(hKey: HCRYPTKEY, dwParam: u32, pbData: *const u8, dwFlags: u32) -> BOOL;
+        extern fn CryptSetKeyParam(hKey: HCRYPTKEY, dwParam: CRYPT_KEY_PARAM_ID, pbData: *const u8, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptSetOIDFunctionValue(dwEncodingType: u32, pszFuncName: PCSTR, pszOID: PCSTR, #[opt] pwszValueName: PCWSTR, dwValueType: u32, #[size_param(6)] #[opt] pbValueData: *const u8, cbValueData: u32) -> BOOL;
         #[library("ADVAPI32.dll")]
@@ -3930,11 +4155,11 @@ mod Windows {
         #[library("ADVAPI32.dll")]
         extern fn CryptSetProviderW(pszProvName: PCWSTR, dwProvType: u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptSignAndEncodeCertificate(#[opt] hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: u32, dwCertEncodingType: u32, lpszStructType: PCSTR, pvStructInfo: *const void, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvHashAuxInfo: *const void, #[size_param(8)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32) -> BOOL;
+        extern fn CryptSignAndEncodeCertificate(#[opt] hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: CERT_KEY_SPEC, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, lpszStructType: PCSTR, pvStructInfo: *const void, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvHashAuxInfo: *const void, #[size_param(8)] #[opt] pbEncoded: *mut u8, #[in] #[out] pcbEncoded: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptSignAndEncryptMessage(pSignPara: *const CRYPT_SIGN_MESSAGE_PARA, pEncryptPara: *const CRYPT_ENCRYPT_MESSAGE_PARA, cRecipientCert: u32, #[len_param(2)] rgpRecipientCert: *const PCCERT_CONTEXT, #[size_param(5)] pbToBeSignedAndEncrypted: *const u8, cbToBeSignedAndEncrypted: u32, #[size_param(7)] #[opt] pbSignedAndEncryptedBlob: *mut u8, #[in] #[out] pcbSignedAndEncryptedBlob: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptSignCertificate(#[opt] hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: u32, dwCertEncodingType: u32, #[size_param(4)] pbEncodedToBeSigned: *const u8, cbEncodedToBeSigned: u32, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvHashAuxInfo: *const void, #[size_param(8)] #[opt] pbSignature: *mut u8, #[in] #[out] pcbSignature: *mut u32) -> BOOL;
+        extern fn CryptSignCertificate(#[opt] hCryptProvOrNCryptKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, #[opt] dwKeySpec: u32, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(4)] pbEncodedToBeSigned: *const u8, cbEncodedToBeSigned: u32, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvHashAuxInfo: *const void, #[size_param(8)] #[opt] pbSignature: *mut u8, #[in] #[out] pcbSignature: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CryptSignHashA(hHash: HCRYPTHASH, dwKeySpec: u32, #[opt] szDescription: PCSTR, dwFlags: u32, #[size_param(5)] #[opt] pbSignature: *mut u8, #[in] #[out] pdwSigLen: *mut u32) -> BOOL;
         #[library("ADVAPI32.dll")]
@@ -3944,9 +4169,9 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptSignMessageWithKey(pSignPara: *const CRYPT_KEY_SIGN_MESSAGE_PARA, #[size_param(2)] pbToBeSigned: *const u8, cbToBeSigned: u32, #[size_param(4)] #[opt] pbSignedBlob: *mut u8, #[in] #[out] pcbSignedBlob: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptStringToBinaryA(pszString: PCSTR, cchString: u32, dwFlags: u32, #[size_param(4)] #[opt] pbBinary: *mut u8, #[in] #[out] pcbBinary: *mut u32, #[opt] pdwSkip: *mut u32, #[opt] pdwFlags: *mut u32) -> BOOL;
+        extern fn CryptStringToBinaryA(pszString: PCSTR, cchString: u32, dwFlags: CRYPT_STRING, #[size_param(4)] #[opt] pbBinary: *mut u8, #[in] #[out] pcbBinary: *mut u32, #[opt] pdwSkip: *mut u32, #[opt] pdwFlags: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptStringToBinaryW(pszString: PCWSTR, cchString: u32, dwFlags: u32, #[size_param(4)] #[opt] pbBinary: *mut u8, #[in] #[out] pcbBinary: *mut u32, #[opt] pdwSkip: *mut u32, #[opt] pdwFlags: *mut u32) -> BOOL;
+        extern fn CryptStringToBinaryW(pszString: PCWSTR, cchString: u32, dwFlags: CRYPT_STRING, #[size_param(4)] #[opt] pbBinary: *mut u8, #[in] #[out] pcbBinary: *mut u32, #[opt] pdwSkip: *mut u32, #[opt] pdwFlags: *mut u32) -> BOOL;
         #[library("CRYPTNET.dll")]
         extern fn CryptUninstallCancelRetrieval(dwFlags: u32, #[reserved] pvReserved: *const void) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -3958,9 +4183,9 @@ mod Windows {
         #[library("CRYPT32.dll")]
         extern fn CryptUnregisterOIDInfo(pInfo: *const CRYPT_OID_INFO) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptVerifyCertificateSignature(#[opt] hCryptProv: HCRYPTPROV_LEGACY, dwCertEncodingType: u32, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, pPublicKey: *const CERT_PUBLIC_KEY_INFO) -> BOOL;
+        extern fn CryptVerifyCertificateSignature(#[opt] hCryptProv: HCRYPTPROV_LEGACY, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, #[size_param(3)] pbEncoded: *const u8, cbEncoded: u32, pPublicKey: *const CERT_PUBLIC_KEY_INFO) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn CryptVerifyCertificateSignatureEx(#[opt] hCryptProv: HCRYPTPROV_LEGACY, dwCertEncodingType: u32, dwSubjectType: u32, pvSubject: *const void, dwIssuerType: u32, #[opt] pvIssuer: *const void, dwFlags: u32, #[in] #[out] #[opt] pvExtra: *mut void) -> BOOL;
+        extern fn CryptVerifyCertificateSignatureEx(#[opt] hCryptProv: HCRYPTPROV_LEGACY, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, dwSubjectType: u32, pvSubject: *const void, dwIssuerType: u32, #[opt] pvIssuer: *const void, dwFlags: CRYPT_VERIFY_CERT_FLAGS, #[in] #[out] #[opt] pvExtra: *mut void) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn CryptVerifyDetachedMessageHash(pHashPara: *const CRYPT_HASH_MESSAGE_PARA, #[size_param(2)] pbDetachedHashBlob: *const u8, cbDetachedHashBlob: u32, cToBeHashed: u32, #[len_param(3)] rgpbToBeHashed: *const *const u8, #[len_param(3)] rgcbToBeHashed: *const u32, #[size_param(7)] #[opt] pbComputedHash: *mut u8, #[in] #[out] #[opt] pcbComputedHash: *mut u32) -> BOOL;
         #[library("CRYPT32.dll")]
@@ -4007,7 +4232,7 @@ mod Windows {
         const ECC_CMS_SHARED_INFO: PCSTR = 77;
         struct EV_EXTRA_CERT_CHAIN_POLICY_PARA {
             cbSize: u32,
-            dwRootProgramQualifierFlags: u32,
+            dwRootProgramQualifierFlags: CERT_ROOT_PROGRAM_FLAGS,
         }
         struct EV_EXTRA_CERT_CHAIN_POLICY_STATUS {
             cbSize: u32,
@@ -4023,10 +4248,20 @@ mod Windows {
         extern fn FindCertsByIssuer(#[size_param(1)] #[opt] pCertChains: *mut CERT_CHAIN, #[in] #[out] pcbCertChains: *mut u32, pcCertChains: *mut u32, #[size_param(4)] #[opt] pbEncodedIssuerName: *const u8, cbEncodedIssuerName: u32, #[opt] pwszPurpose: PCWSTR, dwKeySpec: u32) -> HRESULT;
         const HCCE_LOCAL_MACHINE: HCERTCHAINENGINE = 1;
         const HCCE_SERIAL_LOCAL_MACHINE: HCERTCHAINENGINE = 2;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("CertFreeCertificateChainEngine")]
         type HCERTCHAINENGINE = HANDLE;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type HCERTSTORE = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type HCERTSTOREPROV = *mut void;
         type HCERT_SERVER_OCSP_RESPONSE = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("CryptCloseAsyncHandle")]
         type HCRYPTASYNC = HANDLE;
         type HCRYPTDEFAULTCONTEXT = *mut void;
         type HCRYPTHASH = usize;
@@ -4035,7 +4270,9 @@ mod Windows {
         type HCRYPTOIDFUNCADDR = *mut void;
         type HCRYPTOIDFUNCSET = *mut void;
         type HCRYPTPROV = usize;
+        #[invalid_handle(0)]
         type HCRYPTPROV_LEGACY = usize;
+        #[invalid_handle(0)]
         type HCRYPTPROV_OR_NCRYPT_KEY_HANDLE = usize;
         struct HMAC_INFO {
             HashAlgid: ALG_ID,
@@ -4046,16 +4283,20 @@ mod Windows {
         }
         const HP_ALGID: i32 = 1;
         const HP_HASHSIZE: i32 = 4;
-        const HP_HASHVAL: i32 = 2;
-        const HP_HMAC_INFO: i32 = 5;
         const HP_TLS1PRF_LABEL: i32 = 6;
         const HP_TLS1PRF_SEED: i32 = 7;
+        #[repr(i32)]
+        #[scoped]
+        enum HTTPSPOLICY_CALLBACK_DATA_AUTH_TYPE {
+            AUTHTYPE_CLIENT = 1,
+            AUTHTYPE_SERVER = 2,
+        }
         struct HTTPSPolicyCallbackData {
             Anonymous: union {
                 cbStruct: u32,
                 cbSize: u32,
             },
-            dwAuthType: u32,
+            dwAuthType: HTTPSPOLICY_CALLBACK_DATA_AUTH_TYPE,
             fdwChecks: u32,
             pwszServerName: *mut u16,
         }
@@ -4069,28 +4310,22 @@ mod Windows {
             Subtype: GUID,
         }
         const KP_ADMIN_PIN: i32 = 31;
-        const KP_ALGID: i32 = 7;
-        const KP_BLOCKLEN: i32 = 8;
-        const KP_CERTIFICATE: i32 = 26;
         const KP_CLEAR_KEY: i32 = 27;
         const KP_CLIENT_RANDOM: i32 = 21;
         const KP_CMS_DH_KEY_INFO: i32 = 38;
         const KP_CMS_KEY_INFO: i32 = 37;
         const KP_EFFECTIVE_KEYLEN: i32 = 19;
         const KP_G: i32 = 12;
-        const KP_GET_USE_COUNT: i32 = 42;
         const KP_HIGHEST_VERSION: i32 = 41;
         const KP_INFO: i32 = 18;
         const KP_IV: i32 = 1;
         const KP_KEYEXCHANGE_PIN: i32 = 32;
-        const KP_KEYLEN: i32 = 9;
         const KP_KEYVAL: i32 = 30;
         const KP_MODE: i32 = 4;
         const KP_MODE_BITS: i32 = 5;
         const KP_OAEP_PARAMS: i32 = 36;
         const KP_P: i32 = 11;
         const KP_PADDING: i32 = 3;
-        const KP_PERMISSIONS: i32 = 6;
         const KP_PIN_ID: i32 = 43;
         const KP_PIN_INFO: i32 = 44;
         const KP_PRECOMP_MD5: i32 = 24;
@@ -4104,8 +4339,6 @@ mod Windows {
         const KP_RB: i32 = 17;
         const KP_ROUNDS: i32 = 35;
         const KP_RP: i32 = 23;
-        const KP_SALT: i32 = 2;
-        const KP_SALT_EX: i32 = 10;
         const KP_SCHANNEL_ALG: i32 = 20;
         const KP_SERVER_RANDOM: i32 = 22;
         const KP_SIGNATURE_PIN: i32 = 33;
@@ -4113,9 +4346,6 @@ mod Windows {
         const KP_X: i32 = 14;
         const KP_Y: i32 = 15;
         const MAXUIDLEN: i32 = 64;
-        const MICROSOFT_ROOT_CERT_CHAIN_POLICY_CHECK_APPLICATION_ROOT_FLAG: i32 = 131072;
-        const MICROSOFT_ROOT_CERT_CHAIN_POLICY_DISABLE_FLIGHT_ROOT_FLAG: i32 = 262144;
-        const MICROSOFT_ROOT_CERT_CHAIN_POLICY_ENABLE_TEST_ROOT_FLAG: i32 = 65536;
         #[encoding("ansi")]
         const MS_DEF_DH_SCHANNEL_PROV_A: String = "Microsoft DH SChannel Cryptographic Provider";
         #[encoding("utf-16")]
@@ -4203,7 +4433,7 @@ mod Windows {
         const OCSP_BASIC_REVOKED_CERT_STATUS: i32 = 1;
         struct OCSP_BASIC_REVOKED_INFO {
             RevocationDate: FILETIME,
-            dwCrlReasonCode: u32,
+            dwCrlReasonCode: CERT_REVOCATION_STATUS_REASON,
         }
         const OCSP_BASIC_SIGNED_RESPONSE: PCSTR = 68;
         struct OCSP_BASIC_SIGNED_RESPONSE_INFO {
@@ -4538,9 +4768,9 @@ mod Windows {
         extern fn PFN_CANCEL_ASYNC_RETRIEVAL_FUNC(#[opt] hAsyncRetrieve: HCRYPTASYNC) -> BOOL;
         extern fn PFN_CERT_CHAIN_FIND_BY_ISSUER_CALLBACK(pCert: *const CERT_CONTEXT, #[in] #[out] #[opt] pvFindArg: *mut void) -> BOOL;
         extern fn PFN_CERT_CREATE_CONTEXT_SORT_FUNC(cbTotalEncoded: u32, cbRemainEncoded: u32, cEntry: u32, #[in] #[out] #[opt] pvSort: *mut void) -> BOOL;
-        extern fn PFN_CERT_DLL_OPEN_STORE_PROV_FUNC(lpszStoreProvider: PCSTR, dwEncodingType: u32, #[opt] hCryptProv: HCRYPTPROV_LEGACY, dwFlags: u32, #[opt] pvPara: *const void, hCertStore: HCERTSTORE, #[in] #[out] pStoreProvInfo: *mut CERT_STORE_PROV_INFO) -> BOOL;
+        extern fn PFN_CERT_DLL_OPEN_STORE_PROV_FUNC(lpszStoreProvider: PCSTR, dwEncodingType: CERT_QUERY_ENCODING_TYPE, #[opt] hCryptProv: HCRYPTPROV_LEGACY, dwFlags: u32, #[opt] pvPara: *const void, hCertStore: HCERTSTORE, #[in] #[out] pStoreProvInfo: *mut CERT_STORE_PROV_INFO) -> BOOL;
         extern fn PFN_CERT_ENUM_PHYSICAL_STORE(pvSystemStore: *const void, dwFlags: u32, pwszStoreName: PCWSTR, pStoreInfo: *const CERT_PHYSICAL_STORE_INFO, #[reserved] pvReserved: *const void, #[in] #[out] #[opt] pvArg: *mut void) -> BOOL;
-        extern fn PFN_CERT_ENUM_SYSTEM_STORE(pvSystemStore: *const void, dwFlags: u32, pStoreInfo: *const CERT_SYSTEM_STORE_INFO, #[reserved] pvReserved: *const void, #[in] #[out] #[opt] pvArg: *mut void) -> BOOL;
+        extern fn PFN_CERT_ENUM_SYSTEM_STORE(pvSystemStore: *const void, dwFlags: CERT_SYSTEM_STORE_FLAGS, pStoreInfo: *const CERT_SYSTEM_STORE_INFO, #[reserved] pvReserved: *const void, #[in] #[out] #[opt] pvArg: *mut void) -> BOOL;
         extern fn PFN_CERT_ENUM_SYSTEM_STORE_LOCATION(pwszStoreLocation: PCWSTR, dwFlags: u32, #[reserved] pvReserved: *const void, #[in] #[out] #[opt] pvArg: *mut void) -> BOOL;
         extern fn PFN_CERT_IS_WEAK_HASH(dwHashUseType: u32, pwszCNGHashAlgid: PCWSTR, dwChainFlags: u32, #[opt] pSignerChainContext: *const CERT_CHAIN_CONTEXT, #[opt] pTimeStamp: *const FILETIME, #[opt] pwszFileName: PCWSTR) -> BOOL;
         extern fn PFN_CERT_SERVER_OCSP_RESPONSE_UPDATE_CALLBACK(pChainContext: *const CERT_CHAIN_CONTEXT, pServerOcspResponseContext: *const CERT_SERVER_OCSP_RESPONSE_CONTEXT, pNewCrlContext: *const CRL_CONTEXT, #[opt] pPrevCrlContext: *const CRL_CONTEXT, #[in] #[out] #[opt] pvArg: *mut void, dwWriteOcspFileError: u32);
@@ -4590,39 +4820,40 @@ mod Windows {
         extern fn PFN_CRYPT_ENUM_KEYID_PROP(pKeyIdentifier: *const CRYPT_HASH_BLOB, dwFlags: u32, #[reserved] pvReserved: *const void, #[in] #[out] #[opt] pvArg: *mut void, cProp: u32, #[len_param(4)] rgdwPropId: *const u32, #[len_param(4)] rgpvData: *const *const void, #[len_param(4)] rgcbData: *const u32) -> BOOL;
         extern fn PFN_CRYPT_ENUM_OID_FUNC(dwEncodingType: u32, pszFuncName: PCSTR, pszOID: PCSTR, cValue: u32, #[len_param(3)] rgdwValueType: *const u32, #[len_param(3)] rgpwszValueName: *const PCWSTR, #[len_param(3)] rgpbValueData: *const *const u8, #[len_param(3)] rgcbValueData: *const u32, #[in] #[out] #[opt] pvArg: *mut void) -> BOOL;
         extern fn PFN_CRYPT_ENUM_OID_INFO(pInfo: *const CRYPT_OID_INFO, #[in] #[out] #[opt] pvArg: *mut void) -> BOOL;
-        extern fn PFN_CRYPT_EXPORT_PUBLIC_KEY_INFO_EX2_FUNC(hNCryptKey: NCRYPT_KEY_HANDLE, dwCertEncodingType: u32, pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
-        extern fn PFN_CRYPT_EXPORT_PUBLIC_KEY_INFO_FROM_BCRYPT_HANDLE_FUNC(hBCryptKey: BCRYPT_KEY_HANDLE, dwCertEncodingType: u32, pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
-        extern fn PFN_CRYPT_EXTRACT_ENCODED_SIGNATURE_PARAMETERS_FUNC(dwCertEncodingType: u32, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, ppvDecodedSignPara: *mut *mut void, ppwszCNGHashAlgid: *mut PWSTR) -> BOOL;
+        extern fn PFN_CRYPT_EXPORT_PUBLIC_KEY_INFO_EX2_FUNC(hNCryptKey: NCRYPT_KEY_HANDLE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
+        extern fn PFN_CRYPT_EXPORT_PUBLIC_KEY_INFO_FROM_BCRYPT_HANDLE_FUNC(hBCryptKey: BCRYPT_KEY_HANDLE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pszPublicKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pInfo: *mut CERT_PUBLIC_KEY_INFO, #[in] #[out] pcbInfo: *mut u32) -> BOOL;
+        extern fn PFN_CRYPT_EXTRACT_ENCODED_SIGNATURE_PARAMETERS_FUNC(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, ppvDecodedSignPara: *mut *mut void, ppwszCNGHashAlgid: *mut PWSTR) -> BOOL;
         extern fn PFN_CRYPT_FREE(pv: *const void);
-        extern fn PFN_CRYPT_GET_SIGNER_CERTIFICATE(#[in] #[out] #[opt] pvGetArg: *mut void, dwCertEncodingType: u32, pSignerId: *const CERT_INFO, hMsgCertStore: HCERTSTORE) -> PCCERT_CONTEXT;
+        extern fn PFN_CRYPT_GET_SIGNER_CERTIFICATE(#[in] #[out] #[opt] pvGetArg: *mut void, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pSignerId: *const CERT_INFO, hMsgCertStore: HCERTSTORE) -> PCCERT_CONTEXT;
         extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_FLUSH(pContext: *const void, #[len_param(2)] rgIdentifierOrNameList: *const PCERT_NAME_BLOB, dwIdentifierOrNameListCount: u32) -> BOOL;
         extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_FREE(#[opt] pPluginContext: *const void, pbData: *const u8);
         extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_FREE_IDENTIFIER(#[opt] pPluginContext: *const void, pIdentifier: *const CRYPT_INTEGER_BLOB);
         extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_FREE_PASSWORD(#[opt] pPluginContext: *const void, pwszPassword: PCWSTR);
         extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_GET(#[opt] pPluginContext: *const void, #[opt] pIdentifier: *const CRYPT_INTEGER_BLOB, dwNameType: u32, pNameBlob: *const CRYPT_INTEGER_BLOB, ppbContent: *mut PBYTE, pcbContent: *mut u32, ppwszPassword: *mut PCWSTR, ppIdentifier: *mut PCRYPT_DATA_BLOB) -> BOOL;
         extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_INITIALIZE(pfnFlush: PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_FLUSH, pContext: *const void, pdwExpectedObjectCount: *mut u32, ppFuncTable: *mut PCRYPT_OBJECT_LOCATOR_PROVIDER_TABLE, ppPluginContext: *mut *mut void) -> BOOL;
-        extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_RELEASE(dwReason: u32, #[opt] pPluginContext: *const void);
-        extern fn PFN_CRYPT_SIGN_AND_ENCODE_HASH_FUNC(hKey: NCRYPT_KEY_HANDLE, dwCertEncodingType: u32, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvDecodedSignPara: *const void, pwszCNGPubKeyAlgid: PCWSTR, pwszCNGHashAlgid: PCWSTR, #[size_param(7)] pbComputedHash: *const u8, cbComputedHash: u32, #[size_param(9)] #[opt] pbSignature: *mut u8, #[in] #[out] pcbSignature: *mut u32) -> BOOL;
-        extern fn PFN_CRYPT_VERIFY_ENCODED_SIGNATURE_FUNC(dwCertEncodingType: u32, pPubKeyInfo: *const CERT_PUBLIC_KEY_INFO, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvDecodedSignPara: *const void, pwszCNGPubKeyAlgid: PCWSTR, pwszCNGHashAlgid: PCWSTR, #[size_param(7)] pbComputedHash: *const u8, cbComputedHash: u32, #[size_param(9)] pbSignature: *const u8, cbSignature: u32) -> BOOL;
+        extern fn PFN_CRYPT_OBJECT_LOCATOR_PROVIDER_RELEASE(dwReason: CRYPT_OBJECT_LOCATOR_RELEASE_REASON, #[opt] pPluginContext: *const void);
+        extern fn PFN_CRYPT_SIGN_AND_ENCODE_HASH_FUNC(hKey: NCRYPT_KEY_HANDLE, dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvDecodedSignPara: *const void, pwszCNGPubKeyAlgid: PCWSTR, pwszCNGHashAlgid: PCWSTR, #[size_param(7)] pbComputedHash: *const u8, cbComputedHash: u32, #[size_param(9)] #[opt] pbSignature: *mut u8, #[in] #[out] pcbSignature: *mut u32) -> BOOL;
+        extern fn PFN_CRYPT_VERIFY_ENCODED_SIGNATURE_FUNC(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pPubKeyInfo: *const CERT_PUBLIC_KEY_INFO, pSignatureAlgorithm: *const CRYPT_ALGORITHM_IDENTIFIER, #[opt] pvDecodedSignPara: *const void, pwszCNGPubKeyAlgid: PCWSTR, pwszCNGHashAlgid: PCWSTR, #[size_param(7)] pbComputedHash: *const u8, cbComputedHash: u32, #[size_param(9)] pbSignature: *const u8, cbSignature: u32) -> BOOL;
         extern fn PFN_EXPORT_PRIV_KEY_FUNC(hCryptProv: HCRYPTPROV, dwKeySpec: u32, pszPrivateKeyObjId: PCSTR, dwFlags: u32, #[opt] pvAuxInfo: *const void, #[size_param(6)] #[opt] pPrivateKeyInfo: *mut CRYPT_PRIVATE_KEY_INFO, #[in] #[out] pcbPrivateKeyInfo: *mut u32) -> BOOL;
         extern fn PFN_FREE_ENCODED_OBJECT_FUNC(#[opt] pszObjectOid: PCSTR, #[in] #[out] pObject: *mut CRYPT_BLOB_ARRAY, #[in] #[out] #[opt] pvFreeContext: *mut void);
         extern fn PFN_IMPORT_PRIV_KEY_FUNC(hCryptProv: HCRYPTPROV, pPrivateKeyInfo: *const CRYPT_PRIVATE_KEY_INFO, dwFlags: u32, #[opt] pvAuxInfo: *const void) -> BOOL;
-        extern fn PFN_IMPORT_PUBLIC_KEY_INFO_EX2_FUNC(dwCertEncodingType: u32, pInfo: *const CERT_PUBLIC_KEY_INFO, dwFlags: u32, #[opt] pvAuxInfo: *const void, phKey: *mut BCRYPT_KEY_HANDLE) -> BOOL;
+        extern fn PFN_IMPORT_PUBLIC_KEY_INFO_EX2_FUNC(dwCertEncodingType: CERT_QUERY_ENCODING_TYPE, pInfo: *const CERT_PUBLIC_KEY_INFO, dwFlags: u32, #[opt] pvAuxInfo: *const void, phKey: *mut BCRYPT_KEY_HANDLE) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn PFXExportCertStore(hStore: HCERTSTORE, #[in] #[out] pPFX: *mut CRYPT_DATA_BLOB, szPassword: PCWSTR, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn PFXExportCertStoreEx(hStore: HCERTSTORE, #[in] #[out] pPFX: *mut CRYPT_DATA_BLOB, szPassword: PCWSTR, pvPara: *const void, dwFlags: u32) -> BOOL;
         #[library("CRYPT32.dll")]
-        extern fn PFXImportCertStore(pPFX: *const CRYPT_DATA_BLOB, szPassword: PCWSTR, dwFlags: u32) -> HCERTSTORE;
+        extern fn PFXImportCertStore(pPFX: *const CRYPT_DATA_BLOB, szPassword: PCWSTR, dwFlags: CRYPT_KEY_FLAGS) -> HCERTSTORE;
         #[library("CRYPT32.dll")]
         extern fn PFXIsPFXBlob(pPFX: *const CRYPT_DATA_BLOB) -> BOOL;
         #[library("CRYPT32.dll")]
         extern fn PFXVerifyPassword(pPFX: *const CRYPT_DATA_BLOB, szPassword: PCWSTR, dwFlags: u32) -> BOOL;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("CryptCloseAsyncHandle")]
         type PHCRYPTASYNC = *mut HANDLE;
         type PHMAC_INFO = *mut HMAC_INFO;
         type PHTTPSPolicyCallbackData = *mut HTTPSPolicyCallbackData;
-        const PKCS12_ALLOW_OVERWRITE_KEY: i32 = 16384;
-        const PKCS12_ALWAYS_CNG_KSP: i32 = 512;
         #[encoding("utf-16")]
         const PKCS12_CONFIG_REGPATH: String = "Software\\Microsoft\\Windows\\CurrentVersion\\PFX";
         const PKCS12_DISABLE_ENCRYPT_CERTIFICATES: i32 = 256;
@@ -4636,9 +4867,7 @@ mod Windows {
         const PKCS12_EXPORT_SILENT: i32 = 64;
         const PKCS12_IMPORT_RESERVED_MASK: u32 = 4294901760;
         const PKCS12_IMPORT_SILENT: i32 = 64;
-        const PKCS12_INCLUDE_EXTENDED_PROPERTIES: i32 = 16;
         const PKCS12_NAMED_NO_PERSIST_KEY: i32 = 131072;
-        const PKCS12_NO_PERSIST_KEY: i32 = 32768;
         const PKCS12_OBJECT_LOCATOR_ALL_IMPORT_FLAGS: i32 = 33360;
         const PKCS12_ONLY_CERTIFICATES: i32 = 1024;
         #[encoding("utf-16")]
@@ -4662,12 +4891,10 @@ mod Windows {
         const PKCS12_PBKDF2_ID_HMAC_SHA384: String = "1.2.840.113549.2.10";
         #[encoding("ansi")]
         const PKCS12_PBKDF2_ID_HMAC_SHA512: String = "1.2.840.113549.2.11";
-        const PKCS12_PREFER_CNG_KSP: i32 = 256;
         const PKCS12_PROTECT_TO_DOMAIN_SIDS: i32 = 32;
         const PKCS12_VIRTUAL_ISOLATION_KEY: i32 = 65536;
         const PKCS5_PADDING: i32 = 1;
         const PKCS7_SIGNER_INFO: PCSTR = 500;
-        const PKCS_7_ASN_ENCODING: i32 = 65536;
         const PKCS_7_NDR_ENCODING: i32 = 131072;
         const PKCS_ATTRIBUTE: PCSTR = 22;
         const PKCS_ATTRIBUTES: PCSTR = 48;
@@ -4877,14 +5104,7 @@ mod Windows {
         const TIMESTAMP_NO_AUTH_RETRIEVAL: i32 = 131072;
         const TIMESTAMP_REQUEST: PCSTR = 78;
         const TIMESTAMP_RESPONSE: PCSTR = 79;
-        const TIMESTAMP_STATUS_GRANTED: i32 = 0;
-        const TIMESTAMP_STATUS_GRANTED_WITH_MODS: i32 = 1;
-        const TIMESTAMP_STATUS_REJECTED: i32 = 2;
-        const TIMESTAMP_STATUS_REVOCATION_WARNING: i32 = 4;
-        const TIMESTAMP_STATUS_REVOKED: i32 = 5;
-        const TIMESTAMP_STATUS_WAITING: i32 = 3;
         const TIMESTAMP_VERIFY_CONTEXT_SIGNATURE: i32 = 32;
-        const TIMESTAMP_VERSION: i32 = 1;
         const TIME_VALID_OID_FLUSH_CRL: PCSTR = 2;
         const TIME_VALID_OID_FLUSH_CRL_FROM_CERT: PCSTR = 3;
         const TIME_VALID_OID_FLUSH_CTL: PCSTR = 1;
@@ -4918,7 +5138,6 @@ mod Windows {
         const USAGE_MATCH_TYPE_OR: i32 = 1;
         const X509_ALGORITHM_IDENTIFIER: PCSTR = 74;
         const X509_ALTERNATE_NAME: PCSTR = 12;
-        const X509_ASN_ENCODING: i32 = 1;
         const X509_AUTHORITY_INFO_ACCESS: PCSTR = 32;
         const X509_AUTHORITY_KEY_ID: PCSTR = 9;
         const X509_AUTHORITY_KEY_ID2: PCSTR = 31;

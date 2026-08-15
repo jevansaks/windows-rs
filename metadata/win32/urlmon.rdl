@@ -331,10 +331,12 @@ mod Windows {
         extern fn CopyBindInfo(pcbiSrc: *const BINDINFO, pbiDest: *mut BINDINFO) -> HRESULT;
         #[library("urlmon.dll")]
         extern fn CopyStgMedium(pcstgmedSrc: *const STGMEDIUM, pstgmedDest: *mut STGMEDIUM) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("urlmon.dll")]
         extern fn CreateAsyncBindCtx(reserved: u32, pBSCb: IBindStatusCallback, #[opt] pEFetc: IEnumFORMATETC, ppBC: *mut IBindCtx) -> HRESULT;
         #[library("urlmon.dll")]
         extern fn CreateAsyncBindCtxEx(pbc: IBindCtx, dwOptions: u32, pBSCb: IBindStatusCallback, #[opt] pEnum: IEnumFORMATETC, ppBC: *mut IBindCtx, reserved: u32) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("urlmon.dll")]
         extern fn CreateFormatEnumerator(cfmtetc: u32, #[len_param(0)] rgfmtetc: *const FORMATETC, ppenumfmtetc: *mut IEnumFORMATETC) -> HRESULT;
         #[library("urlmon.dll")]
@@ -474,8 +476,8 @@ mod Windows {
         }
         #[guid(0x69d14c80_c18e_11d0_a9ce_006097942311)]
         interface IDataFilter: IUnknown {
-            fn DoEncode(&self, dwFlags: u32, lInBufferSize: i32, pbInBuffer: *const u8, lOutBufferSize: i32, pbOutBuffer: *mut u8, lInBytesAvailable: i32, plInBytesRead: *mut i32, plOutBytesWritten: *mut i32, dwReserved: u32) -> HRESULT;
-            fn DoDecode(&self, dwFlags: u32, lInBufferSize: i32, pbInBuffer: *const u8, lOutBufferSize: i32, pbOutBuffer: *mut u8, lInBytesAvailable: i32, plInBytesRead: *mut i32, plOutBytesWritten: *mut i32, dwReserved: u32) -> HRESULT;
+            fn DoEncode(&self, dwFlags: u32, lInBufferSize: i32, #[len_param(1)] pbInBuffer: *const u8, lOutBufferSize: i32, #[len_param(3)] pbOutBuffer: *mut u8, lInBytesAvailable: i32, plInBytesRead: *mut i32, plOutBytesWritten: *mut i32, dwReserved: u32) -> HRESULT;
+            fn DoDecode(&self, dwFlags: u32, lInBufferSize: i32, #[len_param(1)] pbInBuffer: *const u8, lOutBufferSize: i32, #[len_param(3)] pbOutBuffer: *mut u8, lInBytesAvailable: i32, plInBytesRead: *mut i32, plOutBytesWritten: *mut i32, dwReserved: u32) -> HRESULT;
             fn SetEncodingLevel(&self, dwEncLevel: u32) -> HRESULT;
         }
         #[library("urlmon.dll")]
@@ -509,11 +511,11 @@ mod Windows {
         }
         #[guid(0x4f9f9fcb_e0f4_48eb_b7ab_fa2ea9365cb4)]
         interface IHttpNegotiate2: IHttpNegotiate {
-            fn GetRootSecurityId(&self, pbSecurityId: *mut u8, #[in] #[out] pcbSecurityId: *mut u32, dwReserved: usize) -> HRESULT;
+            fn GetRootSecurityId(&self, #[len_param(1)] pbSecurityId: *mut u8, #[in] #[out] pcbSecurityId: *mut u32, dwReserved: usize) -> HRESULT;
         }
         #[guid(0x57b6c80a_34c2_4602_bc26_66a02fc57153)]
         interface IHttpNegotiate3: IHttpNegotiate2 {
-            fn GetSerializedClientCertContext(&self, ppbCert: *mut *mut u8, pcbCert: *mut u32) -> HRESULT;
+            fn GetSerializedClientCertContext(&self, #[len_param(1)] ppbCert: *mut *mut u8, pcbCert: *mut u32) -> HRESULT;
         }
         #[guid(0x79eac9d7_bafa_11ce_8c82_00aa004ba90b)]
         interface IHttpSecurity: IWindowForBindingUI {
@@ -543,7 +545,7 @@ mod Windows {
         }
         #[guid(0x79eac9e4_baf9_11ce_8c82_00aa004ba90b)]
         interface IInternetProtocol: IInternetProtocolRoot {
-            fn Read(&self, #[in] #[out] pv: *mut void, cb: u32, pcbRead: *mut u32) -> HRESULT;
+            fn Read(&self, #[len_param(1)] #[in] #[out] pv: *mut void, cb: u32, pcbRead: *mut u32) -> HRESULT;
             fn Seek(&self, dlibMove: i64, dwOrigin: u32, plibNewPosition: *mut u64) -> HRESULT;
             fn LockRequest(&self, dwOptions: u32) -> HRESULT;
             fn UnlockRequest(&self) -> HRESULT;
@@ -557,7 +559,7 @@ mod Windows {
             fn ParseUrl(&self, pwzUrl: PCWSTR, ParseAction: PARSEACTION, dwParseFlags: u32, #[out] pwzResult: PWSTR, cchResult: u32, pcchResult: *mut u32, dwReserved: u32) -> HRESULT;
             fn CombineUrl(&self, pwzBaseUrl: PCWSTR, pwzRelativeUrl: PCWSTR, dwCombineFlags: u32, #[out] pwzResult: PWSTR, cchResult: u32, pcchResult: *mut u32, dwReserved: u32) -> HRESULT;
             fn CompareUrl(&self, pwzUrl1: PCWSTR, pwzUrl2: PCWSTR, dwCompareFlags: u32) -> HRESULT;
-            fn QueryInfo(&self, pwzUrl: PCWSTR, OueryOption: QUERYOPTION, dwQueryFlags: u32, #[in] #[out] pBuffer: *mut void, cbBuffer: u32, #[in] #[out] pcbBuf: *mut u32, dwReserved: u32) -> HRESULT;
+            fn QueryInfo(&self, pwzUrl: PCWSTR, OueryOption: QUERYOPTION, dwQueryFlags: u32, #[len_param(5)] #[in] #[out] pBuffer: *mut void, cbBuffer: u32, #[in] #[out] pcbBuf: *mut u32, dwReserved: u32) -> HRESULT;
         }
         #[guid(0x79eac9e3_baf9_11ce_8c82_00aa004ba90b)]
         interface IInternetProtocolRoot: IUnknown {
@@ -587,21 +589,21 @@ mod Windows {
             fn GetSecuritySite(&self, ppSite: *mut IInternetSecurityMgrSite) -> HRESULT;
             fn MapUrlToZone(&self, pwszUrl: PCWSTR, pdwZone: *mut u32, dwFlags: u32) -> HRESULT;
             fn GetSecurityId(&self, pwszUrl: PCWSTR, pbSecurityId: *mut u8, #[in] #[out] pcbSecurityId: *mut u32, dwReserved: usize) -> HRESULT;
-            fn ProcessUrlAction(&self, pwszUrl: PCWSTR, dwAction: u32, pPolicy: *mut u8, cbPolicy: u32, pContext: *const u8, cbContext: u32, dwFlags: u32, dwReserved: u32) -> HRESULT;
-            fn QueryCustomPolicy(&self, pwszUrl: PCWSTR, guidKey: *const GUID, ppPolicy: *mut *mut u8, pcbPolicy: *mut u32, pContext: *const u8, cbContext: u32, dwReserved: u32) -> HRESULT;
+            fn ProcessUrlAction(&self, pwszUrl: PCWSTR, dwAction: u32, #[len_param(3)] pPolicy: *mut u8, cbPolicy: u32, pContext: *const u8, cbContext: u32, dwFlags: u32, dwReserved: u32) -> HRESULT;
+            fn QueryCustomPolicy(&self, pwszUrl: PCWSTR, guidKey: *const GUID, #[len_param(3)] ppPolicy: *mut *mut u8, pcbPolicy: *mut u32, pContext: *const u8, cbContext: u32, dwReserved: u32) -> HRESULT;
             fn SetZoneMapping(&self, dwZone: u32, lpszPattern: PCWSTR, dwFlags: u32) -> HRESULT;
             fn GetZoneMappings(&self, dwZone: u32, ppenumString: *mut IEnumString, dwFlags: u32) -> HRESULT;
         }
         #[guid(0xf164edf1_cc7c_4f0d_9a94_34222625c393)]
         interface IInternetSecurityManagerEx: IInternetSecurityManager {
-            fn ProcessUrlActionEx(&self, pwszUrl: PCWSTR, dwAction: u32, pPolicy: *mut u8, cbPolicy: u32, pContext: *const u8, cbContext: u32, dwFlags: u32, dwReserved: u32, pdwOutFlags: *mut u32) -> HRESULT;
+            fn ProcessUrlActionEx(&self, pwszUrl: PCWSTR, dwAction: u32, #[len_param(3)] pPolicy: *mut u8, cbPolicy: u32, pContext: *const u8, cbContext: u32, dwFlags: u32, dwReserved: u32, pdwOutFlags: *mut u32) -> HRESULT;
         }
         #[guid(0xf1e50292_a795_4117_8e09_2b560a72ac60)]
         interface IInternetSecurityManagerEx2: IInternetSecurityManagerEx {
             fn MapUrlToZoneEx2(&self, pUri: IUri, pdwZone: *mut u32, dwFlags: u32, ppwszMappedUrl: *mut PWSTR, #[opt] pdwOutFlags: *mut u32) -> HRESULT;
-            fn ProcessUrlActionEx2(&self, pUri: IUri, dwAction: u32, pPolicy: *mut u8, cbPolicy: u32, pContext: *const u8, cbContext: u32, dwFlags: u32, dwReserved: usize, pdwOutFlags: *mut u32) -> HRESULT;
+            fn ProcessUrlActionEx2(&self, pUri: IUri, dwAction: u32, #[len_param(3)] pPolicy: *mut u8, cbPolicy: u32, pContext: *const u8, cbContext: u32, dwFlags: u32, dwReserved: usize, pdwOutFlags: *mut u32) -> HRESULT;
             fn GetSecurityIdEx2(&self, pUri: IUri, pbSecurityId: *mut u8, #[in] #[out] pcbSecurityId: *mut u32, dwReserved: usize) -> HRESULT;
-            fn QueryCustomPolicyEx2(&self, pUri: IUri, guidKey: *const GUID, ppPolicy: *mut *mut u8, pcbPolicy: *mut u32, pContext: *const u8, cbContext: u32, dwReserved: usize) -> HRESULT;
+            fn QueryCustomPolicyEx2(&self, pUri: IUri, guidKey: *const GUID, #[len_param(3)] ppPolicy: *mut *mut u8, pcbPolicy: *mut u32, pContext: *const u8, cbContext: u32, dwReserved: usize) -> HRESULT;
         }
         #[guid(0x79eac9ed_baf9_11ce_8c82_00aa004ba90b)]
         interface IInternetSecurityMgrSite: IUnknown {
@@ -799,7 +801,7 @@ mod Windows {
         }
         #[guid(0xdd1ec3b3_8391_4fdb_a9e6_347c3caaa7dd)]
         interface IWinInetCacheHints: IUnknown {
-            fn SetCacheExtension(&self, pwzExt: PCWSTR, #[in] #[out] pszCacheFile: *mut void, #[in] #[out] pcbCacheFile: *mut u32, #[in] #[out] pdwWinInetError: *mut u32, #[in] #[out] pdwReserved: *mut u32) -> HRESULT;
+            fn SetCacheExtension(&self, pwzExt: PCWSTR, #[len_param(2)] #[in] #[out] pszCacheFile: *mut void, #[in] #[out] pcbCacheFile: *mut u32, #[in] #[out] pdwWinInetError: *mut u32, #[in] #[out] pdwReserved: *mut u32) -> HRESULT;
         }
         #[guid(0x7857aeac_d31f_49bf_884e_dd46df36780a)]
         interface IWinInetCacheHints2: IWinInetCacheHints {
@@ -812,7 +814,7 @@ mod Windows {
         }
         #[guid(0x79eac9d8_bafa_11ce_8c82_00aa004ba90b)]
         interface IWinInetHttpInfo: IWinInetInfo {
-            fn QueryInfo(&self, dwOption: u32, #[in] #[out] pBuffer: *mut void, #[in] #[out] pcbBuf: *mut u32, #[in] #[out] pdwFlags: *mut u32, #[in] #[out] pdwReserved: *mut u32) -> HRESULT;
+            fn QueryInfo(&self, dwOption: u32, #[len_param(2)] #[in] #[out] pBuffer: *mut void, #[in] #[out] pcbBuf: *mut u32, #[in] #[out] pdwFlags: *mut u32, #[in] #[out] pdwReserved: *mut u32) -> HRESULT;
         }
         #[guid(0xf286fa56_c1fd_4270_8e67_b3eb790a81e8)]
         interface IWinInetHttpTimeouts: IUnknown {
@@ -820,7 +822,7 @@ mod Windows {
         }
         #[guid(0x79eac9d6_bafa_11ce_8c82_00aa004ba90b)]
         interface IWinInetInfo: IUnknown {
-            fn QueryOption(&self, dwOption: u32, #[in] #[out] pBuffer: *mut void, #[in] #[out] pcbBuf: *mut u32) -> HRESULT;
+            fn QueryOption(&self, dwOption: u32, #[len_param(2)] #[in] #[out] pBuffer: *mut void, #[in] #[out] pcbBuf: *mut u32) -> HRESULT;
         }
         #[guid(0x79eac9d5_bafa_11ce_8c82_00aa004ba90b)]
         interface IWindowForBindingUI: IUnknown {

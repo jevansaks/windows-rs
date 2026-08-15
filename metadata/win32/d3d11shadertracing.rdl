@@ -156,8 +156,9 @@ mod Windows {
         struct D3D11_VERTEX_SHADER_TRACE_DESC {
             Invocation: u64,
         }
+        #[supported_os("windows8.0")]
         #[library("D3DCOMPILER_47.dll")]
-        extern fn D3DDisassemble11Trace(#[size_param(1)] pSrcData: *const void, SrcDataSize: usize, pTrace: ID3D11ShaderTrace, StartStep: u32, NumSteps: u32, Flags: u32, ppDisassembly: *mut ID3D10Blob) -> HRESULT;
+        extern "C" fn D3DDisassemble11Trace(#[size_param(1)] pSrcData: *const void, SrcDataSize: usize, pTrace: ID3D11ShaderTrace, StartStep: u32, NumSteps: u32, Flags: u32, ppDisassembly: *mut ID3D10Blob) -> HRESULT;
         #[guid(0x36b013e6_2811_4845_baa7_d623fe0df104)]
         interface ID3D11ShaderTrace: IUnknown {
             fn TraceReady(&self, #[opt] pTestCount: *mut u64) -> HRESULT;

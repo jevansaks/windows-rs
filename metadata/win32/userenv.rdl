@@ -2,29 +2,41 @@
 mod Windows {
     mod Win32 {
         type ASYNCCOMPLETIONHANDLE = usize;
+        #[supported_os("windows8.0")]
         #[library("USERENV.dll")]
         extern fn CreateAppContainerProfile(pszAppContainerName: PCWSTR, pszDisplayName: PCWSTR, pszDescription: PCWSTR, #[len_param(4)] #[opt] pCapabilities: *const SID_AND_ATTRIBUTES, dwCapabilityCount: u32, ppSidAppContainerSid: *mut PSID) -> HRESULT;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn CreateEnvironmentBlock(lpEnvironment: *mut *mut void, #[opt] hToken: HANDLE, bInherit: BOOL) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn CreateProfile(pszUserSid: PCWSTR, pszUserName: PCWSTR, #[len_param(3)] #[out] pszProfilePath: PWSTR, cchProfilePath: u32) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("USERENV.dll")]
         extern fn DeleteAppContainerProfile(pszAppContainerName: PCWSTR) -> HRESULT;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn DeleteProfileA(lpSidString: PCSTR, #[opt] lpProfilePath: PCSTR, #[opt] lpComputerName: PCSTR) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn DeleteProfileW(lpSidString: PCWSTR, #[opt] lpProfilePath: PCWSTR, #[opt] lpComputerName: PCWSTR) -> BOOL;
+        #[supported_os("windows8.0")]
         #[library("USERENV.dll")]
         extern fn DeriveAppContainerSidFromAppContainerName(pszAppContainerName: PCWSTR, ppsidAppContainerSid: *mut PSID) -> HRESULT;
+        #[supported_os("windows10.0.10240")]
         #[library("USERENV.dll")]
         extern fn DeriveRestrictedAppContainerSidFromAppContainerSidAndRestrictedName(psidAppContainerSid: PSID, pszRestrictedAppContainerName: PCWSTR, ppsidRestrictedAppContainerSid: *mut PSID) -> HRESULT;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn DestroyEnvironmentBlock(lpEnvironment: *const void) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn EnterCriticalPolicySection(bMachine: BOOL) -> HANDLE;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn ExpandEnvironmentStringsForUserA(#[opt] hToken: HANDLE, lpSrc: PCSTR, #[len_param(3)] #[out] lpDest: PSTR, dwSize: u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn ExpandEnvironmentStringsForUserW(#[opt] hToken: HANDLE, lpSrc: PCWSTR, #[len_param(3)] #[out] lpDest: PWSTR, dwSize: u32) -> BOOL;
         const FLAG_ASSUME_COMP_WQLFILTER_TRUE: i32 = 33554432;
         const FLAG_ASSUME_SLOW_LINK: i32 = 536870912;
@@ -37,9 +49,11 @@ mod Windows {
         const FLAG_NO_GPO_FILTER: u32 = 2147483648;
         const FLAG_NO_USER: i32 = 1;
         const FLAG_PLANNING_MODE: i32 = 16777216;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn FreeGPOListA(pGPOList: *const GROUP_POLICY_OBJECTA) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn FreeGPOListW(pGPOList: *const GROUP_POLICY_OBJECTW) -> BOOL;
         const GPC_BLOCK_POLICY: i32 = 1;
         const GPO_FLAG_DISABLE: i32 = 1;
@@ -99,42 +113,60 @@ mod Windows {
         }
         #[library("USERENV.dll")]
         extern fn GenerateGPNotification(bMachine: BOOL, lpwszMgmtProduct: PCWSTR, dwMgmtProductOptions: u32) -> u32;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetAllUsersProfileDirectoryA(#[len_param(1)] #[out] #[opt] lpProfileDir: PSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetAllUsersProfileDirectoryW(#[len_param(1)] #[out] #[opt] lpProfileDir: PWSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
+        #[supported_os("windows8.0")]
         #[library("USERENV.dll")]
         extern fn GetAppContainerFolderPath(pszAppContainerSid: PCWSTR, ppszPath: *mut PWSTR) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("USERENV.dll")]
         extern fn GetAppContainerRegistryLocation(desiredAccess: REGSAM, phAppContainerKey: *mut HKEY) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn GetAppliedGPOListA(dwFlags: u32, #[opt] pMachineName: PCSTR, #[opt] pSidUser: PSID, pGuidExtension: *const GUID, ppGPOList: *mut PGROUP_POLICY_OBJECTA) -> u32;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn GetAppliedGPOListW(dwFlags: u32, #[opt] pMachineName: PCWSTR, #[opt] pSidUser: PSID, pGuidExtension: *const GUID, ppGPOList: *mut PGROUP_POLICY_OBJECTW) -> u32;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetDefaultUserProfileDirectoryA(#[len_param(1)] #[out] #[opt] lpProfileDir: PSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetDefaultUserProfileDirectoryW(#[len_param(1)] #[out] #[opt] lpProfileDir: PWSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetGPOListA(#[opt] hToken: HANDLE, #[opt] lpName: PCSTR, #[opt] lpHostName: PCSTR, #[opt] lpComputerName: PCSTR, dwFlags: u32, pGPOList: *mut PGROUP_POLICY_OBJECTA) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetGPOListW(#[opt] hToken: HANDLE, #[opt] lpName: PCWSTR, #[opt] lpHostName: PCWSTR, #[opt] lpComputerName: PCWSTR, dwFlags: u32, pGPOList: *mut PGROUP_POLICY_OBJECTW) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetProfileType(dwFlags: *mut u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetProfilesDirectoryA(#[len_param(1)] #[out] #[opt] lpProfileDir: PSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetProfilesDirectoryW(#[len_param(1)] #[out] #[opt] lpProfileDir: PWSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetUserProfileDirectoryA(hToken: HANDLE, #[len_param(2)] #[out] #[opt] lpProfileDir: PSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn GetUserProfileDirectoryW(hToken: HANDLE, #[len_param(2)] #[out] #[opt] lpProfileDir: PWSTR, #[in] #[out] lpcchSize: *mut u32) -> BOOL;
         type LPPOLICYSETTINGSTATUSINFO = *mut POLICYSETTINGSTATUSINFO;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn LeaveCriticalPolicySection(hSection: HANDLE) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn LoadUserProfileA(hToken: HANDLE, #[in] #[out] lpProfileInfo: *mut PROFILEINFOA) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn LoadUserProfileW(hToken: HANDLE, #[in] #[out] lpProfileInfo: *mut PROFILEINFOW) -> BOOL;
         extern fn PFNGENERATEGROUPPOLICY(dwFlags: u32, #[in] #[out] pbAbort: *mut BOOL, #[opt] pwszSite: *const u16, #[opt] pComputerTarget: *const RSOP_TARGET, #[opt] pUserTarget: *const RSOP_TARGET) -> u32;
         extern fn PFNPROCESSGROUPPOLICY(dwFlags: u32, hToken: HANDLE, hKeyRoot: HKEY, pDeletedGPOList: PGROUP_POLICY_OBJECT, pChangedGPOList: PGROUP_POLICY_OBJECT, pHandle: ASYNCCOMPLETIONHANDLE, #[in] #[out] pbAbort: *mut BOOL, #[opt] pStatusCallback: PFNSTATUSMESSAGECALLBACK) -> u32;
@@ -161,8 +193,10 @@ mod Windows {
         const PT_ROAMING: i32 = 2;
         const PT_ROAMING_PREEXISTING: i32 = 8;
         const PT_TEMPORARY: i32 = 1;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn ProcessGroupPolicyCompleted(extensionId: *const GUID, pAsyncHandle: ASYNCCOMPLETIONHANDLE, dwStatus: u32) -> u32;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn ProcessGroupPolicyCompletedEx(extensionId: *const GUID, pAsyncHandle: ASYNCCOMPLETIONHANDLE, dwStatus: u32, RsopStatus: HRESULT) -> u32;
         type REFGPEXTENSIONID = *mut GUID;
@@ -179,18 +213,25 @@ mod Windows {
         }
         const RSOP_TEMPNAMESPACE_EXISTS: i32 = 4;
         const RSOP_USER_ACCESS_DENIED: i32 = 1;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn RefreshPolicy(bMachine: BOOL) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn RefreshPolicyEx(bMachine: BOOL, dwOptions: u32) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn RegisterGPNotification(hEvent: HANDLE, bMachine: BOOL) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn RsopAccessCheckByType(pSecurityDescriptor: PSECURITY_DESCRIPTOR, #[opt] pPrincipalSelfSid: PSID, pRsopToken: PRSOPTOKEN, dwDesiredAccessMask: u32, #[len_param(5)] #[opt] pObjectTypeList: *const OBJECT_TYPE_LIST, ObjectTypeListLength: u32, pGenericMapping: *const GENERIC_MAPPING, #[size_param(8)] #[opt] pPrivilegeSet: *const PRIVILEGE_SET, #[opt] pdwPrivilegeSetLength: *const u32, pdwGrantedAccessMask: *mut u32, pbAccessStatus: *mut BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn RsopFileAccessCheck(pszFileName: PCWSTR, pRsopToken: PRSOPTOKEN, dwDesiredAccessMask: u32, pdwGrantedAccessMask: *mut u32, pbAccessStatus: *mut BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn RsopResetPolicySettingStatus(dwFlags: u32, pServices: IWbemServices, pSettingInstance: IWbemClassObject) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("USERENV.dll")]
         extern fn RsopSetPolicySettingStatus(dwFlags: u32, pServices: IWbemServices, pSettingInstance: IWbemClassObject, nInfo: u32, #[len_param(3)] pStatus: *const POLICYSETTINGSTATUSINFO) -> HRESULT;
         #[repr(i32)]
@@ -201,9 +242,11 @@ mod Windows {
             RSOPFailed = 3,
             RSOPSubsettingFailed = 4,
         }
-        #[library("USERENV.dll")]
+        #[supported_os("windows5.0")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn UnloadUserProfile(hToken: HANDLE, hProfile: HANDLE) -> BOOL;
-        #[library("USERENV.dll")]
+        #[supported_os("windows6.0.6000")]
+        #[library("USERENV.dll", set_last_error)]
         extern fn UnregisterGPNotification(hEvent: HANDLE) -> BOOL;
     }
 }

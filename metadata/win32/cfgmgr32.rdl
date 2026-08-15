@@ -432,9 +432,9 @@ mod Windows {
         extern fn CM_Get_Sibling(pdnDevInst: *mut DEVNODE, dnDevInst: DEVINST, ulFlags: u32) -> CONFIGRET;
         #[library("SETUPAPI.dll")]
         extern fn CM_Get_Sibling_Ex(pdnDevInst: *mut DEVNODE, dnDevInst: DEVINST, ulFlags: u32, #[opt] hMachine: HMACHINE) -> CONFIGRET;
-        #[library("SETUPAPI.dll")]
+        #[library("SETUPAPI.dll", set_last_error)]
         extern fn CM_Get_Version() -> u16;
-        #[library("SETUPAPI.dll")]
+        #[library("SETUPAPI.dll", set_last_error)]
         extern fn CM_Get_Version_Ex(#[opt] hMachine: HMACHINE) -> u16;
         const CM_HWPI_DOCKED: i32 = 2;
         const CM_HWPI_NOT_DOCKABLE: i32 = 0;
@@ -748,7 +748,7 @@ mod Windows {
         extern fn CM_Unregister_Device_Interface_ExW(pszDeviceInterface: PCWSTR, ulFlags: u32, #[opt] hMachine: HMACHINE) -> CONFIGRET;
         #[library("CFGMGR32.dll")]
         extern fn CM_Unregister_Notification(NotifyContext: HCMNOTIFICATION) -> CONFIGRET;
-        #[library("SETUPAPI.dll", import = "CMP_WaitNoPendingInstallEvents")]
+        #[library("SETUPAPI.dll", import = "CMP_WaitNoPendingInstallEvents", set_last_error)]
         extern fn CM_WaitNoPendingInstallEvents(dwTimeout: u32) -> u32;
         const CONFIGMG_VERSION: i32 = 1024;
         type CONFIGRET = RETURN_TYPE;

@@ -44,6 +44,28 @@ pub(crate) fn build_resolution_map(
     map
 }
 
+pub(crate) fn apply_canonical_owners(map: &mut HashMap<String, String>, exclude: &str) {
+    for (name, namespace) in [
+        ("IUnknown", "Windows.Win32.System.Com"),
+        ("ISequentialStream", "Windows.Win32.System.Com"),
+        ("IStream", "Windows.Win32.System.Com"),
+        ("HRESULT", "Windows.Win32.Foundation"),
+        ("NTSTATUS", "Windows.Win32.Foundation"),
+        ("BOOL", "Windows.Win32.Foundation"),
+        ("UINT", "Windows.Win32.Foundation"),
+        ("PCSTR", "Windows.Win32.Foundation"),
+        ("PCWSTR", "Windows.Win32.Foundation"),
+        ("PSTR", "Windows.Win32.Foundation"),
+        ("PWSTR", "Windows.Win32.Foundation"),
+    ] {
+        if namespace == exclude {
+            map.remove(name);
+        } else {
+            map.insert(name.to_string(), namespace.to_string());
+        }
+    }
+}
+
 /// Return the defining-header partition leaf for a declaration cursor.
 ///
 /// Macro-expanded linkage cursors can spell at the macro definition, so expansion
@@ -233,8 +255,8 @@ pub(crate) fn matches_filter(file: &str, filter: &str) -> bool {
     if filter.is_empty() {
         return false;
     }
-    let file = file.replace('\\', "/");
-    let filter = filter.replace('\\', "/");
+    let file = file.replace('\\', "/").to_ascii_lowercase();
+    let filter = filter.replace('\\', "/").to_ascii_lowercase();
     file.ends_with(filter.as_str())
         && (file.len() == filter.len() || file.as_bytes()[file.len() - filter.len() - 1] == b'/')
 }

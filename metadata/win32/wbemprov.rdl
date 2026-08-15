@@ -26,13 +26,13 @@ mod Windows {
         }
         #[guid(0x631f7d96_d993_11d2_b339_00105a1f4aaf)]
         interface IWbemEventProviderSecurity: IUnknown {
-            fn AccessCheck(&self, wszQueryLanguage: WBEM_CWSTR, wszQuery: WBEM_CWSTR, lSidLength: i32, pSid: *const u8) -> HRESULT;
+            fn AccessCheck(&self, wszQueryLanguage: WBEM_CWSTR, wszQuery: WBEM_CWSTR, lSidLength: i32, #[len_param(2)] pSid: *const u8) -> HRESULT;
         }
         #[guid(0x3ae0080a_7e3a_4366_bf89_0feedc931659)]
         interface IWbemEventSink: IWbemObjectSink {
-            fn SetSinkSecurity(&self, lSDLength: i32, pSD: *const u8) -> HRESULT;
+            fn SetSinkSecurity(&self, lSDLength: i32, #[len_param(0)] pSD: *const u8) -> HRESULT;
             fn IsActive(&self) -> HRESULT;
-            fn GetRestrictedSink(&self, lNumQueries: i32, awszQueries: *const PCWSTR, pCallback: IUnknown, ppSink: *mut IWbemEventSink) -> HRESULT;
+            fn GetRestrictedSink(&self, lNumQueries: i32, #[len_param(0)] awszQueries: *const PCWSTR, pCallback: IUnknown, ppSink: *mut IWbemEventSink) -> HRESULT;
             fn SetBatchingParameters(&self, lFlags: i32, dwMaxBufferSize: u32, dwMaxSendLatency: u32) -> HRESULT;
         }
         #[guid(0x49353c93_516b_11d1_aea6_00c04fb68820)]
@@ -63,7 +63,7 @@ mod Windows {
         }
         #[guid(0xe246107b_b06e_11d0_ad61_00c04fd8fdff)]
         interface IWbemUnboundObjectSink: IUnknown {
-            fn IndicateToConsumer(&self, pLogicalConsumer: IWbemClassObject, lNumObjects: i32, apObjects: *const IWbemClassObject) -> HRESULT;
+            fn IndicateToConsumer(&self, pLogicalConsumer: IWbemClassObject, lNumObjects: i32, #[len_param(1)] apObjects: *const IWbemClassObject) -> HRESULT;
         }
         #[repr(i32)]
         enum WBEM_BATCH_TYPE {

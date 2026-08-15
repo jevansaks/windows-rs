@@ -63,8 +63,10 @@ mod Windows {
             dwType: u32,
             rgb: [u8; 1],
         }
+        #[supported_os("windows5.0")]
         #[library("ole32.dll")]
         extern fn StgConvertPropertyToVariant(pprop: *const SERIALIZEDPROPERTYVALUE, CodePage: u16, pvar: *mut PROPVARIANT, pma: *const PMemoryAllocator) -> bool;
+        #[supported_os("windows5.0")]
         #[library("ole32.dll")]
         extern fn StgConvertVariantToProperty(pvar: *const PROPVARIANT, CodePage: u16, #[size_param(3)] #[opt] pprop: *mut SERIALIZEDPROPERTYVALUE, #[in] #[out] pcb: *mut u32, pid: PROPID, #[reserved] fReserved: bool, #[in] #[out] #[opt] pcIndirect: *mut u32) -> *mut SERIALIZEDPROPERTYVALUE;
     }

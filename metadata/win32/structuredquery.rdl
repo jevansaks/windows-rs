@@ -35,7 +35,7 @@ mod Windows {
             fn CreateTrueFalse(&self, fVal: BOOL, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
             fn CreateNegation(&self, pcSub: ICondition, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
             fn CreateCompoundFromObjectArray(&self, ct: CONDITION_TYPE, #[opt] poaSubs: IObjectArray, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
-            fn CreateCompoundFromArray(&self, ct: CONDITION_TYPE, ppcondSubs: *const ICondition, cSubs: u32, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
+            fn CreateCompoundFromArray(&self, ct: CONDITION_TYPE, #[len_param(2)] ppcondSubs: *const ICondition, cSubs: u32, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
             fn CreateStringLeaf(&self, propkey: *const PROPERTYKEY, cop: CONDITION_OPERATION, pszValue: PCWSTR, #[opt] pszLocaleName: PCWSTR, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
             fn CreateIntegerLeaf(&self, propkey: *const PROPERTYKEY, cop: CONDITION_OPERATION, lValue: i32, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
             fn CreateBooleanLeaf(&self, propkey: *const PROPERTYKEY, cop: CONDITION_OPERATION, fValue: BOOL, cco: CONDITION_CREATION_OPTIONS, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;

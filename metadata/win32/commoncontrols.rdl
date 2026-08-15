@@ -44,7 +44,7 @@ mod Windows {
             fn DiscardImages(&self, iFirstImage: i32, iLastImage: i32, dwFlags: u32) -> HRESULT;
             fn PreloadImages(&self, pimldp: *const IMAGELISTDRAWPARAMS) -> HRESULT;
             fn GetStatistics(&self, #[in] #[out] pils: *mut IMAGELISTSTATS) -> HRESULT;
-            fn Initialize(&self, cx: i32, cy: i32, flags: u32, cInitial: i32, cGrow: i32) -> HRESULT;
+            fn Initialize(&self, cx: i32, cy: i32, flags: IMAGELIST_CREATION_FLAGS, cInitial: i32, cGrow: i32) -> HRESULT;
             fn Replace2(&self, i: i32, hbmImage: HBITMAP, #[opt] hbmMask: HBITMAP, #[opt] punk: IUnknown, dwFlags: u32) -> HRESULT;
             fn ReplaceFromImageList(&self, i: i32, pil: IImageList, iSrc: i32, #[opt] punk: IUnknown, dwFlags: u32) -> HRESULT;
         }
@@ -76,6 +76,7 @@ mod Windows {
             cStandby: i32,
         }
         const ImageList: GUID = 0x7c476ba2_02b1_48f4_8048_b24619ddc058;
+        #[supported_os("windows6.0.6000")]
         #[library("COMCTL32.dll")]
         extern fn ImageList_CoCreateInstance(rclsid: *const GUID, #[opt] punkOuter: IUnknown, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
     }

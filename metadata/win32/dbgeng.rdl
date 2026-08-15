@@ -92,10 +92,8 @@ mod Windows {
         const DEBUG_CES_LOG_FILE: i32 = 64;
         const DEBUG_CES_PROCESS_OPTIONS: i32 = 512;
         const DEBUG_CES_RADIX: i32 = 128;
-        const DEBUG_CES_STEP_FILTERS: i32 = 65536;
         const DEBUG_CES_SYSTEMS: i32 = 2048;
         const DEBUG_CES_TEXT_REPLACEMENTS: i32 = 16384;
-        const DEBUG_CES_VIEWS: i32 = 32768;
         const DEBUG_CLASS_IMAGE_FILE: i32 = 3;
         const DEBUG_CLASS_KERNEL: i32 = 1;
         const DEBUG_CLASS_UNINITIALIZED: i32 = 0;
@@ -838,7 +836,7 @@ mod Windows {
             Virtual: BOOL,
             FrameNumber: u32,
             InlineFrameContext: u32,
-            FrameMachine: u32,
+            Reserved1: u32,
         }
         const DEBUG_STACK_FRAME_MEMORY_USAGE: i32 = 512;
         const DEBUG_STACK_FRAME_NUMBERS: i32 = 64;
@@ -4884,9 +4882,6 @@ mod Windows {
             fn GetCurrentProcessExecutableNameWide(&self, #[len_param(1)] #[out] #[opt] Buffer: PWSTR, BufferSize: u32, #[opt] ExeSize: *mut u32) -> HRESULT;
             fn GetCurrentSystemServerNameWide(&self, #[len_param(1)] #[out] #[opt] Buffer: PWSTR, BufferSize: u32, #[opt] NameSize: *mut u32) -> HRESULT;
         }
-        const IMAGE_FILE_MACHINE_ARM64EC: i32 = 42561;
-        const IMAGE_FILE_MACHINE_ARM64X: i32 = 42574;
-        const IMAGE_FILE_MACHINE_CHPE_X86: i32 = 14948;
         union INLINE_FRAME_CONTEXT {
             ContextValue: u32,
             Anonymous: struct {
@@ -4908,7 +4903,6 @@ mod Windows {
         extern fn PDEBUG_EXTENSION_CALL(Client: IDebugClient, #[opt] Args: PCSTR) -> HRESULT;
         extern fn PDEBUG_EXTENSION_CANUNLOAD() -> HRESULT;
         extern fn PDEBUG_EXTENSION_INITIALIZE(Version: *mut u32, Flags: *mut u32) -> HRESULT;
-        extern fn PDEBUG_EXTENSION_ISEXTENSIONAPI(Name: PCSTR) -> BOOL;
         extern fn PDEBUG_EXTENSION_KNOWN_STRUCT(Flags: u32, Offset: u64, #[opt] TypeName: PCSTR, #[len_param(4)] #[out] #[opt] Buffer: PSTR, #[in] #[out] #[opt] BufferChars: *mut u32) -> HRESULT;
         extern fn PDEBUG_EXTENSION_KNOWN_STRUCT_EX(Client: IDebugClient, Flags: u32, Offset: u64, #[opt] TypeName: PCSTR, #[len_param(5)] #[out] #[opt] Buffer: PSTR, #[in] #[out] #[opt] BufferChars: *mut u32) -> HRESULT;
         extern fn PDEBUG_EXTENSION_NOTIFY(Notify: u32, Argument: u64);

@@ -1232,7 +1232,6 @@ mod Windows {
         const FILE_DEVICE_CONSOLE: i32 = 80;
         const FILE_DEVICE_CONTROLLER: i32 = 4;
         const FILE_DEVICE_CRYPT_PROVIDER: i32 = 63;
-        const FILE_DEVICE_CXL_TYPE3: i32 = 103;
         const FILE_DEVICE_DATALINK: i32 = 5;
         const FILE_DEVICE_DEVAPI: i32 = 71;
         const FILE_DEVICE_DFS: i32 = 6;
@@ -1264,7 +1263,6 @@ mod Windows {
         const FILE_DEVICE_MOUSE: i32 = 15;
         const FILE_DEVICE_MT_COMPOSITE: i32 = 66;
         const FILE_DEVICE_MT_TRANSPORT: i32 = 67;
-        const FILE_DEVICE_MULTITIER_MEMORY: i32 = 102;
         const FILE_DEVICE_MULTI_UNC_PROVIDER: i32 = 16;
         const FILE_DEVICE_NAMED_PIPE: i32 = 17;
         const FILE_DEVICE_NETWORK: i32 = 18;
@@ -1615,7 +1613,6 @@ mod Windows {
         const FSCTL_ADVANCE_FILE_ID: i32 = 590532;
         const FSCTL_ALLOW_EXTENDED_DASD_IO: i32 = 589955;
         const FSCTL_CASCADES_REFS_SET_FILE_REMOTE: i32 = 591004;
-        const FSCTL_CIMFS_QUERY_BACKING_REGION_NAMES: i32 = 591008;
         const FSCTL_CLEAN_VOLUME_METADATA: i32 = 590716;
         const FSCTL_CLEAR_ALL_LCN_WEAK_REFERENCES: i32 = 590956;
         const FSCTL_CLEAR_LCN_WEAK_REFERENCE: i32 = 590948;
@@ -1819,9 +1816,6 @@ mod Windows {
         const FSCTL_REFS_SET_VOLUME_DEDUP_INFO: i32 = 590960;
         const FSCTL_REFS_SET_VOLUME_IO_METRICS_INFO: i32 = 590984;
         const FSCTL_REFS_STREAM_SNAPSHOT_MANAGEMENT: i32 = 590912;
-        const FSCTL_REFS_VOLUME_ATTESTATION_INJECT_CERTIFICATE: i32 = 591016;
-        const FSCTL_REFS_VOLUME_ATTESTATION_PREPARE_TO_SIGN: i32 = 591012;
-        const FSCTL_REFS_VOLUME_ATTESTATION_QUERY_STATUS: i32 = 591020;
         const FSCTL_REMOVE_OVERLAY: i32 = 623412;
         const FSCTL_REPAIR_COPIES: i32 = 639668;
         const FSCTL_REQUEST_BATCH_OPLOCK: i32 = 589832;
@@ -2192,9 +2186,6 @@ mod Windows {
         const IOCTL_STORAGE_ATTRIBUTE_MANAGEMENT: i32 = 3005596;
         const IOCTL_STORAGE_BASE: i32 = 45;
         const IOCTL_STORAGE_BC_VERSION: i32 = 1;
-        const IOCTL_STORAGE_BOOT_PARTITION_ACTIVATE: i32 = 3005456;
-        const IOCTL_STORAGE_BOOT_PARTITION_DOWNLOAD: i32 = 3005452;
-        const IOCTL_STORAGE_BOOT_PARTITION_GET_INFO: i32 = 2956308;
         const IOCTL_STORAGE_BREAK_RESERVATION: i32 = 2969620;
         const IOCTL_STORAGE_CHECK_PRIORITY_HINT_SUPPORT: i32 = 2955392;
         const IOCTL_STORAGE_CHECK_VERIFY: i32 = 2967552;
@@ -2657,7 +2648,6 @@ mod Windows {
         }
         struct PARTITION_INFORMATION_EX {
             PartitionStyle: PARTITION_STYLE,
-            PartitionOrdinal: u16,
             StartingOffset: i64,
             PartitionLength: i64,
             PartitionNumber: u32,
@@ -3194,9 +3184,6 @@ mod Windows {
         type PSTORAGE_FRU_ID_DESCRIPTOR = *mut STORAGE_FRU_ID_DESCRIPTOR;
         type PSTORAGE_GET_BC_PROPERTIES_OUTPUT = *mut STORAGE_GET_BC_PROPERTIES_OUTPUT;
         type PSTORAGE_HOTPLUG_INFO = *mut STORAGE_HOTPLUG_INFO;
-        type PSTORAGE_HW_BOOT_PARTITION_ACTIVATE = *mut STORAGE_HW_BOOT_PARTITION_ACTIVATE;
-        type PSTORAGE_HW_BOOT_PARTITION_DOWNLOAD = *mut STORAGE_HW_BOOT_PARTITION_DOWNLOAD;
-        type PSTORAGE_HW_BOOT_PARTITION_INFO = *mut STORAGE_HW_BOOT_PARTITION_INFO;
         type PSTORAGE_HW_CRYPTO_CAPABILITY = *mut STORAGE_HW_CRYPTO_CAPABILITY;
         type PSTORAGE_HW_CRYPTO_DESCRIPTOR = *mut STORAGE_HW_CRYPTO_DESCRIPTOR;
         type PSTORAGE_HW_ENDURANCE_DATA_DESCRIPTOR = *mut STORAGE_HW_ENDURANCE_DATA_DESCRIPTOR;
@@ -3553,9 +3540,6 @@ mod Windows {
         const REQUEST_OPLOCK_INPUT_FLAG_ACK: i32 = 2;
         const REQUEST_OPLOCK_INPUT_FLAG_COMPLETE_ACK_ON_CLOSE: i32 = 4;
         const REQUEST_OPLOCK_INPUT_FLAG_REQUEST: i32 = 1;
-        const REQUEST_OPLOCK_INPUT_FLAG_RH_ALWAYS_BLOCK_UNTIL_ACK: i32 = 8;
-        const REQUEST_OPLOCK_INPUT_FLAG_RH_IGNORE_WRITES: i32 = 16;
-        const REQUEST_OPLOCK_INPUT_FLAG_RH_NO_NON_CACHED_IO: i32 = 32;
         struct REQUEST_OPLOCK_OUTPUT_BUFFER {
             StructureVersion: u16,
             StructureLength: u16,
@@ -3567,7 +3551,6 @@ mod Windows {
         }
         const REQUEST_OPLOCK_OUTPUT_FLAG_ACK_REQUIRED: i32 = 1;
         const REQUEST_OPLOCK_OUTPUT_FLAG_MODES_PROVIDED: i32 = 2;
-        const REQUEST_OPLOCK_OUTPUT_FLAG_NON_CACHED_IO_PRESENT: i32 = 8;
         const REQUEST_OPLOCK_OUTPUT_FLAG_WRITABLE_SECTION_PRESENT: i32 = 4;
         struct REQUEST_RAW_ENCRYPTED_DATA {
             FileOffset: i64,
@@ -4712,39 +4695,6 @@ mod Windows {
             DeviceHotplug: bool,
             WriteCacheEnableOverride: bool,
         }
-        struct STORAGE_HW_BOOT_PARTITION_ACTIVATE {
-            Version: u32,
-            Size: u32,
-            Flags: u32,
-            BPID: u8,
-            Reserved: [u8; 3],
-        }
-        const STORAGE_HW_BOOT_PARTITION_ACTIVATE_STRUCTURE_VERSION: i32 = 1;
-        struct STORAGE_HW_BOOT_PARTITION_DOWNLOAD {
-            Version: u32,
-            Size: u32,
-            Flags: u32,
-            BPID: u8,
-            Reserved: [u8; 3],
-            Offset: DWORDLONG,
-            BufferSize: DWORDLONG,
-            ImageBuffer: [u8; 1],
-        }
-        const STORAGE_HW_BOOT_PARTITION_DOWNLOAD_STRUCTURE_VERSION: i32 = 1;
-        struct STORAGE_HW_BOOT_PARTITION_INFO {
-            Version: u32,
-            Size: u32,
-            BPSZ: DWORDLONG,
-            Flags: u32,
-            ImagePayloadAlignment: u32,
-            ImagePayloadMaxSize: u32,
-            SlotCount: u8,
-            ABPID: u8,
-        }
-        const STORAGE_HW_BOOT_PARTITION_INFO_STRUCTURE_VERSION_V1: i32 = 1;
-        const STORAGE_HW_BOOT_PARTITION_REQUEST_ACTIVATE_EXISTING_BOOT_PARTITION: u32 = 2147483648;
-        const STORAGE_HW_BOOT_PARTITION_REQUEST_FLAG_CONTROLLER: i32 = 1;
-        const STORAGE_HW_BOOT_PARTITION_REQUEST_REPLACE_EXISTING_BOOT_PARTITION: i32 = 1073741824;
         struct STORAGE_HW_CRYPTO_CAPABILITY {
             Version: u32,
             Size: u32,

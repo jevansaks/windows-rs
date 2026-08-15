@@ -507,7 +507,7 @@ mod Windows {
         interface IUIAutomationRegistrar: IUnknown {
             fn RegisterProperty(&self, property: *const UIAutomationPropertyInfo, propertyId: *mut PROPERTYID) -> HRESULT;
             fn RegisterEvent(&self, event: *const UIAutomationEventInfo, eventId: *mut EVENTID) -> HRESULT;
-            fn RegisterPattern(&self, pattern: *const UIAutomationPatternInfo, pPatternId: *mut PATTERNID, pPatternAvailablePropertyId: *mut PROPERTYID, propertyIdCount: u32, pPropertyIds: *mut PROPERTYID, eventIdCount: u32, pEventIds: *mut EVENTID) -> HRESULT;
+            fn RegisterPattern(&self, pattern: *const UIAutomationPatternInfo, pPatternId: *mut PATTERNID, pPatternAvailablePropertyId: *mut PROPERTYID, propertyIdCount: u32, #[len_param(3)] pPropertyIds: *mut PROPERTYID, eventIdCount: u32, #[len_param(5)] pEventIds: *mut EVENTID) -> HRESULT;
         }
         #[guid(0xc7935180_6fb3_4201_b174_7df73adbf64a)]
         interface IValueProvider: IUnknown {

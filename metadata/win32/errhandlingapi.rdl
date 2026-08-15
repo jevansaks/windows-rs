@@ -15,8 +15,7 @@ mod Windows {
         extern fn GetLastError() -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetThreadErrorMode() -> u32;
-        type LPTOP_LEVEL_EXCEPTION_FILTER = PTOP_LEVEL_EXCEPTION_FILTER;
-        extern fn PTOP_LEVEL_EXCEPTION_FILTER(ExceptionInfo: *const EXCEPTION_POINTERS) -> i32;
+        extern fn LPTOP_LEVEL_EXCEPTION_FILTER(ExceptionInfo: *const EXCEPTION_POINTERS) -> i32;
         #[library("KERNEL32.dll")]
         extern fn RaiseException(dwExceptionCode: u32, dwExceptionFlags: u32, nNumberOfArguments: u32, #[len_param(2)] #[opt] lpArguments: *const usize);
         #[arch(Arm64)]
@@ -31,9 +30,9 @@ mod Windows {
         extern fn RemoveVectoredExceptionHandler(Handle: *const void) -> u32;
         #[library("KERNEL32.dll")]
         extern fn SetErrorMode(uMode: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetLastError(dwErrCode: u32);
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetThreadErrorMode(dwNewMode: u32, #[opt] lpOldMode: *const u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn SetUnhandledExceptionFilter(#[opt] lpTopLevelExceptionFilter: LPTOP_LEVEL_EXCEPTION_FILTER) -> LPTOP_LEVEL_EXCEPTION_FILTER;

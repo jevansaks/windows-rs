@@ -5,6 +5,70 @@ fn read(dir: &str, leaf: &str) -> String {
 }
 
 #[test]
+fn partition_by_translation_unit() {
+    let _guard = test_clang::libclang_guard();
+    let scratch = format!("{}/translation_unit_partition", env!("OUT_DIR"));
+    std::fs::create_dir_all(&scratch).unwrap();
+
+    let left = std::path::PathBuf::from("partition_input/left.cpp");
+    let right = std::path::PathBuf::from("partition_input/right.cpp");
+    let mut clang = windows_clang::clang();
+    clang
+        .args([
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+            "-fms-extensions",
+        ])
+        .library("test.dll")
+        .input(&left)
+        .input(&right)
+        .output(&scratch)
+        .write_partitions(&[
+            windows_clang::PartitionSpec {
+                name: "left".to_string(),
+                input: left,
+                namespace: "Test.1394".to_string(),
+                filters: vec!["partition_input/left.h".to_string()],
+                exclude: ["Excluded".to_string()].into(),
+            },
+            windows_clang::PartitionSpec {
+                name: "right".to_string(),
+                input: right,
+                namespace: "Test.Right".to_string(),
+                filters: vec!["partition_input/right-only.h".to_string()],
+                exclude: Default::default(),
+            },
+        ])
+        .unwrap();
+    windows_rdl::reader()
+        .input(&scratch)
+        .output(format!("{scratch}/partitions.winmd"))
+        .write()
+        .unwrap();
+
+    let left = read(&scratch, "left");
+    let right = read(&scratch, "right");
+    assert!(
+        left.contains("mod Test {\n    mod _1394 {"),
+        "left.rdl:\n{left}"
+    );
+    assert!(left.contains("LeftOnly"), "left.rdl:\n{left}");
+    assert!(!left.contains("RightOnly"), "left.rdl:\n{left}");
+    assert!(!left.contains("Excluded"), "left.rdl:\n{left}");
+    assert!(
+        right.contains("mod Test {\n    mod Right {"),
+        "right.rdl:\n{right}"
+    );
+    assert!(right.contains("UseLeft"), "right.rdl:\n{right}");
+    assert!(
+        right.contains("super::_1394::LEFT_VALUE"),
+        "right.rdl:\n{right}"
+    );
+    assert!(!right.contains("LeftOnly"), "right.rdl:\n{right}");
+}
+
+#[test]
 fn partition_by_defining_header() {
     let _guard = test_clang::libclang_guard();
     let scratch = format!("{}/header_partition", env!("OUT_DIR"));

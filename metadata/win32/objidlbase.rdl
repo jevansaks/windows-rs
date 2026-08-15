@@ -39,21 +39,21 @@ mod Windows {
         interface AsyncIPipeByte: IUnknown {
             fn Begin_Pull(&self, cRequest: u32) -> HRESULT;
             fn Finish_Pull(&self, buf: *mut u8, pcReturned: *mut u32) -> HRESULT;
-            fn Begin_Push(&self, buf: *const u8, cSent: u32) -> HRESULT;
+            fn Begin_Push(&self, #[len_param(1)] buf: *const u8, cSent: u32) -> HRESULT;
             fn Finish_Push(&self) -> HRESULT;
         }
         #[guid(0xdb2f3acf_2f86_11d1_8e04_00c04fb9989a)]
         interface AsyncIPipeDouble: IUnknown {
             fn Begin_Pull(&self, cRequest: u32) -> HRESULT;
             fn Finish_Pull(&self, buf: *mut f64, pcReturned: *mut u32) -> HRESULT;
-            fn Begin_Push(&self, buf: *const f64, cSent: u32) -> HRESULT;
+            fn Begin_Push(&self, #[len_param(1)] buf: *const f64, cSent: u32) -> HRESULT;
             fn Finish_Push(&self) -> HRESULT;
         }
         #[guid(0xdb2f3acd_2f86_11d1_8e04_00c04fb9989a)]
         interface AsyncIPipeLong: IUnknown {
             fn Begin_Pull(&self, cRequest: u32) -> HRESULT;
             fn Finish_Pull(&self, buf: *mut i32, pcReturned: *mut u32) -> HRESULT;
-            fn Begin_Push(&self, buf: *const i32, cSent: u32) -> HRESULT;
+            fn Begin_Push(&self, #[len_param(1)] buf: *const i32, cSent: u32) -> HRESULT;
             fn Finish_Push(&self) -> HRESULT;
         }
         const COLE_DEFAULT_PRINCIPAL: PWSTR = -1;
@@ -296,7 +296,6 @@ mod Windows {
         }
         #[guid(0xecc8691b_c1db_4dc0_855e_65f6c551af49)]
         interface INoMarshal: IUnknown {}
-        struct IObjContext {}
         #[guid(0xd5f569d0_593b_101a_b569_08002b2dbf7a)]
         interface IPSFactoryBuffer: IUnknown {
             fn CreateProxy(&self, pUnkOuter: IUnknown, riid: *const GUID, ppProxy: *mut IRpcProxyBuffer, #[iid_is] ppv: *mut *mut void) -> HRESULT;
@@ -308,18 +307,18 @@ mod Windows {
         }
         #[guid(0xdb2f3aca_2f86_11d1_8e04_00c04fb9989a)]
         interface IPipeByte: IUnknown {
-            fn Pull(&self, buf: *mut u8, cRequest: u32, pcReturned: *mut u32) -> HRESULT;
-            fn Push(&self, buf: *const u8, cSent: u32) -> HRESULT;
+            fn Pull(&self, #[len_param(1)] buf: *mut u8, cRequest: u32, pcReturned: *mut u32) -> HRESULT;
+            fn Push(&self, #[len_param(1)] buf: *const u8, cSent: u32) -> HRESULT;
         }
         #[guid(0xdb2f3ace_2f86_11d1_8e04_00c04fb9989a)]
         interface IPipeDouble: IUnknown {
-            fn Pull(&self, buf: *mut f64, cRequest: u32, pcReturned: *mut u32) -> HRESULT;
-            fn Push(&self, buf: *const f64, cSent: u32) -> HRESULT;
+            fn Pull(&self, #[len_param(1)] buf: *mut f64, cRequest: u32, pcReturned: *mut u32) -> HRESULT;
+            fn Push(&self, #[len_param(1)] buf: *const f64, cSent: u32) -> HRESULT;
         }
         #[guid(0xdb2f3acc_2f86_11d1_8e04_00c04fb9989a)]
         interface IPipeLong: IUnknown {
-            fn Pull(&self, buf: *mut i32, cRequest: u32, pcReturned: *mut u32) -> HRESULT;
-            fn Push(&self, buf: *const i32, cSent: u32) -> HRESULT;
+            fn Pull(&self, #[len_param(1)] buf: *mut i32, cRequest: u32, pcReturned: *mut u32) -> HRESULT;
+            fn Push(&self, #[len_param(1)] buf: *const i32, cSent: u32) -> HRESULT;
         }
         #[guid(0x72380d55_8d2b_43a3_8513_2b6ef31434e9)]
         interface IProcessInitControl: IUnknown {

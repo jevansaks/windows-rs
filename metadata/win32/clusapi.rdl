@@ -176,7 +176,6 @@ mod Windows {
             CTCTL_GET_FAULT_DOMAIN_STATE = 789,
             CLCTL_NETNAME_SET_PWD_INFOEX = 794,
             CLCTL_GET_NODE_NETWORK_CONNECTIVITY = 797,
-            CLCTL_RLUA_GET_PWD = 802,
             CLCTL_STORAGE_GET_AVAILABLE_DISKS_EX2_INT = 8161,
             CLCTL_CLOUD_WITNESS_RESOURCE_TYPE_VALIDATE_CREDENTIALS = 8417,
             CLCTL_CLOUD_WITNESS_RESOURCE_UPDATE_TOKEN = 4202726,
@@ -304,11 +303,9 @@ mod Windows {
         const CLUSAPI_RESOURCE_ONLINE_IGNORE_RESOURCE_STATUS: i32 = 1;
         const CLUSAPI_RESOURCE_ONLINE_NECESSARY_FOR_QUORUM: i32 = 4;
         const CLUSAPI_VALID_CHANGE_RESOURCE_GROUP_FLAGS: i32 = 1;
-        const CLUSAPI_VERSION: i32 = 3079;
+        const CLUSAPI_VERSION: i32 = 3077;
         const CLUSAPI_VERSION_CU: i32 = 3075;
-        const CLUSAPI_VERSION_DT: i32 = 3079;
         const CLUSAPI_VERSION_GA: i32 = 3077;
-        const CLUSAPI_VERSION_GE: i32 = 3078;
         const CLUSAPI_VERSION_NI: i32 = 2572;
         const CLUSAPI_VERSION_RS3: i32 = 2560;
         const CLUSAPI_VERSION_SERVER2008: i32 = 1536;
@@ -555,7 +552,6 @@ mod Windows {
             CLUSCTL_RESOURCE_RLUA_GET_VIRTUAL_SERVER_TOKEN = 16777581,
             CLUSCTL_RESOURCE_RLUA_SET_PWD_INFO = 16777594,
             CLUSCTL_RESOURCE_RLUA_SET_PWD_INFOEX = 16778010,
-            CLUSCTL_RESOURCE_RLUA_GET_PWD = 16778018,
             CLUSCTL_RESOURCE_DELETE = 22020102,
             CLUSCTL_RESOURCE_UNDELETE = 22020230,
             CLUSCTL_RESOURCE_INSTALL_NODE = 22020106,
@@ -1148,8 +1144,6 @@ mod Windows {
         #[encoding("utf-16")]
         const CLUSREG_NAME_NETNAME_DNN_DISABLE_CLONES: String = "DisableClones";
         #[encoding("utf-16")]
-        const CLUSREG_NAME_NETNAME_DNS_AUTHENTICATION: String = "DnsAuthenticationMode";
-        #[encoding("utf-16")]
         const CLUSREG_NAME_NETNAME_DNS_NAME: String = "DnsName";
         #[encoding("utf-16")]
         const CLUSREG_NAME_NETNAME_DNS_SUFFIX: String = "DnsSuffix";
@@ -1181,10 +1175,6 @@ mod Windows {
         const CLUSREG_NAME_NETNAME_STATUS_KERBEROS: String = "StatusKerberos";
         #[encoding("utf-16")]
         const CLUSREG_NAME_NETNAME_STATUS_NETBIOS: String = "StatusNetBIOS";
-        #[encoding("utf-16")]
-        const CLUSREG_NAME_NETNAME_USE_DNS: String = "DnsEnabled";
-        #[encoding("utf-16")]
-        const CLUSREG_NAME_NETNAME_USE_DYNAMIC_DNS: String = "UseDynamicDNS";
         #[encoding("utf-16")]
         const CLUSREG_NAME_NETNAME_VCO_CONTAINER: String = "VcoContainer";
         #[encoding("utf-16")]
@@ -2998,7 +2988,6 @@ mod Windows {
         #[library("CLUSAPI.dll")]
         extern fn CreateClusterResourceTypeEx(hCluster: *const _HCLUSTER, lpszResourceTypeName: PCWSTR, lpszDisplayName: PCWSTR, lpszResourceTypeDll: PCWSTR, dwLooksAlivePollInterval: u32, dwIsAlivePollInterval: u32, #[opt] lpszReason: PCWSTR) -> u32;
         const DNS_LENGTH: i32 = 64;
-        const DT_UPGRADE_VERSION: i32 = 1;
         #[library("CLUSAPI.dll")]
         extern fn DeleteClusterGroup(hGroup: *const _HGROUP) -> u32;
         #[library("CLUSAPI.dll")]
@@ -3215,7 +3204,6 @@ mod Windows {
         const NT11_MAJOR_VERSION: i32 = 10;
         const NT12_MAJOR_VERSION: i32 = 11;
         const NT13_MAJOR_VERSION: i32 = 12;
-        const NT14_MAJOR_VERSION: i32 = 14;
         const NT4SP4_MAJOR_VERSION: i32 = 2;
         const NT4_MAJOR_VERSION: i32 = 1;
         const NT51_MAJOR_VERSION: i32 = 4;
@@ -3753,7 +3741,6 @@ mod Windows {
         extern fn ResumeClusterNodeEx(hNode: *const _HNODE, eResumeFailbackType: CLUSTER_NODE_RESUME_FAILBACK_TYPE, dwResumeFlagsReserved: u32) -> u32;
         #[library("CLUSAPI.dll")]
         extern fn ResumeClusterNodeEx2(hNode: *const _HNODE, eResumeFailbackType: CLUSTER_NODE_RESUME_FAILBACK_TYPE, dwResumeFlagsReserved: u32, #[opt] lpszReason: PCWSTR) -> u32;
-        const SE_UPGRADE_VERSION: i32 = 2;
         #[repr(i32)]
         enum SR_DISK_REPLICATION_ELIGIBLE {
             SrDiskReplicationEligibleNone = 0,

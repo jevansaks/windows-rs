@@ -1,8 +1,9 @@
 #[win32]
 mod Windows {
     mod Win32 {
+        #[supported_os("windows8.1")]
         #[library("d2d1.dll")]
-        extern fn D2D1ComputeMaximumScaleFactor(matrix: *const super::Foundation::Numerics::Matrix3x2) -> f32;
+        extern "C" fn D2D1ComputeMaximumScaleFactor(matrix: *const super::Foundation::Numerics::Matrix3x2) -> f32;
         #[repr(i32)]
         enum D2D1_RENDERING_PRIORITY {
             D2D1_RENDERING_PRIORITY_NORMAL = 0,

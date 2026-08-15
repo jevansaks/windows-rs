@@ -1741,12 +1741,12 @@ mod Windows {
         }
         #[guid(0x0c733aa6_2a1c_11ce_ade5_00aa0044773d)]
         interface IAlterIndex: IUnknown {
-            fn AlterIndex(&self, pTableId: *const DBID, pIndexId: *const DBID, pNewIndexId: *const DBID, cPropertySets: u32, #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
+            fn AlterIndex(&self, pTableId: *const DBID, pIndexId: *const DBID, pNewIndexId: *const DBID, cPropertySets: u32, #[len_param(3)] #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
         }
         #[guid(0x0c733aa5_2a1c_11ce_ade5_00aa0044773d)]
         interface IAlterTable: IUnknown {
             fn AlterColumn(&self, pTableId: *const DBID, pColumnId: *const DBID, dwColumnDescFlags: DBCOLUMNDESCFLAGS, pColumnDesc: *const DBCOLUMNDESC) -> HRESULT;
-            fn AlterTable(&self, pTableId: *const DBID, pNewTableId: *const DBID, cPropertySets: u32, #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
+            fn AlterTable(&self, pTableId: *const DBID, pNewTableId: *const DBID, cPropertySets: u32, #[len_param(2)] #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
         }
         #[guid(0x0c733ab1_2a1c_11ce_ade5_00aa0044773d)]
         interface IBindResource: IUnknown {
@@ -1759,7 +1759,7 @@ mod Windows {
         }
         #[guid(0x0c733a11_2a1c_11ce_ade5_00aa0044773d)]
         interface IColumnsInfo: IUnknown {
-            fn GetColumnInfo(&self, pcColumns: *mut DBORDINAL, prgInfo: *mut *mut DBCOLUMNINFO, ppStringsBuffer: *mut *mut OLECHAR) -> HRESULT;
+            fn GetColumnInfo(&self, #[opt] pcColumns: *mut DBORDINAL, prgInfo: *mut *mut DBCOLUMNINFO, ppStringsBuffer: *mut *mut OLECHAR) -> HRESULT;
             fn MapColumnIDs(&self, cColumnIDs: DBORDINAL, #[len_param(0)] #[opt] rgColumnIDs: *const DBID, #[len_param(0)] #[opt] rgColumns: *mut DBORDINAL) -> HRESULT;
         }
         #[guid(0x0c733ab8_2a1c_11ce_ade5_00aa0044773d)]
@@ -1910,20 +1910,20 @@ mod Windows {
         }
         #[guid(0xa07cccd1_8148_11d0_87bb_00c04fc33942)]
         interface IMDDataset: IUnknown {
-            fn FreeAxisInfo(&self, cAxes: DBCOUNTITEM, rgAxisInfo: *const MDAXISINFO) -> HRESULT;
-            fn GetAxisInfo(&self, #[in] #[out] pcAxes: *mut DBCOUNTITEM, prgAxisInfo: *mut *mut MDAXISINFO) -> HRESULT;
-            fn GetAxisRowset(&self, pUnkOuter: IUnknown, iAxis: DBCOUNTITEM, riid: *const GUID, cPropertySets: u32, #[in] #[out] rgPropertySets: *mut DBPROPSET, #[iid_is] ppRowset: *mut *mut void) -> HRESULT;
+            fn FreeAxisInfo(&self, cAxes: DBCOUNTITEM, #[len_param(0)] rgAxisInfo: *const MDAXISINFO) -> HRESULT;
+            fn GetAxisInfo(&self, #[in] #[out] pcAxes: *mut DBCOUNTITEM, #[len_param(0)] prgAxisInfo: *mut *mut MDAXISINFO) -> HRESULT;
+            fn GetAxisRowset(&self, pUnkOuter: IUnknown, iAxis: DBCOUNTITEM, riid: *const GUID, cPropertySets: u32, #[len_param(3)] #[in] #[out] rgPropertySets: *mut DBPROPSET, #[iid_is] ppRowset: *mut *mut void) -> HRESULT;
             fn GetCellData(&self, hAccessor: HACCESSOR, ulStartCell: DBORDINAL, ulEndCell: DBORDINAL, pData: *mut void) -> HRESULT;
             fn GetSpecification(&self, riid: *const GUID, #[iid_is] ppSpecification: *mut *mut void) -> HRESULT;
         }
         #[guid(0xa07cccd2_8148_11d0_87bb_00c04fc33942)]
         interface IMDFind: IUnknown {
-            fn FindCell(&self, ulStartingOrdinal: DBORDINAL, cMembers: DBCOUNTITEM, rgpwszMember: *const PCWSTR, pulCellOrdinal: *mut DBORDINAL) -> HRESULT;
-            fn FindTuple(&self, ulAxisIdentifier: u32, ulStartingOrdinal: DBORDINAL, cMembers: DBCOUNTITEM, rgpwszMember: *const PCWSTR, pulTupleOrdinal: *mut u32) -> HRESULT;
+            fn FindCell(&self, ulStartingOrdinal: DBORDINAL, cMembers: DBCOUNTITEM, #[len_param(1)] rgpwszMember: *const PCWSTR, pulCellOrdinal: *mut DBORDINAL) -> HRESULT;
+            fn FindTuple(&self, ulAxisIdentifier: u32, ulStartingOrdinal: DBORDINAL, cMembers: DBCOUNTITEM, #[len_param(2)] rgpwszMember: *const PCWSTR, pulTupleOrdinal: *mut u32) -> HRESULT;
         }
         #[guid(0x0c733aa0_2a1c_11ce_ade5_00aa0044773d)]
         interface IMDRangeRowset: IUnknown {
-            fn GetRangeRowset(&self, pUnkOuter: IUnknown, ulStartCell: DBORDINAL, ulEndCell: DBORDINAL, riid: *const GUID, cPropertySets: u32, #[in] #[out] rgPropertySets: *mut DBPROPSET, #[iid_is] ppRowset: *mut *mut void) -> HRESULT;
+            fn GetRangeRowset(&self, pUnkOuter: IUnknown, ulStartCell: DBORDINAL, ulEndCell: DBORDINAL, riid: *const GUID, cPropertySets: u32, #[len_param(4)] #[in] #[out] rgPropertySets: *mut DBPROPSET, #[iid_is] ppRowset: *mut *mut void) -> HRESULT;
         }
         #[guid(0x0c733a90_2a1c_11ce_ade5_00aa0044773d)]
         interface IMultipleResults: IUnknown {
@@ -1975,15 +1975,15 @@ mod Windows {
         }
         #[guid(0x0c733aae_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowSchemaChange: IRowChange {
-            fn DeleteColumns(&self, cColumns: DBORDINAL, rgColumnIDs: *const DBID, #[in] #[out] rgdwStatus: *mut DBSTATUS) -> HRESULT;
-            fn AddColumns(&self, cColumns: DBORDINAL, rgNewColumnInfo: *const DBCOLUMNINFO, #[in] #[out] rgColumns: *mut DBCOLUMNACCESS) -> HRESULT;
+            fn DeleteColumns(&self, cColumns: DBORDINAL, #[len_param(0)] rgColumnIDs: *const DBID, #[len_param(0)] #[in] #[out] rgdwStatus: *mut DBSTATUS) -> HRESULT;
+            fn AddColumns(&self, cColumns: DBORDINAL, #[len_param(0)] rgNewColumnInfo: *const DBCOLUMNINFO, #[len_param(0)] #[in] #[out] rgColumns: *mut DBCOLUMNACCESS) -> HRESULT;
         }
         #[guid(0x0c733a7c_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowset: IUnknown {
-            fn AddRefRows(&self, cRows: DBCOUNTITEM, rghRows: *const HROW, rgRefCounts: *mut DBREFCOUNT, rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
+            fn AddRefRows(&self, cRows: DBCOUNTITEM, #[len_param(0)] rghRows: *const HROW, #[len_param(0)] rgRefCounts: *mut DBREFCOUNT, #[len_param(0)] rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
             fn GetData(&self, hRow: HROW, hAccessor: HACCESSOR, pData: *mut void) -> HRESULT;
-            fn GetNextRows(&self, hReserved: HCHAPTER, lRowsOffset: DBROWOFFSET, cRows: DBROWCOUNT, pcRowsObtained: *mut DBCOUNTITEM, prghRows: *mut *mut HROW) -> HRESULT;
-            fn ReleaseRows(&self, cRows: DBCOUNTITEM, rghRows: *const HROW, rgRowOptions: *const DBROWOPTIONS, rgRefCounts: *mut DBREFCOUNT, rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
+            fn GetNextRows(&self, hReserved: HCHAPTER, lRowsOffset: DBROWOFFSET, cRows: DBROWCOUNT, pcRowsObtained: *mut DBCOUNTITEM, #[len_param(2)] prghRows: *mut *mut HROW) -> HRESULT;
+            fn ReleaseRows(&self, cRows: DBCOUNTITEM, #[len_param(0)] rghRows: *const HROW, #[len_param(0)] rgRowOptions: *const DBROWOPTIONS, #[len_param(0)] rgRefCounts: *mut DBREFCOUNT, #[len_param(0)] rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
             fn RestartPosition(&self, hReserved: HCHAPTER) -> HRESULT;
         }
         #[guid(0x0c733ac2_2a1c_11ce_ade5_00aa0044773d)]
@@ -1992,7 +1992,7 @@ mod Windows {
         }
         #[guid(0x0c733a05_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetChange: IUnknown {
-            fn DeleteRows(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, rghRows: *const HROW, rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
+            fn DeleteRows(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, #[len_param(1)] rghRows: *const HROW, #[len_param(1)] rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
             fn SetData(&self, hRow: HROW, hAccessor: HACCESSOR, pData: *const void) -> HRESULT;
             fn InsertRow(&self, hReserved: HCHAPTER, hAccessor: HACCESSOR, pData: *const void, phRow: *mut HROW) -> HRESULT;
         }
@@ -2008,7 +2008,7 @@ mod Windows {
         struct IRowsetExactScroll {}
         #[guid(0x0c733a9d_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetFind: IUnknown {
-            fn FindNextRow(&self, hChapter: HCHAPTER, hAccessor: HACCESSOR, pFindValue: *const void, CompareOp: DBCOMPAREOP, cbBookmark: DBBKMARK, pBookmark: *const u8, lRowsOffset: DBROWOFFSET, cRows: DBROWCOUNT, #[in] #[out] pcRowsObtained: *mut DBCOUNTITEM, prghRows: *mut *mut HROW) -> HRESULT;
+            fn FindNextRow(&self, hChapter: HCHAPTER, hAccessor: HACCESSOR, pFindValue: *const void, CompareOp: DBCOMPAREOP, cbBookmark: DBBKMARK, #[len_param(4)] pBookmark: *const u8, lRowsOffset: DBROWOFFSET, cRows: DBROWCOUNT, #[in] #[out] pcRowsObtained: *mut DBCOUNTITEM, #[len_param(8)] prghRows: *mut *mut HROW) -> HRESULT;
         }
         #[guid(0x0c733a09_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetIdentity: IUnknown {
@@ -2016,7 +2016,7 @@ mod Windows {
         }
         #[guid(0x0c733a82_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetIndex: IUnknown {
-            fn GetIndexInfo(&self, #[in] #[out] pcKeyColumns: *mut DBORDINAL, prgIndexColumnDesc: *mut *mut DBINDEXCOLUMNDESC, #[in] #[out] pcIndexPropertySets: *mut u32, prgIndexPropertySets: *mut *mut DBPROPSET) -> HRESULT;
+            fn GetIndexInfo(&self, #[in] #[out] pcKeyColumns: *mut DBORDINAL, #[len_param(0)] prgIndexColumnDesc: *mut *mut DBINDEXCOLUMNDESC, #[in] #[out] pcIndexPropertySets: *mut u32, #[len_param(2)] prgIndexPropertySets: *mut *mut DBPROPSET) -> HRESULT;
             fn Seek(&self, hAccessor: HACCESSOR, cKeyValues: DBORDINAL, pData: *const void, dwSeekOptions: DBSEEK) -> HRESULT;
             fn SetRange(&self, hAccessor: HACCESSOR, cStartKeyColumns: DBORDINAL, pStartData: *const void, cEndKeyColumns: DBORDINAL, pEndData: *const void, dwRangeOptions: DBRANGE) -> HRESULT;
         }
@@ -2028,10 +2028,10 @@ mod Windows {
         }
         #[guid(0x0c733a7d_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetLocate: IRowset {
-            fn Compare(&self, hReserved: HCHAPTER, cbBookmark1: DBBKMARK, pBookmark1: *const u8, cbBookmark2: DBBKMARK, pBookmark2: *const u8, pComparison: *mut DBCOMPARE) -> HRESULT;
-            fn GetRowsAt(&self, hReserved1: HWATCHREGION, hReserved2: HCHAPTER, cbBookmark: DBBKMARK, pBookmark: *const u8, lRowsOffset: DBROWOFFSET, cRows: DBROWCOUNT, pcRowsObtained: *mut DBCOUNTITEM, prghRows: *mut *mut HROW) -> HRESULT;
-            fn GetRowsByBookmark(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, rgcbBookmarks: *const DBBKMARK, rgpBookmarks: *const *const u8, rghRows: *mut HROW, rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
-            fn Hash(&self, hReserved: HCHAPTER, cBookmarks: DBBKMARK, rgcbBookmarks: *const DBBKMARK, rgpBookmarks: *const *const u8, rgHashedValues: *mut DBHASHVALUE, rgBookmarkStatus: *mut DBROWSTATUS) -> HRESULT;
+            fn Compare(&self, hReserved: HCHAPTER, cbBookmark1: DBBKMARK, #[len_param(1)] pBookmark1: *const u8, cbBookmark2: DBBKMARK, #[len_param(3)] pBookmark2: *const u8, pComparison: *mut DBCOMPARE) -> HRESULT;
+            fn GetRowsAt(&self, hReserved1: HWATCHREGION, hReserved2: HCHAPTER, cbBookmark: DBBKMARK, #[len_param(2)] pBookmark: *const u8, lRowsOffset: DBROWOFFSET, cRows: DBROWCOUNT, pcRowsObtained: *mut DBCOUNTITEM, #[len_param(5)] prghRows: *mut *mut HROW) -> HRESULT;
+            fn GetRowsByBookmark(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, #[len_param(1)] rgcbBookmarks: *const DBBKMARK, #[len_param(1)] rgpBookmarks: *const *const u8, #[len_param(1)] rghRows: *mut HROW, #[len_param(1)] rgRowStatus: *mut DBROWSTATUS) -> HRESULT;
+            fn Hash(&self, hReserved: HCHAPTER, cBookmarks: DBBKMARK, #[len_param(1)] rgcbBookmarks: *const DBBKMARK, #[len_param(1)] rgpBookmarks: *const *const u8, #[len_param(1)] rgHashedValues: *mut DBHASHVALUE, #[len_param(1)] rgBookmarkStatus: *mut DBROWSTATUS) -> HRESULT;
         }
         #[guid(0x0c733a83_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetNotify: IUnknown {
@@ -2047,20 +2047,20 @@ mod Windows {
         #[guid(0x0c733a84_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetResynch: IUnknown {
             fn GetVisibleData(&self, hRow: HROW, hAccessor: HACCESSOR, pData: *mut void) -> HRESULT;
-            fn ResynchRows(&self, cRows: DBCOUNTITEM, rghRows: *const HROW, pcRowsResynched: *mut DBCOUNTITEM, prghRowsResynched: *mut *mut HROW, prgRowStatus: *mut *mut DBROWSTATUS) -> HRESULT;
+            fn ResynchRows(&self, cRows: DBCOUNTITEM, #[len_param(0)] rghRows: *const HROW, pcRowsResynched: *mut DBCOUNTITEM, #[len_param(0)] prghRowsResynched: *mut *mut HROW, #[len_param(0)] prgRowStatus: *mut *mut DBROWSTATUS) -> HRESULT;
         }
         #[guid(0x0c733a7e_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetScroll: IRowsetLocate {
-            fn GetApproximatePosition(&self, hReserved: HCHAPTER, cbBookmark: DBBKMARK, pBookmark: *const u8, pulPosition: *mut DBCOUNTITEM, pcRows: *mut DBCOUNTITEM) -> HRESULT;
-            fn GetRowsAtRatio(&self, hReserved1: HWATCHREGION, hReserved2: HCHAPTER, ulNumerator: DBCOUNTITEM, ulDenominator: DBCOUNTITEM, cRows: DBROWCOUNT, pcRowsObtained: *mut DBCOUNTITEM, prghRows: *mut *mut HROW) -> HRESULT;
+            fn GetApproximatePosition(&self, hReserved: HCHAPTER, cbBookmark: DBBKMARK, #[len_param(1)] pBookmark: *const u8, pulPosition: *mut DBCOUNTITEM, pcRows: *mut DBCOUNTITEM) -> HRESULT;
+            fn GetRowsAtRatio(&self, hReserved1: HWATCHREGION, hReserved2: HCHAPTER, ulNumerator: DBCOUNTITEM, ulDenominator: DBCOUNTITEM, cRows: DBROWCOUNT, pcRowsObtained: *mut DBCOUNTITEM, #[len_param(4)] prghRows: *mut *mut HROW) -> HRESULT;
         }
         #[guid(0x0c733a6d_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetUpdate: IRowsetChange {
             fn GetOriginalData(&self, hRow: HROW, hAccessor: HACCESSOR, pData: *mut void) -> HRESULT;
-            fn GetPendingRows(&self, hReserved: HCHAPTER, dwRowStatus: DBPENDINGSTATUS, #[in] #[out] pcPendingRows: *mut DBCOUNTITEM, prgPendingRows: *mut *mut HROW, prgPendingStatus: *mut *mut DBPENDINGSTATUS) -> HRESULT;
-            fn GetRowStatus(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, rghRows: *const HROW, rgPendingStatus: *mut DBPENDINGSTATUS) -> HRESULT;
-            fn Undo(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, rghRows: *const HROW, #[in] #[out] pcRowsUndone: *mut DBCOUNTITEM, prgRowsUndone: *mut *mut HROW, prgRowStatus: *mut *mut DBROWSTATUS) -> HRESULT;
-            fn Update(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, rghRows: *const HROW, #[in] #[out] pcRows: *mut DBCOUNTITEM, prgRows: *mut *mut HROW, prgRowStatus: *mut *mut DBROWSTATUS) -> HRESULT;
+            fn GetPendingRows(&self, hReserved: HCHAPTER, dwRowStatus: DBPENDINGSTATUS, #[in] #[out] pcPendingRows: *mut DBCOUNTITEM, #[len_param(2)] prgPendingRows: *mut *mut HROW, #[len_param(2)] prgPendingStatus: *mut *mut DBPENDINGSTATUS) -> HRESULT;
+            fn GetRowStatus(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, #[len_param(1)] rghRows: *const HROW, #[len_param(1)] rgPendingStatus: *mut DBPENDINGSTATUS) -> HRESULT;
+            fn Undo(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, #[len_param(1)] rghRows: *const HROW, #[in] #[out] pcRowsUndone: *mut DBCOUNTITEM, #[len_param(3)] prgRowsUndone: *mut *mut HROW, #[len_param(3)] prgRowStatus: *mut *mut DBROWSTATUS) -> HRESULT;
+            fn Update(&self, hReserved: HCHAPTER, cRows: DBCOUNTITEM, #[len_param(1)] rghRows: *const HROW, #[in] #[out] pcRows: *mut DBCOUNTITEM, #[len_param(3)] prgRows: *mut *mut HROW, #[len_param(3)] prgRowStatus: *mut *mut DBROWSTATUS) -> HRESULT;
         }
         #[guid(0x0c733a99_2a1c_11ce_ade5_00aa0044773d)]
         interface IRowsetView: IUnknown {
@@ -2073,8 +2073,8 @@ mod Windows {
         }
         #[guid(0x0c733ab0_2a1c_11ce_ade5_00aa0044773d)]
         interface IScopedOperations: IBindResource {
-            fn Copy(&self, cRows: DBCOUNTITEM, #[len_param(0)] #[opt] rgpwszSourceURLs: *const PCWSTR, #[len_param(0)] rgpwszDestURLs: *const PCWSTR, dwCopyFlags: u32, #[opt] pAuthenticate: IAuthenticate, #[len_param(0)] rgdwStatus: *mut DBSTATUS, #[len_param(0)] #[opt] rgpwszNewURLs: *mut PWSTR, ppStringsBuffer: *mut *mut OLECHAR) -> HRESULT;
-            fn Move(&self, cRows: DBCOUNTITEM, #[len_param(0)] #[opt] rgpwszSourceURLs: *const PCWSTR, #[len_param(0)] rgpwszDestURLs: *const PCWSTR, dwMoveFlags: u32, #[opt] pAuthenticate: IAuthenticate, #[len_param(0)] rgdwStatus: *mut DBSTATUS, #[len_param(0)] #[opt] rgpwszNewURLs: *mut PWSTR, ppStringsBuffer: *mut *mut OLECHAR) -> HRESULT;
+            fn Copy(&self, cRows: DBCOUNTITEM, #[len_param(0)] #[opt] rgpwszSourceURLs: *const PCWSTR, #[len_param(0)] rgpwszDestURLs: *const PCWSTR, dwCopyFlags: u32, pAuthenticate: IAuthenticate, #[len_param(0)] rgdwStatus: *mut DBSTATUS, #[len_param(0)] #[opt] rgpwszNewURLs: *mut PWSTR, ppStringsBuffer: *mut *mut OLECHAR) -> HRESULT;
+            fn Move(&self, cRows: DBCOUNTITEM, #[len_param(0)] #[opt] rgpwszSourceURLs: *const PCWSTR, #[len_param(0)] rgpwszDestURLs: *const PCWSTR, dwMoveFlags: u32, pAuthenticate: IAuthenticate, #[len_param(0)] rgdwStatus: *mut DBSTATUS, #[len_param(0)] #[opt] rgpwszNewURLs: *mut PWSTR, ppStringsBuffer: *mut *mut OLECHAR) -> HRESULT;
             fn Delete(&self, cRows: DBCOUNTITEM, #[len_param(0)] rgpwszURLs: *const PCWSTR, dwDeleteFlags: u32, #[len_param(0)] rgdwStatus: *mut DBSTATUS) -> HRESULT;
             fn OpenRowset(&self, #[opt] pUnkOuter: IUnknown, #[opt] pTableID: *const DBID, #[opt] pIndexID: *const DBID, riid: *const GUID, cPropertySets: u32, #[len_param(4)] #[in] #[out] rgPropertySets: *mut DBPROPSET, #[iid_is] #[opt] ppRowset: *mut *mut void) -> HRESULT;
         }
@@ -2107,7 +2107,7 @@ mod Windows {
         #[guid(0x0c733aab_2a1c_11ce_ade5_00aa0044773d)]
         interface ITableDefinitionWithConstraints: ITableCreation {
             fn AddConstraint(&self, pTableID: *const DBID, pConstraintDesc: *const DBCONSTRAINTDESC) -> HRESULT;
-            fn CreateTableWithConstraints(&self, pUnkOuter: IUnknown, pTableID: *const DBID, cColumnDescs: DBORDINAL, #[in] #[out] rgColumnDescs: *mut DBCOLUMNDESC, cConstraintDescs: u32, rgConstraintDescs: *const DBCONSTRAINTDESC, riid: *const GUID, cPropertySets: u32, #[in] #[out] rgPropertySets: *mut DBPROPSET, ppTableID: *mut *mut DBID, #[iid_is] ppRowset: *mut *mut void) -> HRESULT;
+            fn CreateTableWithConstraints(&self, pUnkOuter: IUnknown, pTableID: *const DBID, cColumnDescs: DBORDINAL, #[len_param(2)] #[in] #[out] rgColumnDescs: *mut DBCOLUMNDESC, cConstraintDescs: u32, #[len_param(4)] rgConstraintDescs: *const DBCONSTRAINTDESC, riid: *const GUID, cPropertySets: u32, #[len_param(7)] #[in] #[out] rgPropertySets: *mut DBPROPSET, ppTableID: *mut *mut DBID, #[iid_is] ppRowset: *mut *mut void) -> HRESULT;
             fn DropConstraint(&self, pTableID: *const DBID, pConstraintID: *const DBID) -> HRESULT;
         }
         #[guid(0x0c733a5e_2a1c_11ce_ade5_00aa0044773d)]
@@ -2127,10 +2127,10 @@ mod Windows {
         #[guid(0x0c733aa1_2a1c_11ce_ade5_00aa0044773d)]
         interface ITrusteeAdmin: IUnknown {
             fn CompareTrustees(&self, pTrustee1: *const TRUSTEE_W, pTrustee2: *const TRUSTEE_W) -> HRESULT;
-            fn CreateTrustee(&self, pTrustee: *const TRUSTEE_W, cPropertySets: u32, #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
+            fn CreateTrustee(&self, pTrustee: *const TRUSTEE_W, cPropertySets: u32, #[len_param(1)] #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
             fn DeleteTrustee(&self, pTrustee: *const TRUSTEE_W) -> HRESULT;
-            fn SetTrusteeProperties(&self, pTrustee: *const TRUSTEE_W, cPropertySets: u32, #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
-            fn GetTrusteeProperties(&self, pTrustee: *const TRUSTEE_W, cPropertyIDSets: u32, rgPropertyIDSets: *const DBPROPIDSET, #[in] #[out] pcPropertySets: *mut u32, prgPropertySets: *mut *mut DBPROPSET) -> HRESULT;
+            fn SetTrusteeProperties(&self, pTrustee: *const TRUSTEE_W, cPropertySets: u32, #[len_param(1)] #[in] #[out] rgPropertySets: *mut DBPROPSET) -> HRESULT;
+            fn GetTrusteeProperties(&self, pTrustee: *const TRUSTEE_W, cPropertyIDSets: u32, #[len_param(1)] rgPropertyIDSets: *const DBPROPIDSET, #[in] #[out] pcPropertySets: *mut u32, #[len_param(3)] prgPropertySets: *mut *mut DBPROPSET) -> HRESULT;
         }
         #[guid(0x0c733aa2_2a1c_11ce_ade5_00aa0044773d)]
         interface ITrusteeGroupAdmin: IUnknown {

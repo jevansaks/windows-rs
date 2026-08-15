@@ -33,6 +33,14 @@ impl syn::parse::Parse for Module {
 
 impl std::fmt::Display for Module {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.name.fmt(f)
+        let name = self.name.to_string();
+        if name
+            .strip_prefix('_')
+            .is_some_and(|name| name.as_bytes().first().is_some_and(u8::is_ascii_digit))
+        {
+            name[1..].fmt(f)
+        } else {
+            name.fmt(f)
+        }
     }
 }

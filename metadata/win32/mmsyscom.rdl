@@ -1,13 +1,7 @@
 #[win32]
 mod Windows {
     mod Win32 {
-        const CALLBACK_EVENT: i32 = 327680;
-        const CALLBACK_FUNCTION: i32 = 196608;
-        const CALLBACK_NULL: i32 = 0;
-        const CALLBACK_TASK: i32 = 131072;
-        const CALLBACK_THREAD: i32 = 131072;
         const CALLBACK_TYPEMASK: i32 = 458752;
-        const CALLBACK_WINDOW: i32 = 65536;
         extern fn DRVCALLBACK(hdrvr: HDRVR, uMsg: u32, dwUser: usize, dw1: usize, dw2: usize);
         type HDRVR = *mut void;
         const JOYERR_BASE: i32 = 160;

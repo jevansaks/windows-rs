@@ -1,8 +1,9 @@
 #[win32]
 mod Windows {
     mod Win32 {
+        #[supported_os("windows10.0.10240")]
         #[library("d2d1.dll")]
-        extern fn D2D1GetGradientMeshInteriorPointsFromCoonsPatch(pPoint0: *const super::Foundation::Numerics::Vector2, pPoint1: *const super::Foundation::Numerics::Vector2, pPoint2: *const super::Foundation::Numerics::Vector2, pPoint3: *const super::Foundation::Numerics::Vector2, pPoint4: *const super::Foundation::Numerics::Vector2, pPoint5: *const super::Foundation::Numerics::Vector2, pPoint6: *const super::Foundation::Numerics::Vector2, pPoint7: *const super::Foundation::Numerics::Vector2, pPoint8: *const super::Foundation::Numerics::Vector2, pPoint9: *const super::Foundation::Numerics::Vector2, pPoint10: *const super::Foundation::Numerics::Vector2, pPoint11: *const super::Foundation::Numerics::Vector2, pTensorPoint11: *mut super::Foundation::Numerics::Vector2, pTensorPoint12: *mut super::Foundation::Numerics::Vector2, pTensorPoint21: *mut super::Foundation::Numerics::Vector2, pTensorPoint22: *mut super::Foundation::Numerics::Vector2);
+        extern "C" fn D2D1GetGradientMeshInteriorPointsFromCoonsPatch(pPoint0: *const super::Foundation::Numerics::Vector2, pPoint1: *const super::Foundation::Numerics::Vector2, pPoint2: *const super::Foundation::Numerics::Vector2, pPoint3: *const super::Foundation::Numerics::Vector2, pPoint4: *const super::Foundation::Numerics::Vector2, pPoint5: *const super::Foundation::Numerics::Vector2, pPoint6: *const super::Foundation::Numerics::Vector2, pPoint7: *const super::Foundation::Numerics::Vector2, pPoint8: *const super::Foundation::Numerics::Vector2, pPoint9: *const super::Foundation::Numerics::Vector2, pPoint10: *const super::Foundation::Numerics::Vector2, pPoint11: *const super::Foundation::Numerics::Vector2, pTensorPoint11: *mut super::Foundation::Numerics::Vector2, pTensorPoint12: *mut super::Foundation::Numerics::Vector2, pTensorPoint21: *mut super::Foundation::Numerics::Vector2, pTensorPoint22: *mut super::Foundation::Numerics::Vector2);
         #[repr(i32)]
         enum D2D1_COLOR_BITMAP_GLYPH_SNAP_OPTION {
             D2D1_COLOR_BITMAP_GLYPH_SNAP_OPTION_DEFAULT = 0,

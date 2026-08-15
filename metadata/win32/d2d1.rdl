@@ -1,16 +1,21 @@
 #[win32]
 mod Windows {
     mod Win32 {
+        #[supported_os("windows6.1")]
         #[library("d2d1.dll")]
-        extern fn D2D1CreateFactory(factoryType: D2D1_FACTORY_TYPE, riid: *const GUID, #[opt] pFactoryOptions: *const D2D1_FACTORY_OPTIONS, #[iid_is] ppIFactory: *mut *mut void) -> HRESULT;
+        extern "C" fn D2D1CreateFactory(factoryType: D2D1_FACTORY_TYPE, riid: *const GUID, #[opt] pFactoryOptions: *const D2D1_FACTORY_OPTIONS, #[iid_is] ppIFactory: *mut *mut void) -> HRESULT;
+        #[supported_os("windows6.1")]
         #[library("d2d1.dll")]
-        extern fn D2D1InvertMatrix(#[in] #[out] matrix: *mut super::Foundation::Numerics::Matrix3x2) -> BOOL;
+        extern "C" fn D2D1InvertMatrix(#[in] #[out] matrix: *mut super::Foundation::Numerics::Matrix3x2) -> BOOL;
+        #[supported_os("windows6.1")]
         #[library("d2d1.dll")]
-        extern fn D2D1IsMatrixInvertible(matrix: *const super::Foundation::Numerics::Matrix3x2) -> BOOL;
+        extern "C" fn D2D1IsMatrixInvertible(matrix: *const super::Foundation::Numerics::Matrix3x2) -> BOOL;
+        #[supported_os("windows6.1")]
         #[library("d2d1.dll")]
-        extern fn D2D1MakeRotateMatrix(angle: f32, center: super::Foundation::Numerics::Vector2, matrix: *mut super::Foundation::Numerics::Matrix3x2);
+        extern "C" fn D2D1MakeRotateMatrix(angle: f32, center: super::Foundation::Numerics::Vector2, matrix: *mut super::Foundation::Numerics::Matrix3x2);
+        #[supported_os("windows6.1")]
         #[library("d2d1.dll")]
-        extern fn D2D1MakeSkewMatrix(angleX: f32, angleY: f32, center: super::Foundation::Numerics::Vector2, matrix: *mut super::Foundation::Numerics::Matrix3x2);
+        extern "C" fn D2D1MakeSkewMatrix(angleX: f32, angleY: f32, center: super::Foundation::Numerics::Vector2, matrix: *mut super::Foundation::Numerics::Matrix3x2);
         #[repr(i32)]
         enum D2D1_ANTIALIAS_MODE {
             D2D1_ANTIALIAS_MODE_PER_PRIMITIVE = 0,

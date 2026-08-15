@@ -85,6 +85,8 @@ mod Windows {
         const SAFER_LEVELID_FULLYTRUSTED: i32 = 262144;
         const SAFER_LEVELID_NORMALUSER: i32 = 131072;
         const SAFER_LEVELID_UNTRUSTED: i32 = 4096;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type SAFER_LEVEL_HANDLE = *mut void;
         const SAFER_LEVEL_OPEN: i32 = 1;
         const SAFER_MAX_DESCRIPTION_SIZE: i32 = 256;
@@ -170,23 +172,23 @@ mod Windows {
         const SRP_POLICY_WLDPMSI: String = "WLDPMSI";
         #[encoding("utf-16")]
         const SRP_POLICY_WLDPSCRIPT: String = "WLDPSCRIPT";
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferCloseLevel(hLevelHandle: SAFER_LEVEL_HANDLE) -> BOOL;
-        #[library("ADVAPI32.dll")]
-        extern fn SaferComputeTokenFromLevel(LevelHandle: SAFER_LEVEL_HANDLE, #[opt] InAccessToken: HANDLE, OutAccessToken: *mut HANDLE, dwFlags: u32, #[in] #[out] #[opt] lpReserved: *mut void) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
+        extern fn SaferComputeTokenFromLevel(LevelHandle: SAFER_LEVEL_HANDLE, #[opt] InAccessToken: HANDLE, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] OutAccessToken: *mut HANDLE, dwFlags: u32, #[in] #[out] #[opt] lpReserved: *mut void) -> BOOL;
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferCreateLevel(dwScopeId: u32, dwLevelId: u32, OpenFlags: u32, pLevelHandle: *mut SAFER_LEVEL_HANDLE, #[reserved] lpReserved: *const void) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferGetLevelInformation(LevelHandle: SAFER_LEVEL_HANDLE, dwInfoType: SAFER_OBJECT_INFO_CLASS, #[size_param(3)] #[opt] lpQueryBuffer: *mut void, dwInBufferSize: u32, lpdwOutBufferSize: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferGetPolicyInformation(dwScopeId: u32, SaferPolicyInfoClass: SAFER_POLICY_INFO_CLASS, InfoBufferSize: u32, #[size_param(2)] InfoBuffer: *mut void, InfoBufferRetSize: *mut u32, #[reserved] lpReserved: *const void) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferIdentifyLevel(dwNumProperties: u32, #[len_param(0)] #[opt] pCodeProperties: *const SAFER_CODE_PROPERTIES_V2, pLevelHandle: *mut SAFER_LEVEL_HANDLE, #[opt] lpReserved: *const void) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferRecordEventLogEntry(hLevel: SAFER_LEVEL_HANDLE, szTargetPath: PCWSTR, #[reserved] lpReserved: *const void) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferSetLevelInformation(LevelHandle: SAFER_LEVEL_HANDLE, dwInfoType: SAFER_OBJECT_INFO_CLASS, #[size_param(3)] lpQueryBuffer: *const void, dwInBufferSize: u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SaferSetPolicyInformation(dwScopeId: u32, SaferPolicyInfoClass: SAFER_POLICY_INFO_CLASS, InfoBufferSize: u32, #[size_param(2)] InfoBuffer: *const void, #[reserved] lpReserved: *const void) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn SaferiIsExecutableFileType(szFullPathname: PCWSTR, bFromShellExecute: bool) -> BOOL;

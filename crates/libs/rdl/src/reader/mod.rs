@@ -1041,7 +1041,16 @@ impl Encoder<'_> {
                     return self.err(ty, "too many leading `super` keywords");
                 }
             } else {
-                path.push(segment.ident.to_string());
+                let segment = segment.ident.to_string();
+                path.push(
+                    segment
+                        .strip_prefix('_')
+                        .filter(|segment| {
+                            segment.as_bytes().first().is_some_and(u8::is_ascii_digit)
+                        })
+                        .unwrap_or(&segment)
+                        .to_string(),
+                );
             }
         }
 

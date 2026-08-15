@@ -1,7 +1,5 @@
 #[win32]
 mod Test {
-    #[associated_enum("FLAGS")]
-    const AMBIGUOUS_FLAG: u32 = 1;
     #[encoding("custom")]
     const AMBIGUOUS_TEXT: String = "text";
     #[struct_size_field("cbSize")]
@@ -11,6 +9,8 @@ mod Test {
         cbSize: u32,
         #[associated_enum("FLAGS")]
         flags: u32,
+        #[project_as("BOOL")]
+        status: i32,
         #[not_null_terminated]
         #[null_null_terminated]
         #[encoding("ansi")]
@@ -29,7 +29,7 @@ mod Test {
     #[library("override.dll", set_last_error)]
     extern fn AnnotatedFunction(#[raii_free("CloseHandle")] #[invalid_handle(-1)] #[invalid_handle(0)] result: *mut HANDLE, #[not_null_terminated] bytes: *const i8, count: u32) -> i32;
     #[library("kernel32.dll")]
-    extern fn AnnotatedParameters(#[free_with("CloseHandle")] allocated: *mut HANDLE, #[ignore_if_return("0")] ignored: *mut HANDLE, #[not_null_terminated] #[null_null_terminated] text: *mut i8, #[len_param(5)] items: *mut void, #[len_const(16)] fixed: *mut void, count: u32, #[size_param(7)] bytes: *mut void, byteCount: u32, #[retained] retained: *mut HANDLE, #[in] #[out] #[opt] direction: *mut HANDLE, #[reserved] #[opt] reserved: *const HANDLE, #[iid_is] #[opt] com: *mut *mut void, #[retval] retval: *mut i32) -> i32;
+    extern fn AnnotatedParameters(#[free_with("CloseHandle")] allocated: *mut HANDLE, #[ignore_if_return("0")] ignored: *mut HANDLE, #[not_null_terminated] #[null_null_terminated] text: *mut i8, #[len_param(5)] items: *mut void, #[len_const(16)] fixed: *mut void, count: u32, #[size_param(7)] bytes: *mut void, byteCount: u32, #[retained] retained: *mut HANDLE, #[in] #[out] #[opt] direction: *mut HANDLE, #[reserved] #[opt] reserved: *const HANDLE, #[iid_is] #[opt] com: *mut *mut void, #[retval] retval: *mut i32, #[project_as("BOOL")] projected: i32) -> i32;
     #[library("kernel32.dll")]
     extern fn AnnotatedReturn() -> #[raii_free("CloseHandle")] #[invalid_handle(-1)]
     HANDLE;
@@ -37,6 +37,8 @@ mod Test {
     extern "system" fn AnnotatedStringReturn() -> #[free_with("LocalFree")] #[do_not_release]
     #[not_null_terminated]
     *mut i8;
+    #[library("kernel32.dll")]
+    extern fn AssociatedEnumReturn() -> #[associated_enum("FLAGS")] u32;
     type BOOL = i32;
     type BYTE = u8;
     #[also_usable_for("HANDLE")]
@@ -60,9 +62,12 @@ mod Test {
     }
     #[free_with("FreeString")]
     type OWNED_STRING = *mut i8;
+    type PROJECTED_STATUS = i32;
     extern fn PUBLIC_CALLBACK(value: u32) -> i32;
     #[library("kernel32.dll")]
     extern fn PostfixAnnotatedFunction(#[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] result: *mut HANDLE, reduced: *mut HANDLE) -> i32;
+    #[library("kernel32.dll")]
+    extern fn ProjectedReturn() -> #[project_as("BOOL")] i32;
     #[raii_free("CloseHandle")]
     #[invalid_handle(-1)]
     #[invalid_handle(0)]

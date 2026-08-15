@@ -4,84 +4,84 @@ mod Windows {
         #[guid(0x5efd22ba_7838_46cb_88e2_cadb14124f8f)]
         interface IEnumITfCompositionView: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumITfCompositionView) -> HRESULT;
-            fn Next(&self, ulCount: u32, rgCompositionView: *mut ITfCompositionView, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] rgCompositionView: *mut ITfCompositionView, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0xf0c0f8dd_cf38_44e1_bb0f_68cf0d551c78)]
         interface IEnumTfContextViews: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfContextViews) -> HRESULT;
-            fn Next(&self, ulCount: u32, rgViews: *mut ITfContextView, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] rgViews: *mut ITfContextView, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0x8f1a7ea6_1654_4502_a86e_b2902344d507)]
         interface IEnumTfContexts: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfContexts) -> HRESULT;
-            fn Next(&self, ulCount: u32, rgContext: *mut ITfContext, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] rgContext: *mut ITfContext, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0x7cef04d7_cb75_4e80_a7ab_5f5bc7d332de)]
         interface IEnumTfDisplayAttributeInfo: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfDisplayAttributeInfo) -> HRESULT;
-            fn Next(&self, ulCount: u32, rgInfo: *mut ITfDisplayAttributeInfo, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] rgInfo: *mut ITfDisplayAttributeInfo, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0xaa80e808_2021_11d2_93e0_0060b067b86e)]
         interface IEnumTfDocumentMgrs: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfDocumentMgrs) -> HRESULT;
-            fn Next(&self, ulCount: u32, rgDocumentMgr: *mut ITfDocumentMgr, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] rgDocumentMgr: *mut ITfDocumentMgr, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0xe4b24db0_0990_11d3_8df0_00105a2799b5)]
         interface IEnumTfFunctionProviders: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfFunctionProviders) -> HRESULT;
-            fn Next(&self, ulCount: u32, ppCmdobj: *mut ITfFunctionProvider, pcFetch: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] ppCmdobj: *mut ITfFunctionProvider, pcFetch: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0x71c6e74d_0f28_11d8_a82a_00065b84435c)]
         interface IEnumTfInputProcessorProfiles: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfInputProcessorProfiles) -> HRESULT;
-            fn Next(&self, ulCount: u32, pProfile: *mut TF_INPUTPROCESSORPROFILE, pcFetch: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] pProfile: *mut TF_INPUTPROCESSORPROFILE, pcFetch: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0x3d61bf11_ac5f_42c8_a4cb_931bcc28c744)]
         interface IEnumTfLanguageProfiles: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfLanguageProfiles) -> HRESULT;
-            fn Next(&self, ulCount: u32, pProfile: *mut TF_LANGUAGEPROFILE, pcFetch: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] pProfile: *mut TF_LANGUAGEPROFILE, pcFetch: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0x19188cb0_aca9_11d2_afc5_00105a2799b5)]
         interface IEnumTfProperties: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfProperties) -> HRESULT;
-            fn Next(&self, ulCount: u32, ppProp: *mut ITfProperty, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] ppProp: *mut ITfProperty, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0x8ed8981b_7c10_4d7d_9fb3_ab72e9c75f72)]
         interface IEnumTfPropertyValue: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfPropertyValue) -> HRESULT;
-            fn Next(&self, ulCount: u32, rgValues: *mut TF_PROPERTYVAL, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] rgValues: *mut TF_PROPERTYVAL, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0xf99d3f40_8e32_11d2_bf46_00105a2799b5)]
         interface IEnumTfRanges: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfRanges) -> HRESULT;
-            fn Next(&self, ulCount: u32, ppRange: *mut ITfRange, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] ppRange: *mut ITfRange, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
         #[guid(0x887aa91e_acba_4931_84da_3c5208cf543f)]
         interface IEnumTfUIElements: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfUIElements) -> HRESULT;
-            fn Next(&self, ulCount: u32, ppElement: *mut ITfUIElement, pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] ppElement: *mut ITfUIElement, pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
@@ -103,8 +103,8 @@ mod Windows {
             fn GetCount(&self, puCount: *mut u32) -> HRESULT;
             fn GetSelection(&self, puIndex: *mut u32) -> HRESULT;
             fn GetString(&self, uIndex: u32, pstr: *mut BSTR) -> HRESULT;
-            fn GetPageIndex(&self, pIndex: *mut u32, uSize: u32, puPageCnt: *mut u32) -> HRESULT;
-            fn SetPageIndex(&self, pIndex: *const u32, uPageCnt: u32) -> HRESULT;
+            fn GetPageIndex(&self, #[len_param(1)] pIndex: *mut u32, uSize: u32, puPageCnt: *mut u32) -> HRESULT;
+            fn SetPageIndex(&self, #[len_param(1)] pIndex: *const u32, uPageCnt: u32) -> HRESULT;
             fn GetCurrentPage(&self, puPage: *mut u32) -> HRESULT;
         }
         #[guid(0x85fad185_58ce_497a_9460_355366b64b9a)]
@@ -119,8 +119,8 @@ mod Windows {
             fn UnregisterCategory(&self, rclsid: *const GUID, rcatid: *const GUID, rguid: *const GUID) -> HRESULT;
             fn EnumCategoriesInItem(&self, rguid: *const GUID, ppEnum: *mut IEnumGUID) -> HRESULT;
             fn EnumItemsInCategory(&self, rcatid: *const GUID, ppEnum: *mut IEnumGUID) -> HRESULT;
-            fn FindClosestCategory(&self, rguid: *const GUID, pcatid: *mut GUID, ppcatidList: *const *const GUID, ulCount: u32) -> HRESULT;
-            fn RegisterGUIDDescription(&self, rclsid: *const GUID, rguid: *const GUID, pchDesc: *const u16, cch: u32) -> HRESULT;
+            fn FindClosestCategory(&self, rguid: *const GUID, pcatid: *mut GUID, #[len_param(3)] ppcatidList: *const *const GUID, ulCount: u32) -> HRESULT;
+            fn RegisterGUIDDescription(&self, rclsid: *const GUID, rguid: *const GUID, #[len_param(3)] pchDesc: *const u16, cch: u32) -> HRESULT;
             fn UnregisterGUIDDescription(&self, rclsid: *const GUID, rguid: *const GUID) -> HRESULT;
             fn GetGUIDDescription(&self, rguid: *const GUID, pbstrDesc: *mut BSTR) -> HRESULT;
             fn RegisterGUIDDWORD(&self, rclsid: *const GUID, rguid: *const GUID, dw: u32) -> HRESULT;
@@ -183,8 +183,8 @@ mod Windows {
         interface ITfContext: IUnknown {
             fn RequestEditSession(&self, tid: TfClientId, pes: ITfEditSession, dwFlags: u32, phrSession: *mut HRESULT) -> HRESULT;
             fn InWriteSession(&self, tid: TfClientId, pfWriteSession: *mut BOOL) -> HRESULT;
-            fn GetSelection(&self, ec: TfEditCookie, ulIndex: u32, ulCount: u32, pSelection: *mut TF_SELECTION, pcFetched: *mut u32) -> HRESULT;
-            fn SetSelection(&self, ec: TfEditCookie, ulCount: u32, pSelection: *const TF_SELECTION) -> HRESULT;
+            fn GetSelection(&self, ec: TfEditCookie, ulIndex: u32, ulCount: u32, #[len_param(2)] pSelection: *mut TF_SELECTION, pcFetched: *mut u32) -> HRESULT;
+            fn SetSelection(&self, ec: TfEditCookie, ulCount: u32, #[len_param(1)] pSelection: *const TF_SELECTION) -> HRESULT;
             fn GetStart(&self, ec: TfEditCookie, ppStart: *mut ITfRange) -> HRESULT;
             fn GetEnd(&self, ec: TfEditCookie, ppEnd: *mut ITfRange) -> HRESULT;
             fn GetActiveView(&self, ppView: *mut ITfContextView) -> HRESULT;
@@ -192,7 +192,7 @@ mod Windows {
             fn GetStatus(&self, pdcs: *mut TF_STATUS) -> HRESULT;
             fn GetProperty(&self, guidProp: *const GUID, ppProp: *mut ITfProperty) -> HRESULT;
             fn GetAppProperty(&self, guidProp: *const GUID, ppProp: *mut ITfReadOnlyProperty) -> HRESULT;
-            fn TrackProperties(&self, prgProp: *const *const GUID, cProp: u32, prgAppProp: *const *const GUID, cAppProp: u32, ppProperty: *mut ITfReadOnlyProperty) -> HRESULT;
+            fn TrackProperties(&self, #[len_param(1)] prgProp: *const *const GUID, cProp: u32, #[len_param(3)] prgAppProp: *const *const GUID, cAppProp: u32, ppProperty: *mut ITfReadOnlyProperty) -> HRESULT;
             fn EnumProperties(&self, ppEnum: *mut IEnumTfProperties) -> HRESULT;
             fn GetDocumentMgr(&self, ppDm: *mut ITfDocumentMgr) -> HRESULT;
             fn CreateRangeBackup(&self, ec: TfEditCookie, pRange: ITfRange, ppBackup: *mut ITfRangeBackup) -> HRESULT;
@@ -287,7 +287,7 @@ mod Windows {
         #[guid(0x42d4d099_7c1a_4a89_b836_6c6f22160df0)]
         interface ITfEditRecord: IUnknown {
             fn GetSelectionStatus(&self, pfChanged: *mut BOOL) -> HRESULT;
-            fn GetTextAndPropertyUpdates(&self, dwFlags: u32, prgProperties: *const *const GUID, cProperties: u32, ppEnum: *mut IEnumTfRanges) -> HRESULT;
+            fn GetTextAndPropertyUpdates(&self, dwFlags: u32, #[len_param(2)] prgProperties: *const *const GUID, cProperties: u32, ppEnum: *mut IEnumTfRanges) -> HRESULT;
         }
         #[guid(0xaa80e803_2021_11d2_93e0_0060b067b86e)]
         interface ITfEditSession: IUnknown {
@@ -319,7 +319,7 @@ mod Windows {
             fn GetProfile(&self, dwProfileType: u32, langid: LANGID, clsid: *const GUID, guidProfile: *const GUID, hkl: HKL, pProfile: *mut TF_INPUTPROCESSORPROFILE) -> HRESULT;
             fn EnumProfiles(&self, langid: LANGID, ppEnum: *mut IEnumTfInputProcessorProfiles) -> HRESULT;
             fn ReleaseInputProcessor(&self, rclsid: *const GUID, dwFlags: u32) -> HRESULT;
-            fn RegisterProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, pchDesc: *const u16, cchDesc: u32, pchIconFile: *const u16, cchFile: u32, uIconIndex: u32, hklsubstitute: HKL, dwPreferredLayout: u32, bEnabledByDefault: BOOL, dwFlags: u32) -> HRESULT;
+            fn RegisterProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, #[len_param(4)] pchDesc: *const u16, cchDesc: u32, #[len_param(6)] pchIconFile: *const u16, cchFile: u32, uIconIndex: u32, hklsubstitute: HKL, dwPreferredLayout: u32, bEnabledByDefault: BOOL, dwFlags: u32) -> HRESULT;
             fn UnregisterProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, dwFlags: u32) -> HRESULT;
             fn GetActiveProfile(&self, catid: *const GUID, pProfile: *mut TF_INPUTPROCESSORPROFILE) -> HRESULT;
         }
@@ -331,7 +331,7 @@ mod Windows {
         interface ITfInputProcessorProfiles: IUnknown {
             fn Register(&self, rclsid: *const GUID) -> HRESULT;
             fn Unregister(&self, rclsid: *const GUID) -> HRESULT;
-            fn AddLanguageProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, pchDesc: *const u16, cchDesc: u32, pchIconFile: *const u16, cchFile: u32, uIconIndex: u32) -> HRESULT;
+            fn AddLanguageProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, #[len_param(4)] pchDesc: *const u16, cchDesc: u32, #[len_param(6)] pchIconFile: *const u16, cchFile: u32, uIconIndex: u32) -> HRESULT;
             fn RemoveLanguageProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID) -> HRESULT;
             fn EnumInputProcessorInfo(&self, ppEnum: *mut IEnumGUID) -> HRESULT;
             fn GetDefaultLanguageProfile(&self, langid: LANGID, catid: *const GUID, pclsid: *mut GUID, pguidProfile: *mut GUID) -> HRESULT;
@@ -341,7 +341,7 @@ mod Windows {
             fn GetLanguageProfileDescription(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, pbstrProfile: *mut BSTR) -> HRESULT;
             fn GetCurrentLanguage(&self, plangid: *mut LANGID) -> HRESULT;
             fn ChangeCurrentLanguage(&self, langid: LANGID) -> HRESULT;
-            fn GetLanguageList(&self, ppLangId: *mut *mut LANGID, pulCount: *mut u32) -> HRESULT;
+            fn GetLanguageList(&self, #[len_param(1)] ppLangId: *mut *mut LANGID, pulCount: *mut u32) -> HRESULT;
             fn EnumLanguageProfiles(&self, langid: LANGID, ppEnum: *mut IEnumTfLanguageProfiles) -> HRESULT;
             fn EnableLanguageProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, fEnable: BOOL) -> HRESULT;
             fn IsEnabledLanguageProfile(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, pfEnable: *mut BOOL) -> HRESULT;
@@ -350,11 +350,11 @@ mod Windows {
         }
         #[guid(0x892f230f_fe00_4a41_a98e_fcd6de0d35ef)]
         interface ITfInputProcessorProfilesEx: ITfInputProcessorProfiles {
-            fn SetLanguageProfileDisplayName(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, pchFile: *const u16, cchFile: u32, uResId: u32) -> HRESULT;
+            fn SetLanguageProfileDisplayName(&self, rclsid: *const GUID, langid: LANGID, guidProfile: *const GUID, #[len_param(4)] pchFile: *const u16, cchFile: u32, uResId: u32) -> HRESULT;
         }
         #[guid(0x55ce16ba_3014_41c1_9ceb_fade1446ac6c)]
         interface ITfInsertAtSelection: IUnknown {
-            fn InsertTextAtSelection(&self, ec: TfEditCookie, dwFlags: u32, pchText: *const u16, cch: i32, ppRange: *mut ITfRange) -> HRESULT;
+            fn InsertTextAtSelection(&self, ec: TfEditCookie, dwFlags: u32, #[len_param(3)] pchText: *const u16, cch: i32, ppRange: *mut ITfRange) -> HRESULT;
             fn InsertEmbeddedAtSelection(&self, ec: TfEditCookie, dwFlags: u32, pDataObject: IDataObject, ppRange: *mut ITfRange) -> HRESULT;
         }
         #[guid(0xaa80e7f5_2021_11d2_93e0_0060b067b86e)]
@@ -382,9 +382,9 @@ mod Windows {
             fn KeyUp(&self, wParam: WPARAM, lParam: LPARAM, pfEaten: *mut BOOL) -> HRESULT;
             fn GetPreservedKey(&self, pic: ITfContext, pprekey: *const TF_PRESERVEDKEY, pguid: *mut GUID) -> HRESULT;
             fn IsPreservedKey(&self, rguid: *const GUID, pprekey: *const TF_PRESERVEDKEY, pfRegistered: *mut BOOL) -> HRESULT;
-            fn PreserveKey(&self, tid: TfClientId, rguid: *const GUID, prekey: *const TF_PRESERVEDKEY, pchDesc: *const u16, cchDesc: u32) -> HRESULT;
+            fn PreserveKey(&self, tid: TfClientId, rguid: *const GUID, prekey: *const TF_PRESERVEDKEY, #[len_param(4)] pchDesc: *const u16, cchDesc: u32) -> HRESULT;
             fn UnpreserveKey(&self, rguid: *const GUID, pprekey: *const TF_PRESERVEDKEY) -> HRESULT;
-            fn SetPreservedKeyDescription(&self, rguid: *const GUID, pchDesc: *const u16, cchDesc: u32) -> HRESULT;
+            fn SetPreservedKeyDescription(&self, rguid: *const GUID, #[len_param(2)] pchDesc: *const u16, cchDesc: u32) -> HRESULT;
             fn GetPreservedKeyDescription(&self, rguid: *const GUID, pbstrDesc: *mut BSTR) -> HRESULT;
             fn SimulatePreservedKey(&self, pic: ITfContext, rguid: *const GUID, pfEaten: *mut BOOL) -> HRESULT;
         }
@@ -447,8 +447,8 @@ mod Windows {
         }
         #[guid(0xaa80e7ff_2021_11d2_93e0_0060b067b86e)]
         interface ITfRange: IUnknown {
-            fn GetText(&self, ec: TfEditCookie, dwFlags: u32, pchText: *mut u16, cchMax: u32, pcch: *mut u32) -> HRESULT;
-            fn SetText(&self, ec: TfEditCookie, dwFlags: u32, pchText: *const u16, cch: i32) -> HRESULT;
+            fn GetText(&self, ec: TfEditCookie, dwFlags: u32, #[len_param(3)] pchText: *mut u16, cchMax: u32, pcch: *mut u32) -> HRESULT;
+            fn SetText(&self, ec: TfEditCookie, dwFlags: u32, #[len_param(3)] pchText: *const u16, cch: i32) -> HRESULT;
             fn GetFormattedText(&self, ec: TfEditCookie, ppDataObject: *mut IDataObject) -> HRESULT;
             fn GetEmbedded(&self, ec: TfEditCookie, rguidService: *const GUID, riid: *const GUID, #[iid_is] ppunk: *mut *mut void) -> HRESULT;
             fn InsertEmbedded(&self, ec: TfEditCookie, dwFlags: u32, pDataObject: IDataObject) -> HRESULT;

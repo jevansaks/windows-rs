@@ -7,13 +7,13 @@ mod Windows {
         }
         #[guid(0xa889c72a_fcc1_4a9e_af61_ed071333fb5b)]
         interface IWbemClientConnectionTransport: IUnknown {
-            fn Open(&self, strAddressType: BSTR, dwBinaryAddressLength: u32, abBinaryAddress: *const u8, strObject: BSTR, strUser: BSTR, strPassword: BSTR, strLocale: BSTR, lFlags: i32, pCtx: IWbemContext, riid: *const GUID, #[iid_is] pInterface: *mut *mut void, pCallRes: *mut IWbemCallResult) -> HRESULT;
-            fn OpenAsync(&self, strAddressType: BSTR, dwBinaryAddressLength: u32, abBinaryAddress: *const u8, strObject: BSTR, strUser: BSTR, strPassword: BSTR, strLocale: BSTR, lFlags: i32, pCtx: IWbemContext, riid: *const GUID, pResponseHandler: IWbemObjectSink) -> HRESULT;
+            fn Open(&self, strAddressType: BSTR, dwBinaryAddressLength: u32, #[len_param(1)] abBinaryAddress: *const u8, strObject: BSTR, strUser: BSTR, strPassword: BSTR, strLocale: BSTR, lFlags: i32, pCtx: IWbemContext, riid: *const GUID, #[iid_is] pInterface: *mut *mut void, pCallRes: *mut IWbemCallResult) -> HRESULT;
+            fn OpenAsync(&self, strAddressType: BSTR, dwBinaryAddressLength: u32, #[len_param(1)] abBinaryAddress: *const u8, strObject: BSTR, strUser: BSTR, strPassword: BSTR, strLocale: BSTR, lFlags: i32, pCtx: IWbemContext, riid: *const GUID, pResponseHandler: IWbemObjectSink) -> HRESULT;
             fn Cancel(&self, lFlags: i32, pHandler: IWbemObjectSink) -> HRESULT;
         }
         #[guid(0xf7ce2e11_8c90_11d1_9e7b_00c04fc324a8)]
         interface IWbemClientTransport: IUnknown {
-            fn ConnectServer(&self, strAddressType: BSTR, dwBinaryAddressLength: u32, abBinaryAddress: *const u8, strNetworkResource: BSTR, strUser: BSTR, strPassword: BSTR, strLocale: BSTR, lSecurityFlags: i32, strAuthority: BSTR, pCtx: IWbemContext, ppNamespace: *mut IWbemServices) -> HRESULT;
+            fn ConnectServer(&self, strAddressType: BSTR, dwBinaryAddressLength: u32, #[len_param(1)] abBinaryAddress: *const u8, strNetworkResource: BSTR, strUser: BSTR, strPassword: BSTR, strLocale: BSTR, lSecurityFlags: i32, strAuthority: BSTR, pCtx: IWbemContext, ppNamespace: *mut IWbemServices) -> HRESULT;
         }
         #[guid(0xd8ec9cb1_b135_4f10_8b1b_c7188bb0d186)]
         interface IWbemConnectorLogin: IUnknown {

@@ -27,6 +27,10 @@ impl Collector {
         self.0.insert(name, item);
     }
 
+    pub fn into_items(self) -> impl Iterator<Item = (String, Item)> {
+        self.0.into_iter()
+    }
+
     /// Keep only entries whose name satisfies `keep`.
     pub fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
         self.0.retain(|name, _| keep(name));

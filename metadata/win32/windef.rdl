@@ -51,26 +51,85 @@ mod Windows {
             DPI_HOSTING_BEHAVIOR_DEFAULT = 0,
             DPI_HOSTING_BEHAVIOR_MIXED = 1,
         }
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DestroyAcceleratorTable")]
         type HACCEL = *mut void;
+        #[also_usable_for("HGDIOBJ")]
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteObject")]
         type HBITMAP = *mut void;
+        #[also_usable_for("HGDIOBJ")]
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteObject")]
         type HBRUSH = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteColorSpace")]
         type HCOLORSPACE = *mut void;
+        #[also_usable_for("HICON")]
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DestroyCursor")]
         type HCURSOR = HICON;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type HDC = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("CloseDesktop")]
         type HDESK = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteEnhMetaFile")]
         type HENHMETAFILE = *mut void;
         const HFILE_ERROR: HFILE = -1;
+        #[also_usable_for("HGDIOBJ")]
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteObject")]
         type HFONT = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteObject")]
         type HGDIOBJ = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("wglDeleteContext")]
         type HGLRC = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("UnhookWindowsHookEx")]
         type HHOOK = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DestroyIcon")]
         type HICON = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DestroyMenu")]
         type HMENU = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type HMONITOR = *mut void;
+        #[also_usable_for("HGDIOBJ")]
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteObject")]
         type HPALETTE = *mut void;
+        #[also_usable_for("HGDIOBJ")]
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteObject")]
         type HPEN = *mut void;
         type HUMPD = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("UnhookWinEvent")]
         type HWINEVENTHOOK = *mut void;
+        #[also_usable_for("HANDLE")]
         type HWND = *mut void;
         type LPCOLORREF = *mut u32;
         type LPCRECT = *const RECT;

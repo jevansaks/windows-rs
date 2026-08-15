@@ -216,7 +216,7 @@ mod Windows {
                 pCRLContext: PCCRL_CONTEXT,
                 hCertStore: HCERTSTORE,
             },
-            dwFlags: u32,
+            dwFlags: CRYPT_KEY_FLAGS,
             pwszPassword: PCWSTR,
         }
         const CRYPTUI_WIZ_IMPORT_SUBJECT_CERT_CONTEXT: i32 = 2;

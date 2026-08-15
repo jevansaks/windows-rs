@@ -161,7 +161,6 @@ mod Windows {
         interface IDirectManipulationCompositor2: IDirectManipulationCompositor {
             fn AddContentWithCrossProcessChaining(&self, content: IDirectManipulationPrimaryContent, #[opt] device: IUnknown, #[opt] parentVisual: IUnknown, #[opt] childVisual: IUnknown) -> HRESULT;
         }
-        struct IDirectManipulationCompositorPartner {}
         #[guid(0xb89962cb_3d89_442b_bb58_5098fa0f9f16)]
         interface IDirectManipulationContent: IUnknown {
             fn GetContentRect(&self, contentSize: *mut RECT) -> HRESULT;
@@ -173,7 +172,6 @@ mod Windows {
             fn GetContentTransform(&self, #[len_param(1)] matrix: *mut f32, pointCount: u32) -> HRESULT;
             fn SyncContentTransform(&self, #[len_param(1)] matrix: *const f32, pointCount: u32) -> HRESULT;
         }
-        struct IDirectManipulationContent2 {}
         #[guid(0x652d5c71_fe60_4a98_be70_e5f21291e7f1)]
         interface IDirectManipulationDeferContactService: IUnknown {
             fn DeferContact(&self, pointerId: u32, timeout: u32) -> HRESULT;
@@ -215,11 +213,6 @@ mod Windows {
         interface IDirectManipulationManager3: IDirectManipulationManager2 {
             fn GetService(&self, clsid: *const GUID, riid: *const GUID, #[iid_is] #[retval] object: *mut *mut void) -> HRESULT;
         }
-        struct IDirectManipulationManagerPartner {}
-        struct IDirectManipulationParametricMotionBehavior {}
-        struct IDirectManipulationParametricMotionCurve {}
-        struct IDirectManipulationParametricRestPointBehavior {}
-        struct IDirectManipulationParametricRestPointList {}
         #[guid(0xc12851e4_1698_4625_b9b1_7ca3ec18630b)]
         interface IDirectManipulationPrimaryContent: IUnknown {
             fn SetSnapInterval(&self, motion: DIRECTMANIPULATION_MOTION_TYPES, interval: f32, offset: f32) -> HRESULT;
@@ -232,8 +225,6 @@ mod Windows {
             fn GetInertiaEndTransform(&self, #[len_param(1)] matrix: *mut f32, pointCount: u32) -> HRESULT;
             fn GetCenterPoint(&self, centerX: *mut f32, centerY: *mut f32) -> HRESULT;
         }
-        struct IDirectManipulationPrimaryContent2 {}
-        struct IDirectManipulationSnapPointsInertiaBehavior {}
         #[guid(0x790b6337_64f8_4ff5_a269_b32bc2af27a7)]
         interface IDirectManipulationUpdateHandler: IUnknown {
             fn Update(&self) -> HRESULT;
@@ -281,13 +272,11 @@ mod Windows {
             fn RemoveBehavior(&self, cookie: u32) -> HRESULT;
             fn RemoveAllBehaviors(&self) -> HRESULT;
         }
-        struct IDirectManipulationViewport3 {}
         #[guid(0x952121da_d69f_45f9_b0f9_f23944321a6d)]
         interface IDirectManipulationViewportEventHandler: IUnknown {
             fn OnViewportStatusChanged(&self, viewport: IDirectManipulationViewport, current: DIRECTMANIPULATION_STATUS, previous: DIRECTMANIPULATION_STATUS) -> HRESULT;
             fn OnViewportUpdated(&self, viewport: IDirectManipulationViewport) -> HRESULT;
             fn OnContentUpdated(&self, viewport: IDirectManipulationViewport, content: IDirectManipulationContent) -> HRESULT;
         }
-        struct IDirectManipulationViewportPartner {}
     }
 }

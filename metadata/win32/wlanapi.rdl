@@ -971,7 +971,7 @@ mod Windows {
             WLSecurityPage = 1,
             WLAdvPage = 2,
         }
-        #[library("wlanapi.dll")]
+        #[library("wlanapi.dll", set_last_error)]
         extern fn WlanAllocateMemory(dwMemorySize: u32) -> *mut void;
         #[library("wlanapi.dll")]
         extern fn WlanCloseHandle(hClientHandle: HANDLE, #[reserved] pReserved: *const void) -> u32;

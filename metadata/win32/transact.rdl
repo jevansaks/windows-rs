@@ -88,7 +88,7 @@ mod Windows {
         }
         struct XACTOPT {
             ulTimeout: u32,
-            szDescription: [i8; 40],
+            szDescription: [u8; 40],
         }
         #[repr(i32)]
         enum XACTRM {

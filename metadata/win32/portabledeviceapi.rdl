@@ -3,7 +3,7 @@ mod Windows {
     mod Win32 {
         #[guid(0x10ece955_cf41_4728_bfa0_41eedf1bbf19)]
         interface IEnumPortableDeviceObjectIDs: IUnknown {
-            fn Next(&self, cObjects: u32, pObjIDs: *mut PWSTR, #[in] #[out] pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, cObjects: u32, #[len_param(0)] pObjIDs: *mut PWSTR, #[in] #[out] pcFetched: *mut u32) -> HRESULT;
             fn Skip(&self, cObjects: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppEnum: *mut IEnumPortableDeviceObjectIDs) -> HRESULT;

@@ -48,15 +48,15 @@ mod Windows {
         extern fn SetAddrInfoExW(pName: PCWSTR, #[opt] pServiceName: PCWSTR, #[opt] pAddresses: *const SOCKET_ADDRESS, dwAddressCount: u32, #[opt] lpBlob: *const BLOB, dwFlags: u32, dwNameSpace: u32, #[opt] lpNspId: *const GUID, #[opt] timeout: *const timeval, #[opt] lpOverlapped: *const OVERLAPPED, #[opt] lpCompletionRoutine: LPLOOKUPSERVICE_COMPLETION_ROUTINE, #[opt] lpNameHandle: *mut HANDLE) -> i32;
         const UDP_CHECKSUM_COVERAGE: i32 = 20;
         const UDP_NOCHECKSUM: i32 = 1;
-        #[library("WS2_32.dll")]
+        #[library("WS2_32.dll", set_last_error)]
         extern fn freeaddrinfo(#[opt] pAddrInfo: *const ADDRINFOA);
-        #[library("WS2_32.dll")]
+        #[library("WS2_32.dll", set_last_error)]
         extern fn getaddrinfo(#[opt] pNodeName: PCSTR, #[opt] pServiceName: PCSTR, #[opt] pHints: *const ADDRINFOA, ppResult: *mut PADDRINFOA) -> i32;
-        #[library("WS2_32.dll")]
+        #[library("WS2_32.dll", set_last_error)]
         extern fn getnameinfo(#[size_param(1)] pSockaddr: *const SOCKADDR, SockaddrLength: socklen_t, #[len_param(3)] #[opt] pNodeBuffer: *mut i8, NodeBufferSize: u32, #[len_param(5)] #[opt] pServiceBuffer: *mut i8, ServiceBufferSize: u32, Flags: i32) -> i32;
-        #[library("WS2_32.dll")]
+        #[library("WS2_32.dll", set_last_error)]
         extern fn inet_ntop(Family: i32, pAddr: *const void, #[len_param(3)] #[out] pStringBuf: PSTR, StringBufSize: usize) -> PCSTR;
-        #[library("WS2_32.dll")]
+        #[library("WS2_32.dll", set_last_error)]
         extern fn inet_pton(Family: i32, pszAddrString: PCSTR, pAddrBuf: *mut void) -> i32;
         type socklen_t = i32;
     }

@@ -9,6 +9,37 @@ use super::*;
 pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadata::Type {
     let decl = cursor.ty();
     let name = parser.canonical_name(decl.name());
+    let canonical = cursor.canonical_type();
+    if parser.winrt_types.is_some()
+        && canonical.kind() == CXType_Pointer
+        && let Some(projected) = canonical.pointee_type().abi_projection(parser)
+    {
+        return projected;
+    }
+    let underlying = decl.typedef_underlying_type();
+    if underlying.kind() == CXType_Pointer {
+        let pointee = underlying.pointee_type();
+        let pointee = if pointee.kind() == CXType_Elaborated {
+            pointee.underlying_type()
+        } else {
+            pointee
+        };
+        let target = parser.canonical_name(pointee.ty().name());
+        if target.starts_with('I') {
+            if parser.force_emit.contains_key(&target) {
+                return metadata::Type::value_named(parser.namespace, &target);
+            }
+            if let Some(namespace) = parser.ref_map.get(&target) {
+                return metadata::Type::value_named(namespace, &target);
+            }
+        }
+    }
+    if let Some(ty) = canonical_string_pointer(&name) {
+        return ty;
+    }
+    if name == "GUID" || name == "Guid" {
+        return metadata::Type::value_named("System", "Guid");
+    }
     // String normalisation and the flat collapses are gated to the per-header scrape: a
     // namespaced scrape (WebView2) resolves `PCWSTR`/`PCSTR` through a reference winmd where they
     // are `const PWSTR`, not distinct types, so forcing them here would leave the reference
@@ -21,9 +52,22 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
             .unwrap_or_else(|| metadata::Type::value_named(parser.namespace, &name));
     }
 
-    // Namespaced scrape: resolve through the reference metadata. A local typedef is emitted by
-    // name; an external one is scheduled for a follow-up pass.
-    if let Some(ns) = parser.ref_map.get(&name) {
+    fn canonical_string_pointer(name: &str) -> Option<metadata::Type> {
+        let canonical = string_alias_canonical(name)?;
+        Some(match canonical {
+            "PCSTR" => metadata::Type::PtrConst(Box::new(metadata::Type::U8), 1),
+            "PCWSTR" => metadata::Type::PtrConst(Box::new(metadata::Type::U16), 1),
+            "PSTR" => metadata::Type::PtrMut(Box::new(metadata::Type::U8), 1),
+            "PWSTR" => metadata::Type::PtrMut(Box::new(metadata::Type::U16), 1),
+            _ => return None,
+        })
+    }
+
+    // Namespaced scrape: semantic scalars remain primitive regardless of partition ownership.
+    // Other names resolve through reference metadata or are scheduled for a follow-up pass.
+    if let Some(scalar) = semantic_scalar(&name) {
+        scalar
+    } else if let Some(ns) = parser.ref_map.get(&name) {
         metadata::Type::value_named(ns, &name)
     } else if let Some(ty) = universal_alias(parser.namespace, &name) {
         ty
@@ -77,9 +121,9 @@ fn flat_canonical(
 
 /// GUID synonyms and generic `void*` aliases collapse in *every* scrape mode, not just the flat
 /// one - see [`resolve_typedef`]'s namespaced branch.
-fn universal_alias(namespace: &str, name: &str) -> Option<metadata::Type> {
+fn universal_alias(_namespace: &str, name: &str) -> Option<metadata::Type> {
     if guid_alias(name) {
-        return Some(metadata::Type::value_named(namespace, "GUID"));
+        return Some(metadata::Type::value_named("System", "Guid"));
     }
     void_pointer_alias(name)
 }
@@ -102,7 +146,19 @@ fn interface_alias(cursor: &Type, parser: &mut Parser<'_>) -> Option<metadata::T
 /// or the `typedef IFoo *NAME` (`LP*`/`P*`) spelling.
 pub(crate) fn is_interface_alias(underlying: &Type) -> bool {
     underlying.is_interface()
-        || (underlying.kind() == CXType_Pointer && underlying.pointee_type().is_interface())
+        || (underlying.kind() == CXType_Pointer && {
+            let pointee = underlying.pointee_type();
+            pointee.is_interface()
+                || (pointee.kind() == CXType_Elaborated && {
+                    let pointee = pointee.underlying_type();
+                    pointee.kind() == CXType_Record
+                        && !pointee.ty().has_definition()
+                        && pointee.ty().name().starts_with('I')
+                })
+                || (pointee.kind() == CXType_Record
+                    && !pointee.ty().has_definition()
+                    && pointee.ty().name().starts_with('I'))
+        })
 }
 
 /// Collapse a scalar typedef to its primitive, for the namespaced scrape's fallback. Pointer-sized
@@ -195,6 +251,8 @@ pub(crate) fn semantic_scalar(name: &str) -> Option<metadata::Type> {
         "BOOLEAN" => metadata::Type::Bool,
         "LARGE_INTEGER" => metadata::Type::I64,
         "ULARGE_INTEGER" => metadata::Type::U64,
+        "DEVPROPID" => metadata::Type::U32,
+        "DATE" => metadata::Type::F64,
         _ => return None,
     })
 }

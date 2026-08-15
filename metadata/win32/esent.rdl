@@ -1520,9 +1520,9 @@ mod Windows {
         const JET_efvWindows10v2004: i32 = 9180;
         const JET_efvWindows11v21H2: i32 = 9400;
         const JET_efvWindows11v22H2: i32 = 9480;
+        const JET_efvWindows11v23H2: i32 = 9600;
         const JET_efvWindows19H1Rtm: i32 = 8920;
         const JET_efvWindowsServer2022: i32 = 9360;
-        const JET_efvWindowsServer2025: i32 = 9620;
         const JET_errAccessDenied: i32 = -1907;
         const JET_errAfterInitialization: i32 = -1850;
         const JET_errAlreadyInitialized: i32 = -1030;
@@ -1549,8 +1549,6 @@ mod Windows {
         const JET_errBadParentPageLink: i32 = -338;
         const JET_errBadPatchPage: i32 = -535;
         const JET_errBadRestoreTargetInstance: i32 = -577;
-        const JET_errBadRootPageLink: i32 = -366;
-        const JET_errBlockedByCorruptionMark: i32 = -1233;
         const JET_errBufferTooSmall: i32 = -1038;
         const JET_errCallbackFailed: i32 = -2101;
         const JET_errCallbackNotResolved: i32 = -2102;
@@ -1592,7 +1590,6 @@ mod Windows {
         const JET_errCommittedLogFilesMissing: i32 = -582;
         const JET_errConsistentTimeMismatch: i32 = -551;
         const JET_errContainerNotEmpty: i32 = -1043;
-        const JET_errCopySignatureMismatchCannotRestart: i32 = -8003;
         const JET_errDDLNotInheritable: i32 = -1326;
         const JET_errDataHasChanged: i32 = -1611;
         const JET_errDatabase200Format: i32 = -1210;
@@ -1816,8 +1813,6 @@ mod Windows {
         const JET_errOutOfThreads: i32 = -103;
         const JET_errPageBoundary: i32 = -323;
         const JET_errPageInitializedMismatch: i32 = -596;
-        const JET_errPageInitializedMismatchUninitLocal: i32 = -597;
-        const JET_errPageInitializedMismatchUninitRemote: i32 = -596;
         const JET_errPageNotInitialized: i32 = -1019;
         const JET_errPageSizeMismatch: i32 = -1213;
         const JET_errPageTagCorrupted: i32 = -357;
@@ -2011,7 +2006,7 @@ mod Windows {
         const JET_paramMaxSessions: i32 = 5;
         const JET_paramMaxTemporaryTables: i32 = 10;
         const JET_paramMaxTransactionSize: i32 = 178;
-        const JET_paramMaxValueInvalid: i32 = 249;
+        const JET_paramMaxValueInvalid: i32 = 232;
         const JET_paramMaxVerPages: i32 = 9;
         const JET_paramMinDataForXpress: i32 = 183;
         const JET_paramNoInformationEvent: i32 = 50;
@@ -2105,7 +2100,6 @@ mod Windows {
         const JET_wrnColumnTruncated: i32 = 1534;
         const JET_wrnCommittedLogFilesLost: i32 = 585;
         const JET_wrnCommittedLogFilesRemoved: i32 = 587;
-        const JET_wrnCopyCompletedAlready: i32 = 8002;
         const JET_wrnCopyLongValue: i32 = 1520;
         const JET_wrnCorruptIndexDeleted: i32 = 1415;
         const JET_wrnDataHasChanged: i32 = 1610;

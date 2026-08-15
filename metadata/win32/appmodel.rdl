@@ -19,10 +19,6 @@ mod Windows {
             AddPackageDependencyOptions2_SpecifiedPackageFamilyOnly = 2,
         }
         #[repr(i32)]
-        enum AppModelPackageFeature {
-            AppModelPackageFeature_SignedSBOM = 1,
-        }
-        #[repr(i32)]
         enum AppPolicyClrCompat {
             AppPolicyClrCompat_Other = 0,
             AppPolicyClrCompat_ClassicDesktop = 1,
@@ -164,14 +160,10 @@ mod Windows {
         extern fn GetResolvedPackageFullNameForPackageDependency2(packageDependencyId: PCWSTR, packageFullName: *mut PWSTR) -> HRESULT;
         #[library("api-ms-win-appmodel-runtime-l1-1-1.dll")]
         extern fn GetStagedPackageOrigin(packageFullName: PCWSTR, origin: *mut PackageOrigin) -> i32;
-        #[library("api-ms-win-appmodel-runtime-l1-1-7.dll")]
-        extern fn GetStagedPackageOrigin2(packageFullName: PCWSTR, origin: *mut PackageOrigin2) -> HRESULT;
         #[library("KERNEL32.dll")]
         extern fn GetStagedPackagePathByFullName(packageFullName: PCWSTR, #[in] #[out] pathLength: *mut u32, #[len_param(1)] #[out] #[opt] path: PWSTR) -> i32;
         #[library("api-ms-win-appmodel-runtime-l1-1-3.dll")]
         extern fn GetStagedPackagePathByFullName2(packageFullName: PCWSTR, packagePathType: PackagePathType, #[in] #[out] pathLength: *mut u32, #[len_param(2)] #[out] #[opt] path: PWSTR) -> i32;
-        #[library("api-ms-win-appmodel-runtime-l1-1-7.dll")]
-        extern fn IsPackageFeatureSupported(feature: AppModelPackageFeature) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn OpenPackageInfoByFullName(packageFullName: PCWSTR, #[reserved] reserved: u32, packageInfoReference: *mut PACKAGE_INFO_REFERENCE) -> i32;
         #[library("api-ms-win-appmodel-runtime-l1-1-1.dll")]
@@ -287,18 +279,6 @@ mod Windows {
             PackageOrigin_DeveloperUnsigned = 4,
             PackageOrigin_DeveloperSigned = 5,
             PackageOrigin_LineOfBusiness = 6,
-            PackageOrigin_SignedSBOM = 7,
-        }
-        #[repr(i32)]
-        enum PackageOrigin2 {
-            PackageOrigin2_Unknown = 0,
-            PackageOrigin2_Unsigned = 1,
-            PackageOrigin2_Inbox = 2,
-            PackageOrigin2_Store = 3,
-            PackageOrigin2_DeveloperUnsigned = 4,
-            PackageOrigin2_DeveloperSigned = 5,
-            PackageOrigin2_LineOfBusiness = 6,
-            PackageOrigin2_SignedSBOM = 7,
         }
         #[repr(i32)]
         enum PackagePathType {

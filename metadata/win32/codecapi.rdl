@@ -204,7 +204,6 @@ mod Windows {
         struct CODECAPI_AVEncVideoCodedVideoAccessUnitSize {}
         struct CODECAPI_AVEncVideoConsecutiveFramesForLayer {}
         struct CODECAPI_AVEncVideoContentType {}
-        struct CODECAPI_AVEncVideoD3D12ReconstructedPictureOutputMode {}
         struct CODECAPI_AVEncVideoDefaultUpperFieldDominant {}
         struct CODECAPI_AVEncVideoDirtyRectEnabled {}
         struct CODECAPI_AVEncVideoDisplayDimension {}
@@ -403,7 +402,6 @@ mod Windows {
             eAVDecDDOperationalMode_PORTABLE8 = 5,
             eAVDecDDOperationalMode_PORTABLE11 = 6,
             eAVDecDDOperationalMode_PORTABLE14 = 7,
-            eAVDecDDOperationalMode_PORTABLE16 = 8,
         }
         #[repr(i32)]
         enum eAVDecDDStereoDownMixMode {
@@ -872,12 +870,6 @@ mod Windows {
         enum eAVEncVideoContentType {
             eAVEncVideoContentType_Unknown = 0,
             eAVEncVideoContentType_FixedCameraAngle = 1,
-        }
-        #[repr(i32)]
-        enum eAVEncVideoD3D12ReconstructedPictureOutputMode {
-            eAVEncVideoEncodeD3D12ReconstructedPictureMode_None = 0,
-            eAVEncVideoEncodeD3D12ReconstructedPictureMode_Copy = 1,
-            eAVEncVideoEncodeD3D12ReconstructedPictureMode_Shared = 2,
         }
         #[repr(i32)]
         enum eAVEncVideoFilmContent {

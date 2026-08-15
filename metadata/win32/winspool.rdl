@@ -138,7 +138,7 @@ mod Windows {
             dwlDriverVersion: DWORDLONG,
             szPackageID: [u16; 260],
         }
-        #[library("WINSPOOL.DRV")]
+        #[library("WINSPOOL.DRV", set_last_error)]
         extern fn ClosePrinter(hPrinter: HANDLE) -> BOOL;
         #[library("WINSPOOL.DRV")]
         extern fn CloseSpoolFileHandle(hPrinter: HANDLE, hSpoolFile: HANDLE) -> BOOL;
@@ -611,7 +611,9 @@ mod Windows {
         #[library("WINSPOOL.DRV")]
         extern fn FindClosePrinterChangeNotification(hChange: HANDLE) -> BOOL;
         #[library("WINSPOOL.DRV")]
-        extern fn FindFirstPrinterChangeNotification(hPrinter: HANDLE, fdwFilter: u32, fdwOptions: u32, #[opt] pPrinterNotifyOptions: *const void) -> HANDLE;
+        extern fn FindFirstPrinterChangeNotification(hPrinter: HANDLE, fdwFilter: u32, fdwOptions: u32, #[opt] pPrinterNotifyOptions: *const void) -> #[invalid_handle(-1)] #[invalid_handle(0)]
+        #[raii_free("FindClosePrinterChangeNotification")]
+        HANDLE;
         #[library("WINSPOOL.DRV")]
         extern fn FindNextPrinterChangeNotification(hChange: HANDLE, #[opt] pdwChange: *mut u32, #[opt] pvReserved: *const void, #[opt] ppPrinterNotifyInfo: *mut *mut void) -> BOOL;
         #[library("WINSPOOL.DRV")]
@@ -1028,14 +1030,14 @@ mod Windows {
         const MS_PRINT_JOB_OUTPUT_FILE: String = "MsPrintJobOutputFile";
         const NORMAL_PRINT: i32 = 0;
         const NO_PRIORITY: i32 = 0;
-        #[library("WINSPOOL.DRV")]
-        extern fn OpenPrinter2A(#[opt] pPrinterName: PCSTR, phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSA, #[opt] pOptions: *const PRINTER_OPTIONSA) -> BOOL;
-        #[library("WINSPOOL.DRV")]
-        extern fn OpenPrinter2W(#[opt] pPrinterName: PCWSTR, phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSW, #[opt] pOptions: *const PRINTER_OPTIONSW) -> BOOL;
-        #[library("WINSPOOL.DRV")]
-        extern fn OpenPrinterA(#[opt] pPrinterName: PCSTR, phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSA) -> BOOL;
-        #[library("WINSPOOL.DRV")]
-        extern fn OpenPrinterW(#[opt] pPrinterName: PCWSTR, phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSW) -> BOOL;
+        #[library("WINSPOOL.DRV", set_last_error)]
+        extern fn OpenPrinter2A(#[native_const] #[opt] pPrinterName: PCSTR, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("ClosePrinter")] phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSA, #[opt] pOptions: *const PRINTER_OPTIONSA) -> BOOL;
+        #[library("WINSPOOL.DRV", set_last_error)]
+        extern fn OpenPrinter2W(#[native_const] #[opt] pPrinterName: PCWSTR, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("ClosePrinter")] phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSW, #[opt] pOptions: *const PRINTER_OPTIONSW) -> BOOL;
+        #[library("WINSPOOL.DRV", set_last_error)]
+        extern fn OpenPrinterA(#[native_const] #[opt] pPrinterName: PCSTR, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("ClosePrinter")] phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSA) -> BOOL;
+        #[library("WINSPOOL.DRV", set_last_error)]
+        extern fn OpenPrinterW(#[native_const] #[opt] pPrinterName: PCWSTR, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("ClosePrinter")] phPrinter: *mut HANDLE, #[opt] pDefault: *const PRINTER_DEFAULTSW) -> BOOL;
         type PADDJOB_INFO_1 = PADDJOB_INFO_1A;
         type PADDJOB_INFO_1A = *mut ADDJOB_INFO_1A;
         type PADDJOB_INFO_1W = *mut ADDJOB_INFO_1W;

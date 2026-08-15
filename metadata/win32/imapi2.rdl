@@ -834,20 +834,20 @@ mod Windows {
         #[guid(0x27354146_7f64_5b0f_8f00_5d77afbe261e)]
         interface IStreamConcatenate: IStream {
             fn Initialize(&self, stream1: IStream, stream2: IStream) -> HRESULT;
-            fn Initialize2(&self, streams: *const IStream, streamCount: u32) -> HRESULT;
+            fn Initialize2(&self, #[len_param(1)] streams: *const IStream, streamCount: u32) -> HRESULT;
             fn Append(&self, stream: IStream) -> HRESULT;
-            fn Append2(&self, streams: *const IStream, streamCount: u32) -> HRESULT;
+            fn Append2(&self, #[len_param(1)] streams: *const IStream, streamCount: u32) -> HRESULT;
         }
         #[guid(0x27354147_7f64_5b0f_8f00_5d77afbe261e)]
         interface IStreamInterleave: IStream {
-            fn Initialize(&self, streams: *const IStream, interleaveSizes: *const u32, streamCount: u32) -> HRESULT;
+            fn Initialize(&self, #[len_param(2)] streams: *const IStream, #[len_param(2)] interleaveSizes: *const u32, streamCount: u32) -> HRESULT;
         }
         #[guid(0x27354145_7f64_5b0f_8f00_5d77afbe261e)]
         interface IStreamPseudoRandomBased: IStream {
             fn put_Seed(&self, value: u32) -> HRESULT;
             fn get_Seed(&self, value: *mut u32) -> HRESULT;
-            fn put_ExtendedSeed(&self, values: *const u32, eCount: u32) -> HRESULT;
-            fn get_ExtendedSeed(&self, values: *mut *mut u32, eCount: *mut u32) -> HRESULT;
+            fn put_ExtendedSeed(&self, #[len_param(1)] values: *const u32, eCount: u32) -> HRESULT;
+            fn get_ExtendedSeed(&self, #[len_param(1)] values: *mut *mut u32, eCount: *mut u32) -> HRESULT;
         }
         #[guid(0x27354135_7f64_5b0f_8f00_5d77afbe261e)]
         interface IWriteEngine2: IDispatch {

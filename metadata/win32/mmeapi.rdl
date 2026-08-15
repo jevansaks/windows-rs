@@ -304,9 +304,27 @@ mod Windows {
         const MIDI_CACHE_ALL: i32 = 1;
         const MIDI_CACHE_BESTFIT: i32 = 2;
         const MIDI_CACHE_QUERY: i32 = 3;
-        const MIDI_IO_STATUS: i32 = 32;
         const MIDI_MAPPER: u32 = 4294967295;
         const MIDI_UNCACHE: i32 = 4;
+        #[repr(u32)]
+        #[flags]
+        #[associated_constant("CALLBACK_TYPEMASK")]
+        #[associated_constant("WAVE_FORMAT_DIRECT_QUERY")]
+        #[scoped]
+        enum MIDI_WAVE_OPEN_TYPE {
+            CALLBACK_NULL = 0,
+            CALLBACK_WINDOW = 65536,
+            CALLBACK_TASK = 131072,
+            CALLBACK_FUNCTION = 196608,
+            CALLBACK_THREAD = 131072,
+            CALLBACK_EVENT = 327680,
+            WAVE_FORMAT_QUERY = 1,
+            WAVE_ALLOWSYNC = 2,
+            WAVE_MAPPED = 4,
+            WAVE_FORMAT_DIRECT = 8,
+            WAVE_MAPPED_DEFAULT_COMMUNICATION_DEVICE = 16,
+            MIDI_IO_STATUS = 32,
+        }
         const MIM_CLOSE: i32 = 962;
         const MIM_DATA: i32 = 963;
         const MIM_ERROR: i32 = 965;
@@ -515,7 +533,7 @@ mod Windows {
             dwLineID: u32,
             fdwLine: u32,
             dwUser: usize,
-            dwComponentType: u32,
+            dwComponentType: MIXERLINE_COMPONENTTYPE,
             cChannels: u32,
             cConnections: u32,
             cControls: u32,
@@ -563,7 +581,7 @@ mod Windows {
             dwLineID: u32,
             fdwLine: u32,
             dwUser: usize,
-            dwComponentType: u32,
+            dwComponentType: MIXERLINE_COMPONENTTYPE,
             cChannels: u32,
             cConnections: u32,
             cControls: u32,
@@ -578,30 +596,34 @@ mod Windows {
                 szPname: [u16; 32],
             },
         }
-        const MIXERLINE_COMPONENTTYPE_DST_DIGITAL: i32 = 1;
+        #[repr(i32)]
+        #[scoped]
+        enum MIXERLINE_COMPONENTTYPE {
+            MIXERLINE_COMPONENTTYPE_DST_DIGITAL = 1,
+            MIXERLINE_COMPONENTTYPE_DST_HEADPHONES = 5,
+            MIXERLINE_COMPONENTTYPE_DST_LINE = 2,
+            MIXERLINE_COMPONENTTYPE_DST_MONITOR = 3,
+            MIXERLINE_COMPONENTTYPE_DST_SPEAKERS = 4,
+            MIXERLINE_COMPONENTTYPE_DST_TELEPHONE = 6,
+            MIXERLINE_COMPONENTTYPE_DST_UNDEFINED = 0,
+            MIXERLINE_COMPONENTTYPE_DST_VOICEIN = 8,
+            MIXERLINE_COMPONENTTYPE_DST_WAVEIN = 7,
+            MIXERLINE_COMPONENTTYPE_SRC_ANALOG = 4106,
+            MIXERLINE_COMPONENTTYPE_SRC_AUXILIARY = 4105,
+            MIXERLINE_COMPONENTTYPE_SRC_COMPACTDISC = 4101,
+            MIXERLINE_COMPONENTTYPE_SRC_DIGITAL = 4097,
+            MIXERLINE_COMPONENTTYPE_SRC_LINE = 4098,
+            MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE = 4099,
+            MIXERLINE_COMPONENTTYPE_SRC_PCSPEAKER = 4103,
+            MIXERLINE_COMPONENTTYPE_SRC_SYNTHESIZER = 4100,
+            MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE = 4102,
+            MIXERLINE_COMPONENTTYPE_SRC_UNDEFINED = 4096,
+            MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT = 4104,
+        }
         const MIXERLINE_COMPONENTTYPE_DST_FIRST: i32 = 0;
-        const MIXERLINE_COMPONENTTYPE_DST_HEADPHONES: i32 = 5;
         const MIXERLINE_COMPONENTTYPE_DST_LAST: i32 = 8;
-        const MIXERLINE_COMPONENTTYPE_DST_LINE: i32 = 2;
-        const MIXERLINE_COMPONENTTYPE_DST_MONITOR: i32 = 3;
-        const MIXERLINE_COMPONENTTYPE_DST_SPEAKERS: i32 = 4;
-        const MIXERLINE_COMPONENTTYPE_DST_TELEPHONE: i32 = 6;
-        const MIXERLINE_COMPONENTTYPE_DST_UNDEFINED: i32 = 0;
-        const MIXERLINE_COMPONENTTYPE_DST_VOICEIN: i32 = 8;
-        const MIXERLINE_COMPONENTTYPE_DST_WAVEIN: i32 = 7;
-        const MIXERLINE_COMPONENTTYPE_SRC_ANALOG: i32 = 4106;
-        const MIXERLINE_COMPONENTTYPE_SRC_AUXILIARY: i32 = 4105;
-        const MIXERLINE_COMPONENTTYPE_SRC_COMPACTDISC: i32 = 4101;
-        const MIXERLINE_COMPONENTTYPE_SRC_DIGITAL: i32 = 4097;
         const MIXERLINE_COMPONENTTYPE_SRC_FIRST: i32 = 4096;
         const MIXERLINE_COMPONENTTYPE_SRC_LAST: i32 = 4106;
-        const MIXERLINE_COMPONENTTYPE_SRC_LINE: i32 = 4098;
-        const MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE: i32 = 4099;
-        const MIXERLINE_COMPONENTTYPE_SRC_PCSPEAKER: i32 = 4103;
-        const MIXERLINE_COMPONENTTYPE_SRC_SYNTHESIZER: i32 = 4100;
-        const MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE: i32 = 4102;
-        const MIXERLINE_COMPONENTTYPE_SRC_UNDEFINED: i32 = 4096;
-        const MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT: i32 = 4104;
         const MIXERLINE_LINEF_ACTIVE: i32 = 1;
         const MIXERLINE_LINEF_DISCONNECTED: i32 = 32768;
         const MIXERLINE_LINEF_SOURCE: u32 = 2147483648;
@@ -895,7 +917,6 @@ mod Windows {
         const WAVERR_STILLPLAYING: i32 = 33;
         const WAVERR_SYNC: i32 = 35;
         const WAVERR_UNPREPARED: i32 = 34;
-        const WAVE_ALLOWSYNC: i32 = 2;
         const WAVE_FORMAT_1M08: i32 = 1;
         const WAVE_FORMAT_1M16: i32 = 4;
         const WAVE_FORMAT_1S08: i32 = 2;
@@ -920,13 +941,9 @@ mod Windows {
         const WAVE_FORMAT_96M16: i32 = 262144;
         const WAVE_FORMAT_96S08: i32 = 131072;
         const WAVE_FORMAT_96S16: i32 = 524288;
-        const WAVE_FORMAT_DIRECT: i32 = 8;
         const WAVE_FORMAT_DIRECT_QUERY: i32 = 9;
         const WAVE_FORMAT_PCM: i32 = 1;
-        const WAVE_FORMAT_QUERY: i32 = 1;
         const WAVE_INVALIDFORMAT: i32 = 0;
-        const WAVE_MAPPED: i32 = 4;
-        const WAVE_MAPPED_DEFAULT_COMMUNICATION_DEVICE: i32 = 16;
         const WAVE_MAPPER: u32 = 4294967295;
         const WHDR_BEGINLOOP: i32 = 4;
         const WHDR_DONE: i32 = 1;
@@ -974,7 +991,7 @@ mod Windows {
         #[library("WINMM.dll")]
         extern fn midiInMessage(#[opt] hmi: HMIDIIN, uMsg: u32, #[opt] dw1: usize, #[opt] dw2: usize) -> MMRESULT;
         #[library("WINMM.dll")]
-        extern fn midiInOpen(phmi: *mut HMIDIIN, uDeviceID: u32, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: u32) -> MMRESULT;
+        extern fn midiInOpen(phmi: *mut HMIDIIN, uDeviceID: u32, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: MIDI_WAVE_OPEN_TYPE) -> MMRESULT;
         #[library("WINMM.dll")]
         extern fn midiInPrepareHeader(hmi: HMIDIIN, #[size_param(2)] #[in] #[out] pmh: *mut MIDIHDR, cbmh: u32) -> MMRESULT;
         #[library("WINMM.dll")]
@@ -1010,7 +1027,7 @@ mod Windows {
         #[library("WINMM.dll")]
         extern fn midiOutMessage(#[opt] hmo: HMIDIOUT, uMsg: u32, #[opt] dw1: usize, #[opt] dw2: usize) -> MMRESULT;
         #[library("WINMM.dll")]
-        extern fn midiOutOpen(phmo: *mut HMIDIOUT, uDeviceID: u32, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: u32) -> MMRESULT;
+        extern fn midiOutOpen(phmo: *mut HMIDIOUT, uDeviceID: u32, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: MIDI_WAVE_OPEN_TYPE) -> MMRESULT;
         #[library("WINMM.dll")]
         extern fn midiOutPrepareHeader(hmo: HMIDIOUT, #[size_param(2)] #[in] #[out] pmh: *mut MIDIHDR, cbmh: u32) -> MMRESULT;
         #[library("WINMM.dll")]
@@ -1086,7 +1103,7 @@ mod Windows {
         #[library("WINMM.dll")]
         extern fn waveInMessage(#[opt] hwi: HWAVEIN, uMsg: u32, #[opt] dw1: usize, #[opt] dw2: usize) -> MMRESULT;
         #[library("WINMM.dll")]
-        extern fn waveInOpen(#[opt] phwi: *mut HWAVEIN, uDeviceID: u32, pwfx: *const WAVEFORMATEX, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: u32) -> MMRESULT;
+        extern fn waveInOpen(#[opt] phwi: *mut HWAVEIN, uDeviceID: u32, pwfx: *const WAVEFORMATEX, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: MIDI_WAVE_OPEN_TYPE) -> MMRESULT;
         #[library("WINMM.dll")]
         extern fn waveInPrepareHeader(hwi: HWAVEIN, #[size_param(2)] #[in] #[out] pwh: *mut WAVEHDR, cbwh: u32) -> MMRESULT;
         #[library("WINMM.dll")]
@@ -1124,7 +1141,7 @@ mod Windows {
         #[library("WINMM.dll")]
         extern fn waveOutMessage(#[opt] hwo: HWAVEOUT, uMsg: u32, dw1: usize, dw2: usize) -> MMRESULT;
         #[library("WINMM.dll")]
-        extern fn waveOutOpen(#[opt] phwo: *mut HWAVEOUT, uDeviceID: u32, pwfx: *const WAVEFORMATEX, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: u32) -> MMRESULT;
+        extern fn waveOutOpen(#[opt] phwo: *mut HWAVEOUT, uDeviceID: u32, pwfx: *const WAVEFORMATEX, #[opt] dwCallback: usize, #[opt] dwInstance: usize, fdwOpen: MIDI_WAVE_OPEN_TYPE) -> MMRESULT;
         #[library("WINMM.dll")]
         extern fn waveOutPause(hwo: HWAVEOUT) -> MMRESULT;
         #[library("WINMM.dll")]

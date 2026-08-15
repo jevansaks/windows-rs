@@ -46,7 +46,6 @@ mod Windows {
         const DevProp_PciDevice_SriovSupport_MissingAcs: i32 = 1;
         const DevProp_PciDevice_SriovSupport_MissingPfDriver: i32 = 2;
         const DevProp_PciDevice_SriovSupport_NoBusResource: i32 = 3;
-        const DevProp_PciDevice_SriovSupport_NoSriovCap: i32 = 5;
         const DevProp_PciDevice_SriovSupport_Ok: i32 = 0;
         const DevProp_PciExpressDevice_LinkSpeed_Five_Gbps: i32 = 2;
         const DevProp_PciExpressDevice_LinkSpeed_TwoAndHalf_Gbps: i32 = 1;

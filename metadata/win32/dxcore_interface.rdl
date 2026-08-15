@@ -75,7 +75,6 @@ mod Windows {
             AdapterInUseProcessSet = 8,
             AdapterEngineFrequencyHertz = 9,
             AdapterMemoryFrequencyHertz = 10,
-            SingleAdapterHybridMode = 11,
         }
         struct DXCoreEngineNamePropertyInput {
             adapterEngineIndex: DXCoreAdapterEngineIndex,
@@ -165,13 +164,6 @@ mod Windows {
         enum DXCoreSegmentGroup {
             Local = 0,
             NonLocal = 1,
-        }
-        #[repr(i32)]
-        #[scoped]
-        enum DXCoreSingleAdapterHybridMode {
-            Unspecified = 0,
-            MinimumPower = 1,
-            HighPerformance = 2,
         }
         #[repr(i32)]
         #[scoped]

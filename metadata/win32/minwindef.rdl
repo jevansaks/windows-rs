@@ -11,19 +11,51 @@ mod Windows {
         }
         type GLOBALHANDLE = HANDLE;
         type HFILE = i32;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("GlobalFree")]
         type HGLOBAL = HANDLE;
+        #[also_usable_for("HMODULE")]
+        #[invalid_handle(0)]
+        #[raii_free("FreeLibrary")]
         type HINSTANCE = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("RegCloseKey")]
         type HKEY = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("UnloadKeyboardLayout")]
         type HKL = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("LocalFree")]
         type HLOCAL = HANDLE;
         type HLSURF = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteMetaFile")]
         type HMETAFILE = *mut void;
+        #[also_usable_for("HINSTANCE")]
+        #[invalid_handle(0)]
+        #[raii_free("FreeLibrary")]
         type HMODULE = HINSTANCE;
+        #[also_usable_for("HGDIOBJ")]
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("DeleteObject")]
         type HRGN = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type HRSRC = *mut void;
         type HSPRITE = *mut void;
         type HSTR = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type HTASK = *mut void;
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
+        #[raii_free("CloseWindowStation")]
         type HWINSTA = *mut void;
         type LOCALHANDLE = HANDLE;
         type LPARAM = isize;

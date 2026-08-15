@@ -3,6 +3,8 @@ mod Windows {
     mod Win32 {
         #[encoding("utf-16")]
         const MS_KEY_PROTECTION_PROVIDER: String = "Microsoft Key Protection Provider";
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type NCRYPT_DESCRIPTOR_HANDLE = *mut void;
         #[encoding("utf-16")]
         const NCRYPT_DESCR_DELIMITER_AND: String = "AND";
@@ -42,8 +44,9 @@ mod Windows {
             pfnStreamOutput: PFNCryptStreamOutputCallbackEx,
             pvCallbackCtxt: *mut void,
         }
+        #[invalid_handle(-1)]
+        #[invalid_handle(0)]
         type NCRYPT_STREAM_HANDLE = *mut void;
-        const NCRYPT_UNPROTECT_NO_DECRYPT: i32 = 1;
         #[library("ncrypt.dll")]
         extern fn NCryptCloseProtectionDescriptor(hDescriptor: NCRYPT_DESCRIPTOR_HANDLE) -> SECURITY_STATUS;
         #[library("ncrypt.dll")]
@@ -67,7 +70,7 @@ mod Windows {
         #[library("ncrypt.dll")]
         extern fn NCryptStreamUpdate(hStream: NCRYPT_STREAM_HANDLE, #[size_param(2)] pbData: *const u8, cbData: usize, fFinal: BOOL) -> SECURITY_STATUS;
         #[library("ncrypt.dll")]
-        extern fn NCryptUnprotectSecret(#[opt] phDescriptor: *mut NCRYPT_DESCRIPTOR_HANDLE, dwFlags: u32, #[size_param(3)] pbProtectedBlob: *const u8, cbProtectedBlob: u32, #[opt] pMemPara: *const NCRYPT_ALLOC_PARA, #[opt] hWnd: HWND, ppbData: *mut *mut u8, pcbData: *mut u32) -> SECURITY_STATUS;
+        extern fn NCryptUnprotectSecret(#[opt] phDescriptor: *mut NCRYPT_DESCRIPTOR_HANDLE, dwFlags: NCRYPT_FLAGS, #[size_param(3)] pbProtectedBlob: *const u8, cbProtectedBlob: u32, #[opt] pMemPara: *const NCRYPT_ALLOC_PARA, #[opt] hWnd: HWND, ppbData: *mut *mut u8, pcbData: *mut u32) -> SECURITY_STATUS;
         extern fn PFNCryptStreamOutputCallback(pvCallbackCtxt: *const void, #[size_param(2)] pbData: *const u8, cbData: usize, fFinal: BOOL) -> SECURITY_STATUS;
         extern fn PFNCryptStreamOutputCallbackEx(pvCallbackCtxt: *const void, #[size_param(2)] #[opt] pbData: *const u8, cbData: usize, hDescriptor: NCRYPT_DESCRIPTOR_HANDLE, fFinal: BOOL) -> SECURITY_STATUS;
     }

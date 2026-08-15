@@ -200,11 +200,6 @@ mod Windows {
         interface IMFMediaEngineTransferSource: IUnknown {
             fn TransferSourceToMediaEngine(&self, destination: IMFMediaEngine) -> HRESULT;
         }
-        #[guid(0x6bdf1188_6ec8_44ff_8ccc_bfca0d12afa3)]
-        interface IMFMediaEngineVideoRendererEffect: IUnknown {
-            fn SetEffect(&self, pEffect: IUnknown) -> HRESULT;
-            fn ClearEffect(&self) -> HRESULT;
-        }
         #[guid(0xba2743a1_07e0_48ef_84b6_9a2ed023ca6c)]
         interface IMFMediaEngineWebSupport: IUnknown {
             fn ShouldDelayTheLoadEvent(&self) -> BOOL;

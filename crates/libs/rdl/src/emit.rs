@@ -10,6 +10,11 @@ use windows_metadata as metadata;
 /// Renders a name as an RDL identifier, escaping Rust keywords (`r#...`) and the
 /// special cases (`Self`/`self` -> `<name>_`, `_` -> `unused`).
 pub fn write_ident(name: &str) -> TokenStream {
+    if name.as_bytes().first().is_some_and(u8::is_ascii_digit) {
+        let name = format_ident!("_{name}");
+        return quote! { #name };
+    }
+
     // keywords list based on https://doc.rust-lang.org/reference/keywords.html
     let name = match name {
         "abstract" | "as" | "become" | "box" | "break" | "const" | "continue" | "crate" | "do"

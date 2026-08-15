@@ -89,7 +89,7 @@ mod Windows {
             nProtectors: u32,
             pProtectors: *mut PENCRYPTION_PROTECTOR,
         }
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn EncryptionDisable(DirPath: PCWSTR, Disable: BOOL) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn FreeEncryptedFileMetadata(pbMetadata: *const u8);

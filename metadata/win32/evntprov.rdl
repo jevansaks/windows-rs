@@ -21,7 +21,6 @@ mod Windows {
         const EVENT_DATA_DESCRIPTOR_TYPE_EVENT_METADATA: i32 = 1;
         const EVENT_DATA_DESCRIPTOR_TYPE_NONE: i32 = 0;
         const EVENT_DATA_DESCRIPTOR_TYPE_PROVIDER_METADATA: i32 = 2;
-        const EVENT_DATA_DESCRIPTOR_TYPE_RESERVED1: i32 = 4;
         const EVENT_DATA_DESCRIPTOR_TYPE_TIMESTAMP_OVERRIDE: i32 = 3;
         struct EVENT_DESCRIPTOR {
             Id: u16,
@@ -86,8 +85,7 @@ mod Windows {
             EventProviderSetReserved1 = 1,
             EventProviderSetTraits = 2,
             EventProviderUseDescriptorType = 3,
-            EventProviderSetReserved2 = 4,
-            MaxEventInfo = 5,
+            MaxEventInfo = 4,
         }
         const EVENT_MAX_LEVEL: i32 = 255;
         const EVENT_MIN_LEVEL: i32 = 0;

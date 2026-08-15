@@ -1,21 +1,21 @@
 #[win32]
 mod Windows {
     mod Win32 {
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoA(lptstrFilename: PCSTR, #[reserved] dwHandle: u32, dwLen: u32, #[size_param(2)] lpData: *mut void) -> BOOL;
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoExA(dwFlags: u32, lpwstrFilename: PCSTR, #[reserved] dwHandle: u32, dwLen: u32, #[size_param(3)] lpData: *mut void) -> BOOL;
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoExW(dwFlags: u32, lpwstrFilename: PCWSTR, #[reserved] dwHandle: u32, dwLen: u32, #[size_param(3)] lpData: *mut void) -> BOOL;
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoSizeA(lptstrFilename: PCSTR, #[opt] lpdwHandle: *mut u32) -> u32;
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoSizeExA(dwFlags: u32, lpwstrFilename: PCSTR, lpdwHandle: *mut u32) -> u32;
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoSizeExW(dwFlags: u32, lpwstrFilename: PCWSTR, lpdwHandle: *mut u32) -> u32;
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoSizeW(lptstrFilename: PCWSTR, #[opt] lpdwHandle: *mut u32) -> u32;
-        #[library("VERSION.dll")]
+        #[library("VERSION.dll", set_last_error)]
         extern fn GetFileVersionInfoW(lptstrFilename: PCWSTR, #[reserved] dwHandle: u32, dwLen: u32, #[size_param(2)] lpData: *mut void) -> BOOL;
         #[library("VERSION.dll")]
         extern fn VerFindFileA(uFlags: u32, szFileName: PCSTR, #[opt] szWinDir: PCSTR, szAppDir: PCSTR, #[len_param(5)] #[out] szCurDir: PSTR, #[in] #[out] puCurDirLen: *mut u32, #[len_param(7)] #[out] szDestDir: PSTR, #[in] #[out] puDestDirLen: *mut u32) -> u32;

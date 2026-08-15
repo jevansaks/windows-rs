@@ -39,7 +39,7 @@ mod Windows {
         }
         #[guid(0xd1a34ef2_cad8_4635_a3d2_fcda8d3f3caf)]
         interface IBitmapData: IUnknown {
-            fn CopyBytesTo(&self, sourceOffsetInBytes: u32, maxBytesToCopy: u32, pvBytes: *mut byte, numberOfBytesCopied: *mut u32) -> HRESULT;
+            fn CopyBytesTo(&self, sourceOffsetInBytes: u32, maxBytesToCopy: u32, #[len_param(1)] pvBytes: *mut byte, numberOfBytesCopied: *mut u32) -> HRESULT;
             fn GetStride(&self, pStride: *mut u32) -> HRESULT;
             fn GetBitmapDescription(&self, pBitmapDescription: *mut BitmapDescription) -> HRESULT;
             fn GetSourceBitmapDescription(&self, pBitmapDescription: *mut BitmapDescription) -> HRESULT;
@@ -48,13 +48,13 @@ mod Windows {
         interface IVisualTreeService: IUnknown {
             fn AdviseVisualTreeChange(&self, pCallback: IVisualTreeServiceCallback) -> HRESULT;
             fn UnadviseVisualTreeChange(&self, pCallback: IVisualTreeServiceCallback) -> HRESULT;
-            fn GetEnums(&self, pCount: *mut u32, ppEnums: *mut *mut EnumType) -> HRESULT;
+            fn GetEnums(&self, pCount: *mut u32, #[len_param(0)] ppEnums: *mut *mut EnumType) -> HRESULT;
             fn CreateInstance(&self, typeName: BSTR, value: BSTR, #[retval] pInstanceHandle: *mut InstanceHandle) -> HRESULT;
-            fn GetPropertyValuesChain(&self, instanceHandle: InstanceHandle, pSourceCount: *mut u32, ppPropertySources: *mut *mut PropertyChainSource, pPropertyCount: *mut u32, ppPropertyValues: *mut *mut PropertyChainValue) -> HRESULT;
+            fn GetPropertyValuesChain(&self, instanceHandle: InstanceHandle, pSourceCount: *mut u32, #[len_param(1)] ppPropertySources: *mut *mut PropertyChainSource, pPropertyCount: *mut u32, #[len_param(3)] ppPropertyValues: *mut *mut PropertyChainValue) -> HRESULT;
             fn SetProperty(&self, instanceHandle: InstanceHandle, value: InstanceHandle, propertyIndex: u32) -> HRESULT;
             fn ClearProperty(&self, instanceHandle: InstanceHandle, propertyIndex: u32) -> HRESULT;
             fn GetCollectionCount(&self, instanceHandle: InstanceHandle, pCollectionSize: *mut u32) -> HRESULT;
-            fn GetCollectionElements(&self, instanceHandle: InstanceHandle, startIndex: u32, #[in] #[out] pElementCount: *mut u32, ppElementValues: *mut *mut CollectionElementValue) -> HRESULT;
+            fn GetCollectionElements(&self, instanceHandle: InstanceHandle, startIndex: u32, #[in] #[out] pElementCount: *mut u32, #[len_param(2)] ppElementValues: *mut *mut CollectionElementValue) -> HRESULT;
             fn AddChild(&self, parent: InstanceHandle, child: InstanceHandle, index: u32) -> HRESULT;
             fn RemoveChild(&self, parent: InstanceHandle, index: u32) -> HRESULT;
             fn ClearChildren(&self, parent: InstanceHandle) -> HRESULT;
@@ -88,7 +88,7 @@ mod Windows {
             fn GetApplication(&self, #[retval] ppApplication: *mut IInspectable) -> HRESULT;
             fn GetIInspectableFromHandle(&self, instanceHandle: InstanceHandle, #[retval] ppInstance: *mut IInspectable) -> HRESULT;
             fn GetHandleFromIInspectable(&self, pInstance: IInspectable, #[retval] pHandle: *mut InstanceHandle) -> HRESULT;
-            fn HitTest(&self, rect: RECT, pCount: *mut u32, ppInstanceHandles: *mut *mut InstanceHandle) -> HRESULT;
+            fn HitTest(&self, rect: RECT, pCount: *mut u32, #[len_param(1)] ppInstanceHandles: *mut *mut InstanceHandle) -> HRESULT;
             fn RegisterInstance(&self, pInstance: IInspectable, #[retval] pInstanceHandle: *mut InstanceHandle) -> HRESULT;
             fn GetInitializationData(&self, #[retval] pInitializationData: *mut BSTR) -> HRESULT;
         }

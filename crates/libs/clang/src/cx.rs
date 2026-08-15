@@ -720,10 +720,18 @@ impl Type {
             CXType_FunctionProto | CXType_FunctionNoProto => Some(Self(self.0)),
             CXType_Pointer => {
                 let pointee = self.pointee_type();
-                if pointee.kind() == CXType_FunctionProto
-                    || pointee.kind() == CXType_FunctionNoProto
-                {
+                if matches!(
+                    pointee.kind(),
+                    CXType_FunctionProto | CXType_FunctionNoProto
+                ) {
                     return Some(pointee);
+                }
+                let canonical = pointee.canonical_type();
+                if matches!(
+                    canonical.kind(),
+                    CXType_FunctionProto | CXType_FunctionNoProto
+                ) {
+                    return Some(canonical);
                 }
                 None
             }
@@ -808,7 +816,7 @@ impl Type {
 
     /// Resolves `ABI::Windows::*` C++/WinRT projection spellings, keeping WinRT
     /// references cross-winmd and capturing absent interop types into the flat root.
-    fn abi_projection(&self, parser: &mut Parser<'_>) -> Option<metadata::Type> {
+    pub(crate) fn abi_projection(&self, parser: &mut Parser<'_>) -> Option<metadata::Type> {
         let canonical = self.canonical_type().spelling();
         let projected = canonical.strip_prefix("ABI::")?;
         // The stem drops generic arguments; the closed list is rebuilt below.
@@ -867,6 +875,10 @@ impl Type {
                         .cloned()
                         .unwrap_or(tag_name)
                 };
+                let name = parser.canonical_name(name);
+                if name == "GUID" || name == "Guid" {
+                    return metadata::Type::value_named("System", "Guid");
+                }
                 // Inline anonymous enums have no referenceable type; their constants are
                 // emitted separately, so references use the underlying integer type.
                 if self.kind() == CXType_Enum && is_anonymous_name(&name) {
@@ -935,6 +947,13 @@ impl Type {
                 // Interface pointers have one implied level in metadata and RDL.
                 if pointee.is_interface() {
                     return pointee.to_type(parser);
+                }
+                if pointee.kind() == CXType_Record && !pointee.ty().has_definition() {
+                    return if pointee.is_const() {
+                        metadata::Type::PtrConst(Box::new(metadata::Type::Void), 1)
+                    } else {
+                        metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1)
+                    };
                 }
                 let inner = pointee.to_type(parser);
                 if pointee.is_const() {

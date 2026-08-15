@@ -333,7 +333,7 @@ mod Windows {
         }
         #[guid(0x3e475447_3a25_40b5_8ad2_f953ae50c92d)]
         interface IAppxEncryptedPackageWriter2: IUnknown {
-            fn AddPayloadFilesEncrypted(&self, fileCount: u32, payloadFiles: *const APPX_PACKAGE_WRITER_PAYLOAD_STREAM, memoryLimit: u64) -> HRESULT;
+            fn AddPayloadFilesEncrypted(&self, fileCount: u32, #[len_param(0)] payloadFiles: *const APPX_PACKAGE_WRITER_PAYLOAD_STREAM, memoryLimit: u64) -> HRESULT;
         }
         #[guid(0x80e8e04d_8c88_44ae_a011_7cadf6fb2e72)]
         interface IAppxEncryptionFactory: IUnknown {
@@ -634,7 +634,7 @@ mod Windows {
         }
         #[guid(0xa83aacd3_41c0_4501_b8a3_74164f50b2fd)]
         interface IAppxPackageWriter3: IUnknown {
-            fn AddPayloadFiles(&self, fileCount: u32, payloadFiles: *const APPX_PACKAGE_WRITER_PAYLOAD_STREAM, memoryLimit: u64) -> HRESULT;
+            fn AddPayloadFiles(&self, fileCount: u32, #[len_param(0)] payloadFiles: *const APPX_PACKAGE_WRITER_PAYLOAD_STREAM, memoryLimit: u64) -> HRESULT;
         }
         #[guid(0x17239d47_6adb_45d2_80f6_f9cbc3bf059d)]
         interface IAppxPackagingDiagnosticEventSink: IUnknown {

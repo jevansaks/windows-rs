@@ -1125,7 +1125,7 @@ mod Windows {
         const SV_XACTMEMSIZE_PARMNUM: i32 = 531;
         const SW_AUTOPROF_LOAD_MASK: i32 = 1;
         const SW_AUTOPROF_SAVE_MASK: i32 = 2;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SetServiceBits(hServiceStatus: SERVICE_STATUS_HANDLE, dwServiceBits: u32, bSetBitsOn: BOOL, bUpdateImmediately: BOOL) -> BOOL;
     }
 }

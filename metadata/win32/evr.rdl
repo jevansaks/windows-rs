@@ -53,7 +53,7 @@ mod Windows {
             fn SetVideoWindow(&self, hwndVideo: HWND) -> HRESULT;
             fn GetVideoWindow(&self, phwndVideo: *mut HWND) -> HRESULT;
             fn RepaintVideo(&self) -> HRESULT;
-            fn GetCurrentImage(&self, #[in] #[out] pBih: *mut BITMAPINFOHEADER, pDib: *mut *mut u8, pcbDib: *mut u32, #[in] #[out] pTimeStamp: *mut i64) -> HRESULT;
+            fn GetCurrentImage(&self, #[in] #[out] pBih: *mut BITMAPINFOHEADER, #[len_param(2)] pDib: *mut *mut u8, pcbDib: *mut u32, #[in] #[out] pTimeStamp: *mut i64) -> HRESULT;
             fn SetBorderColor(&self, Clr: COLORREF) -> HRESULT;
             fn GetBorderColor(&self, pClr: *mut COLORREF) -> HRESULT;
             fn SetRenderingPrefs(&self, dwRenderFlags: u32) -> HRESULT;
@@ -126,6 +126,12 @@ mod Windows {
             MFVideoMixPrefs_ForceBob = 8,
             MFVideoMixPrefs_EnableRotation = 16,
             MFVideoMixPrefs_Mask = 31,
+        }
+        struct MFVideoNormalizedRect {
+            left: f32,
+            top: f32,
+            right: f32,
+            bottom: f32,
         }
         #[repr(i32)]
         enum MFVideoRenderPrefs {

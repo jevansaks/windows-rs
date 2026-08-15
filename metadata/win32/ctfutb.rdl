@@ -4,7 +4,7 @@ mod Windows {
         #[guid(0x583f34d0_de25_11d2_afdd_00105a2799b5)]
         interface IEnumTfLangBarItems: IUnknown {
             fn Clone(&self, ppEnum: *mut IEnumTfLangBarItems) -> HRESULT;
-            fn Next(&self, ulCount: u32, ppItem: *mut ITfLangBarItem, #[in] #[out] pcFetched: *mut u32) -> HRESULT;
+            fn Next(&self, ulCount: u32, #[len_param(0)] ppItem: *mut ITfLangBarItem, #[in] #[out] pcFetched: *mut u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Skip(&self, ulCount: u32) -> HRESULT;
         }
@@ -62,11 +62,11 @@ mod Windows {
             fn AdviseItemSink(&self, punk: ITfLangBarItemSink, pdwCookie: *mut u32, rguidItem: *const GUID) -> HRESULT;
             fn UnadviseItemSink(&self, dwCookie: u32) -> HRESULT;
             fn GetItemFloatingRect(&self, dwThreadId: u32, rguid: *const GUID, prc: *mut RECT) -> HRESULT;
-            fn GetItemsStatus(&self, ulCount: u32, prgguid: *const GUID, pdwStatus: *mut u32) -> HRESULT;
+            fn GetItemsStatus(&self, ulCount: u32, #[len_param(0)] prgguid: *const GUID, #[len_param(0)] pdwStatus: *mut u32) -> HRESULT;
             fn GetItemNum(&self, pulCount: *mut u32) -> HRESULT;
-            fn GetItems(&self, ulCount: u32, ppItem: *mut ITfLangBarItem, pInfo: *mut TF_LANGBARITEMINFO, pdwStatus: *mut u32, #[in] #[out] pcFetched: *mut u32) -> HRESULT;
-            fn AdviseItemsSink(&self, ulCount: u32, ppunk: *const ITfLangBarItemSink, pguidItem: *const GUID, pdwCookie: *mut u32) -> HRESULT;
-            fn UnadviseItemsSink(&self, ulCount: u32, pdwCookie: *const u32) -> HRESULT;
+            fn GetItems(&self, ulCount: u32, #[len_param(0)] ppItem: *mut ITfLangBarItem, #[len_param(0)] pInfo: *mut TF_LANGBARITEMINFO, #[len_param(0)] pdwStatus: *mut u32, #[in] #[out] pcFetched: *mut u32) -> HRESULT;
+            fn AdviseItemsSink(&self, ulCount: u32, #[len_param(0)] ppunk: *const ITfLangBarItemSink, #[len_param(0)] pguidItem: *const GUID, #[len_param(0)] pdwCookie: *mut u32) -> HRESULT;
+            fn UnadviseItemsSink(&self, ulCount: u32, #[len_param(0)] pdwCookie: *const u32) -> HRESULT;
         }
         #[guid(0x57dbe1a0_de25_11d2_afdd_00105a2799b5)]
         interface ITfLangBarItemSink: IUnknown {
@@ -86,7 +86,7 @@ mod Windows {
         }
         #[guid(0x6f8a98e4_aaa0_4f15_8c5b_07e0df0a3dd8)]
         interface ITfMenu: IUnknown {
-            fn AddMenuItem(&self, uId: u32, dwFlags: u32, hbmp: HBITMAP, hbmpMask: HBITMAP, pch: *const u16, cch: u32, #[in] #[out] ppMenu: *mut ITfMenu) -> HRESULT;
+            fn AddMenuItem(&self, uId: u32, dwFlags: u32, hbmp: HBITMAP, hbmpMask: HBITMAP, #[len_param(5)] pch: *const u16, cch: u32, #[in] #[out] ppMenu: *mut ITfMenu) -> HRESULT;
         }
         #[guid(0x45672eb9_9059_46a2_838d_4530355f6a77)]
         interface ITfSystemDeviceTypeLangBarItem: IUnknown {
@@ -96,7 +96,7 @@ mod Windows {
         #[guid(0x1e13e9ec_6b33_4d4a_b5eb_8a92f029f356)]
         interface ITfSystemLangBarItem: IUnknown {
             fn SetIcon(&self, hIcon: HICON) -> HRESULT;
-            fn SetTooltipString(&self, pchToolTip: *const u16, cch: u32) -> HRESULT;
+            fn SetTooltipString(&self, #[len_param(1)] pchToolTip: *const u16, cch: u32) -> HRESULT;
         }
         #[guid(0x1449d9ab_13cf_4687_aa3e_8d8b18574396)]
         interface ITfSystemLangBarItemSink: IUnknown {
@@ -105,7 +105,7 @@ mod Windows {
         }
         #[guid(0x5c4ce0e5_ba49_4b52_ac6b_3b397b4f701f)]
         interface ITfSystemLangBarItemText: IUnknown {
-            fn SetItemText(&self, pch: *const u16, cch: u32) -> HRESULT;
+            fn SetItemText(&self, #[len_param(1)] pch: *const u16, cch: u32) -> HRESULT;
             fn GetItemText(&self, pbstrText: *mut BSTR) -> HRESULT;
         }
         const TF_DTLBI_USEPROFILEICON: i32 = 1;

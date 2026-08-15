@@ -66,7 +66,7 @@ mod Windows {
         }
         #[guid(0x3d73a659_e5d0_4d42_afc0_5121ba425c8d)]
         interface ICDBurn: IUnknown {
-            fn GetRecorderDriveLetter(&self, #[out] pszDrive: PWSTR, cch: u32) -> HRESULT;
+            fn GetRecorderDriveLetter(&self, #[len_param(1)] #[out] pszDrive: PWSTR, cch: u32) -> HRESULT;
             fn Burn(&self, hwnd: HWND) -> HRESULT;
             fn HasRecordableDrive(&self, pfHasRecorder: *mut BOOL) -> HRESULT;
         }
@@ -77,14 +77,13 @@ mod Windows {
         #[guid(0xc8ad25a1_3294_41ee_8165_71174bd01c57)]
         interface ICommDlgBrowser3: ICommDlgBrowser2 {
             fn OnColumnClicked(&self, ppshv: IShellView, iColumn: i32) -> HRESULT;
-            fn GetCurrentFilter(&self, #[out] pszFileSpec: PWSTR, cchFileSpec: i32) -> HRESULT;
+            fn GetCurrentFilter(&self, #[len_param(1)] #[out] pszFileSpec: PWSTR, cchFileSpec: i32) -> HRESULT;
             fn OnPreViewCreated(&self, ppshv: IShellView) -> HRESULT;
         }
         #[guid(0x0df60d92_6818_46d6_b358_d66170dde466)]
         interface IComputerInfoChangeNotify: IUnknown {
             fn ComputerInfoChanged(&self) -> HRESULT;
         }
-        struct IControlMarkup {}
         const IDD_WIZEXTN_FIRST: i32 = 20480;
         const IDD_WIZEXTN_LAST: i32 = 20736;
         #[guid(0x79d16de4_abee_4021_8d9d_9169b261d657)]
@@ -161,7 +160,6 @@ mod Windows {
         interface IInsertItem: IUnknown {
             fn InsertItem(&self, pidl: *const ITEMIDLIST) -> HRESULT;
         }
-        struct IMarkupCallback {}
         #[guid(0x71f312de_43ed_4190_8477_e9536b82350b)]
         interface INameSpaceTreeAccessible: IUnknown {
             fn OnGetDefaultAccessibilityAction(&self, psi: IShellItem, pbstrDefaultAction: *mut BSTR) -> HRESULT;
@@ -335,7 +333,7 @@ mod Windows {
         const ImageProperties: GUID = 0x7ab770c7_0e23_4d7a_8aa2_19bfad479829;
         const ImageRecompress: GUID = 0x6e33091c_d2f8_4740_b55e_2e11d1477a2c;
         const InternetPrintOrdering: GUID = 0xadd36aa8_751a_4579_a266_d66f5202ccbb;
-        type LPVIEWSETTINGS = *mut i8;
+        type LPVIEWSETTINGS = *mut u8;
         const MergedCategorizer: GUID = 0x8e827c11_33e7_4bc1_b242_8cd9a1c2b304;
         struct NSTCCUSTOMDRAW {
             psi: IShellItem,
@@ -387,8 +385,10 @@ mod Windows {
         const PublishDropTarget: GUID = 0xcc6eeffb_43f6_46c5_9619_51d571967f7d;
         const PublishingWizard: GUID = 0x6b33163c_76a5_4b6c_bf21_45de9cd503a1;
         const QueryCancelAutoPlay: GUID = 0x331f1768_05a9_4ddd_b86e_dae34ddc998a;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHAddDefaultPropertiesByExt(pszExt: PCWSTR, pPropStore: IPropertyStore) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHCreateDefaultPropertiesOp(psi: IShellItem, ppFileOp: *mut IFileOperation) -> HRESULT;
         const SHPWHF_ANYLOCATION: i32 = 256;
@@ -397,6 +397,7 @@ mod Windows {
         const SHPWHF_NORECOMPRESS: i32 = 1;
         const SHPWHF_USEMRU: i32 = 8;
         const SHPWHF_VALIDATEVIAWEBFOLDERS: i32 = 65536;
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHSetDefaultProperties(#[opt] hwnd: HWND, psi: IShellItem, dwFileOpFlags: u32, #[opt] pfops: IFileOperationProgressSink) -> HRESULT;
         const SID_SCommandBarState: GUID = 0xb99eaa5c_3850_4400_bc33_2ce534048bf8;

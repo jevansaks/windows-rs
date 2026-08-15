@@ -45,6 +45,7 @@ const RDL_DIR: &str = "metadata/win32";
 /// [`RDL_DIR`] so the generated RDL directory can be freely cleared and rebuilt
 /// without disturbing this prerequisite.
 const METADATA_SEED: &str = "metadata/metadata.rdl";
+const WIN32_SEED_WINMD: &str = "target/win32/Windows.Win32.winmd";
 
 /// Pinned Windows SDK version. The metadata is generated against the
 /// `Microsoft.Windows.SDK.CPP` (headers) and per-arch `Microsoft.Windows.SDK.CPP.<arch>`
@@ -848,6 +849,29 @@ const LIBRARY_OVERRIDES: &[LibraryOverride] = &[
 ];
 
 fn main() {
+    if let Some(input) = std::env::var_os("WIN32METADATA_COMPILE_RDL") {
+        let output = std::env::var_os("WIN32METADATA_COMPILE_OUTPUT")
+            .map(std::path::PathBuf::from)
+            .expect("WIN32METADATA_COMPILE_OUTPUT is required");
+        let mut reader = windows_rdl::reader();
+        reader.input(input);
+        reader.input(METADATA_SEED);
+        for resolution in RESOLUTION_WINMDS {
+            reader.reference(resolution);
+        }
+        if std::path::Path::new(WIN32_SEED_WINMD).is_file() {
+            reader.reference(WIN32_SEED_WINMD);
+        }
+        if let Some(root) = partition_root() {
+            let reference = root.join("bin/Windows.Win32.winmd");
+            if reference.is_file() {
+                reader.reference(reference);
+            }
+        }
+        reader.output(output).write().unwrap();
+        return;
+    }
+
     let time = std::time::Instant::now();
 
     for name in ARCHS {
@@ -869,6 +893,10 @@ fn main() {
     // Phase A: scrape the user-mode Win32 surface into `metadata/win32` (committed RDL) and
     // [`UM_WINMD`] (uncommitted).
     let um = scrape_um();
+
+    if std::env::var_os("WIN32METADATA_PARTITION_SMOKE").is_some() {
+        return;
+    }
 
     if std::env::var_os("WIN32METADATA_USER_MODE_ONLY").is_some() {
         std::fs::copy(UM_WINMD, MERGED_WINMD).unwrap_or_else(|e| {
@@ -910,6 +938,10 @@ fn main() {
 /// Phase A: scrape the user-mode Win32 API surface into `metadata/win32` (committed RDL) and
 /// [`UM_WINMD`] (uncommitted).
 fn scrape_um() -> Summary {
+    if let Some(root) = partition_root() {
+        return scrape_um_partitions(&root);
+    }
+
     assert_no_duplicate_headers();
 
     let include_dirs = sdk_include_dirs();
@@ -997,11 +1029,269 @@ fn scrape_um() -> Summary {
         resolution_winmds: RESOLUTION_WINMDS.iter().map(Into::into).collect(),
         seed: Some(METADATA_SEED.into()),
         parallel: std::env::var_os("WIN32METADATA_SEQUENTIAL").is_none(),
+        partitions: None,
     });
 
     print!("{summary}");
     println!("Wrote {UM_WINMD} ({} partition(s))", summary.partitions);
     summary
+}
+
+fn partition_root() -> Option<std::path::PathBuf> {
+    std::env::var_os("WIN32METADATA_ROOT")
+        .map(std::path::PathBuf::from)
+        .filter(|root| root.join("generation/WinSDK/Partitions").is_dir())
+}
+
+fn scrape_um_partitions(root: &std::path::Path) -> Summary {
+    let winsdk = root.join("generation/WinSDK");
+    let include_root = winsdk.join("RecompiledIdlHeaders");
+    let partition_root = winsdk.join("Partitions");
+    let selected = std::env::var("WIN32METADATA_PARTITION_FILTER")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(|value| value.trim().to_ascii_lowercase())
+                .collect::<std::collections::HashSet<_>>()
+        });
+    let mut partitions = load_partitions(&partition_root, selected.as_ref());
+    partitions.sort_by(|left, right| left.name.cmp(&right.name));
+    assert!(!partitions.is_empty(), "no win32metadata partitions found");
+
+    let mut include_dirs = ["ucrt", "um", "shared", "winrt", "cppwinrt"]
+        .into_iter()
+        .map(|segment| include_root.join(segment))
+        .chain(std::iter::once(winsdk.join("inc")))
+        .collect::<std::collections::BTreeSet<_>>();
+    for partition in &partitions {
+        for filter in &partition.filters {
+            let include_file = include_root.join(filter);
+            if include_file.is_file()
+                && let Some(parent) = include_file.parent()
+            {
+                include_dirs.insert(parent.to_path_buf());
+                continue;
+            }
+            let partition_file = partition_root.join(&partition.name).join(filter);
+            if partition_file.is_file()
+                && let Some(parent) = partition_file.parent()
+            {
+                include_dirs.insert(parent.to_path_buf());
+            }
+        }
+    }
+    let include_args = include_dirs
+        .into_iter()
+        .map(|dir| dir.to_string_lossy().replace('\\', "/"))
+        .flat_map(|dir| ["-isystem".to_string(), dir])
+        .collect::<Vec<_>>();
+    let mut clang = clang();
+    clang
+        .args(CLANG_ARGS)
+        .args(["-include", SAL_SHIM])
+        .args(["-DWIN32METADATA=1"])
+        .args(include_args)
+        .inputs(partitions.iter().map(|partition| &partition.input));
+    let namespace_reference = root.join("bin/Windows.Win32.winmd");
+    if namespace_reference.is_file() {
+        clang.reference(namespace_reference);
+    }
+    clang.libraries(load_library_mappings(&winsdk.join("libMappings.rsp")));
+    clang.libraries(load_library_mappings(&winsdk.join("libMappingsManual.rsp")));
+    clang.namespace_overrides(load_name_mappings(
+        &winsdk.join("requiredNamespacesForNames.rsp"),
+        "--requiredNamespaceForName",
+    ));
+    clang.type_remaps(load_type_remaps(&winsdk, &partition_root));
+
+    let output_root =
+        std::env::var_os("WIN32METADATA_PARTITION_OUTPUT").map(std::path::PathBuf::from);
+    let rdl_dir = output_root
+        .as_ref()
+        .map_or_else(|| RDL_DIR.into(), |root| root.join("rdl"));
+    let out_dir = output_root
+        .as_ref()
+        .map_or_else(|| OUT_DIR.into(), |root| root.join("out"));
+    let winmd = output_root
+        .as_ref()
+        .map_or_else(|| UM_WINMD.into(), |root| root.join("Windows.Win32.winmd"));
+    let archs = std::env::var("WIN32METADATA_PARTITION_ARCHS")
+        .ok()
+        .map_or_else(canonical_archs, |value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(|name| Arch::known(name).unwrap())
+                .collect()
+        });
+    let summary = clang.scrape(&ScrapePlan {
+        root: ROOT.to_string(),
+        rdl_dir,
+        out_dir,
+        winmd: winmd.clone(),
+        archs,
+        reference_winmds: [
+            root.join("bin/Windows.Win32.winmd"),
+            WIN32_SEED_WINMD.into(),
+        ]
+        .into_iter()
+        .filter(|path| path.is_file())
+        .collect(),
+        resolution_winmds: RESOLUTION_WINMDS.iter().map(Into::into).collect(),
+        seed: Some(METADATA_SEED.into()),
+        parallel: std::env::var_os("WIN32METADATA_SEQUENTIAL").is_none(),
+        partitions: Some(&partitions),
+    });
+    print!("{summary}");
+    println!(
+        "Wrote {} ({} partition(s))",
+        winmd.display(),
+        summary.partitions
+    );
+    summary
+}
+
+fn load_partitions(
+    root: &std::path::Path,
+    selected: Option<&std::collections::HashSet<String>>,
+) -> Vec<PartitionSpec> {
+    let mut result = Vec::new();
+    for entry in std::fs::read_dir(root).unwrap().map(Result::unwrap) {
+        let partition_dir = entry.path();
+        if !partition_dir.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if selected.is_some_and(|selected| !selected.contains(&name.to_ascii_lowercase())) {
+            continue;
+        }
+        let input = partition_dir.join("main.cpp");
+        let settings = partition_dir.join("settings.rsp");
+        if !input.is_file() || !settings.is_file() {
+            continue;
+        }
+        let options = parse_rsp(&settings);
+        let namespace = metadata_namespace(
+            options
+                .get("--namespace")
+                .and_then(|values| values.first())
+                .unwrap_or_else(|| panic!("{} has no --namespace", settings.display())),
+        );
+        let mut filters: Vec<String> = options
+            .get("--traverse")
+            .into_iter()
+            .flatten()
+            .flat_map(|value| value.split(';'))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                if let Some(relative) = value.strip_prefix("<IncludeRoot>") {
+                    relative.trim_start_matches(['/', '\\']).replace('\\', "/")
+                } else if let Some(relative) = value.strip_prefix("<PartitionDir>") {
+                    relative.trim_start_matches(['/', '\\']).replace('\\', "/")
+                } else {
+                    value.replace('\\', "/")
+                }
+            })
+            .collect();
+        if name == "Foundation" {
+            filters.push("um/winnt.h".to_string());
+            filters.push("shared/ntdef.h".to_string());
+        }
+        let exclude = options
+            .get("--exclude")
+            .into_iter()
+            .flatten()
+            .flat_map(|value| value.split(';'))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect();
+        result.push(PartitionSpec {
+            name,
+            input,
+            namespace,
+            filters,
+            exclude,
+        });
+    }
+    result
+}
+
+fn metadata_namespace(partition_namespace: &str) -> String {
+    partition_namespace
+        .split('.')
+        .take_while(|part| !part.as_bytes().first().is_some_and(u8::is_ascii_digit))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+fn parse_rsp(path: &std::path::Path) -> std::collections::HashMap<String, Vec<String>> {
+    let mut result = std::collections::HashMap::<String, Vec<String>>::new();
+    let mut option = None::<String>;
+    for raw in std::fs::read_to_string(path).unwrap().lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with("--") {
+            if let Some((name, value)) = line.split_once('=') {
+                result
+                    .entry(name.to_string())
+                    .or_default()
+                    .push(value.trim().to_string());
+                option = None;
+            } else {
+                option = Some(line.to_string());
+            }
+        } else if let Some(option) = &option {
+            result
+                .entry(option.clone())
+                .or_default()
+                .push(line.to_string());
+        }
+    }
+    result
+}
+
+fn load_library_mappings(path: &std::path::Path) -> Vec<(String, String)> {
+    load_name_mappings(path, "--with-librarypath")
+}
+
+fn load_name_mappings(path: &std::path::Path, option: &str) -> Vec<(String, String)> {
+    parse_rsp(path)
+        .remove(option)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|mapping| {
+            let (name, library) = mapping.split_once('=')?;
+            Some((name.to_string(), library.to_string()))
+        })
+        .collect()
+}
+
+fn load_type_remaps(
+    winsdk: &std::path::Path,
+    partitions: &std::path::Path,
+) -> Vec<(String, String)> {
+    let mut remaps = load_name_mappings(&winsdk.join("scraper.settings.rsp"), "--remap");
+    for entry in std::fs::read_dir(partitions).unwrap().map(Result::unwrap) {
+        let settings = entry.path().join("settings.rsp");
+        if settings.is_file() {
+            remaps.extend(load_name_mappings(&settings, "--remap"));
+        }
+    }
+    remaps
+        .into_iter()
+        .filter(|(_, target)| {
+            !target.is_empty()
+                && target
+                    .chars()
+                    .all(|character| character == '_' || character.is_ascii_alphanumeric())
+        })
+        .collect()
 }
 
 fn apply_library_overrides(clang: &mut Clang) {
@@ -1089,6 +1379,14 @@ fn resolve(name: &str, dirs: &[String], kind: &str, var: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numeric_partition_suffix_is_not_a_metadata_namespace() {
+        assert_eq!(
+            metadata_namespace("Windows.Win32.Devices.1394"),
+            "Windows.Win32.Devices"
+        );
+    }
 
     #[test]
     fn library_overrides_are_checked_and_applied() {

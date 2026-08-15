@@ -351,7 +351,7 @@ mod Windows {
             ImageName: UNICODE_STRING,
             BasePriority: KPRIORITY,
             UniqueProcessId: HANDLE,
-            InheritedFromUniqueProcessId: HANDLE,
+            Reserved2: *mut void,
             HandleCount: u32,
             SessionId: u32,
             Reserved3: *mut void,

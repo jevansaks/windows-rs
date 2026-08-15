@@ -185,66 +185,97 @@ mod Windows {
             DWMWCP_ROUND = 2,
             DWMWCP_ROUNDSMALL = 3,
         }
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmAttachMilContent(hwnd: HWND) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmDefWindowProc(hWnd: HWND, msg: u32, wParam: WPARAM, lParam: LPARAM, plResult: *mut LRESULT) -> BOOL;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmDetachMilContent(hwnd: HWND) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmEnableBlurBehindWindow(hWnd: HWND, pBlurBehind: *const DWM_BLURBEHIND) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmEnableComposition(uCompositionAction: u32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmEnableMMCSS(fEnableMMCSS: BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmExtendFrameIntoClientArea(hWnd: HWND, pMarInset: *const MARGINS) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmFlush() -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmGetColorizationColor(pcrColorization: *mut u32, pfOpaqueBlend: *mut BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmGetCompositionTimingInfo(hwnd: HWND, pTimingInfo: *mut DWM_TIMING_INFO) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmGetGraphicsStreamClient(uIndex: u32, pClientUuid: *mut GUID) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmGetGraphicsStreamTransformHint(uIndex: u32, pTransform: *mut MilMatrix3x2D) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmGetTransportAttributes(#[len_const(1)] pfIsRemoting: *mut BOOL, #[len_const(1)] pfIsConnected: *mut BOOL, #[len_const(1)] pDwGeneration: *mut u32) -> HRESULT;
+        #[supported_os("windows10.0.17134")]
         #[library("dwmapi.dll")]
         extern fn DwmGetUnmetTabRequirements(#[opt] appWindow: HWND, value: *mut DWM_TAB_WINDOW_REQUIREMENTS) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmGetWindowAttribute(hwnd: HWND, dwAttribute: u32, #[size_param(3)] pvAttribute: *mut void, cbAttribute: u32) -> HRESULT;
+        #[supported_os("windows6.1")]
         #[library("dwmapi.dll")]
         extern fn DwmInvalidateIconicBitmaps(hwnd: HWND) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmIsCompositionEnabled(pfEnabled: *mut BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmModifyPreviousDxFrameDuration(hwnd: HWND, cRefreshes: i32, fRelative: BOOL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmQueryThumbnailSourceSize(hThumbnail: HTHUMBNAIL, pSize: *mut SIZE) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmRegisterThumbnail(hwndDestination: HWND, hwndSource: HWND, phThumbnailId: *mut HTHUMBNAIL) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("dwmapi.dll")]
         extern fn DwmRenderGesture(gt: GESTURE_TYPE, cContacts: u32, #[len_param(1)] pdwPointerID: *const u32, #[len_param(1)] pPoints: *const POINT) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmSetDxFrameDuration(hwnd: HWND, cRefreshes: i32) -> HRESULT;
+        #[supported_os("windows6.1")]
         #[library("dwmapi.dll")]
         extern fn DwmSetIconicLivePreviewBitmap(hwnd: HWND, hbmp: HBITMAP, #[opt] pptClient: *const POINT, dwSITFlags: u32) -> HRESULT;
+        #[supported_os("windows6.1")]
         #[library("dwmapi.dll")]
         extern fn DwmSetIconicThumbnail(hwnd: HWND, hbmp: HBITMAP, dwSITFlags: u32) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmSetPresentParameters(hwnd: HWND, #[in] #[out] pPresentParams: *mut DWM_PRESENT_PARAMETERS) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmSetWindowAttribute(hwnd: HWND, dwAttribute: u32, #[size_param(3)] pvAttribute: *const void, cbAttribute: u32) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("dwmapi.dll")]
         extern fn DwmShowContact(dwPointerID: u32, eShowContact: DWM_SHOWCONTACT) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("dwmapi.dll")]
         extern fn DwmTetherContact(dwPointerID: u32, fEnable: BOOL, ptTether: POINT) -> HRESULT;
+        #[supported_os("windows8.0")]
         #[library("dwmapi.dll")]
         extern fn DwmTransitionOwnedWindow(hwnd: HWND, target: DWMTRANSITION_OWNEDWINDOW_TARGET) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmUnregisterThumbnail(hThumbnailId: HTHUMBNAIL) -> HRESULT;
+        #[supported_os("windows6.0.6000")]
         #[library("dwmapi.dll")]
         extern fn DwmUpdateThumbnailProperties(hThumbnailId: HTHUMBNAIL, ptnProperties: *const DWM_THUMBNAIL_PROPERTIES) -> HRESULT;
         #[repr(i32)]

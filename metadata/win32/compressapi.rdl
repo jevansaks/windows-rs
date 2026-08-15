@@ -21,35 +21,35 @@ mod Windows {
             COMPRESS_INFORMATION_CLASS_LEVEL = 2,
         }
         const COMPRESS_RAW: i32 = 536870912;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn CloseCompressor(CompressorHandle: COMPRESSOR_HANDLE) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn CloseDecompressor(DecompressorHandle: DECOMPRESSOR_HANDLE) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn Compress(CompressorHandle: COMPRESSOR_HANDLE, #[size_param(2)] #[opt] UncompressedData: *const void, UncompressedDataSize: usize, #[size_param(4)] #[opt] CompressedBuffer: *mut void, CompressedBufferSize: usize, CompressedDataSize: *mut usize) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn CreateCompressor(Algorithm: u32, #[opt] AllocationRoutines: *const COMPRESS_ALLOCATION_ROUTINES, CompressorHandle: *mut COMPRESSOR_HANDLE) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn CreateDecompressor(Algorithm: u32, #[opt] AllocationRoutines: *const COMPRESS_ALLOCATION_ROUTINES, DecompressorHandle: *mut COMPRESSOR_HANDLE) -> BOOL;
         type DECOMPRESSOR_HANDLE = COMPRESSOR_HANDLE;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn Decompress(DecompressorHandle: DECOMPRESSOR_HANDLE, #[size_param(2)] #[opt] CompressedData: *const void, CompressedDataSize: usize, #[size_param(4)] #[opt] UncompressedBuffer: *mut void, UncompressedBufferSize: usize, #[opt] UncompressedDataSize: *mut usize) -> BOOL;
         type PCOMPRESSOR_HANDLE = *mut COMPRESSOR_HANDLE;
         type PCOMPRESS_ALLOCATION_ROUTINES = *mut COMPRESS_ALLOCATION_ROUTINES;
         type PDECOMPRESSOR_HANDLE = *mut COMPRESSOR_HANDLE;
         extern "C" fn PFN_COMPRESS_ALLOCATE(UserContext: *const void, Size: usize) -> *mut void;
         extern "C" fn PFN_COMPRESS_FREE(UserContext: *const void, Memory: *const void);
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn QueryCompressorInformation(CompressorHandle: COMPRESSOR_HANDLE, CompressInformationClass: COMPRESS_INFORMATION_CLASS, #[size_param(3)] CompressInformation: *mut void, CompressInformationSize: usize) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn QueryDecompressorInformation(DecompressorHandle: DECOMPRESSOR_HANDLE, CompressInformationClass: COMPRESS_INFORMATION_CLASS, #[size_param(3)] CompressInformation: *mut void, CompressInformationSize: usize) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn ResetCompressor(CompressorHandle: COMPRESSOR_HANDLE) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn ResetDecompressor(DecompressorHandle: DECOMPRESSOR_HANDLE) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn SetCompressorInformation(CompressorHandle: COMPRESSOR_HANDLE, CompressInformationClass: COMPRESS_INFORMATION_CLASS, #[size_param(3)] CompressInformation: *const void, CompressInformationSize: usize) -> BOOL;
-        #[library("Cabinet.dll")]
+        #[library("Cabinet.dll", set_last_error)]
         extern fn SetDecompressorInformation(DecompressorHandle: DECOMPRESSOR_HANDLE, CompressInformationClass: COMPRESS_INFORMATION_CLASS, #[size_param(3)] CompressInformation: *const void, CompressInformationSize: usize) -> BOOL;
     }
 }

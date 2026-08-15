@@ -136,13 +136,13 @@ mod Windows {
         const GUID_MetadataFormatXMPStruct: GUID = 0x22383cf1_ed17_4e2e_af17_d85b8f6b30d0;
         #[guid(0x412d0c3a_9650_44fa_af5b_dd2a06c8e8fb)]
         interface IWICComponentFactory: IWICImagingFactory {
-            fn CreateMetadataReader(&self, guidMetadataFormat: *const GUID, pguidVendor: *const GUID, dwOptions: u32, pIStream: IStream, ppIReader: *mut IWICMetadataReader) -> HRESULT;
-            fn CreateMetadataReaderFromContainer(&self, guidContainerFormat: *const GUID, pguidVendor: *const GUID, dwOptions: u32, pIStream: IStream, ppIReader: *mut IWICMetadataReader) -> HRESULT;
-            fn CreateMetadataWriter(&self, guidMetadataFormat: *const GUID, pguidVendor: *const GUID, dwMetadataOptions: u32, ppIWriter: *mut IWICMetadataWriter) -> HRESULT;
+            fn CreateMetadataReader(&self, guidMetadataFormat: *const GUID, #[len_const(1)] pguidVendor: *const GUID, dwOptions: u32, pIStream: IStream, ppIReader: *mut IWICMetadataReader) -> HRESULT;
+            fn CreateMetadataReaderFromContainer(&self, guidContainerFormat: *const GUID, #[len_const(1)] pguidVendor: *const GUID, dwOptions: u32, pIStream: IStream, ppIReader: *mut IWICMetadataReader) -> HRESULT;
+            fn CreateMetadataWriter(&self, guidMetadataFormat: *const GUID, #[len_const(1)] pguidVendor: *const GUID, dwMetadataOptions: u32, ppIWriter: *mut IWICMetadataWriter) -> HRESULT;
             fn CreateMetadataWriterFromReader(&self, pIReader: IWICMetadataReader, pguidVendor: *const GUID, ppIWriter: *mut IWICMetadataWriter) -> HRESULT;
             fn CreateQueryReaderFromBlockReader(&self, pIBlockReader: IWICMetadataBlockReader, ppIQueryReader: *mut IWICMetadataQueryReader) -> HRESULT;
             fn CreateQueryWriterFromBlockWriter(&self, pIBlockWriter: IWICMetadataBlockWriter, ppIQueryWriter: *mut IWICMetadataQueryWriter) -> HRESULT;
-            fn CreateEncoderPropertyBag(&self, ppropOptions: *const PROPBAG2, cCount: u32, ppIPropertyBag: *mut IPropertyBag2) -> HRESULT;
+            fn CreateEncoderPropertyBag(&self, #[len_param(1)] ppropOptions: *const PROPBAG2, cCount: u32, ppIPropertyBag: *mut IPropertyBag2) -> HRESULT;
         }
         #[guid(0xfeaa2a8d_b3f3_43e4_b25c_d1de990a1ae1)]
         interface IWICMetadataBlockReader: IUnknown {
@@ -162,9 +162,9 @@ mod Windows {
         #[guid(0xaba958bf_c672_44d1_8d61_ce6df2e682c2)]
         interface IWICMetadataHandlerInfo: IWICComponentInfo {
             fn GetMetadataFormat(&self, pguidMetadataFormat: *mut GUID) -> HRESULT;
-            fn GetContainerFormats(&self, cContainerFormats: u32, #[in] #[out] pguidContainerFormats: *mut GUID, pcchActual: *mut u32) -> HRESULT;
-            fn GetDeviceManufacturer(&self, cchDeviceManufacturer: u32, #[in] #[out] wzDeviceManufacturer: *mut u16, pcchActual: *mut u32) -> HRESULT;
-            fn GetDeviceModels(&self, cchDeviceModels: u32, #[in] #[out] wzDeviceModels: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetContainerFormats(&self, cContainerFormats: u32, #[len_param(0)] #[in] #[out] pguidContainerFormats: *mut GUID, pcchActual: *mut u32) -> HRESULT;
+            fn GetDeviceManufacturer(&self, cchDeviceManufacturer: u32, #[len_param(0)] #[in] #[out] wzDeviceManufacturer: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetDeviceModels(&self, cchDeviceModels: u32, #[len_param(0)] #[in] #[out] wzDeviceModels: *mut u16, pcchActual: *mut u32) -> HRESULT;
             fn DoesRequireFullStream(&self, pfRequiresFullStream: *mut BOOL) -> HRESULT;
             fn DoesSupportPadding(&self, pfSupportsPadding: *mut BOOL) -> HRESULT;
             fn DoesRequireFixedSize(&self, pfFixedSize: *mut BOOL) -> HRESULT;
@@ -208,8 +208,10 @@ mod Windows {
             fn GetPreferredVendorGUID(&self, pguidPreferredVendor: *mut GUID) -> HRESULT;
             fn RefreshStream(&self) -> HRESULT;
         }
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICGetMetadataContentSize(guidContainerFormat: *const GUID, pIWriter: IWICMetadataWriter, pcbSize: *mut u64) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICMatchMetadataContent(guidContainerFormat: *const GUID, #[opt] pguidVendor: *const GUID, pIStream: IStream, pguidMetadataFormat: *mut GUID) -> HRESULT;
         #[repr(i32)]
@@ -242,6 +244,7 @@ mod Windows {
             WICPersistOptionPreferUTF8 = 8,
             WICPersistOptionMask = 65535,
         }
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICSerializeMetadataContent(guidContainerFormat: *const GUID, pIWriter: IWICMetadataWriter, dwPersistOptions: u32, pIStream: IStream) -> HRESULT;
     }

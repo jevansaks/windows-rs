@@ -77,21 +77,21 @@ mod Windows {
         const AC_LINE_UNKNOWN: i32 = 255;
         extern fn APPLICATION_RECOVERY_CALLBACK(pvParameter: *mut void) -> u32;
         const ATOM_FLAG_GLOBAL: i32 = 2;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn AccessCheckAndAuditAlarmA(SubsystemName: PCSTR, #[opt] HandleId: *const void, ObjectTypeName: PCSTR, #[opt] ObjectName: PCSTR, SecurityDescriptor: PSECURITY_DESCRIPTOR, DesiredAccess: u32, GenericMapping: *const GENERIC_MAPPING, ObjectCreation: BOOL, GrantedAccess: *mut u32, AccessStatus: *mut BOOL, pfGenerateOnClose: *mut BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn AccessCheckByTypeAndAuditAlarmA(SubsystemName: PCSTR, HandleId: *const void, ObjectTypeName: PCSTR, #[opt] ObjectName: PCSTR, SecurityDescriptor: PSECURITY_DESCRIPTOR, #[opt] PrincipalSelfSid: PSID, DesiredAccess: u32, AuditType: AUDIT_EVENT_TYPE, Flags: u32, #[len_param(10)] #[in] #[out] #[opt] ObjectTypeList: *mut OBJECT_TYPE_LIST, ObjectTypeListLength: u32, GenericMapping: *const GENERIC_MAPPING, ObjectCreation: BOOL, GrantedAccess: *mut u32, AccessStatus: *mut BOOL, pfGenerateOnClose: *mut BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn AccessCheckByTypeResultListAndAuditAlarmA(SubsystemName: PCSTR, HandleId: *const void, ObjectTypeName: PCSTR, #[opt] ObjectName: PCSTR, SecurityDescriptor: PSECURITY_DESCRIPTOR, #[opt] PrincipalSelfSid: PSID, DesiredAccess: u32, AuditType: AUDIT_EVENT_TYPE, Flags: u32, #[len_param(10)] #[in] #[out] #[opt] ObjectTypeList: *mut OBJECT_TYPE_LIST, ObjectTypeListLength: u32, GenericMapping: *const GENERIC_MAPPING, ObjectCreation: BOOL, #[len_param(10)] GrantedAccess: *mut u32, #[len_param(10)] AccessStatusList: *mut u32, pfGenerateOnClose: *mut BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn AccessCheckByTypeResultListAndAuditAlarmByHandleA(SubsystemName: PCSTR, HandleId: *const void, ClientToken: HANDLE, ObjectTypeName: PCSTR, #[opt] ObjectName: PCSTR, SecurityDescriptor: PSECURITY_DESCRIPTOR, #[opt] PrincipalSelfSid: PSID, DesiredAccess: u32, AuditType: AUDIT_EVENT_TYPE, Flags: u32, #[len_param(11)] #[in] #[out] #[opt] ObjectTypeList: *mut OBJECT_TYPE_LIST, ObjectTypeListLength: u32, GenericMapping: *const GENERIC_MAPPING, ObjectCreation: BOOL, #[len_param(11)] GrantedAccess: *mut u32, #[len_param(11)] AccessStatusList: *mut u32, pfGenerateOnClose: *mut BOOL) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn ActivateActCtx(#[in] #[out] #[opt] hActCtx: HANDLE, lpCookie: *mut usize) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn AddAtomA(#[opt] lpString: PCSTR) -> ATOM;
         #[library("KERNEL32.dll")]
         extern fn AddAtomW(#[opt] lpString: PCWSTR) -> ATOM;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn AddConditionalAce(#[in] #[out] pAcl: *mut ACL, dwAceRevision: u32, AceFlags: u32, AceType: u8, AccessMask: u32, pSid: PSID, ConditionStr: *const u16, ReturnLength: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn AddIntegrityLabelToBoundaryDescriptor(#[in] #[out] BoundaryDescriptor: *mut HANDLE, IntegrityLabel: PSID) -> BOOL;
@@ -148,29 +148,29 @@ mod Windows {
         const BAUD_9600: u32 = 2048;
         const BAUD_USER: u32 = 268435456;
         const BELOW_NORMAL_PRIORITY_CLASS: i32 = 16384;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn BackupEventLogA(hEventLog: HANDLE, lpBackupFileName: PCSTR) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn BackupEventLogW(hEventLog: HANDLE, lpBackupFileName: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BackupRead(hFile: HANDLE, #[size_param(2)] lpBuffer: *mut u8, nNumberOfBytesToRead: u32, lpNumberOfBytesRead: *mut u32, bAbort: BOOL, bProcessSecurity: BOOL, #[in] #[out] lpContext: *mut *mut void) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BackupSeek(hFile: HANDLE, dwLowBytesToSeek: u32, dwHighBytesToSeek: u32, lpdwLowByteSeeked: *mut u32, lpdwHighByteSeeked: *mut u32, #[in] #[out] lpContext: *mut *mut void) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BackupWrite(hFile: HANDLE, #[size_param(2)] lpBuffer: *const u8, nNumberOfBytesToWrite: u32, lpNumberOfBytesWritten: *mut u32, bAbort: BOOL, bProcessSecurity: BOOL, #[in] #[out] lpContext: *mut *mut void) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BeginUpdateResourceA(pFileName: PCSTR, bDeleteExistingResources: BOOL) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BeginUpdateResourceW(pFileName: PCWSTR, bDeleteExistingResources: BOOL) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn BindIoCompletionCallback(FileHandle: HANDLE, Function: LPOVERLAPPED_COMPLETION_ROUTINE, Flags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BuildCommDCBA(lpDef: PCSTR, lpDCB: *mut DCB) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BuildCommDCBAndTimeoutsA(lpDef: PCSTR, lpDCB: *mut DCB, lpCommTimeouts: *mut COMMTIMEOUTS) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BuildCommDCBAndTimeoutsW(lpDef: PCWSTR, lpDCB: *mut DCB, lpCommTimeouts: *mut COMMTIMEOUTS) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn BuildCommDCBW(lpDef: PCWSTR, lpDCB: *mut DCB) -> BOOL;
         const CALLBACK_CHUNK_FINISHED: i32 = 0;
         const CALLBACK_STREAM_SWITCH: i32 = 1;
@@ -351,11 +351,6 @@ mod Windows {
                     uliTotalFileSize: u64,
                     uliTotalBytesTransferred: u64,
                 },
-                SparseChunkStatus: struct {
-                    uliChunkNumber: u64,
-                    uliChunkSize: u64,
-                    uliChunkOffset: u64,
-                },
             },
         }
         #[repr(i32)]
@@ -376,9 +371,7 @@ mod Windows {
             COPYFILE2_CALLBACK_STREAM_FINISHED = 4,
             COPYFILE2_CALLBACK_POLL_CONTINUE = 5,
             COPYFILE2_CALLBACK_ERROR = 6,
-            COPYFILE2_CALLBACK_SPARSE_CHUNK_STARTED = 7,
-            COPYFILE2_CALLBACK_SPARSE_CHUNK_FINISHED = 8,
-            COPYFILE2_CALLBACK_MAX = 9,
+            COPYFILE2_CALLBACK_MAX = 7,
         }
         const COPY_FILE2_V2_DISABLE_BLOCK_CLONING: i32 = 2;
         const COPY_FILE2_V2_DONT_COPY_JUNCTIONS: i32 = 1;
@@ -420,31 +413,31 @@ mod Windows {
         const CREATE_SUSPENDED: i32 = 4;
         const CREATE_UNICODE_ENVIRONMENT: i32 = 1024;
         const CRITICAL_SECTION_NO_DEBUG_INFO: i32 = 16777216;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CallNamedPipeA(lpNamedPipeName: PCSTR, #[size_param(2)] #[opt] lpInBuffer: *const void, nInBufferSize: u32, #[size_param(4)] #[opt] lpOutBuffer: *mut void, nOutBufferSize: u32, lpBytesRead: *mut u32, nTimeOut: u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn CancelDeviceWakeupRequest(hDevice: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn CancelTimerQueueTimer(#[opt] TimerQueue: HANDLE, Timer: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CheckNameLegalDOS8Dot3A(lpName: PCSTR, #[len_param(2)] #[out] #[opt] lpOemName: PSTR, OemNameSize: u32, #[opt] pbNameContainsSpaces: *mut BOOL, pbNameLegal: *mut BOOL) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CheckNameLegalDOS8Dot3W(lpName: PCWSTR, #[len_param(2)] #[out] #[opt] lpOemName: PSTR, OemNameSize: u32, #[opt] pbNameContainsSpaces: *mut BOOL, pbNameLegal: *mut BOOL) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn ClearCommBreak(hFile: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn ClearCommError(hFile: HANDLE, #[opt] lpErrors: *mut u32, #[opt] lpStat: *mut COMSTAT) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ClearEventLogA(hEventLog: HANDLE, #[opt] lpBackupFileName: PCSTR) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ClearEventLogW(hEventLog: HANDLE, #[opt] lpBackupFileName: PCWSTR) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn CloseEncryptedFileRaw(pvContext: *const void);
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn CloseEventLog(hEventLog: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CommConfigDialogA(lpszName: PCSTR, #[opt] hWnd: HWND, #[in] #[out] lpCC: *mut COMMCONFIG) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CommConfigDialogW(lpszName: PCWSTR, #[opt] hWnd: HWND, #[in] #[out] lpCC: *mut COMMCONFIG) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn ConvertFiberToThread() -> BOOL;
@@ -460,79 +453,79 @@ mod Windows {
         extern fn CopyContext(#[in] #[out] Destination: *mut CONTEXT, ContextFlags: u32, Source: *const CONTEXT) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn CopyFile2(pwszExistingFileName: PCWSTR, pwszNewFileName: PCWSTR, #[opt] pExtendedParameters: *const COPYFILE2_EXTENDED_PARAMETERS) -> HRESULT;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CopyFileA(lpExistingFileName: PCSTR, lpNewFileName: PCSTR, bFailIfExists: BOOL) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CopyFileExA(lpExistingFileName: PCSTR, lpNewFileName: PCSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, #[in] #[out] #[opt] pbCancel: *mut BOOL, dwCopyFlags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CopyFileExW(lpExistingFileName: PCWSTR, lpNewFileName: PCWSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, #[in] #[out] #[opt] pbCancel: *mut BOOL, dwCopyFlags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CopyFileTransactedA(lpExistingFileName: PCSTR, lpNewFileName: PCSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, #[opt] pbCancel: *const BOOL, dwCopyFlags: u32, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CopyFileTransactedW(lpExistingFileName: PCWSTR, lpNewFileName: PCWSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, #[opt] pbCancel: *const BOOL, dwCopyFlags: u32, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CopyFileW(lpExistingFileName: PCWSTR, lpNewFileName: PCWSTR, bFailIfExists: BOOL) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateActCtxA(pActCtx: *const ACTCTXA) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateActCtxW(pActCtx: *const ACTCTXW) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn CreateBoundaryDescriptorA(Name: PCSTR, Flags: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateDirectoryExA(lpTemplateDirectory: PCSTR, lpNewDirectory: PCSTR, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateDirectoryExW(lpTemplateDirectory: PCWSTR, lpNewDirectory: PCWSTR, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateDirectoryTransactedA(#[opt] lpTemplateDirectory: PCSTR, lpNewDirectory: PCSTR, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateDirectoryTransactedW(#[opt] lpTemplateDirectory: PCWSTR, lpNewDirectory: PCWSTR, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES, hTransaction: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn CreateFiber(dwStackSize: usize, lpStartAddress: LPFIBER_START_ROUTINE, #[opt] lpParameter: *const void) -> *mut void;
         #[library("KERNEL32.dll")]
         extern fn CreateFiberEx(dwStackCommitSize: usize, dwStackReserveSize: usize, dwFlags: u32, lpStartAddress: LPFIBER_START_ROUTINE, #[opt] lpParameter: *const void) -> *mut void;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateFileMappingA(hFile: HANDLE, #[opt] lpFileMappingAttributes: *const SECURITY_ATTRIBUTES, flProtect: u32, dwMaximumSizeHigh: u32, dwMaximumSizeLow: u32, #[opt] lpName: PCSTR) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateFileMappingNumaA(hFile: HANDLE, #[opt] lpFileMappingAttributes: *const SECURITY_ATTRIBUTES, flProtect: u32, dwMaximumSizeHigh: u32, dwMaximumSizeLow: u32, #[opt] lpName: PCSTR, nndPreferred: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateFileTransactedA(lpFileName: PCSTR, dwDesiredAccess: u32, dwShareMode: u32, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES, dwCreationDisposition: u32, dwFlagsAndAttributes: u32, #[opt] hTemplateFile: HANDLE, hTransaction: HANDLE, #[opt] pusMiniVersion: *const u16, #[reserved] lpExtendedParameter: *const void) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateFileTransactedW(lpFileName: PCWSTR, dwDesiredAccess: u32, dwShareMode: u32, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES, dwCreationDisposition: u32, dwFlagsAndAttributes: u32, #[opt] hTemplateFile: HANDLE, hTransaction: HANDLE, #[opt] pusMiniVersion: *const u16, #[reserved] lpExtendedParameter: *const void) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateHardLinkA(lpFileName: PCSTR, lpExistingFileName: PCSTR, #[reserved] lpSecurityAttributes: *const SECURITY_ATTRIBUTES) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateHardLinkTransactedA(lpFileName: PCSTR, lpExistingFileName: PCSTR, #[reserved] lpSecurityAttributes: *const SECURITY_ATTRIBUTES, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateHardLinkTransactedW(lpFileName: PCWSTR, lpExistingFileName: PCWSTR, #[reserved] lpSecurityAttributes: *const SECURITY_ATTRIBUTES, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateHardLinkW(lpFileName: PCWSTR, lpExistingFileName: PCWSTR, #[reserved] lpSecurityAttributes: *const SECURITY_ATTRIBUTES) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateJobObjectA(#[opt] lpJobAttributes: *const SECURITY_ATTRIBUTES, #[opt] lpName: PCSTR) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn CreateJobSet(NumJob: u32, #[len_param(0)] UserJobSet: *const JOB_SET_ARRAY, Flags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateMailslotA(lpName: PCSTR, nMaxMessageSize: u32, lReadTimeout: u32, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateMailslotW(lpName: PCWSTR, nMaxMessageSize: u32, lReadTimeout: u32, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateNamedPipeA(lpName: PCSTR, dwOpenMode: u32, dwPipeMode: u32, nMaxInstances: u32, nOutBufferSize: u32, nInBufferSize: u32, nDefaultTimeOut: u32, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn CreatePrivateNamespaceA(#[opt] lpPrivateNamespaceAttributes: *const SECURITY_ATTRIBUTES, lpBoundaryDescriptor: *const void, lpAliasPrefix: PCSTR) -> HANDLE;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn CreateProcessWithLogonW(lpUsername: PCWSTR, #[opt] lpDomain: PCWSTR, lpPassword: PCWSTR, dwLogonFlags: u32, #[opt] lpApplicationName: PCWSTR, #[in] #[out] #[opt] lpCommandLine: PWSTR, dwCreationFlags: u32, #[opt] lpEnvironment: *const void, #[opt] lpCurrentDirectory: PCWSTR, lpStartupInfo: *const STARTUPINFOW, lpProcessInformation: *mut PROCESS_INFORMATION) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn CreateProcessWithTokenW(hToken: HANDLE, dwLogonFlags: u32, #[opt] lpApplicationName: PCWSTR, #[in] #[out] #[opt] lpCommandLine: PWSTR, dwCreationFlags: u32, #[opt] lpEnvironment: *const void, #[opt] lpCurrentDirectory: PCWSTR, lpStartupInfo: *const STARTUPINFOW, lpProcessInformation: *mut PROCESS_INFORMATION) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn CreateSemaphoreA(#[opt] lpSemaphoreAttributes: *const SECURITY_ATTRIBUTES, lInitialCount: i32, lMaximumCount: i32, #[opt] lpName: PCSTR) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn CreateSemaphoreExA(#[opt] lpSemaphoreAttributes: *const SECURITY_ATTRIBUTES, lInitialCount: i32, lMaximumCount: i32, #[opt] lpName: PCSTR, #[reserved] dwFlags: u32, dwDesiredAccess: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateSymbolicLinkA(lpSymlinkFileName: PCSTR, lpTargetFileName: PCSTR, dwFlags: u32) -> bool;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateSymbolicLinkTransactedA(lpSymlinkFileName: PCSTR, lpTargetFileName: PCSTR, dwFlags: u32, hTransaction: HANDLE) -> bool;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateSymbolicLinkTransactedW(lpSymlinkFileName: PCWSTR, lpTargetFileName: PCWSTR, dwFlags: u32, hTransaction: HANDLE) -> bool;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateSymbolicLinkW(lpSymlinkFileName: PCWSTR, lpTargetFileName: PCWSTR, dwFlags: u32) -> bool;
         #[library("KERNEL32.dll")]
         extern fn CreateTapePartition(hDevice: HANDLE, dwPartitionMethod: u32, dwCount: u32, dwSize: u32) -> u32;
@@ -614,43 +607,43 @@ mod Windows {
         const DTR_CONTROL_DISABLE: i32 = 0;
         const DTR_CONTROL_ENABLE: i32 = 1;
         const DTR_CONTROL_HANDSHAKE: i32 = 2;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DeactivateActCtx(dwFlags: u32, ulCookie: usize) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn DebugBreakProcess(Process: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn DebugSetProcessKillOnExit(KillOnExit: BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn DecryptFileA(lpFileName: PCSTR, #[reserved] dwReserved: u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn DecryptFileW(lpFileName: PCWSTR, #[reserved] dwReserved: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DefineDosDeviceA(dwFlags: u32, lpDeviceName: PCSTR, #[opt] lpTargetPath: PCSTR) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn DeleteAtom(nAtom: ATOM) -> ATOM;
         #[library("KERNEL32.dll")]
         extern fn DeleteFiber(lpFiber: *const void);
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DeleteFileTransactedA(lpFileName: PCSTR, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DeleteFileTransactedW(lpFileName: PCWSTR, hTransaction: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn DeleteUmsCompletionList(UmsCompletionList: PUMS_COMPLETION_LIST) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn DeleteUmsThreadContext(UmsThread: PUMS_CONTEXT) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DeleteVolumeMountPointA(lpszVolumeMountPoint: PCSTR) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn DequeueUmsCompletionListItems(UmsCompletionList: PUMS_COMPLETION_LIST, WaitTimeOut: u32, UmsThreadList: *mut PUMS_CONTEXT) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn DeregisterEventSource(hEventLog: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn DisableThreadProfiling(PerformanceDataHandle: HANDLE) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DnsHostnameToComputerNameA(Hostname: PCSTR, #[len_param(2)] #[out] #[opt] ComputerName: PSTR, #[in] #[out] nSize: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DnsHostnameToComputerNameW(Hostname: PCWSTR, #[len_param(2)] #[out] #[opt] ComputerName: PWSTR, #[in] #[out] nSize: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn DosDateTimeToFileTime(wFatDate: u16, wFatTime: u16, lpFileTime: *mut FILETIME) -> BOOL;
         const EFSRPC_SECURE_ONLY: i32 = 8;
         const EFS_DROP_ALTERNATE_STREAMS: i32 = 16;
@@ -678,23 +671,23 @@ mod Windows {
         extern fn EnableProcessOptionalXStateFeatures(Features: u64) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn EnableThreadProfiling(ThreadHandle: HANDLE, Flags: u32, HardwareCounters: u64, PerformanceDataHandle: *mut HANDLE) -> u32;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn EncryptFileA(lpFileName: PCSTR) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn EncryptFileW(lpFileName: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn EndUpdateResourceA(hUpdate: HANDLE, fDiscard: BOOL) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn EndUpdateResourceW(hUpdate: HANDLE, fDiscard: BOOL) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn EnterUmsSchedulingMode(SchedulerStartupInfo: *const UMS_SCHEDULER_STARTUP_INFO) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn EnumResourceLanguagesA(#[opt] hModule: HMODULE, lpType: PCSTR, lpName: PCSTR, lpEnumFunc: ENUMRESLANGPROCA, lParam: isize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn EnumResourceLanguagesW(#[opt] hModule: HMODULE, lpType: PCWSTR, lpName: PCWSTR, lpEnumFunc: ENUMRESLANGPROCW, lParam: isize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn EnumResourceTypesA(#[opt] hModule: HMODULE, lpEnumFunc: ENUMRESTYPEPROCA, lParam: isize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn EnumResourceTypesW(#[opt] hModule: HMODULE, lpEnumFunc: ENUMRESTYPEPROCW, lParam: isize) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn EraseTape(hDevice: HANDLE, dwEraseType: u32, bImmediate: BOOL) -> u32;
@@ -951,47 +944,47 @@ mod Windows {
         const FS_VOL_IS_COMPRESSED: i32 = 32768;
         #[library("KERNEL32.dll")]
         extern fn FatalExit(ExitCode: i32);
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn FileEncryptionStatusA(lpFileName: PCSTR, lpStatus: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn FileEncryptionStatusW(lpFileName: PCWSTR, lpStatus: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FileTimeToDosDateTime(lpFileTime: *const FILETIME, lpFatDate: *mut u16, lpFatTime: *mut u16) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindActCtxSectionGuid(dwFlags: u32, #[reserved] lpExtensionGuid: *const GUID, ulSectionId: u32, #[opt] lpGuidToFind: *const GUID, ReturnedData: *mut ACTCTX_SECTION_KEYED_DATA) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindActCtxSectionStringA(dwFlags: u32, #[reserved] lpExtensionGuid: *const GUID, ulSectionId: u32, lpStringToFind: PCSTR, ReturnedData: *mut ACTCTX_SECTION_KEYED_DATA) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindActCtxSectionStringW(dwFlags: u32, #[reserved] lpExtensionGuid: *const GUID, ulSectionId: u32, lpStringToFind: PCWSTR, ReturnedData: *mut ACTCTX_SECTION_KEYED_DATA) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn FindAtomA(#[opt] lpString: PCSTR) -> ATOM;
         #[library("KERNEL32.dll")]
         extern fn FindAtomW(#[opt] lpString: PCWSTR) -> ATOM;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindFirstFileNameTransactedW(lpFileName: PCWSTR, dwFlags: u32, #[in] #[out] StringLength: *mut u32, #[len_param(2)] #[out] LinkName: PWSTR, #[opt] hTransaction: HANDLE) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindFirstFileTransactedA(lpFileName: PCSTR, fInfoLevelId: FINDEX_INFO_LEVELS, lpFindFileData: *mut void, fSearchOp: FINDEX_SEARCH_OPS, #[reserved] lpSearchFilter: *const void, dwAdditionalFlags: u32, hTransaction: HANDLE) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindFirstFileTransactedW(lpFileName: PCWSTR, fInfoLevelId: FINDEX_INFO_LEVELS, lpFindFileData: *mut void, fSearchOp: FINDEX_SEARCH_OPS, #[reserved] lpSearchFilter: *const void, dwAdditionalFlags: u32, hTransaction: HANDLE) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindFirstStreamTransactedW(lpFileName: PCWSTR, InfoLevel: STREAM_INFO_LEVELS, lpFindStreamData: *mut void, #[reserved] dwFlags: u32, hTransaction: HANDLE) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindFirstVolumeA(#[len_param(1)] #[out] lpszVolumeName: PSTR, cchBufferLength: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindFirstVolumeMountPointA(lpszRootPathName: PCSTR, #[len_param(2)] #[out] lpszVolumeMountPoint: PSTR, cchBufferLength: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindFirstVolumeMountPointW(lpszRootPathName: PCWSTR, #[len_param(2)] #[out] lpszVolumeMountPoint: PWSTR, cchBufferLength: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindNextVolumeA(#[in] #[out] hFindVolume: HANDLE, #[len_param(2)] #[out] lpszVolumeName: PSTR, cchBufferLength: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindNextVolumeMountPointA(hFindVolumeMountPoint: HANDLE, #[len_param(2)] #[out] lpszVolumeMountPoint: PSTR, cchBufferLength: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindNextVolumeMountPointW(hFindVolumeMountPoint: HANDLE, #[len_param(2)] #[out] lpszVolumeMountPoint: PWSTR, cchBufferLength: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindResourceA(#[opt] hModule: HMODULE, lpName: PCSTR, lpType: PCSTR) -> HRSRC;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindResourceExA(#[opt] hModule: HMODULE, lpType: PCSTR, lpName: PCSTR, wLanguage: u16) -> HRSRC;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn FindVolumeMountPointClose(hFindVolumeMountPoint: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn FormatMessageA(dwFlags: u32, #[opt] lpSource: *const void, dwMessageId: u32, dwLanguageId: u32, lpBuffer: PSTR, nSize: u32, #[opt] Arguments: *const va_list) -> u32;
@@ -1025,7 +1018,7 @@ mod Windows {
         const GMEM_VALID_FLAGS: i32 = 32626;
         const GMEM_ZEROINIT: i32 = 64;
         const GPTR: i32 = 64;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetActiveProcessorCount(GroupNumber: u16) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetActiveProcessorGroupCount() -> u16;
@@ -1037,9 +1030,9 @@ mod Windows {
         extern fn GetAtomNameA(nAtom: ATOM, #[len_param(2)] #[out] lpBuffer: PSTR, nSize: i32) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetAtomNameW(nAtom: ATOM, #[len_param(2)] #[out] lpBuffer: PWSTR, nSize: i32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetBinaryTypeA(lpApplicationName: PCSTR, lpBinaryType: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetBinaryTypeW(lpApplicationName: PCWSTR, lpBinaryType: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetCommConfig(hCommDev: HANDLE, #[size_param(2)] #[opt] lpCC: *mut COMMCONFIG, #[in] #[out] lpdwSize: *mut u32) -> BOOL;
@@ -1055,105 +1048,105 @@ mod Windows {
         extern fn GetCommState(hFile: HANDLE, lpDCB: *mut DCB) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetCommTimeouts(hFile: HANDLE, lpCommTimeouts: *mut COMMTIMEOUTS) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetCompressedFileSizeTransactedA(lpFileName: PCSTR, #[opt] lpFileSizeHigh: *mut u32, hTransaction: HANDLE) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetCompressedFileSizeTransactedW(lpFileName: PCWSTR, #[opt] lpFileSizeHigh: *mut u32, hTransaction: HANDLE) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetComputerNameA(#[len_param(1)] #[out] #[opt] lpBuffer: PSTR, #[in] #[out] nSize: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetComputerNameW(#[len_param(1)] #[out] #[opt] lpBuffer: PWSTR, #[in] #[out] nSize: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetCurrentActCtx(lphActCtx: *mut HANDLE) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetCurrentHwProfileA(lpHwProfileInfo: *mut HW_PROFILE_INFOA) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetCurrentHwProfileW(lpHwProfileInfo: *mut HW_PROFILE_INFOW) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetCurrentUmsThread() -> PUMS_CONTEXT;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetDefaultCommConfigA(lpszName: PCSTR, #[size_param(2)] lpCC: *mut COMMCONFIG, #[in] #[out] lpdwSize: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetDefaultCommConfigW(lpszName: PCWSTR, #[size_param(2)] lpCC: *mut COMMCONFIG, #[in] #[out] lpdwSize: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetDevicePowerState(hDevice: HANDLE, pfOn: *mut BOOL) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetDllDirectoryA(nBufferLength: u32, #[len_param(0)] #[out] #[opt] lpBuffer: PSTR) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetDllDirectoryW(nBufferLength: u32, #[len_param(0)] #[out] #[opt] lpBuffer: PWSTR) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetEnabledXStateFeatures() -> u64;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetEventLogInformation(hEventLog: HANDLE, dwInfoLevel: u32, #[size_param(3)] lpBuffer: *mut void, cbBufSize: u32, pcbBytesNeeded: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFileAttributesTransactedA(lpFileName: PCSTR, fInfoLevelId: GET_FILEEX_INFO_LEVELS, lpFileInformation: *mut void, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFileAttributesTransactedW(lpFileName: PCWSTR, fInfoLevelId: GET_FILEEX_INFO_LEVELS, lpFileInformation: *mut void, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFileBandwidthReservation(hFile: HANDLE, lpPeriodMilliseconds: *mut u32, lpBytesPerPeriod: *mut u32, pDiscardable: *mut BOOL, lpTransferSize: *mut u32, lpNumOutstandingRequests: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFileInformationByHandleEx(hFile: HANDLE, FileInformationClass: FILE_INFO_BY_HANDLE_CLASS, #[size_param(3)] lpFileInformation: *mut void, dwBufferSize: u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetFileInformationByName(FileName: PCWSTR, FileInformationClass: FILE_INFO_BY_NAME_CLASS, #[size_param(3)] FileInfoBuffer: *mut void, FileInfoBufferSize: u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetFileSecurityA(lpFileName: PCSTR, RequestedInformation: SECURITY_INFORMATION, #[size_param(3)] #[out] #[opt] pSecurityDescriptor: PSECURITY_DESCRIPTOR, nLength: u32, lpnLengthNeeded: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFirmwareEnvironmentVariableA(lpName: PCSTR, lpGuid: PCSTR, #[size_param(3)] #[opt] pBuffer: *mut void, nSize: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFirmwareEnvironmentVariableExA(lpName: PCSTR, lpGuid: PCSTR, #[size_param(3)] #[opt] pBuffer: *mut void, nSize: u32, #[opt] pdwAttribubutes: *mut u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFirmwareEnvironmentVariableExW(lpName: PCWSTR, lpGuid: PCWSTR, #[size_param(3)] #[opt] pBuffer: *mut void, nSize: u32, #[opt] pdwAttribubutes: *mut u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFirmwareEnvironmentVariableW(lpName: PCWSTR, lpGuid: PCWSTR, #[size_param(3)] #[opt] pBuffer: *mut void, nSize: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFirmwareType(#[in] #[out] FirmwareType: *mut FIRMWARE_TYPE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFullPathNameTransactedA(lpFileName: PCSTR, nBufferLength: u32, #[len_param(1)] #[out] #[opt] lpBuffer: PSTR, lpFilePart: *mut PSTR, hTransaction: HANDLE) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetFullPathNameTransactedW(lpFileName: PCWSTR, nBufferLength: u32, #[len_param(1)] #[out] #[opt] lpBuffer: PWSTR, lpFilePart: *mut PWSTR, hTransaction: HANDLE) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetLogicalDriveStringsA(nBufferLength: u32, #[len_param(0)] #[out] #[opt] lpBuffer: PSTR) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetLongPathNameTransactedA(lpszShortPath: PCSTR, #[len_param(2)] #[out] #[opt] lpszLongPath: PSTR, cchBuffer: u32, hTransaction: HANDLE) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetLongPathNameTransactedW(lpszShortPath: PCWSTR, #[len_param(2)] #[out] #[opt] lpszLongPath: PWSTR, cchBuffer: u32, hTransaction: HANDLE) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetMailslotInfo(hMailslot: HANDLE, #[opt] lpMaxMessageSize: *mut u32, #[opt] lpNextSize: *mut u32, #[opt] lpMessageCount: *mut u32, #[opt] lpReadTimeout: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetMaximumProcessorCount(GroupNumber: u16) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetMaximumProcessorGroupCount() -> u16;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNamedPipeClientComputerNameA(Pipe: HANDLE, #[size_param(2)] #[out] ClientComputerName: PSTR, ClientComputerNameLength: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNamedPipeClientProcessId(Pipe: HANDLE, ClientProcessId: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNamedPipeClientSessionId(Pipe: HANDLE, ClientSessionId: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNamedPipeHandleStateA(hNamedPipe: HANDLE, #[opt] lpState: *mut u32, #[opt] lpCurInstances: *mut u32, #[opt] lpMaxCollectionCount: *mut u32, #[opt] lpCollectDataTimeout: *mut u32, #[len_param(6)] #[out] #[opt] lpUserName: PSTR, nMaxUserNameSize: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNamedPipeServerProcessId(Pipe: HANDLE, ServerProcessId: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNamedPipeServerSessionId(Pipe: HANDLE, ServerSessionId: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetNextUmsListItem(#[in] #[out] UmsContext: PUMS_CONTEXT) -> PUMS_CONTEXT;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNumaAvailableMemoryNode(Node: u8, AvailableBytes: *mut u64) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNumaAvailableMemoryNodeEx(Node: u16, AvailableBytes: *mut u64) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNumaNodeNumberFromHandle(hFile: HANDLE, NodeNumber: *mut u16) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNumaNodeProcessorMask(Node: u8, ProcessorMask: *mut u64) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNumaProcessorNode(Processor: u8, NodeNumber: *mut u8) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNumaProcessorNodeEx(Processor: *const PROCESSOR_NUMBER, NodeNumber: *mut u16) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetNumaProximityNode(ProximityId: u32, NodeNumber: *mut u8) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetNumberOfEventLogRecords(hEventLog: HANDLE, NumberOfRecords: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetOldestEventLogRecord(hEventLog: HANDLE, OldestRecord: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetPrivateProfileIntA(lpAppName: PCSTR, lpKeyName: PCSTR, nDefault: i32, #[opt] lpFileName: PCSTR) -> u32;
@@ -1167,19 +1160,19 @@ mod Windows {
         extern fn GetPrivateProfileSectionNamesW(#[len_param(1)] #[out] #[opt] lpszReturnBuffer: PWSTR, nSize: u32, #[opt] lpFileName: PCWSTR) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetPrivateProfileSectionW(lpAppName: PCWSTR, #[len_param(2)] #[out] #[opt] lpReturnedString: PWSTR, nSize: u32, #[opt] lpFileName: PCWSTR) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetPrivateProfileStringA(#[opt] lpAppName: PCSTR, #[opt] lpKeyName: PCSTR, #[opt] lpDefault: PCSTR, #[len_param(4)] #[out] #[opt] lpReturnedString: PSTR, nSize: u32, #[opt] lpFileName: PCSTR) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetPrivateProfileStringW(#[opt] lpAppName: PCWSTR, #[opt] lpKeyName: PCWSTR, #[opt] lpDefault: PCWSTR, #[len_param(4)] #[out] #[opt] lpReturnedString: PWSTR, nSize: u32, #[opt] lpFileName: PCWSTR) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetPrivateProfileStructA(lpszSection: PCSTR, lpszKey: PCSTR, #[size_param(3)] #[opt] lpStruct: *mut void, uSizeStruct: u32, #[opt] szFile: PCSTR) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetPrivateProfileStructW(lpszSection: PCWSTR, lpszKey: PCWSTR, #[size_param(3)] #[opt] lpStruct: *mut void, uSizeStruct: u32, #[opt] szFile: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetProcessAffinityMask(hProcess: HANDLE, lpProcessAffinityMask: *mut usize, lpSystemAffinityMask: *mut usize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetProcessDEPPolicy(hProcess: HANDLE, lpFlags: *mut u32, lpPermanent: *mut BOOL) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetProcessIoCounters(hProcess: HANDLE, lpIoCounters: *mut IO_COUNTERS) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetProfileIntA(lpAppName: PCSTR, lpKeyName: PCSTR, nDefault: i32) -> u32;
@@ -1193,15 +1186,15 @@ mod Windows {
         extern fn GetProfileStringA(#[opt] lpAppName: PCSTR, #[opt] lpKeyName: PCSTR, #[opt] lpDefault: PCSTR, #[len_param(4)] #[out] #[opt] lpReturnedString: PSTR, nSize: u32) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetProfileStringW(#[opt] lpAppName: PCWSTR, #[opt] lpKeyName: PCWSTR, #[opt] lpDefault: PCWSTR, #[len_param(4)] #[out] #[opt] lpReturnedString: PWSTR, nSize: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetShortPathNameA(lpszLongPath: PCSTR, #[len_param(2)] #[out] #[opt] lpszShortPath: PSTR, cchBuffer: u32) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetStartupInfoA(lpStartupInfo: *mut STARTUPINFOA);
         #[library("KERNEL32.dll")]
         extern fn GetSystemDEPPolicy() -> DEP_SYSTEM_POLICY_TYPE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetSystemPowerStatus(lpSystemPowerStatus: *mut SYSTEM_POWER_STATUS) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetSystemRegistryQuota(#[opt] pdwQuotaAllowed: *mut u32, #[opt] pdwQuotaUsed: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetTapeParameters(hDevice: HANDLE, dwOperation: u32, #[in] #[out] lpdwSize: *mut u32, #[size_param(2)] lpTapeInformation: *mut void) -> u32;
@@ -1211,21 +1204,21 @@ mod Windows {
         extern fn GetTapeStatus(hDevice: HANDLE) -> u32;
         #[library("KERNEL32.dll")]
         extern fn GetThreadEnabledXStateFeatures() -> u64;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetThreadSelectorEntry(hThread: HANDLE, dwSelector: u32, #[out] lpSelectorEntry: LPLDT_ENTRY) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetUmsCompletionListEvent(UmsCompletionList: PUMS_COMPLETION_LIST, #[in] #[out] UmsCompletionEvent: *mut HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn GetUmsSystemThreadInformation(ThreadHandle: HANDLE, #[in] #[out] SystemThreadInfo: *mut UMS_SYSTEM_THREAD_INFORMATION) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetUserNameA(#[len_param(1)] #[out] #[opt] lpBuffer: PSTR, #[in] #[out] pcbBuffer: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn GetUserNameW(#[len_param(1)] #[out] #[opt] lpBuffer: PWSTR, #[in] #[out] pcbBuffer: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetVolumeNameForVolumeMountPointA(lpszVolumeMountPoint: PCSTR, #[len_param(2)] #[out] lpszVolumeName: PSTR, cchBufferLength: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetVolumePathNameA(lpszFileName: PCSTR, #[len_param(2)] #[out] lpszVolumePathName: PSTR, cchBufferLength: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn GetVolumePathNamesForVolumeNameA(lpszVolumeName: PCSTR, #[len_param(2)] #[opt] lpszVolumePathNames: *mut i8, cchBufferLength: u32, lpcchReturnLength: *mut u32) -> BOOL;
         #[arch(Arm64)]
         #[library("KERNEL32.dll")]
@@ -1329,7 +1322,7 @@ mod Windows {
         extern fn IsBadStringPtrW(#[opt] lpsz: PCWSTR, ucchMax: usize) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn IsBadWritePtr(#[opt] lp: *const void, ucb: usize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn IsNativeVhdBoot(NativeVhdBoot: *mut BOOL) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn IsSystemResumeAutomatic() -> BOOL;
@@ -1371,7 +1364,7 @@ mod Windows {
         type LPEVENTLOG_FULL_INFORMATION = *mut EVENTLOG_FULL_INFORMATION;
         type LPEXCEPTION_POINTERS = PEXCEPTION_POINTERS;
         type LPEXCEPTION_RECORD = PEXCEPTION_RECORD;
-        type LPFIBER_START_ROUTINE = PFIBER_START_ROUTINE;
+        extern fn LPFIBER_START_ROUTINE(lpFiberParameter: *mut void);
         type LPFILE_ID_DESCRIPTOR = *mut FILE_ID_DESCRIPTOR;
         type LPHW_PROFILE_INFO = LPHW_PROFILE_INFOA;
         type LPHW_PROFILE_INFOA = *mut HW_PROFILE_INFOA;
@@ -1395,7 +1388,7 @@ mod Windows {
         type LPWIN32_STREAM_ID = *mut WIN32_STREAM_ID;
         #[library("KERNEL32.dll")]
         extern fn LoadModule(lpModuleName: PCSTR, lpParameterBlock: *const void) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn LoadPackagedLibrary(lpwLibFileName: PCWSTR, #[reserved] Reserved: u32) -> HMODULE;
         #[library("KERNEL32.dll")]
         extern fn LocalAlloc(uFlags: u32, uBytes: usize) -> HLOCAL;
@@ -1423,33 +1416,33 @@ mod Windows {
         #[arch(X86 | X64)]
         #[library("KERNEL32.dll")]
         extern fn LocateXStateFeature(Context: *const CONTEXT, FeatureId: u32, #[opt] Length: *mut u32) -> *mut void;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LogonUserA(lpszUsername: PCSTR, #[opt] lpszDomain: PCSTR, #[opt] lpszPassword: PCSTR, dwLogonType: u32, dwLogonProvider: u32, phToken: *mut HANDLE) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LogonUserExA(lpszUsername: PCSTR, #[opt] lpszDomain: PCSTR, #[opt] lpszPassword: PCSTR, dwLogonType: u32, dwLogonProvider: u32, phToken: *mut HANDLE, ppLogonSid: *mut PSID, ppProfileBuffer: *mut *mut void, #[opt] pdwProfileLength: *mut u32, #[opt] pQuotaLimits: *mut QUOTA_LIMITS) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LogonUserExW(lpszUsername: PCWSTR, #[opt] lpszDomain: PCWSTR, #[opt] lpszPassword: PCWSTR, dwLogonType: u32, dwLogonProvider: u32, phToken: *mut HANDLE, ppLogonSid: *mut PSID, ppProfileBuffer: *mut *mut void, #[opt] pdwProfileLength: *mut u32, #[opt] pQuotaLimits: *mut QUOTA_LIMITS) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LogonUserW(lpszUsername: PCWSTR, #[opt] lpszDomain: PCWSTR, #[opt] lpszPassword: PCWSTR, dwLogonType: u32, dwLogonProvider: u32, phToken: *mut HANDLE) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupAccountNameA(#[opt] lpSystemName: PCSTR, lpAccountName: PCSTR, #[size_param(3)] #[out] #[opt] Sid: PSID, #[in] #[out] cbSid: *mut u32, #[len_param(5)] #[out] #[opt] ReferencedDomainName: PSTR, #[in] #[out] cchReferencedDomainName: *mut u32, peUse: *mut SID_NAME_USE) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupAccountNameW(#[opt] lpSystemName: PCWSTR, lpAccountName: PCWSTR, #[size_param(3)] #[out] #[opt] Sid: PSID, #[in] #[out] cbSid: *mut u32, #[len_param(5)] #[out] #[opt] ReferencedDomainName: PWSTR, #[in] #[out] cchReferencedDomainName: *mut u32, peUse: *mut SID_NAME_USE) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupAccountSidA(#[opt] lpSystemName: PCSTR, Sid: PSID, #[len_param(3)] #[out] #[opt] Name: PSTR, #[in] #[out] cchName: *mut u32, #[len_param(5)] #[out] #[opt] ReferencedDomainName: PSTR, #[in] #[out] cchReferencedDomainName: *mut u32, peUse: *mut SID_NAME_USE) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupAccountSidW(#[opt] lpSystemName: PCWSTR, Sid: PSID, #[len_param(3)] #[out] #[opt] Name: PWSTR, #[in] #[out] cchName: *mut u32, #[len_param(5)] #[out] #[opt] ReferencedDomainName: PWSTR, #[in] #[out] cchReferencedDomainName: *mut u32, peUse: *mut SID_NAME_USE) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupPrivilegeDisplayNameA(#[opt] lpSystemName: PCSTR, lpName: PCSTR, #[len_param(3)] #[out] #[opt] lpDisplayName: PSTR, #[in] #[out] cchDisplayName: *mut u32, lpLanguageId: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupPrivilegeDisplayNameW(#[opt] lpSystemName: PCWSTR, lpName: PCWSTR, #[len_param(3)] #[out] #[opt] lpDisplayName: PWSTR, #[in] #[out] cchDisplayName: *mut u32, lpLanguageId: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupPrivilegeNameA(#[opt] lpSystemName: PCSTR, lpLuid: *const LUID, #[len_param(3)] #[out] #[opt] lpName: PSTR, #[in] #[out] cchName: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupPrivilegeNameW(#[opt] lpSystemName: PCWSTR, lpLuid: *const LUID, #[len_param(3)] #[out] #[opt] lpName: PWSTR, #[in] #[out] cchName: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupPrivilegeValueA(#[opt] lpSystemName: PCSTR, lpName: PCSTR, lpLuid: *mut LUID) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn LookupPrivilegeValueW(#[opt] lpSystemName: PCWSTR, lpName: PCWSTR, lpLuid: *mut LUID) -> BOOL;
         const MARKPARITY: i32 = 3;
         const MAXINTATOM: i32 = 49152;
@@ -1483,23 +1476,23 @@ mod Windows {
         #[arch(X86)]
         #[library("KERNEL32.dll")]
         extern fn MapUserPhysicalPagesScatter(#[len_param(1)] VirtualAddresses: *const *const void, NumberOfPages: usize, #[len_param(1)] #[opt] PageArray: *const u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MapViewOfFileExNuma(hFileMappingObject: HANDLE, dwDesiredAccess: u32, dwFileOffsetHigh: u32, dwFileOffsetLow: u32, dwNumberOfBytesToMap: usize, #[opt] lpBaseAddress: *const void, nndPreferred: u32) -> *mut void;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileA(lpExistingFileName: PCSTR, lpNewFileName: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileExA(lpExistingFileName: PCSTR, #[opt] lpNewFileName: PCSTR, dwFlags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileExW(lpExistingFileName: PCWSTR, #[opt] lpNewFileName: PCWSTR, dwFlags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileTransactedA(lpExistingFileName: PCSTR, #[opt] lpNewFileName: PCSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, dwFlags: u32, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileTransactedW(lpExistingFileName: PCWSTR, #[opt] lpNewFileName: PCWSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, dwFlags: u32, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileW(lpExistingFileName: PCWSTR, lpNewFileName: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileWithProgressA(lpExistingFileName: PCSTR, #[opt] lpNewFileName: PCSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, dwFlags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn MoveFileWithProgressW(lpExistingFileName: PCWSTR, #[opt] lpNewFileName: PCWSTR, #[opt] lpProgressRoutine: LPPROGRESS_ROUTINE, #[opt] lpData: *const void, dwFlags: u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn MulDiv(nNumber: i32, nNumerator: i32, nDenominator: i32) -> i32;
@@ -1508,7 +1501,7 @@ mod Windows {
         const NMPWAIT_WAIT_FOREVER: u32 = 4294967295;
         const NOPARITY: i32 = 0;
         const NORMAL_PRIORITY_CLASS: i32 = 32;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn NotifyChangeEventLog(hEventLog: HANDLE, hEvent: HANDLE) -> BOOL;
         const ODDPARITY: i32 = 1;
         struct OFSTRUCT {
@@ -1553,17 +1546,17 @@ mod Windows {
         }
         const OPERATION_START_TRACE_CURRENT_THREAD: i32 = 1;
         const OVERWRITE_HIDDEN: i32 = 4;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ObjectCloseAuditAlarmA(SubsystemName: PCSTR, HandleId: *const void, GenerateOnClose: BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ObjectDeleteAuditAlarmA(SubsystemName: PCSTR, HandleId: *const void, GenerateOnClose: BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ObjectOpenAuditAlarmA(SubsystemName: PCSTR, HandleId: *const void, ObjectTypeName: PCSTR, #[opt] ObjectName: PCSTR, pSecurityDescriptor: PSECURITY_DESCRIPTOR, ClientToken: HANDLE, DesiredAccess: u32, GrantedAccess: u32, #[opt] Privileges: *const PRIVILEGE_SET, ObjectCreation: BOOL, AccessGranted: BOOL, GenerateOnClose: *mut BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ObjectPrivilegeAuditAlarmA(SubsystemName: PCSTR, HandleId: *const void, ClientToken: HANDLE, DesiredAccess: u32, Privileges: *const PRIVILEGE_SET, AccessGranted: BOOL) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn OpenBackupEventLogA(#[opt] lpUNCServerName: PCSTR, lpFileName: PCSTR) -> HANDLE;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn OpenBackupEventLogW(#[opt] lpUNCServerName: PCWSTR, lpFileName: PCWSTR) -> HANDLE;
         #[library("api-ms-win-core-comm-l1-1-1.dll")]
         extern fn OpenCommPort(uPortNumber: u32, dwDesiredAccess: u32, dwFlagsAndAttributes: u32) -> HANDLE;
@@ -1571,17 +1564,17 @@ mod Windows {
         extern fn OpenEncryptedFileRawA(lpFileName: PCSTR, ulFlags: u32, pvContext: *mut *mut void) -> u32;
         #[library("ADVAPI32.dll")]
         extern fn OpenEncryptedFileRawW(lpFileName: PCWSTR, ulFlags: u32, pvContext: *mut *mut void) -> u32;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn OpenEventLogA(#[opt] lpUNCServerName: PCSTR, lpSourceName: PCSTR) -> HANDLE;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn OpenEventLogW(#[opt] lpUNCServerName: PCWSTR, lpSourceName: PCWSTR) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn OpenFile(lpFileName: PCSTR, #[in] #[out] lpReOpenBuff: *mut OFSTRUCT, uStyle: u32) -> HFILE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn OpenFileById(hVolumeHint: HANDLE, lpFileId: *const FILE_ID_DESCRIPTOR, dwDesiredAccess: u32, dwShareMode: u32, #[opt] lpSecurityAttributes: *const SECURITY_ATTRIBUTES, dwFlagsAndAttributes: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn OpenFileMappingA(dwDesiredAccess: u32, bInheritHandle: BOOL, lpName: PCSTR) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn OpenJobObjectA(dwDesiredAccess: u32, bInheritHandle: BOOL, lpName: PCSTR) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn OpenMutexA(dwDesiredAccess: u32, bInheritHandle: BOOL, lpName: PCSTR) -> HANDLE;
@@ -1629,7 +1622,6 @@ mod Windows {
         extern fn PFE_EXPORT_FUNC(#[size_param(2)] pbData: *const u8, #[opt] pvCallbackContext: *const void, ulLength: u32) -> u32;
         extern fn PFE_IMPORT_FUNC(#[size_param(2)] pbData: *mut u8, #[opt] pvCallbackContext: *const void, #[in] #[out] ulLength: *mut u32) -> u32;
         extern fn PFIBER_CALLOUT_ROUTINE(lpParameter: *mut void) -> *mut void;
-        extern fn PFIBER_START_ROUTINE(lpFiberParameter: *mut void);
         type PFILE_ALIGNMENT_INFO = *mut FILE_ALIGNMENT_INFO;
         type PFILE_ALLOCATION_INFO = *mut FILE_ALLOCATION_INFO;
         type PFILE_ATTRIBUTE_TAG_INFO = *mut FILE_ATTRIBUTE_TAG_INFO;
@@ -1672,7 +1664,6 @@ mod Windows {
         type POPERATION_START_PARAMETERS = *mut OPERATION_START_PARAMETERS;
         type POWER_REQUEST_CONTEXT = REASON_CONTEXT;
         type PPOWER_REQUEST_CONTEXT = *mut REASON_CONTEXT;
-        type PPROCESS_CREATION_SME_VECTOR_LENGTH = *mut PROCESS_CREATION_SME_VECTOR_LENGTH;
         type PPROCESS_CREATION_SVE_VECTOR_LENGTH = *mut PROCESS_CREATION_SVE_VECTOR_LENGTH;
         extern fn PQUERYACTCTXW_FUNC(dwFlags: u32, hActCtx: HANDLE, #[opt] pvSubInstance: *const void, ulInfoClass: u32, #[size_param(5)] #[opt] pvBuffer: *mut void, cbBuffer: usize, #[opt] pcbWrittenOrRequired: *mut usize) -> BOOL;
         #[repr(i32)]
@@ -1853,18 +1844,6 @@ mod Windows {
         const PROCESS_CREATION_MITIGATION_POLICY_WIN32K_SYSTEM_CALL_DISABLE_DEFER: i32 = 0;
         const PROCESS_CREATION_MITIGATION_POLICY_WIN32K_SYSTEM_CALL_DISABLE_MASK: i32 = 805306368;
         const PROCESS_CREATION_MITIGATION_POLICY_WIN32K_SYSTEM_CALL_DISABLE_RESERVED: i32 = 805306368;
-        struct PROCESS_CREATION_SME_VECTOR_LENGTH {
-            Anonymous: union {
-                Data: u32,
-                Anonymous: struct {
-                    _bitfield: u32 {
-                        VectorLength: 24,
-                        FlagsReserved: 8,
-                    },
-                },
-            },
-            Reserved: u32,
-        }
         union PROCESS_CREATION_SVE_VECTOR_LENGTH {
             Data: u32,
             Anonymous: struct {
@@ -1917,7 +1896,6 @@ mod Windows {
             ProcThreadAttributeEnableOptionalXStateFeatures = 27,
             ProcThreadAttributeTrustedApp = 29,
             ProcThreadAttributeSveVectorLength = 30,
-            ProcThreadAttributeSmeVectorLength = 31,
         }
         const PROC_THREAD_ATTRIBUTE_NUMBER: i32 = 65535;
         const PROC_THREAD_ATTRIBUTE_PARENT_PROCESS: i32 = 131072;
@@ -1925,7 +1903,6 @@ mod Windows {
         const PROC_THREAD_ATTRIBUTE_PROTECTION_LEVEL: i32 = 131083;
         const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE: i32 = 131094;
         const PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES: i32 = 131081;
-        const PROC_THREAD_ATTRIBUTE_SME_VECTOR_LENGTH: i32 = 131103;
         const PROC_THREAD_ATTRIBUTE_SVE_VECTOR_LENGTH: i32 = 131102;
         const PROC_THREAD_ATTRIBUTE_THREAD: i32 = 65536;
         const PROC_THREAD_ATTRIBUTE_TRUSTED_APP: i32 = 131101;
@@ -1972,15 +1949,15 @@ mod Windows {
         const PURGE_RXCLEAR: i32 = 8;
         const PURGE_TXABORT: i32 = 1;
         const PURGE_TXCLEAR: i32 = 4;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn PowerClearRequest(PowerRequest: HANDLE, RequestType: POWER_REQUEST_TYPE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn PowerCreateRequest(Context: *const REASON_CONTEXT) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn PowerSetRequest(PowerRequest: HANDLE, RequestType: POWER_REQUEST_TYPE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn PrepareTape(hDevice: HANDLE, dwOperation: u32, bImmediate: BOOL) -> u32;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn PrivilegedServiceAuditAlarmA(SubsystemName: PCSTR, ServiceName: PCSTR, ClientToken: HANDLE, Privileges: *const PRIVILEGE_SET, AccessGranted: BOOL) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn PulseEvent(hEvent: HANDLE) -> BOOL;
@@ -1990,15 +1967,15 @@ mod Windows {
         const QUERY_ACTCTX_FLAG_ACTCTX_IS_HMODULE: i32 = 8;
         const QUERY_ACTCTX_FLAG_NO_ADDREF: u32 = 2147483648;
         const QUERY_ACTCTX_FLAG_USE_ACTIVE_ACTCTX: i32 = 4;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn QueryActCtxSettingsW(#[opt] dwFlags: u32, #[opt] hActCtx: HANDLE, #[opt] settingsNameSpace: PCWSTR, settingName: PCWSTR, #[size_param(5)] #[out] #[opt] pvBuffer: PWSTR, dwBuffer: usize, #[opt] pdwWrittenOrRequired: *mut usize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn QueryActCtxW(dwFlags: u32, hActCtx: HANDLE, #[opt] pvSubInstance: *const void, ulInfoClass: u32, #[size_param(5)] #[opt] pvBuffer: *mut void, cbBuffer: usize, #[opt] pcbWrittenOrRequired: *mut usize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn QueryDosDeviceA(#[opt] lpDeviceName: PCSTR, #[len_param(2)] #[out] #[opt] lpTargetPath: PSTR, ucchMax: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn QueryFullProcessImageNameA(hProcess: HANDLE, dwFlags: u32, #[len_param(3)] #[out] lpExeName: PSTR, #[in] #[out] lpdwSize: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn QueryFullProcessImageNameW(hProcess: HANDLE, dwFlags: u32, #[len_param(3)] #[out] lpExeName: PWSTR, #[in] #[out] lpdwSize: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn QueryThreadProfiling(ThreadHandle: HANDLE, Enabled: *mut bool) -> u32;
@@ -2038,17 +2015,17 @@ mod Windows {
         const RTS_CONTROL_TOGGLE: i32 = 3;
         #[library("api-ms-win-core-backgroundtask-l1-1-0.dll")]
         extern fn RaiseCustomSystemEventTrigger(CustomSystemEventTriggerConfig: *const CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn ReOpenFile(hOriginalFile: HANDLE, dwDesiredAccess: u32, dwShareMode: u32, dwFlagsAndAttributes: u32) -> HANDLE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn ReadDirectoryChangesExW(hDirectory: HANDLE, #[size_param(2)] lpBuffer: *mut void, nBufferLength: u32, bWatchSubtree: BOOL, dwNotifyFilter: u32, #[opt] lpBytesReturned: *mut u32, #[in] #[out] #[opt] lpOverlapped: *mut OVERLAPPED, #[opt] lpCompletionRoutine: LPOVERLAPPED_COMPLETION_ROUTINE, ReadDirectoryNotifyInformationClass: READ_DIRECTORY_NOTIFY_INFORMATION_CLASS) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn ReadDirectoryChangesW(hDirectory: HANDLE, #[size_param(2)] lpBuffer: *mut void, nBufferLength: u32, bWatchSubtree: BOOL, dwNotifyFilter: u32, #[opt] lpBytesReturned: *mut u32, #[in] #[out] #[opt] lpOverlapped: *mut OVERLAPPED, #[opt] lpCompletionRoutine: LPOVERLAPPED_COMPLETION_ROUTINE) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn ReadEncryptedFileRaw(pfExportCallback: PFE_EXPORT_FUNC, #[opt] pvCallbackContext: *const void, pvContext: *const void) -> u32;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ReadEventLogA(hEventLog: HANDLE, dwReadFlags: u32, dwRecordOffset: u32, #[size_param(4)] lpBuffer: *mut void, nNumberOfBytesToRead: u32, pnBytesRead: *mut u32, pnMinNumberOfBytesNeeded: *mut u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ReadEventLogW(hEventLog: HANDLE, dwReadFlags: u32, dwRecordOffset: u32, #[size_param(4)] lpBuffer: *mut void, nNumberOfBytesToRead: u32, pnBytesRead: *mut u32, pnMinNumberOfBytesNeeded: *mut u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn ReadThreadProfilingData(PerformanceDataHandle: HANDLE, Flags: u32, PerformanceData: *mut PERFORMANCE_DATA) -> u32;
@@ -2056,29 +2033,29 @@ mod Windows {
         extern fn RegisterApplicationRecoveryCallback(pRecoveyCallback: APPLICATION_RECOVERY_CALLBACK, #[opt] pvParameter: *const void, dwPingInterval: u32, dwFlags: u32) -> HRESULT;
         #[library("KERNEL32.dll")]
         extern fn RegisterApplicationRestart(#[opt] pwzCommandline: PCWSTR, dwFlags: u32) -> HRESULT;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn RegisterEventSourceA(#[opt] lpUNCServerName: PCSTR, lpSourceName: PCSTR) -> HANDLE;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn RegisterEventSourceW(#[opt] lpUNCServerName: PCWSTR, lpSourceName: PCWSTR) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn RegisterWaitForSingleObject(phNewWaitObject: *mut HANDLE, hObject: HANDLE, Callback: WAITORTIMERCALLBACK, #[opt] Context: *const void, dwMilliseconds: u32, dwFlags: u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn ReleaseActCtx(#[in] #[out] hActCtx: HANDLE);
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn RemoveDirectoryTransactedA(lpPathName: PCSTR, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn RemoveDirectoryTransactedW(lpPathName: PCWSTR, hTransaction: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn RemoveSecureMemoryCacheCallback(pfnCallBack: PSECURE_MEMORY_CACHE_CALLBACK) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn ReplaceFileA(lpReplacedFileName: PCSTR, lpReplacementFileName: PCSTR, #[opt] lpBackupFileName: PCSTR, dwReplaceFlags: u32, #[reserved] lpExclude: *const void, #[reserved] lpReserved: *const void) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn ReplaceFileW(lpReplacedFileName: PCWSTR, lpReplacementFileName: PCWSTR, #[opt] lpBackupFileName: PCWSTR, dwReplaceFlags: u32, #[reserved] lpExclude: *const void, #[reserved] lpReserved: *const void) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn ReplacePartitionUnit(TargetPartition: PCWSTR, SparePartition: PCWSTR, Flags: u32) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ReportEventA(hEventLog: HANDLE, wType: u16, wCategory: u16, dwEventID: u32, #[opt] lpUserSid: PSID, wNumStrings: u16, dwDataSize: u32, #[len_param(5)] #[opt] lpStrings: *const PCSTR, #[size_param(6)] #[opt] lpRawData: *const void) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn ReportEventW(hEventLog: HANDLE, wType: u16, wCategory: u16, dwEventID: u32, #[opt] lpUserSid: PSID, wNumStrings: u16, dwDataSize: u32, #[len_param(5)] #[opt] lpStrings: *const PCWSTR, #[size_param(6)] #[opt] lpRawData: *const void) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn RequestDeviceWakeup(hDevice: HANDLE) -> BOOL;
@@ -2215,51 +2192,51 @@ mod Windows {
         extern fn SetCommState(hFile: HANDLE, lpDCB: *const DCB) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn SetCommTimeouts(hFile: HANDLE, lpCommTimeouts: *const COMMTIMEOUTS) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetDefaultCommConfigA(lpszName: PCSTR, #[size_param(2)] lpCC: *const COMMCONFIG, dwSize: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetDefaultCommConfigW(lpszName: PCWSTR, #[size_param(2)] lpCC: *const COMMCONFIG, dwSize: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetDllDirectoryA(#[opt] lpPathName: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetDllDirectoryW(#[opt] lpPathName: PCWSTR) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn SetEnvironmentStringsA(NewEnvironment: *const i8) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFileAttributesTransactedA(lpFileName: PCSTR, dwFileAttributes: u32, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFileAttributesTransactedW(lpFileName: PCWSTR, dwFileAttributes: u32, hTransaction: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFileBandwidthReservation(hFile: HANDLE, nPeriodMilliseconds: u32, nBytesPerPeriod: u32, bDiscardable: BOOL, lpTransferSize: *mut u32, lpNumOutstandingRequests: *mut u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFileCompletionNotificationModes(FileHandle: HANDLE, Flags: u8) -> BOOL;
-        #[library("ADVAPI32.dll")]
+        #[library("ADVAPI32.dll", set_last_error)]
         extern fn SetFileSecurityA(lpFileName: PCSTR, SecurityInformation: SECURITY_INFORMATION, pSecurityDescriptor: PSECURITY_DESCRIPTOR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFileShortNameA(hFile: HANDLE, lpShortName: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFileShortNameW(hFile: HANDLE, lpShortName: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFirmwareEnvironmentVariableA(lpName: PCSTR, lpGuid: PCSTR, #[size_param(3)] #[opt] pValue: *const void, nSize: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFirmwareEnvironmentVariableExA(lpName: PCSTR, lpGuid: PCSTR, #[size_param(3)] #[opt] pValue: *const void, nSize: u32, dwAttributes: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFirmwareEnvironmentVariableExW(lpName: PCWSTR, lpGuid: PCWSTR, #[size_param(3)] #[opt] pValue: *const void, nSize: u32, dwAttributes: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetFirmwareEnvironmentVariableW(lpName: PCWSTR, lpGuid: PCWSTR, #[size_param(3)] #[opt] pValue: *const void, nSize: u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn SetHandleCount(uNumber: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetMailslotInfo(hMailslot: HANDLE, lReadTimeout: u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn SetMessageWaitingIndicator(hMsgIndicator: HANDLE, ulMsgCount: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetProcessAffinityMask(hProcess: HANDLE, dwProcessAffinityMask: usize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetProcessDEPPolicy(dwFlags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetSearchPathMode(Flags: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetSystemPowerState(fSuspend: BOOL, fForce: BOOL) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn SetTapeParameters(hDevice: HANDLE, dwOperation: u32, lpTapeInformation: *const void) -> u32;
@@ -2273,13 +2250,13 @@ mod Windows {
         extern fn SetTimerQueueTimer(#[opt] TimerQueue: HANDLE, Callback: WAITORTIMERCALLBACK, #[opt] Parameter: *const void, DueTime: u32, Period: u32, PreferIo: BOOL) -> HANDLE;
         #[library("KERNEL32.dll")]
         extern fn SetUmsThreadInformation(UmsThread: PUMS_CONTEXT, UmsThreadInfoClass: UMS_THREAD_INFO_CLASS, UmsThreadInformation: *const void, UmsThreadInformationLength: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetVolumeLabelA(#[opt] lpRootPathName: PCSTR, #[opt] lpVolumeName: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetVolumeLabelW(#[opt] lpRootPathName: PCWSTR, #[opt] lpVolumeName: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetVolumeMountPointA(lpszVolumeMountPoint: PCSTR, lpszVolumeName: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn SetVolumeMountPointW(lpszVolumeMountPoint: PCWSTR, lpszVolumeName: PCWSTR) -> BOOL;
         #[arch(Arm64)]
         #[library("KERNEL32.dll")]
@@ -2337,17 +2314,17 @@ mod Windows {
         extern fn UnregisterApplicationRestart() -> HRESULT;
         #[library("KERNEL32.dll")]
         extern fn UnregisterWait(WaitHandle: HANDLE) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn UpdateResourceA(hUpdate: HANDLE, lpType: PCSTR, lpName: PCSTR, wLanguage: u16, #[size_param(5)] #[opt] lpData: *const void, cb: u32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn UpdateResourceW(hUpdate: HANDLE, lpType: PCWSTR, lpName: PCWSTR, wLanguage: u16, #[size_param(5)] #[opt] lpData: *const void, cb: u32) -> BOOL;
         const VOLUME_NAME_DOS: i32 = 0;
         const VOLUME_NAME_GUID: i32 = 1;
         const VOLUME_NAME_NONE: i32 = 4;
         const VOLUME_NAME_NT: i32 = 2;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn VerifyVersionInfoA(#[in] #[out] lpVersionInformation: *mut OSVERSIONINFOEXA, dwTypeMask: u32, dwlConditionMask: DWORDLONG) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn VerifyVersionInfoW(#[in] #[out] lpVersionInformation: *mut OSVERSIONINFOEXW, dwTypeMask: u32, dwlConditionMask: DWORDLONG) -> BOOL;
         const WAIT_ABANDONED: i32 = 128;
         const WAIT_ABANDONED_0: i32 = 128;
@@ -2365,37 +2342,37 @@ mod Windows {
         extern fn WTSGetActiveConsoleSessionId() -> u32;
         #[library("KERNEL32.dll")]
         extern fn WaitCommEvent(hFile: HANDLE, #[in] #[out] lpEvtMask: *mut u32, #[in] #[out] #[opt] lpOverlapped: *mut OVERLAPPED) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WaitNamedPipeA(lpNamedPipeName: PCSTR, nTimeOut: u32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn WinExec(lpCmdLine: PCSTR, uCmdShow: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Wow64GetThreadSelectorEntry(hThread: HANDLE, dwSelector: u32, lpSelectorEntry: *mut WOW64_LDT_ENTRY) -> BOOL;
         #[library("ADVAPI32.dll")]
         extern fn WriteEncryptedFileRaw(pfImportCallback: PFE_IMPORT_FUNC, #[opt] pvCallbackContext: *const void, pvContext: *const void) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WritePrivateProfileSectionA(#[opt] lpAppName: PCSTR, #[opt] lpString: PCSTR, #[opt] lpFileName: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WritePrivateProfileSectionW(#[opt] lpAppName: PCWSTR, #[opt] lpString: PCWSTR, #[opt] lpFileName: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WritePrivateProfileStringA(#[opt] lpAppName: PCSTR, #[opt] lpKeyName: PCSTR, #[opt] lpString: PCSTR, #[opt] lpFileName: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WritePrivateProfileStringW(#[opt] lpAppName: PCWSTR, #[opt] lpKeyName: PCWSTR, #[opt] lpString: PCWSTR, #[opt] lpFileName: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WritePrivateProfileStructA(lpszSection: PCSTR, lpszKey: PCSTR, #[size_param(3)] #[opt] lpStruct: *const void, uSizeStruct: u32, #[opt] szFile: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WritePrivateProfileStructW(lpszSection: PCWSTR, lpszKey: PCWSTR, #[size_param(3)] #[opt] lpStruct: *const void, uSizeStruct: u32, #[opt] szFile: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WriteProfileSectionA(lpAppName: PCSTR, lpString: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WriteProfileSectionW(lpAppName: PCWSTR, lpString: PCWSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WriteProfileStringA(#[opt] lpAppName: PCSTR, #[opt] lpKeyName: PCSTR, #[opt] lpString: PCSTR) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn WriteProfileStringW(#[opt] lpAppName: PCWSTR, #[opt] lpKeyName: PCWSTR, #[opt] lpString: PCWSTR) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn WriteTapemark(hDevice: HANDLE, dwTapemarkType: u32, dwTapemarkCount: u32, bImmediate: BOOL) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn ZombifyActCtx(#[in] #[out] hActCtx: HANDLE) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn _hread(hFile: HFILE, #[size_param(2)] lpBuffer: *mut void, lBytes: i32) -> i32;
@@ -2403,15 +2380,15 @@ mod Windows {
         extern fn _hwrite(hFile: HFILE, #[size_param(2)] lpBuffer: *const i8, lBytes: i32) -> i32;
         #[library("KERNEL32.dll")]
         extern fn _lclose(hFile: HFILE) -> HFILE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn _lcreat(lpPathName: PCSTR, iAttribute: i32) -> HFILE;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn _llseek(hFile: HFILE, lOffset: i32, iOrigin: i32) -> i32;
         #[library("KERNEL32.dll")]
         extern fn _lopen(lpPathName: PCSTR, iReadWrite: i32) -> HFILE;
         #[library("KERNEL32.dll")]
         extern fn _lread(hFile: HFILE, #[size_param(2)] lpBuffer: *mut void, uBytes: u32) -> u32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn _lwrite(hFile: HFILE, #[size_param(2)] lpBuffer: *const i8, uBytes: u32) -> u32;
         #[library("KERNEL32.dll")]
         extern fn lstrcatA(#[in] #[out] lpString1: PSTR, lpString2: PCSTR) -> PSTR;

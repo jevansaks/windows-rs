@@ -1,6 +1,7 @@
 #[win32]
 mod Windows {
     mod Win32 {
+        #[free_with("SysFreeString")]
         type BSTR = *mut OLECHAR;
         struct BSTRBLOB {
             cbSize: u32,

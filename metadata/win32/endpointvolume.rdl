@@ -44,7 +44,7 @@ mod Windows {
         interface IAudioMeterInformation: IUnknown {
             fn GetPeakValue(&self, pfPeak: *mut f32) -> HRESULT;
             fn GetMeteringChannelCount(&self, pnChannelCount: *mut u32) -> HRESULT;
-            fn GetChannelsPeakValues(&self, u32ChannelCount: u32, afPeakValues: *mut f32) -> HRESULT;
+            fn GetChannelsPeakValues(&self, u32ChannelCount: u32, #[len_param(0)] afPeakValues: *mut f32) -> HRESULT;
             fn QueryHardwareSupport(&self, pdwHardwareSupportMask: *mut u32) -> HRESULT;
         }
         type PAUDIO_VOLUME_NOTIFICATION_DATA = *mut AUDIO_VOLUME_NOTIFICATION_DATA;

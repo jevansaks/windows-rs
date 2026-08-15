@@ -39,9 +39,9 @@ mod Windows {
         }
         #[guid(0x17cf72d1_bac5_11d1_b1bf_00c04fc2f3ef)]
         interface ITipHelper: IUnknown {
-            fn Pull(&self, i_pszTxUrl: *const i8, o_ppITransaction: *mut ITransaction) -> HRESULT;
-            fn PullAsync(&self, i_pszTxUrl: *const i8, i_pTipPullSink: ITipPullSink, o_ppITransaction: *mut ITransaction) -> HRESULT;
-            fn GetLocalTmUrl(&self, o_ppszLocalTmUrl: *mut *mut i8) -> HRESULT;
+            fn Pull(&self, i_pszTxUrl: *const u8, o_ppITransaction: *mut ITransaction) -> HRESULT;
+            fn PullAsync(&self, i_pszTxUrl: *const u8, i_pTipPullSink: ITipPullSink, o_ppITransaction: *mut ITransaction) -> HRESULT;
+            fn GetLocalTmUrl(&self, o_ppszLocalTmUrl: *mut *mut u8) -> HRESULT;
         }
         #[guid(0x17cf72d2_bac5_11d1_b1bf_00c04fc2f3ef)]
         interface ITipPullSink: IUnknown {
@@ -49,7 +49,7 @@ mod Windows {
         }
         #[guid(0x17cf72d0_bac5_11d1_b1bf_00c04fc2f3ef)]
         interface ITipTransaction: IUnknown {
-            fn Push(&self, i_pszRemoteTmUrl: *const i8, o_ppszRemoteTxUrl: *mut PSTR) -> HRESULT;
+            fn Push(&self, i_pszRemoteTmUrl: *const u8, o_ppszRemoteTxUrl: *mut PSTR) -> HRESULT;
             fn GetTransactionUrl(&self, o_ppszLocalTxUrl: *mut PSTR) -> HRESULT;
         }
         #[guid(0x0fb15081_af41_11ce_bd2b_204c4f4f5020)]
@@ -61,21 +61,21 @@ mod Windows {
         #[guid(0x0141fda5_8fc0_11ce_bd18_204c4f4f5020)]
         interface ITransactionExport: IUnknown {
             fn Export(&self, punkTransaction: IUnknown, pcbTransactionCookie: *mut u32) -> HRESULT;
-            fn GetTransactionCookie(&self, punkTransaction: IUnknown, cbTransactionCookie: u32, rgbTransactionCookie: *mut byte, pcbUsed: *mut u32) -> HRESULT;
+            fn GetTransactionCookie(&self, punkTransaction: IUnknown, cbTransactionCookie: u32, #[len_param(1)] rgbTransactionCookie: *mut byte, pcbUsed: *mut u32) -> HRESULT;
         }
         #[guid(0xe1cf9b53_8745_11ce_a9ba_00aa006c3706)]
         interface ITransactionExportFactory: IUnknown {
             fn GetRemoteClassId(&self, pclsid: *mut GUID) -> HRESULT;
-            fn Create(&self, cbWhereabouts: u32, rgbWhereabouts: *const byte, ppExport: *mut ITransactionExport) -> HRESULT;
+            fn Create(&self, cbWhereabouts: u32, #[len_param(0)] rgbWhereabouts: *const byte, ppExport: *mut ITransactionExport) -> HRESULT;
         }
         #[guid(0xe1cf9b5a_8745_11ce_a9ba_00aa006c3706)]
         interface ITransactionImport: IUnknown {
-            fn Import(&self, cbTransactionCookie: u32, rgbTransactionCookie: *const byte, piid: *const GUID, #[iid_is] ppvTransaction: *mut *mut void) -> HRESULT;
+            fn Import(&self, cbTransactionCookie: u32, #[len_param(0)] rgbTransactionCookie: *const byte, piid: *const GUID, #[iid_is] ppvTransaction: *mut *mut void) -> HRESULT;
         }
         #[guid(0x0141fda4_8fc0_11ce_bd18_204c4f4f5020)]
         interface ITransactionImportWhereabouts: IUnknown {
             fn GetWhereaboutsSize(&self, pcbWhereabouts: *mut u32) -> HRESULT;
-            fn GetWhereabouts(&self, cbWhereabouts: u32, rgbWhereabouts: *mut byte, pcbUsed: *mut u32) -> HRESULT;
+            fn GetWhereabouts(&self, cbWhereabouts: u32, #[len_param(0)] rgbWhereabouts: *mut byte, pcbUsed: *mut u32) -> HRESULT;
         }
         #[guid(0xc82bd533_5b30_11d3_8a91_00c04f79eb6d)]
         interface ITransactionLastEnlistmentAsync: IUnknown {

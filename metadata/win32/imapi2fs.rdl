@@ -65,14 +65,14 @@ mod Windows {
         }
         #[guid(0x2c941fda_975b_59be_a960_9a2a262853a5)]
         interface IEnumFsiItems: IUnknown {
-            fn Next(&self, celt: u32, rgelt: *mut IFsiItem, pceltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, celt: u32, #[len_param(0)] rgelt: *mut IFsiItem, pceltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, celt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppEnum: *mut IEnumFsiItems) -> HRESULT;
         }
         #[guid(0x2c941fd6_975b_59be_a960_9a2a262853a5)]
         interface IEnumProgressItems: IUnknown {
-            fn Next(&self, celt: u32, rgelt: *mut IProgressItem, pceltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, celt: u32, #[len_param(0)] rgelt: *mut IProgressItem, pceltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, celt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppEnum: *mut IEnumProgressItems) -> HRESULT;

@@ -453,7 +453,7 @@ impl Default for STRRET {
 pub union STRRET_0 {
     pub pOleStr: PWSTR,
     pub uOffset: u32,
-    pub cStr: [i8; 260],
+    pub cStr: [u8; 260],
 }
 impl Default for STRRET_0 {
     fn default() -> Self {
@@ -461,10 +461,10 @@ impl Default for STRRET_0 {
     }
 }
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct WNDCLASSEXA {
     pub cbSize: u32,
-    pub style: u32,
+    pub style: WNDCLASS_STYLES,
     pub lpfnWndProc: WNDPROC,
     pub cbClsExtra: i32,
     pub cbWndExtra: i32,
@@ -475,6 +475,29 @@ pub struct WNDCLASSEXA {
     pub lpszMenuName: PCSTR,
     pub lpszClassName: PCSTR,
     pub hIconSm: HICON,
+}
+impl Default for WNDCLASSEXA {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub struct WNDCLASS_STYLES(pub u32);
+impl WNDCLASS_STYLES {
+    pub const CS_VREDRAW: Self = Self(1);
+    pub const CS_HREDRAW: Self = Self(2);
+    pub const CS_DBLCLKS: Self = Self(8);
+    pub const CS_OWNDC: Self = Self(32);
+    pub const CS_CLASSDC: Self = Self(64);
+    pub const CS_PARENTDC: Self = Self(128);
+    pub const CS_NOCLOSE: Self = Self(512);
+    pub const CS_SAVEBITS: Self = Self(2048);
+    pub const CS_BYTEALIGNCLIENT: Self = Self(4096);
+    pub const CS_BYTEALIGNWINDOW: Self = Self(8192);
+    pub const CS_GLOBALCLASS: Self = Self(16384);
+    pub const CS_IME: Self = Self(65536);
+    pub const CS_DROPSHADOW: Self = Self(131072);
 }
 pub type WNDPROC = Option<
     unsafe extern "system" fn(param0: HWND, param1: u32, param2: WPARAM, param3: LPARAM) -> LRESULT,

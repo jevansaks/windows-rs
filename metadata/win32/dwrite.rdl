@@ -454,6 +454,7 @@ mod Windows {
             DWRITE_WORD_WRAPPING_WHOLE_WORD = 3,
             DWRITE_WORD_WRAPPING_CHARACTER = 4,
         }
+        #[supported_os("windows6.1")]
         #[library("DWrite.dll")]
         extern fn DWriteCreateFactory(factoryType: DWRITE_FACTORY_TYPE, iid: *const GUID, #[iid_is] factory: *mut *mut void) -> HRESULT;
         const FACILITY_DWRITE: i32 = 2200;

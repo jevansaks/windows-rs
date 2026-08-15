@@ -28,7 +28,7 @@ mod Windows {
         extern fn KSEC_SERIALIZE_WINNT_AUTH_DATA(pvAuthData: *const void, Size: *mut u32, SerializedData: *mut *mut void) -> NTSTATUS;
         extern fn KspCompleteTokenFn(ContextId: LSA_SEC_HANDLE, Token: *const SecBufferDesc) -> NTSTATUS;
         extern fn KspDeleteContextFn(ContextId: LSA_SEC_HANDLE, LsaContextId: *mut LSA_SEC_HANDLE) -> NTSTATUS;
-        extern fn KspGetTokenFn(ContextId: LSA_SEC_HANDLE, #[opt] ImpersonationToken: *mut HANDLE, RawToken: *mut PACCESS_TOKEN) -> NTSTATUS;
+        extern fn KspGetTokenFn(ContextId: LSA_SEC_HANDLE, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] #[opt] ImpersonationToken: *mut HANDLE, RawToken: *mut PACCESS_TOKEN) -> NTSTATUS;
         extern fn KspInitContextFn(ContextId: LSA_SEC_HANDLE, ContextData: *const SecBuffer, NewContextId: *mut LSA_SEC_HANDLE) -> NTSTATUS;
         extern fn KspInitPackageFn(FunctionTable: *const SECPKG_KERNEL_FUNCTIONS) -> NTSTATUS;
         extern fn KspMakeSignatureFn(ContextId: LSA_SEC_HANDLE, fQOP: u32, Message: *const SecBufferDesc, MessageSeqNo: u32) -> NTSTATUS;
@@ -90,8 +90,8 @@ mod Windows {
         extern fn LSA_CREATE_LOGON_SESSION(#[in] #[out] LogonId: *mut LUID) -> NTSTATUS;
         extern fn LSA_CREATE_SHARED_MEMORY(MaxSize: u32, InitialSize: u32) -> *mut void;
         extern fn LSA_CREATE_THREAD(SecurityAttributes: SEC_ATTRS, StackSize: u32, StartFunction: SEC_THREAD_START, ThreadParameter: *const void, CreationFlags: u32, ThreadId: *mut u32) -> HANDLE;
-        extern fn LSA_CREATE_TOKEN(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, AccountName: *const LSA_UNICODE_STRING, AuthorityName: *const LSA_UNICODE_STRING, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
-        extern fn LSA_CREATE_TOKEN_EX(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, SessionInformation: *const void, SessionInformationType: SECPKG_SESSIONINFO_TYPE, Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
+        extern fn LSA_CREATE_TOKEN(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, AccountName: *const LSA_UNICODE_STRING, AuthorityName: *const LSA_UNICODE_STRING, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
+        extern fn LSA_CREATE_TOKEN_EX(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, SessionInformation: *const void, SessionInformationType: SECPKG_SESSIONINFO_TYPE, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
         extern fn LSA_DELETE_CREDENTIAL(LogonId: *const LUID, AuthenticationPackage: u32, PrimaryKeyValue: *const LSA_STRING) -> NTSTATUS;
         extern fn LSA_DELETE_LOGON_SESSION(LogonId: *const LUID) -> NTSTATUS;
         extern fn LSA_DELETE_SHARED_MEMORY(SharedMem: *const void) -> bool;
@@ -108,7 +108,7 @@ mod Windows {
             CopyToClientBuffer: PLSA_COPY_TO_CLIENT_BUFFER,
             CopyFromClientBuffer: PLSA_COPY_FROM_CLIENT_BUFFER,
         }
-        extern fn LSA_DUPLICATE_HANDLE(SourceHandle: HANDLE, DestionationHandle: *mut HANDLE) -> NTSTATUS;
+        extern fn LSA_DUPLICATE_HANDLE(SourceHandle: HANDLE, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] DestionationHandle: *mut HANDLE) -> NTSTATUS;
         extern fn LSA_EXPAND_AUTH_DATA_FOR_DOMAIN(#[size_param(1)] UserAuthData: *const u8, UserAuthDataSize: u32, Reserved: *const void, ExpandedAuthData: *mut PUCHAR, ExpandedAuthDataSize: *mut u32) -> NTSTATUS;
         extern fn LSA_FREE_CLIENT_BUFFER(ClientRequest: *const *const void, ClientBaseAddress: *const void) -> NTSTATUS;
         extern fn LSA_FREE_LSA_HEAP(Base: *const void);
@@ -132,7 +132,7 @@ mod Windows {
         extern fn LSA_LOCATE_PKG_BY_ID(PackgeId: u32) -> *mut void;
         extern fn LSA_MAP_BUFFER(InputBuffer: *const SecBuffer, OutputBuffer: *mut SecBuffer) -> NTSTATUS;
         extern fn LSA_OPEN_SAM_USER(Name: *const SECURITY_STRING, NameType: SECPKG_NAME_TYPE, Prefix: *const SECURITY_STRING, AllowGuest: bool, Reserved: u32, UserHandle: *mut *mut void) -> NTSTATUS;
-        extern fn LSA_OPEN_TOKEN_BY_LOGON_ID(LogonId: *const LUID, RetTokenHandle: *mut HANDLE) -> NTSTATUS;
+        extern fn LSA_OPEN_TOKEN_BY_LOGON_ID(LogonId: *const LUID, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] RetTokenHandle: *mut HANDLE) -> NTSTATUS;
         extern fn LSA_PROTECT_MEMORY(#[size_param(1)] #[in] #[out] Buffer: *mut void, BufferSize: u32);
         const LSA_QUERY_CLIENT_PRELOGON_SESSION_ID: i32 = 1;
         extern fn LSA_QUERY_CLIENT_REQUEST(ClientRequest: *const *const void, QueryType: u32, ReplyBuffer: *mut *mut void) -> NTSTATUS;
@@ -309,13 +309,13 @@ mod Windows {
         extern fn PLSA_CREATE_LOGON_SESSION(#[in] #[out] LogonId: *mut LUID) -> NTSTATUS;
         extern fn PLSA_CREATE_SHARED_MEMORY(MaxSize: u32, InitialSize: u32) -> *mut void;
         extern fn PLSA_CREATE_THREAD(SecurityAttributes: SEC_ATTRS, StackSize: u32, StartFunction: SEC_THREAD_START, ThreadParameter: *const void, CreationFlags: u32, ThreadId: *mut u32) -> HANDLE;
-        extern fn PLSA_CREATE_TOKEN(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, AccountName: *const LSA_UNICODE_STRING, AuthorityName: *const LSA_UNICODE_STRING, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
-        extern fn PLSA_CREATE_TOKEN_EX(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, SessionInformation: *const void, SessionInformationType: SECPKG_SESSIONINFO_TYPE, Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
+        extern fn PLSA_CREATE_TOKEN(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, AccountName: *const LSA_UNICODE_STRING, AuthorityName: *const LSA_UNICODE_STRING, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
+        extern fn PLSA_CREATE_TOKEN_EX(LogonId: *const LUID, TokenSource: *const TOKEN_SOURCE, LogonType: SECURITY_LOGON_TYPE, ImpersonationLevel: SECURITY_IMPERSONATION_LEVEL, TokenInformationType: LSA_TOKEN_INFORMATION_TYPE, TokenInformation: *const void, #[opt] TokenGroups: *const TOKEN_GROUPS, #[opt] Workstation: *const LSA_UNICODE_STRING, #[opt] ProfilePath: *const LSA_UNICODE_STRING, SessionInformation: *const void, SessionInformationType: SECPKG_SESSIONINFO_TYPE, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] Token: *mut HANDLE, SubStatus: *mut i32) -> NTSTATUS;
         extern fn PLSA_DELETE_CREDENTIAL(LogonId: *const LUID, AuthenticationPackage: u32, PrimaryKeyValue: *const LSA_STRING) -> NTSTATUS;
         extern fn PLSA_DELETE_LOGON_SESSION(LogonId: *const LUID) -> NTSTATUS;
         extern fn PLSA_DELETE_SHARED_MEMORY(SharedMem: *const void) -> bool;
         type PLSA_DISPATCH_TABLE = *mut LSA_DISPATCH_TABLE;
-        extern fn PLSA_DUPLICATE_HANDLE(SourceHandle: HANDLE, DestionationHandle: *mut HANDLE) -> NTSTATUS;
+        extern fn PLSA_DUPLICATE_HANDLE(SourceHandle: HANDLE, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] DestionationHandle: *mut HANDLE) -> NTSTATUS;
         extern fn PLSA_EXPAND_AUTH_DATA_FOR_DOMAIN(#[size_param(1)] UserAuthData: *const u8, UserAuthDataSize: u32, Reserved: *const void, ExpandedAuthData: *mut PUCHAR, ExpandedAuthDataSize: *mut u32) -> NTSTATUS;
         extern fn PLSA_FREE_CLIENT_BUFFER(ClientRequest: *const *const void, ClientBaseAddress: *const void) -> NTSTATUS;
         extern fn PLSA_FREE_LSA_HEAP(Base: *const void);
@@ -339,7 +339,7 @@ mod Windows {
         extern fn PLSA_LOCATE_PKG_BY_ID(PackgeId: u32) -> *mut void;
         extern fn PLSA_MAP_BUFFER(InputBuffer: *const SecBuffer, OutputBuffer: *mut SecBuffer) -> NTSTATUS;
         extern fn PLSA_OPEN_SAM_USER(Name: *const SECURITY_STRING, NameType: SECPKG_NAME_TYPE, Prefix: *const SECURITY_STRING, AllowGuest: bool, Reserved: u32, UserHandle: *mut *mut void) -> NTSTATUS;
-        extern fn PLSA_OPEN_TOKEN_BY_LOGON_ID(LogonId: *const LUID, RetTokenHandle: *mut HANDLE) -> NTSTATUS;
+        extern fn PLSA_OPEN_TOKEN_BY_LOGON_ID(LogonId: *const LUID, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] RetTokenHandle: *mut HANDLE) -> NTSTATUS;
         extern fn PLSA_PROTECT_MEMORY(#[size_param(1)] #[in] #[out] Buffer: *mut void, BufferSize: u32);
         extern fn PLSA_QUERY_CLIENT_REQUEST(ClientRequest: *const *const void, QueryType: u32, ReplyBuffer: *mut *mut void) -> NTSTATUS;
         extern fn PLSA_REDIRECTED_LOGON_CALLBACK(RedirectedLogonHandle: HANDLE, Buffer: *mut void, BufferLength: u32, ReturnBuffer: *mut *mut void, ReturnBufferLength: *mut u32) -> NTSTATUS;
@@ -473,7 +473,6 @@ mod Windows {
             ByteArrayOffset: u32,
             ByteArrayLength: u16,
         }
-        const SECPKG_CALL_AGENT_LOGON: i32 = 524288;
         const SECPKG_CALL_ANSI: i32 = 2;
         const SECPKG_CALL_ASYNC_UPDATE: i32 = 4096;
         const SECPKG_CALL_BUFFER_MARSHAL: i32 = 65536;
@@ -595,7 +594,7 @@ mod Windows {
             PackageParameter: *mut void,
         }
         struct SECPKG_EVENT_PACKAGE_CHANGE {
-            ChangeType: u32,
+            ChangeType: SECPKG_PACKAGE_CHANGE_TYPE,
             PackageId: LSA_SEC_HANDLE,
             PackageName: SECURITY_STRING,
         }
@@ -646,7 +645,6 @@ mod Windows {
             SecpkgFailureReason_NoLineOfSight = 9,
             SecpkgFailureReason_Loopback = 10,
             SecpkgFailureReason_NullSession = 11,
-            SecpkgFailureReason_GlobalSPN = 12,
         }
         struct SECPKG_FUNCTION_TABLE {
             InitializePackage: PLSA_AP_INITIALIZE_PACKAGE,
@@ -767,9 +765,13 @@ mod Windows {
             MsvAvTimestamp: FILETIME,
             MsvAvTargetName: PWSTR,
         }
-        const SECPKG_PACKAGE_CHANGE_LOAD: i32 = 0;
-        const SECPKG_PACKAGE_CHANGE_SELECT: i32 = 2;
-        const SECPKG_PACKAGE_CHANGE_UNLOAD: i32 = 1;
+        #[repr(i32)]
+        #[scoped]
+        enum SECPKG_PACKAGE_CHANGE_TYPE {
+            SECPKG_PACKAGE_CHANGE_LOAD = 0,
+            SECPKG_PACKAGE_CHANGE_UNLOAD = 1,
+            SECPKG_PACKAGE_CHANGE_SELECT = 2,
+        }
         struct SECPKG_PARAMETERS {
             Version: u32,
             MachineState: u32,
@@ -951,11 +953,11 @@ mod Windows {
         extern fn SpDeleteContextFn(ContextHandle: LSA_SEC_HANDLE) -> NTSTATUS;
         extern fn SpDeleteCredentialsFn(CredentialHandle: LSA_SEC_HANDLE, Key: *const SecBuffer) -> NTSTATUS;
         extern fn SpExchangeMetaDataFn(#[opt] CredentialHandle: LSA_SEC_HANDLE, #[opt] TargetName: *const LSA_UNICODE_STRING, ContextRequirements: u32, MetaDataLength: u32, #[size_param(3)] MetaData: *const u8, #[in] #[out] ContextHandle: *mut LSA_SEC_HANDLE) -> NTSTATUS;
-        extern fn SpExportSecurityContextFn(phContext: LSA_SEC_HANDLE, fFlags: u32, pPackedContext: *mut SecBuffer, #[opt] pToken: *mut HANDLE) -> NTSTATUS;
+        extern fn SpExportSecurityContextFn(phContext: LSA_SEC_HANDLE, fFlags: u32, pPackedContext: *mut SecBuffer, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] #[opt] pToken: *mut HANDLE) -> NTSTATUS;
         extern fn SpExtractTargetInfoFn(#[opt] ClientRequest: *const *const void, #[size_param(3)] ProtocolSubmitBuffer: *const void, #[opt] ClientBufferBase: *const void, SubmitBufferLength: u32, ppvTargetInfo: *mut *mut void, pcbTargetInfo: *mut u32) -> NTSTATUS;
         extern fn SpFormatCredentialsFn(Credentials: *const SecBuffer, FormattedCredentials: *mut SecBuffer) -> NTSTATUS;
         extern fn SpFreeCredentialsHandleFn(CredentialHandle: LSA_SEC_HANDLE) -> NTSTATUS;
-        extern fn SpGetContextTokenFn(ContextHandle: LSA_SEC_HANDLE, ImpersonationToken: *mut HANDLE) -> NTSTATUS;
+        extern fn SpGetContextTokenFn(ContextHandle: LSA_SEC_HANDLE, #[invalid_handle(-1)] #[invalid_handle(0)] #[raii_free("CloseHandle")] ImpersonationToken: *mut HANDLE) -> NTSTATUS;
         extern fn SpGetCredUIContextFn(ContextHandle: LSA_SEC_HANDLE, CredType: *const GUID, FlatCredUIContextLength: *mut u32, FlatCredUIContext: *mut PUCHAR) -> NTSTATUS;
         extern fn SpGetCredentialsFn(CredentialHandle: LSA_SEC_HANDLE, #[in] #[out] Credentials: *mut SecBuffer) -> NTSTATUS;
         extern fn SpGetExtendedInformationFn(Class: SECPKG_EXTENDED_INFORMATION_CLASS, ppInformation: *mut PSECPKG_EXTENDED_INFORMATION) -> NTSTATUS;

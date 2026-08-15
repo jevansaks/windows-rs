@@ -196,7 +196,7 @@ mod Windows {
             timeout: i32,
             fdArray: [WSAPOLLFD; 0],
         }
-        #[library("MSWSOCK.dll")]
+        #[library("MSWSOCK.dll", set_last_error)]
         extern fn WSARecvEx(s: SOCKET, #[size_param(2)] buf: *mut i8, len: i32, #[in] #[out] flags: *mut i32) -> i32;
         struct WSASENDMSG {
             lpMsg: LPWSAMSG,

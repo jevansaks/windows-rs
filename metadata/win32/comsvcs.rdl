@@ -189,10 +189,13 @@ mod Windows {
         }
         const CServiceConfig: GUID = 0xecabb0c8_7f19_11d2_978e_0000f8757e2a;
         const ClrAssemblyLocator: GUID = 0x458aa3b5_265a_4b75_bc05_9bea4630cf18;
+        #[supported_os("windows5.1.2600")]
         #[library("comsvcs.dll")]
         extern fn CoCreateActivity(pIUnknown: IUnknown, riid: *const GUID, #[iid_is] ppObj: *mut *mut void) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("comsvcs.dll")]
         extern fn CoEnterServiceDomain(pConfigObject: IUnknown) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("comsvcs.dll")]
         extern fn CoLeaveServiceDomain(pUnkStatus: IUnknown);
         const CoMTSLocator: GUID = 0xecabb0ac_7f19_11d2_978e_0000f8757e2a;
@@ -300,6 +303,7 @@ mod Windows {
             GATD_INCLUDE_CLASS_NAME = 8,
             GATD_INCLUDE_APPLICATION_NAME = 16,
         }
+        #[supported_os("windows5.1.2600")]
         #[library("comsvcs.dll")]
         extern fn GetManagedExtensions(dwExts: *mut u32) -> HRESULT;
         const GetSecurityCallContextAppObject: GUID = 0xecabb0a8_7f19_11d2_978e_0000f8757e2a;
@@ -1131,6 +1135,7 @@ mod Windows {
             LockSetGet = 0,
             LockMethod = 1,
         }
+        #[supported_os("windows5.0")]
         #[library("comsvcs.dll")]
         extern fn MTSCreateActivity(riid: *const GUID, #[iid_is] ppobj: *mut *mut void) -> HRESULT;
         type MTS_OBJID = u64;
@@ -1176,6 +1181,7 @@ mod Windows {
         type RESID = usize;
         type RESOURCERATING = u32;
         type RESTYPID = usize;
+        #[supported_os("windows5.0")]
         #[library("comsvcs.dll")]
         extern "C" fn RecycleSurrogate(lReasonCode: i32) -> HRESULT;
         #[repr(i32)]
@@ -1184,6 +1190,7 @@ mod Windows {
             Process = 1,
         }
         type SRESID = PWSTR;
+        #[supported_os("windows5.0")]
         #[library("comsvcs.dll")]
         extern "C" fn SafeRef(rid: *const GUID, pUnk: IUnknown) -> *mut void;
         const SecurityCallContext: GUID = 0xecabb0a7_7f19_11d2_978e_0000f8757e2a;

@@ -266,9 +266,9 @@ mod Windows {
         extern fn WNetGetConnectionA(lpLocalName: PCSTR, #[len_param(2)] #[out] #[opt] lpRemoteName: PSTR, #[in] #[out] lpnLength: *mut u32) -> u32;
         #[library("MPR.dll")]
         extern fn WNetGetConnectionW(lpLocalName: PCWSTR, #[len_param(2)] #[out] #[opt] lpRemoteName: PWSTR, #[in] #[out] lpnLength: *mut u32) -> u32;
-        #[library("MPR.dll")]
+        #[library("MPR.dll", set_last_error)]
         extern fn WNetGetLastErrorA(lpError: *mut u32, #[len_param(2)] #[out] lpErrorBuf: PSTR, nErrorBufSize: u32, #[len_param(4)] #[out] lpNameBuf: PSTR, nNameBufSize: u32) -> u32;
-        #[library("MPR.dll")]
+        #[library("MPR.dll", set_last_error)]
         extern fn WNetGetLastErrorW(lpError: *mut u32, #[len_param(2)] #[out] lpErrorBuf: PWSTR, nErrorBufSize: u32, #[len_param(4)] #[out] lpNameBuf: PWSTR, nNameBufSize: u32) -> u32;
         #[library("MPR.dll")]
         extern fn WNetGetNetworkInformationA(lpProvider: PCSTR, lpNetInfoStruct: *mut NETINFOSTRUCT) -> u32;

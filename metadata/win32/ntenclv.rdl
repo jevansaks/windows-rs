@@ -25,11 +25,6 @@ mod Windows {
             Size: usize,
             Identity: ENCLAVE_IDENTITY,
         }
-        #[packed(1)]
-        struct ENCLAVE_PACKAGE_IDENTITY {
-            PackageId: [u8; 32],
-            PackageSvn: u64,
-        }
         const ENCLAVE_REPORT_DATA_LENGTH: i32 = 64;
         const ENCLAVE_RUNTIME_POLICY_ALLOW_DYNAMIC_DEBUG: i32 = 2;
         const ENCLAVE_RUNTIME_POLICY_ALLOW_FULL_DEBUG: i32 = 1;
@@ -146,10 +141,6 @@ mod Windows {
             Svn: u32,
             ModuleName: [u16; 1],
         }
-        struct VBS_ENCLAVE_REPORT_PACKAGE_ID {
-            Header: VBS_ENCLAVE_REPORT_VARDATA_HEADER,
-            PackageIdentity: ENCLAVE_PACKAGE_IDENTITY,
-        }
         #[packed(1)]
         struct VBS_ENCLAVE_REPORT_PKG_HEADER {
             PackageSize: u32,
@@ -169,6 +160,5 @@ mod Windows {
         const VBS_ENCLAVE_REPORT_VERSION_CURRENT: i32 = 1;
         const VBS_ENCLAVE_VARDATA_INVALID: i32 = 0;
         const VBS_ENCLAVE_VARDATA_MODULE: i32 = 1;
-        const VBS_ENCLAVE_VARDATA_PACKAGE: i32 = 2;
     }
 }

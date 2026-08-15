@@ -3,7 +3,7 @@
 //! The builder holds the normal parse configuration. [`ScrapePlan`] carries the extra
 //! orchestration state: arches, outputs, seed metadata, and reference winmds.
 
-use crate::{Clang, clang_resource_dir};
+use crate::{Clang, PartitionSpec, clang_resource_dir};
 use std::path::{Path, PathBuf};
 use windows_rdl::{ArchInput, merge_arch_rdl, reader};
 
@@ -49,7 +49,7 @@ impl Arch {
 }
 
 /// Multi-arch and output state layered on top of a configured [`Clang`](crate::Clang).
-pub struct ScrapePlan {
+pub struct ScrapePlan<'a> {
     /// Root namespace; each defining header becomes `<root>.<HeaderStem>`.
     pub root: String,
     /// Committed per-header RDL directory.
@@ -68,6 +68,8 @@ pub struct ScrapePlan {
     pub seed: Option<PathBuf>,
     /// Scrape architectures concurrently.
     pub parallel: bool,
+    /// Explicit translation-unit partitions. When absent, output is partitioned by header.
+    pub partitions: Option<&'a [PartitionSpec]>,
 }
 
 /// What [`Clang::scrape`](crate::Clang::scrape) produced, for the caller's summary output.
@@ -120,7 +122,7 @@ struct Job<'a> {
 
 impl Clang {
     /// Run the plan, replaying this builder once per architecture and merging the results.
-    pub fn scrape(&self, plan: &ScrapePlan) -> Summary {
+    pub fn scrape(&self, plan: &ScrapePlan<'_>) -> Summary {
         assert!(
             !plan.archs.is_empty(),
             "scraper: `plan.archs` must list at least one architecture"
@@ -249,7 +251,7 @@ impl Clang {
     /// Scrape one architecture into `rdl_dir` and compile those partitions into `winmd`.
     fn scrape_arch(
         &self,
-        plan: &ScrapePlan,
+        plan: &ScrapePlan<'_>,
         arch: &Arch,
         rdl_dir: &Path,
         winmd: &Path,
@@ -271,16 +273,18 @@ impl Clang {
             clang.resolution_input(resolution);
         }
 
-        clang
-            .namespace(&plan.root)
-            .output(rdl_dir)
-            .write_by_header()
-            .unwrap_or_else(|e| {
-                panic!(
-                    "failed to generate partitions in `{}`: {e}",
-                    rdl_dir.display()
-                )
-            });
+        clang.namespace(&plan.root).output(rdl_dir);
+        let result = if let Some(partitions) = plan.partitions {
+            clang.write_partitions(partitions)
+        } else {
+            clang.write_by_header()
+        };
+        result.unwrap_or_else(|e| {
+            panic!(
+                "failed to generate partitions in `{}`: {e}",
+                rdl_dir.display()
+            )
+        });
 
         let mut rdl_paths = collect_rdl_paths(rdl_dir);
         if let Some(seed) = &plan.seed

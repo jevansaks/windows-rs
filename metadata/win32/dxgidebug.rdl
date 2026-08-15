@@ -32,7 +32,7 @@ mod Windows {
             Category: DXGI_INFO_QUEUE_MESSAGE_CATEGORY,
             Severity: DXGI_INFO_QUEUE_MESSAGE_SEVERITY,
             ID: DXGI_INFO_QUEUE_MESSAGE_ID,
-            pDescription: *const i8,
+            pDescription: *const u8,
             DescriptionByteLength: usize,
         }
         #[repr(i32)]

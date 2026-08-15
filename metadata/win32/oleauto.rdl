@@ -130,6 +130,7 @@ mod Windows {
         const STDOLE_MINORVERNUM: i32 = 0;
         #[library("OLEAUT32.dll")]
         extern fn SafeArrayAccessData(psa: *const SAFEARRAY, ppvData: *mut *mut void) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("OLEAUT32.dll")]
         extern fn SafeArrayAddRef(psa: *const SAFEARRAY, ppDataToRelease: *mut *mut void) -> HRESULT;
         #[library("OLEAUT32.dll")]
@@ -180,8 +181,10 @@ mod Windows {
         extern fn SafeArrayPutElement(psa: *const SAFEARRAY, rgIndices: *const i32, pv: *const void) -> HRESULT;
         #[library("OLEAUT32.dll")]
         extern fn SafeArrayRedim(#[in] #[out] psa: *mut SAFEARRAY, psaboundNew: *const SAFEARRAYBOUND) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("OLEAUT32.dll")]
         extern fn SafeArrayReleaseData(pData: *const void);
+        #[supported_os("windows5.1.2600")]
         #[library("OLEAUT32.dll")]
         extern fn SafeArrayReleaseDescriptor(psa: *const SAFEARRAY);
         #[library("OLEAUT32.dll")]
@@ -194,6 +197,7 @@ mod Windows {
         extern fn SafeArrayUnlock(psa: *const SAFEARRAY) -> HRESULT;
         #[library("OLEAUT32.dll")]
         extern fn SetErrorInfo(dwReserved: u32, #[opt] perrinfo: IErrorInfo) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("OLEAUT32.dll")]
         extern fn SysAddRefString(bstrString: BSTR) -> HRESULT;
         #[library("OLEAUT32.dll")]
@@ -208,6 +212,7 @@ mod Windows {
         extern fn SysReAllocString(#[in] #[out] pbstr: *mut BSTR, #[opt] psz: *const OLECHAR) -> i32;
         #[library("OLEAUT32.dll")]
         extern fn SysReAllocStringLen(#[in] #[out] pbstr: *mut BSTR, #[opt] psz: *const OLECHAR, len: u32) -> i32;
+        #[supported_os("windows5.1.2600")]
         #[library("OLEAUT32.dll")]
         extern fn SysReleaseString(bstrString: BSTR);
         #[library("OLEAUT32.dll")]

@@ -63,8 +63,14 @@ mod Windows {
         const SCHANNEL_ALERT: i32 = 2;
         struct SCHANNEL_ALERT_TOKEN {
             dwTokenType: u32,
-            dwAlertType: u32,
+            dwAlertType: SCHANNEL_ALERT_TOKEN_ALERT_TYPE,
             dwAlertNumber: u32,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum SCHANNEL_ALERT_TOKEN_ALERT_TYPE {
+            TLS1_ALERT_WARNING = 1,
+            TLS1_ALERT_FATAL = 2,
         }
         struct SCHANNEL_CERT_HASH {
             dwLength: u32,
@@ -99,8 +105,30 @@ mod Windows {
             dwMinimumCipherStrength: u32,
             dwMaximumCipherStrength: u32,
             dwSessionLifespan: u32,
-            dwFlags: u32,
+            dwFlags: SCHANNEL_CRED_FLAGS,
             dwCredFormat: u32,
+        }
+        #[repr(u32)]
+        #[flags]
+        #[scoped]
+        enum SCHANNEL_CRED_FLAGS {
+            SCH_CRED_AUTO_CRED_VALIDATION = 32,
+            SCH_CRED_CACHE_ONLY_URL_RETRIEVAL_ON_CREATE = 131072,
+            SCH_DISABLE_RECONNECTS = 128,
+            SCH_CRED_IGNORE_NO_REVOCATION_CHECK = 2048,
+            SCH_CRED_IGNORE_REVOCATION_OFFLINE = 4096,
+            SCH_CRED_MANUAL_CRED_VALIDATION = 8,
+            SCH_CRED_NO_DEFAULT_CREDS = 16,
+            SCH_CRED_NO_SERVERNAME_CHECK = 4,
+            SCH_CRED_NO_SYSTEM_MAPPER = 2,
+            SCH_CRED_REVOCATION_CHECK_CHAIN = 512,
+            SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT = 1024,
+            SCH_CRED_REVOCATION_CHECK_END_CERT = 256,
+            SCH_CRED_USE_DEFAULT_CREDS = 64,
+            SCH_SEND_AUX_RECORD = 2097152,
+            SCH_SEND_ROOT_CERT = 262144,
+            SCH_USE_STRONG_CRYPTO = 4194304,
+            SCH_USE_PRESHAREDKEY_ONLY = 8388608,
         }
         const SCHANNEL_CRED_VERSION: i32 = 4;
         #[encoding("ansi")]
@@ -113,7 +141,13 @@ mod Windows {
         const SCHANNEL_SESSION: i32 = 3;
         struct SCHANNEL_SESSION_TOKEN {
             dwTokenType: u32,
-            dwFlags: u32,
+            dwFlags: SCHANNEL_SESSION_TOKEN_FLAGS,
+        }
+        #[repr(i32)]
+        #[scoped]
+        enum SCHANNEL_SESSION_TOKEN_FLAGS {
+            SSL_SESSION_ENABLE_RECONNECTS = 1,
+            SSL_SESSION_DISABLE_RECONNECTS = 2,
         }
         const SCHANNEL_SHUTDOWN: i32 = 1;
         const SCH_ALLOW_NULL_ENCRYPTION: i32 = 33554432;
@@ -126,25 +160,17 @@ mod Windows {
             aphMappers: *mut *mut _HMAPPER,
         }
         const SCH_CREDENTIALS_VERSION: i32 = 5;
-        const SCH_CRED_AUTO_CRED_VALIDATION: i32 = 32;
         const SCH_CRED_CACHE_ONLY_URL_RETRIEVAL: i32 = 32768;
-        const SCH_CRED_CACHE_ONLY_URL_RETRIEVAL_ON_CREATE: i32 = 131072;
         const SCH_CRED_CERT_CONTEXT: i32 = 3;
         const SCH_CRED_DEFERRED_CRED_VALIDATION: i32 = 67108864;
         const SCH_CRED_DISABLE_RECONNECTS: i32 = 128;
         const SCH_CRED_FORMAT_CERT_CONTEXT: i32 = 0;
         const SCH_CRED_FORMAT_CERT_HASH: i32 = 1;
         const SCH_CRED_FORMAT_CERT_HASH_STORE: i32 = 2;
-        const SCH_CRED_IGNORE_NO_REVOCATION_CHECK: i32 = 2048;
-        const SCH_CRED_IGNORE_REVOCATION_OFFLINE: i32 = 4096;
-        const SCH_CRED_MANUAL_CRED_VALIDATION: i32 = 8;
         const SCH_CRED_MAX_STORE_NAME_SIZE: i32 = 128;
         const SCH_CRED_MAX_SUPPORTED_ALGS: i32 = 256;
         const SCH_CRED_MAX_SUPPORTED_CERTS: i32 = 100;
         const SCH_CRED_MEMORY_STORE_CERT: i32 = 65536;
-        const SCH_CRED_NO_DEFAULT_CREDS: i32 = 16;
-        const SCH_CRED_NO_SERVERNAME_CHECK: i32 = 4;
-        const SCH_CRED_NO_SYSTEM_MAPPER: i32 = 2;
         struct SCH_CRED_PUBLIC_CERTCHAIN {
             dwType: u32,
             cbCertChain: u32,
@@ -152,9 +178,6 @@ mod Windows {
         }
         const SCH_CRED_RESTRICTED_ROOTS: i32 = 8192;
         const SCH_CRED_REVOCATION_CHECK_CACHE_ONLY: i32 = 16384;
-        const SCH_CRED_REVOCATION_CHECK_CHAIN: i32 = 512;
-        const SCH_CRED_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT: i32 = 1024;
-        const SCH_CRED_REVOCATION_CHECK_END_CERT: i32 = 256;
         struct SCH_CRED_SECRET_CAPI {
             dwType: u32,
             hProv: HCRYPTPROV,
@@ -167,7 +190,6 @@ mod Windows {
         }
         const SCH_CRED_SNI_CREDENTIAL: i32 = 524288;
         const SCH_CRED_SNI_ENABLE_OCSP: i32 = 1048576;
-        const SCH_CRED_USE_DEFAULT_CREDS: i32 = 64;
         const SCH_CRED_V1: i32 = 1;
         const SCH_CRED_V2: i32 = 2;
         const SCH_CRED_V3: i32 = 3;
@@ -181,11 +203,7 @@ mod Windows {
         }
         const SCH_MACHINE_CERT_HASH: i32 = 1;
         const SCH_MAX_EXT_SUBSCRIPTIONS: i32 = 2;
-        const SCH_SEND_AUX_RECORD: i32 = 2097152;
-        const SCH_SEND_ROOT_CERT: i32 = 262144;
         const SCH_USE_DTLS_ONLY: i32 = 16777216;
-        const SCH_USE_PRESHAREDKEY_ONLY: i32 = 8388608;
-        const SCH_USE_STRONG_CRYPTO: i32 = 4194304;
         const SECPKGCONTEXT_CIPHERINFO_V1: i32 = 1;
         const SECPKGCONTEXT_CONNECTION_INFO_EX_V1: i32 = 1;
         struct SEND_GENERIC_TLS_EXTENSION {
@@ -274,8 +292,6 @@ mod Windows {
         extern fn SSL_EMPTY_CACHE_FN_A(pszTargetName: PSTR, dwFlags: u32) -> BOOL;
         extern fn SSL_EMPTY_CACHE_FN_W(pszTargetName: PWSTR, dwFlags: u32) -> BOOL;
         extern fn SSL_FREE_CERTIFICATE_FN(pCertificate: *mut X509Certificate);
-        const SSL_SESSION_DISABLE_RECONNECTS: i32 = 2;
-        const SSL_SESSION_ENABLE_RECONNECTS: i32 = 1;
         const SSL_SESSION_RECONNECT: i32 = 1;
         struct SUBSCRIBE_GENERIC_TLS_EXTENSION {
             Flags: u32,
@@ -465,7 +481,6 @@ mod Windows {
         const TLS1_ALERT_DECRYPTION_FAILED: i32 = 21;
         const TLS1_ALERT_DECRYPT_ERROR: i32 = 51;
         const TLS1_ALERT_EXPORT_RESTRICTION: i32 = 60;
-        const TLS1_ALERT_FATAL: i32 = 2;
         const TLS1_ALERT_HANDSHAKE_FAILURE: i32 = 40;
         const TLS1_ALERT_ILLEGAL_PARAMETER: i32 = 47;
         const TLS1_ALERT_INSUFFIENT_SECURITY: i32 = 71;
@@ -480,7 +495,6 @@ mod Windows {
         const TLS1_ALERT_UNSUPPORTED_CERT: i32 = 43;
         const TLS1_ALERT_UNSUPPORTED_EXT: i32 = 110;
         const TLS1_ALERT_USER_CANCELED: i32 = 90;
-        const TLS1_ALERT_WARNING: i32 = 1;
         struct TLS_EXTENSION_SUBSCRIPTION {
             ExtensionType: u16,
             HandshakeType: u16,

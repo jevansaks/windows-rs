@@ -1,7 +1,7 @@
 #[win32]
 mod Windows {
     mod Win32 {
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> HANDLE;
         struct HEAPENTRY32 {
             dwSize: usize,
@@ -22,13 +22,13 @@ mod Windows {
         }
         const HF32_DEFAULT: i32 = 1;
         const HF32_SHARED: i32 = 2;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Heap32First(lphe: *mut HEAPENTRY32, th32ProcessID: u32, th32HeapID: usize) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Heap32ListFirst(hSnapshot: HANDLE, lphl: *mut HEAPLIST32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Heap32ListNext(hSnapshot: HANDLE, lphl: *mut HEAPLIST32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Heap32Next(lphe: *mut HEAPENTRY32) -> BOOL;
         const LF32_FIXED: i32 = 1;
         const LF32_FREE: i32 = 2;
@@ -65,13 +65,13 @@ mod Windows {
             szModule: [u16; 256],
             szExePath: [u16; 260],
         }
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Module32First(hSnapshot: HANDLE, lpme: *mut MODULEENTRY32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Module32FirstW(hSnapshot: HANDLE, lpme: *mut MODULEENTRY32W) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Module32Next(hSnapshot: HANDLE, lpme: *mut MODULEENTRY32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Module32NextW(hSnapshot: HANDLE, lpme: *mut MODULEENTRY32W) -> BOOL;
         type PHEAPENTRY32 = *mut HEAPENTRY32;
         type PHEAPLIST32 = *mut HEAPLIST32;
@@ -104,13 +104,13 @@ mod Windows {
             szExeFile: [u16; 260],
         }
         type PTHREADENTRY32 = *mut THREADENTRY32;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Process32First(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Process32FirstW(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32W) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Process32Next(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Process32NextW(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32W) -> BOOL;
         const TH32CS_INHERIT: u32 = 2147483648;
         const TH32CS_SNAPALL: i32 = 15;
@@ -128,9 +128,9 @@ mod Windows {
             tpDeltaPri: i32,
             dwFlags: u32,
         }
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Thread32First(hSnapshot: HANDLE, lpte: *mut THREADENTRY32) -> BOOL;
-        #[library("KERNEL32.dll")]
+        #[library("KERNEL32.dll", set_last_error)]
         extern fn Thread32Next(hSnapshot: HANDLE, lpte: *mut THREADENTRY32) -> BOOL;
         #[library("KERNEL32.dll")]
         extern fn Toolhelp32ReadProcessMemory(th32ProcessID: u32, lpBaseAddress: *const void, lpBuffer: *mut void, cbRead: usize, lpNumberOfBytesRead: *mut usize) -> BOOL;

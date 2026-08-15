@@ -116,8 +116,8 @@ mod Windows {
         type HAMSISESSION = *mut void;
         #[guid(0x3e47f2e5_81d4_4d3b_897f_545096770373)]
         interface IAmsiStream: IUnknown {
-            fn GetAttribute(&self, attribute: AMSI_ATTRIBUTE, dataSize: u32, data: *mut u8, retData: *mut u32) -> HRESULT;
-            fn Read(&self, position: u64, size: u32, buffer: *mut u8, readSize: *mut u32) -> HRESULT;
+            fn GetAttribute(&self, attribute: AMSI_ATTRIBUTE, dataSize: u32, #[len_param(1)] data: *mut u8, retData: *mut u32) -> HRESULT;
+            fn Read(&self, position: u64, size: u32, #[len_param(1)] buffer: *mut u8, readSize: *mut u32) -> HRESULT;
         }
         #[guid(0x82d29c2e_f062_44e6_b5c9_3d9a2f24a2df)]
         interface IAntimalware: IUnknown {

@@ -43,7 +43,7 @@ mod Windows {
         interface IMFTransform: IUnknown {
             fn GetStreamLimits(&self, pdwInputMinimum: *mut u32, pdwInputMaximum: *mut u32, pdwOutputMinimum: *mut u32, pdwOutputMaximum: *mut u32) -> HRESULT;
             fn GetStreamCount(&self, pcInputStreams: *mut u32, pcOutputStreams: *mut u32) -> HRESULT;
-            fn GetStreamIDs(&self, dwInputIDArraySize: u32, pdwInputIDs: *mut u32, dwOutputIDArraySize: u32, pdwOutputIDs: *mut u32) -> HRESULT;
+            fn GetStreamIDs(&self, dwInputIDArraySize: u32, #[len_param(0)] pdwInputIDs: *mut u32, dwOutputIDArraySize: u32, #[len_param(2)] pdwOutputIDs: *mut u32) -> HRESULT;
             fn GetInputStreamInfo(&self, dwInputStreamID: u32, pStreamInfo: *mut MFT_INPUT_STREAM_INFO) -> HRESULT;
             fn GetOutputStreamInfo(&self, dwOutputStreamID: u32, pStreamInfo: *mut MFT_OUTPUT_STREAM_INFO) -> HRESULT;
             fn GetAttributes(&self, pAttributes: *mut IMFAttributes) -> HRESULT;
@@ -63,7 +63,7 @@ mod Windows {
             fn ProcessEvent(&self, dwInputStreamID: u32, pEvent: IMFMediaEvent) -> HRESULT;
             fn ProcessMessage(&self, eMessage: MFT_MESSAGE_TYPE, ulParam: usize) -> HRESULT;
             fn ProcessInput(&self, dwInputStreamID: u32, pSample: IMFSample, dwFlags: u32) -> HRESULT;
-            fn ProcessOutput(&self, dwFlags: u32, cOutputBufferCount: u32, #[in] #[out] pOutputSamples: *mut MFT_OUTPUT_DATA_BUFFER, pdwStatus: *mut u32) -> HRESULT;
+            fn ProcessOutput(&self, dwFlags: u32, cOutputBufferCount: u32, #[len_param(1)] #[in] #[out] pOutputSamples: *mut MFT_OUTPUT_DATA_BUFFER, pdwStatus: *mut u32) -> HRESULT;
         }
         #[repr(i32)]
         enum MF3DVideoOutputType {

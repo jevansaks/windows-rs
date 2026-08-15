@@ -2,10 +2,9 @@
 mod Windows {
     mod Win32 {
         #[library("WINMM.dll")]
-        extern fn PlaySoundA(#[opt] pszSound: PCSTR, #[opt] hmod: HMODULE, fdwSound: u32) -> BOOL;
+        extern fn PlaySoundA(#[opt] pszSound: PCSTR, #[opt] hmod: HMODULE, fdwSound: SND_FLAGS) -> BOOL;
         #[library("WINMM.dll")]
-        extern fn PlaySoundW(#[opt] pszSound: PCWSTR, #[opt] hmod: HMODULE, fdwSound: u32) -> BOOL;
-        const SND_ALIAS: i32 = 65536;
+        extern fn PlaySoundW(#[opt] pszSound: PCWSTR, #[opt] hmod: HMODULE, fdwSound: SND_FLAGS) -> BOOL;
         const SND_ALIAS_ID: i32 = 1114112;
         const SND_ALIAS_START: i32 = 0;
         const SND_ALIAS_SYSTEMASTERISK: u32 = 10835;
@@ -16,20 +15,28 @@ mod Windows {
         const SND_ALIAS_SYSTEMQUESTION: u32 = 16211;
         const SND_ALIAS_SYSTEMSTART: u32 = 21331;
         const SND_ALIAS_SYSTEMWELCOME: u32 = 22355;
-        const SND_APPLICATION: i32 = 128;
-        const SND_ASYNC: i32 = 1;
-        const SND_FILENAME: i32 = 131072;
-        const SND_LOOP: i32 = 8;
-        const SND_MEMORY: i32 = 4;
-        const SND_NODEFAULT: i32 = 2;
-        const SND_NOSTOP: i32 = 16;
-        const SND_NOWAIT: i32 = 8192;
-        const SND_PURGE: i32 = 64;
+        #[repr(u32)]
+        #[flags]
+        #[associated_constant("SND_ALIAS_ID")]
+        #[associated_constant("SND_RESOURCE")]
+        #[scoped]
+        enum SND_FLAGS {
+            SND_SYNC = 0,
+            SND_ASYNC = 1,
+            SND_NODEFAULT = 2,
+            SND_MEMORY = 4,
+            SND_LOOP = 8,
+            SND_NOSTOP = 16,
+            SND_NOWAIT = 8192,
+            SND_ALIAS = 65536,
+            SND_FILENAME = 131072,
+            SND_PURGE = 64,
+            SND_APPLICATION = 128,
+            SND_SENTRY = 524288,
+            SND_SYSTEM = 2097152,
+        }
         const SND_RESOURCE: i32 = 262148;
         const SND_RING: i32 = 1048576;
-        const SND_SENTRY: i32 = 524288;
-        const SND_SYNC: i32 = 0;
-        const SND_SYSTEM: i32 = 2097152;
         #[library("WINMM.dll")]
         extern fn sndPlaySoundA(#[opt] pszSound: PCSTR, fuSound: u32) -> BOOL;
         #[library("WINMM.dll")]

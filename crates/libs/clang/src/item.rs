@@ -31,7 +31,7 @@ impl Item {
             Self::Callback(item) => item.write(namespace),
             Self::Const(item) => item.write(namespace),
             Self::GuidConst(item) => item.write(),
-            Self::PropertyKeyConst(item) => item.write(),
+            Self::PropertyKeyConst(item) => item.write(namespace),
             Self::Enum(item) => item.write(),
             Self::Interface(item) => item.write(namespace),
             Self::Struct(item) => item.write(namespace),

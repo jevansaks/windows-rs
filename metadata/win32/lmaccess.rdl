@@ -458,7 +458,7 @@ mod Windows {
         extern "C" fn NetRemoveServiceAccount(#[opt] ServerName: PCWSTR, AccountName: PCWSTR, Flags: u32) -> NTSTATUS;
         #[library("NETAPI32.dll")]
         extern fn NetUserAdd(#[opt] servername: PCWSTR, level: u32, buf: *mut u8, #[opt] parm_err: *mut u32) -> u32;
-        #[library("NETAPI32.dll")]
+        #[library("NETAPI32.dll", set_last_error)]
         extern fn NetUserChangePassword(#[opt] domainname: PCWSTR, #[opt] username: PCWSTR, oldpassword: PCWSTR, newpassword: PCWSTR) -> u32;
         #[library("NETAPI32.dll")]
         extern fn NetUserDel(#[opt] servername: PCWSTR, username: PCWSTR) -> u32;

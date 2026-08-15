@@ -24,6 +24,8 @@ enum class
 W32M("win32metadata:also_usable_for=HANDLE")
 typedef HANDLE DISTINCT_HANDLE;
 
+typedef long PROJECTED_STATUS;
+
 W32M("win32metadata:raii_free=CloseHandle")
 W32M("win32metadata:invalid_handle=-1")
 W32M("win32metadata:invalid_handle=0")
@@ -38,7 +40,6 @@ typedef char* OWNED_STRING;
 W32M("win32metadata:native_encoding=custom")
 const char* const AMBIGUOUS_TEXT = "text";
 
-W32M("win32metadata:associated_enum=FLAGS")
 const DWORD AMBIGUOUS_FLAG = 1;
 
 struct
@@ -89,7 +90,15 @@ BOOL AnnotatedParameters(
         W32M_POSTFIX("win32metadata:com_out_ptr"),
     BOOL* retval
         W32M_POSTFIX("win32metadata:out")
-        W32M_POSTFIX("win32metadata:retval"));
+        W32M_POSTFIX("win32metadata:retval"),
+    PROJECTED_STATUS projected
+        W32M_POSTFIX("win32metadata:project_as=BOOL"));
+
+PROJECTED_STATUS ProjectedReturn(void)
+    W32M_POSTFIX("win32metadata:project_as=BOOL");
+
+DWORD AssociatedEnumReturn(void)
+    W32M_POSTFIX("win32metadata:associated_enum=FLAGS");
 
 BOOL UsesCallback(INTERNAL_CALLBACK callback);
 
@@ -128,6 +137,8 @@ typedef struct
     DWORD cbSize;
     W32M("win32metadata:associated_enum=FLAGS")
     DWORD flags;
+    W32M("win32metadata:project_as=BOOL")
+    PROJECTED_STATUS status;
     char* text
         W32M_POSTFIX("win32metadata:not_null_terminated")
         W32M_POSTFIX("win32metadata:null_null_terminated")

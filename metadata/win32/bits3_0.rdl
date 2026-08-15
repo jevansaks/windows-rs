@@ -59,7 +59,7 @@ mod Windows {
             fn GetFileModificationTime(&self, pVal: *mut FILETIME) -> HRESULT;
             fn GetLastAccessTime(&self, pVal: *mut FILETIME) -> HRESULT;
             fn IsFileValidated(&self) -> HRESULT;
-            fn GetFileRanges(&self, pRangeCount: *mut u32, ppRanges: *mut *mut BG_FILE_RANGE) -> HRESULT;
+            fn GetFileRanges(&self, pRangeCount: *mut u32, #[len_param(0)] ppRanges: *mut *mut BG_FILE_RANGE) -> HRESULT;
         }
         #[guid(0x659cdea4_489e_11d9_a9cd_000d56965251)]
         interface IEnumBitsPeerCacheRecords: IUnknown {

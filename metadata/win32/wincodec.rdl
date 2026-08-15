@@ -164,12 +164,12 @@ mod Windows {
         #[guid(0xe87a44c4_b76e_4c47_8b09_298eb12a2714)]
         interface IWICBitmapCodecInfo: IWICComponentInfo {
             fn GetContainerFormat(&self, pguidContainerFormat: *mut GUID) -> HRESULT;
-            fn GetPixelFormats(&self, cFormats: u32, #[in] #[out] pguidPixelFormats: *mut GUID, pcActual: *mut u32) -> HRESULT;
-            fn GetColorManagementVersion(&self, cchColorManagementVersion: u32, #[in] #[out] wzColorManagementVersion: *mut u16, pcchActual: *mut u32) -> HRESULT;
-            fn GetDeviceManufacturer(&self, cchDeviceManufacturer: u32, #[in] #[out] wzDeviceManufacturer: *mut u16, pcchActual: *mut u32) -> HRESULT;
-            fn GetDeviceModels(&self, cchDeviceModels: u32, #[in] #[out] wzDeviceModels: *mut u16, pcchActual: *mut u32) -> HRESULT;
-            fn GetMimeTypes(&self, cchMimeTypes: u32, #[in] #[out] wzMimeTypes: *mut u16, pcchActual: *mut u32) -> HRESULT;
-            fn GetFileExtensions(&self, cchFileExtensions: u32, #[in] #[out] wzFileExtensions: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetPixelFormats(&self, cFormats: u32, #[len_param(0)] #[in] #[out] pguidPixelFormats: *mut GUID, pcActual: *mut u32) -> HRESULT;
+            fn GetColorManagementVersion(&self, cchColorManagementVersion: u32, #[len_param(0)] #[in] #[out] wzColorManagementVersion: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetDeviceManufacturer(&self, cchDeviceManufacturer: u32, #[len_param(0)] #[in] #[out] wzDeviceManufacturer: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetDeviceModels(&self, cchDeviceModels: u32, #[len_param(0)] #[in] #[out] wzDeviceModels: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetMimeTypes(&self, cchMimeTypes: u32, #[len_param(0)] #[in] #[out] wzMimeTypes: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetFileExtensions(&self, cchFileExtensions: u32, #[len_param(0)] #[in] #[out] wzFileExtensions: *mut u16, pcchActual: *mut u32) -> HRESULT;
             fn DoesSupportAnimation(&self, pfSupportAnimation: *mut BOOL) -> HRESULT;
             fn DoesSupportChromakey(&self, pfSupportChromakey: *mut BOOL) -> HRESULT;
             fn DoesSupportLossless(&self, pfSupportLossless: *mut BOOL) -> HRESULT;
@@ -189,7 +189,7 @@ mod Windows {
             fn CopyPalette(&self, pIPalette: IWICPalette) -> HRESULT;
             fn GetMetadataQueryReader(&self, ppIMetadataQueryReader: *mut IWICMetadataQueryReader) -> HRESULT;
             fn GetPreview(&self, ppIBitmapSource: *mut IWICBitmapSource) -> HRESULT;
-            fn GetColorContexts(&self, cCount: u32, #[in] #[out] ppIColorContexts: *mut IWICColorContext, pcActualCount: *mut u32) -> HRESULT;
+            fn GetColorContexts(&self, cCount: u32, #[len_param(0)] #[in] #[out] ppIColorContexts: *mut IWICColorContext, pcActualCount: *mut u32) -> HRESULT;
             fn GetThumbnail(&self, ppIThumbnail: *mut IWICBitmapSource) -> HRESULT;
             fn GetFrameCount(&self, pCount: *mut u32) -> HRESULT;
             fn GetFrame(&self, index: u32, ppIBitmapFrame: *mut IWICBitmapFrameDecode) -> HRESULT;
@@ -205,7 +205,7 @@ mod Windows {
             fn Initialize(&self, pIStream: IStream, cacheOption: WICBitmapEncoderCacheOption) -> HRESULT;
             fn GetContainerFormat(&self, pguidContainerFormat: *mut GUID) -> HRESULT;
             fn GetEncoderInfo(&self, ppIEncoderInfo: *mut IWICBitmapEncoderInfo) -> HRESULT;
-            fn SetColorContexts(&self, cCount: u32, ppIColorContext: *const IWICColorContext) -> HRESULT;
+            fn SetColorContexts(&self, cCount: u32, #[len_param(0)] ppIColorContext: *const IWICColorContext) -> HRESULT;
             fn SetPalette(&self, pIPalette: IWICPalette) -> HRESULT;
             fn SetThumbnail(&self, pIThumbnail: IWICBitmapSource) -> HRESULT;
             fn SetPreview(&self, pIPreview: IWICBitmapSource) -> HRESULT;
@@ -234,7 +234,7 @@ mod Windows {
         #[guid(0x3b16811b_6a43_4ec9_a813_3d930c13b940)]
         interface IWICBitmapFrameDecode: IWICBitmapSource {
             fn GetMetadataQueryReader(&self, ppIMetadataQueryReader: *mut IWICMetadataQueryReader) -> HRESULT;
-            fn GetColorContexts(&self, cCount: u32, #[in] #[out] ppIColorContexts: *mut IWICColorContext, pcActualCount: *mut u32) -> HRESULT;
+            fn GetColorContexts(&self, cCount: u32, #[len_param(0)] #[in] #[out] ppIColorContexts: *mut IWICColorContext, pcActualCount: *mut u32) -> HRESULT;
             fn GetThumbnail(&self, ppIThumbnail: *mut IWICBitmapSource) -> HRESULT;
         }
         #[guid(0x00000105_a8f2_4877_ba0a_fd2b6645fb94)]
@@ -243,10 +243,10 @@ mod Windows {
             fn SetSize(&self, uiWidth: u32, uiHeight: u32) -> HRESULT;
             fn SetResolution(&self, dpiX: f64, dpiY: f64) -> HRESULT;
             fn SetPixelFormat(&self, #[in] #[out] pPixelFormat: *mut WICPixelFormatGUID) -> HRESULT;
-            fn SetColorContexts(&self, cCount: u32, ppIColorContext: *const IWICColorContext) -> HRESULT;
+            fn SetColorContexts(&self, cCount: u32, #[len_param(0)] ppIColorContext: *const IWICColorContext) -> HRESULT;
             fn SetPalette(&self, pIPalette: IWICPalette) -> HRESULT;
             fn SetThumbnail(&self, pIThumbnail: IWICBitmapSource) -> HRESULT;
-            fn WritePixels(&self, lineCount: u32, cbStride: u32, cbBufferSize: u32, pbPixels: *const u8) -> HRESULT;
+            fn WritePixels(&self, lineCount: u32, cbStride: u32, cbBufferSize: u32, #[len_param(2)] pbPixels: *const u8) -> HRESULT;
             fn WriteSource(&self, pIBitmapSource: IWICBitmapSource, prc: *const WICRect) -> HRESULT;
             fn Commit(&self) -> HRESULT;
             fn GetMetadataQueryWriter(&self, ppIMetadataQueryWriter: *mut IWICMetadataQueryWriter) -> HRESULT;
@@ -255,7 +255,7 @@ mod Windows {
         interface IWICBitmapLock: IUnknown {
             fn GetSize(&self, puiWidth: *mut u32, puiHeight: *mut u32) -> HRESULT;
             fn GetStride(&self, pcbStride: *mut u32) -> HRESULT;
-            fn GetDataPointer(&self, pcbBufferSize: *mut u32, ppbData: *mut WICInProcPointer) -> HRESULT;
+            fn GetDataPointer(&self, pcbBufferSize: *mut u32, #[len_param(0)] ppbData: *mut WICInProcPointer) -> HRESULT;
             fn GetPixelFormat(&self, pPixelFormat: *mut WICPixelFormatGUID) -> HRESULT;
         }
         #[guid(0x00000302_a8f2_4877_ba0a_fd2b6645fb94)]
@@ -268,18 +268,18 @@ mod Windows {
             fn GetPixelFormat(&self, pPixelFormat: *mut WICPixelFormatGUID) -> HRESULT;
             fn GetResolution(&self, pDpiX: *mut f64, pDpiY: *mut f64) -> HRESULT;
             fn CopyPalette(&self, pIPalette: IWICPalette) -> HRESULT;
-            fn CopyPixels(&self, prc: *const WICRect, cbStride: u32, cbBufferSize: u32, pbBuffer: *mut u8) -> HRESULT;
+            fn CopyPixels(&self, prc: *const WICRect, cbStride: u32, cbBufferSize: u32, #[len_param(2)] pbBuffer: *mut u8) -> HRESULT;
         }
         #[guid(0x3b16811b_6a43_4ec9_b713_3d5a0c13b940)]
         interface IWICBitmapSourceTransform: IUnknown {
-            fn CopyPixels(&self, prc: *const WICRect, uiWidth: u32, uiHeight: u32, pguidDstFormat: *const WICPixelFormatGUID, dstTransform: WICBitmapTransformOptions, nStride: u32, cbBufferSize: u32, pbBuffer: *mut u8) -> HRESULT;
+            fn CopyPixels(&self, prc: *const WICRect, uiWidth: u32, uiHeight: u32, pguidDstFormat: *const WICPixelFormatGUID, dstTransform: WICBitmapTransformOptions, nStride: u32, cbBufferSize: u32, #[len_param(6)] pbBuffer: *mut u8) -> HRESULT;
             fn GetClosestSize(&self, #[in] #[out] puiWidth: *mut u32, #[in] #[out] puiHeight: *mut u32) -> HRESULT;
             fn GetClosestPixelFormat(&self, #[in] #[out] pguidDstFormat: *mut WICPixelFormatGUID) -> HRESULT;
             fn DoesSupportTransform(&self, dstTransform: WICBitmapTransformOptions, pfIsSupported: *mut BOOL) -> HRESULT;
         }
         #[guid(0xc3373fdf_6d39_4e5f_8e79_bf40c0b7ed77)]
         interface IWICBitmapSourceTransform2: IWICBitmapSourceTransform {
-            fn GetColorContextsForPixelFormat(&self, pPixelFormat: *const WICPixelFormatGUID, cCount: u32, ppIColorContexts: *const IWICColorContext, pcActualCount: *mut u32) -> HRESULT;
+            fn GetColorContextsForPixelFormat(&self, pPixelFormat: *const WICPixelFormatGUID, cCount: u32, #[len_param(1)] ppIColorContexts: *const IWICColorContext, pcActualCount: *mut u32) -> HRESULT;
         }
         #[guid(0x44728ded_1edf_4fe9_b50b_c89a264c9439)]
         interface IWICBitmapToneMapper: IWICBitmapSource {
@@ -289,10 +289,10 @@ mod Windows {
         #[guid(0x3c613a02_34b2_44ea_9a7c_45aea9c6fd6d)]
         interface IWICColorContext: IUnknown {
             fn InitializeFromFilename(&self, wzFilename: PCWSTR) -> HRESULT;
-            fn InitializeFromMemory(&self, pbBuffer: *const u8, cbBufferSize: u32) -> HRESULT;
+            fn InitializeFromMemory(&self, #[len_param(1)] pbBuffer: *const u8, cbBufferSize: u32) -> HRESULT;
             fn InitializeFromExifColorSpace(&self, value: u32) -> HRESULT;
             fn GetType(&self, pType: *mut WICColorContextType) -> HRESULT;
-            fn GetProfileBytes(&self, cbBuffer: u32, #[in] #[out] pbBuffer: *mut u8, pcbActual: *mut u32) -> HRESULT;
+            fn GetProfileBytes(&self, cbBuffer: u32, #[len_param(0)] #[in] #[out] pbBuffer: *mut u8, pcbActual: *mut u32) -> HRESULT;
             fn GetExifColorSpace(&self, pValue: *mut u32) -> HRESULT;
         }
         #[guid(0xb66f034f_d0e2_40ab_b436_6de39e321a94)]
@@ -304,11 +304,11 @@ mod Windows {
             fn GetComponentType(&self, pType: *mut WICComponentType) -> HRESULT;
             fn GetCLSID(&self, pclsid: *mut GUID) -> HRESULT;
             fn GetSigningStatus(&self, pStatus: *mut u32) -> HRESULT;
-            fn GetAuthor(&self, cchAuthor: u32, #[in] #[out] wzAuthor: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetAuthor(&self, cchAuthor: u32, #[len_param(0)] #[in] #[out] wzAuthor: *mut u16, pcchActual: *mut u32) -> HRESULT;
             fn GetVendorGUID(&self, pguidVendor: *mut GUID) -> HRESULT;
-            fn GetVersion(&self, cchVersion: u32, #[in] #[out] wzVersion: *mut u16, pcchActual: *mut u32) -> HRESULT;
-            fn GetSpecVersion(&self, cchSpecVersion: u32, #[in] #[out] wzSpecVersion: *mut u16, pcchActual: *mut u32) -> HRESULT;
-            fn GetFriendlyName(&self, cchFriendlyName: u32, #[in] #[out] wzFriendlyName: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetVersion(&self, cchVersion: u32, #[len_param(0)] #[in] #[out] wzVersion: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetSpecVersion(&self, cchSpecVersion: u32, #[len_param(0)] #[in] #[out] wzSpecVersion: *mut u16, pcchActual: *mut u32) -> HRESULT;
+            fn GetFriendlyName(&self, cchFriendlyName: u32, #[len_param(0)] #[in] #[out] wzFriendlyName: *mut u16, pcchActual: *mut u32) -> HRESULT;
         }
         #[guid(0xcaf65cc4_8ebe_4718_a21f_8dbf40bb7e25)]
         interface IWICD3DTextureSource: IUnknown {
@@ -332,7 +332,7 @@ mod Windows {
         interface IWICDdsFrameDecode: IUnknown {
             fn GetSizeInBlocks(&self, pWidthInBlocks: *mut u32, pHeightInBlocks: *mut u32) -> HRESULT;
             fn GetFormatInfo(&self, pFormatInfo: *mut WICDdsFormatInfo) -> HRESULT;
-            fn CopyBlocks(&self, prcBoundsInBlocks: *const WICRect, cbStride: u32, cbBufferSize: u32, pbBuffer: *mut u8) -> HRESULT;
+            fn CopyBlocks(&self, prcBoundsInBlocks: *const WICRect, cbStride: u32, cbBufferSize: u32, #[len_param(2)] pbBuffer: *mut u8) -> HRESULT;
         }
         #[guid(0xfbec5e44_f7be_4b65_b7f8_c0c81fef026d)]
         interface IWICDevelopRaw: IWICBitmapFrameDecode {
@@ -389,7 +389,7 @@ mod Windows {
         }
         #[guid(0xdc2bb46d_3f07_481e_8625_220c4aedbb33)]
         interface IWICEnumMetadataItem: IUnknown {
-            fn Next(&self, celt: u32, #[in] #[out] rgeltSchema: *mut PROPVARIANT, #[in] #[out] rgeltId: *mut PROPVARIANT, #[in] #[out] #[opt] rgeltValue: *mut PROPVARIANT, #[opt] pceltFetched: *mut u32) -> HRESULT;
+            fn Next(&self, celt: u32, #[len_param(0)] #[in] #[out] rgeltSchema: *mut PROPVARIANT, #[len_param(0)] #[in] #[out] rgeltId: *mut PROPVARIANT, #[in] #[out] #[opt] rgeltValue: *mut PROPVARIANT, #[opt] pceltFetched: *mut u32) -> HRESULT;
             fn Skip(&self, celt: u32) -> HRESULT;
             fn Reset(&self) -> HRESULT;
             fn Clone(&self, ppIEnumMetadataItem: *mut IWICEnumMetadataItem) -> HRESULT;
@@ -406,7 +406,7 @@ mod Windows {
         }
         #[guid(0x9f34fb65_13f4_4f15_bc57_3726b5e53d9f)]
         interface IWICFormatConverterInfo: IWICComponentInfo {
-            fn GetPixelFormats(&self, cFormats: u32, #[in] #[out] pPixelFormatGUIDs: *mut WICPixelFormatGUID, pcActual: *mut u32) -> HRESULT;
+            fn GetPixelFormats(&self, cFormats: u32, #[len_param(0)] #[in] #[out] pPixelFormatGUIDs: *mut WICPixelFormatGUID, pcActual: *mut u32) -> HRESULT;
             fn CreateInstance(&self, ppIConverter: *mut IWICFormatConverter) -> HRESULT;
         }
         #[guid(0x04c75bf8_3ce1_473b_acc5_3cc4f5e94999)]
@@ -434,7 +434,7 @@ mod Windows {
             fn CreateBitmap(&self, uiWidth: u32, uiHeight: u32, pixelFormat: REFWICPixelFormatGUID, option: WICBitmapCreateCacheOption, ppIBitmap: *mut IWICBitmap) -> HRESULT;
             fn CreateBitmapFromSource(&self, pIBitmapSource: IWICBitmapSource, option: WICBitmapCreateCacheOption, ppIBitmap: *mut IWICBitmap) -> HRESULT;
             fn CreateBitmapFromSourceRect(&self, pIBitmapSource: IWICBitmapSource, x: u32, y: u32, width: u32, height: u32, ppIBitmap: *mut IWICBitmap) -> HRESULT;
-            fn CreateBitmapFromMemory(&self, uiWidth: u32, uiHeight: u32, pixelFormat: REFWICPixelFormatGUID, cbStride: u32, cbBufferSize: u32, pbBuffer: *const u8, ppIBitmap: *mut IWICBitmap) -> HRESULT;
+            fn CreateBitmapFromMemory(&self, uiWidth: u32, uiHeight: u32, pixelFormat: REFWICPixelFormatGUID, cbStride: u32, cbBufferSize: u32, #[len_param(4)] pbBuffer: *const u8, ppIBitmap: *mut IWICBitmap) -> HRESULT;
             fn CreateBitmapFromHBITMAP(&self, hBitmap: HBITMAP, hPalette: HPALETTE, options: WICBitmapAlphaChannelOption, ppIBitmap: *mut IWICBitmap) -> HRESULT;
             fn CreateBitmapFromHICON(&self, hIcon: HICON, ppIBitmap: *mut IWICBitmap) -> HRESULT;
             fn CreateComponentEnumerator(&self, componentTypes: u32, options: u32, ppIEnumUnknown: *mut IEnumUnknown) -> HRESULT;
@@ -461,20 +461,20 @@ mod Windows {
             fn GetQuantizationTable(&self, scanIndex: u32, tableIndex: u32, pQuantizationTable: *mut DXGI_JPEG_QUANTIZATION_TABLE) -> HRESULT;
             fn GetFrameHeader(&self, pFrameHeader: *mut WICJpegFrameHeader) -> HRESULT;
             fn GetScanHeader(&self, scanIndex: u32, pScanHeader: *mut WICJpegScanHeader) -> HRESULT;
-            fn CopyScan(&self, scanIndex: u32, scanOffset: u32, cbScanData: u32, pbScanData: *mut u8, pcbScanDataActual: *mut u32) -> HRESULT;
-            fn CopyMinimalStream(&self, streamOffset: u32, cbStreamData: u32, pbStreamData: *mut u8, pcbStreamDataActual: *mut u32) -> HRESULT;
+            fn CopyScan(&self, scanIndex: u32, scanOffset: u32, cbScanData: u32, #[len_param(2)] pbScanData: *mut u8, pcbScanDataActual: *mut u32) -> HRESULT;
+            fn CopyMinimalStream(&self, streamOffset: u32, cbStreamData: u32, #[len_param(1)] pbStreamData: *mut u8, pcbStreamDataActual: *mut u32) -> HRESULT;
         }
         #[guid(0x2f0c601f_d2c6_468c_abfa_49495d983ed1)]
         interface IWICJpegFrameEncode: IUnknown {
             fn GetAcHuffmanTable(&self, scanIndex: u32, tableIndex: u32, pAcHuffmanTable: *mut DXGI_JPEG_AC_HUFFMAN_TABLE) -> HRESULT;
             fn GetDcHuffmanTable(&self, scanIndex: u32, tableIndex: u32, pDcHuffmanTable: *mut DXGI_JPEG_DC_HUFFMAN_TABLE) -> HRESULT;
             fn GetQuantizationTable(&self, scanIndex: u32, tableIndex: u32, pQuantizationTable: *mut DXGI_JPEG_QUANTIZATION_TABLE) -> HRESULT;
-            fn WriteScan(&self, cbScanData: u32, pbScanData: *const u8) -> HRESULT;
+            fn WriteScan(&self, cbScanData: u32, #[len_param(0)] pbScanData: *const u8) -> HRESULT;
         }
         #[guid(0x30989668_e1c9_4597_b395_458eedb808df)]
         interface IWICMetadataQueryReader: IUnknown {
             fn GetContainerFormat(&self, pguidContainerFormat: *mut GUID) -> HRESULT;
-            fn GetLocation(&self, cchMaxLength: u32, #[in] #[out] wzNamespace: *mut u16, pcchActualLength: *mut u32) -> HRESULT;
+            fn GetLocation(&self, cchMaxLength: u32, #[len_param(0)] #[in] #[out] wzNamespace: *mut u16, pcchActualLength: *mut u32) -> HRESULT;
             fn GetMetadataByName(&self, wzName: PCWSTR, #[in] #[out] pvarValue: *mut PROPVARIANT) -> HRESULT;
             fn GetEnumerator(&self, ppIEnumString: *mut IEnumString) -> HRESULT;
         }
@@ -486,12 +486,12 @@ mod Windows {
         #[guid(0x00000040_a8f2_4877_ba0a_fd2b6645fb94)]
         interface IWICPalette: IUnknown {
             fn InitializePredefined(&self, ePaletteType: WICBitmapPaletteType, fAddTransparentColor: BOOL) -> HRESULT;
-            fn InitializeCustom(&self, pColors: *const WICColor, cCount: u32) -> HRESULT;
+            fn InitializeCustom(&self, #[len_param(1)] pColors: *const WICColor, cCount: u32) -> HRESULT;
             fn InitializeFromBitmap(&self, pISurface: IWICBitmapSource, cCount: u32, fAddTransparentColor: BOOL) -> HRESULT;
             fn InitializeFromPalette(&self, pIPalette: IWICPalette) -> HRESULT;
             fn GetType(&self, pePaletteType: *mut WICBitmapPaletteType) -> HRESULT;
             fn GetColorCount(&self, pcCount: *mut u32) -> HRESULT;
-            fn GetColors(&self, cCount: u32, pColors: *mut WICColor, pcActualColors: *mut u32) -> HRESULT;
+            fn GetColors(&self, cCount: u32, #[len_param(0)] pColors: *mut WICColor, pcActualColors: *mut u32) -> HRESULT;
             fn IsBlackWhite(&self, pfIsBlackWhite: *mut BOOL) -> HRESULT;
             fn IsGrayscale(&self, pfIsGrayscale: *mut BOOL) -> HRESULT;
             fn HasAlpha(&self, pfHasAlpha: *mut BOOL) -> HRESULT;
@@ -502,7 +502,7 @@ mod Windows {
             fn GetColorContext(&self, ppIColorContext: *mut IWICColorContext) -> HRESULT;
             fn GetBitsPerPixel(&self, puiBitsPerPixel: *mut u32) -> HRESULT;
             fn GetChannelCount(&self, puiChannelCount: *mut u32) -> HRESULT;
-            fn GetChannelMask(&self, uiChannelIndex: u32, cbMaskBuffer: u32, #[in] #[out] pbMaskBuffer: *mut u8, pcbActual: *mut u32) -> HRESULT;
+            fn GetChannelMask(&self, uiChannelIndex: u32, cbMaskBuffer: u32, #[len_param(1)] #[in] #[out] pbMaskBuffer: *mut u8, pcbActual: *mut u32) -> HRESULT;
         }
         #[guid(0xa9db33a2_af5f_43c7_b679_74f5984b5aa4)]
         interface IWICPixelFormatInfo2: IWICPixelFormatInfo {
@@ -511,18 +511,18 @@ mod Windows {
         }
         #[guid(0xf928b7b8_2221_40c1_b72e_7e82f1974d1a)]
         interface IWICPlanarBitmapFrameEncode: IUnknown {
-            fn WritePixels(&self, lineCount: u32, pPlanes: *const WICBitmapPlane, cPlanes: u32) -> HRESULT;
-            fn WriteSource(&self, ppPlanes: *const IWICBitmapSource, cPlanes: u32, prcSource: *const WICRect) -> HRESULT;
+            fn WritePixels(&self, lineCount: u32, #[len_param(2)] pPlanes: *const WICBitmapPlane, cPlanes: u32) -> HRESULT;
+            fn WriteSource(&self, #[len_param(1)] ppPlanes: *const IWICBitmapSource, cPlanes: u32, prcSource: *const WICRect) -> HRESULT;
         }
         #[guid(0x3aff9cce_be95_4303_b927_e7d16ff4a613)]
         interface IWICPlanarBitmapSourceTransform: IUnknown {
-            fn DoesSupportTransform(&self, #[in] #[out] puiWidth: *mut u32, #[in] #[out] puiHeight: *mut u32, dstTransform: WICBitmapTransformOptions, dstPlanarOptions: WICPlanarOptions, pguidDstFormats: *const WICPixelFormatGUID, pPlaneDescriptions: *mut WICBitmapPlaneDescription, cPlanes: u32, pfIsSupported: *mut BOOL) -> HRESULT;
-            fn CopyPixels(&self, prcSource: *const WICRect, uiWidth: u32, uiHeight: u32, dstTransform: WICBitmapTransformOptions, dstPlanarOptions: WICPlanarOptions, pDstPlanes: *const WICBitmapPlane, cPlanes: u32) -> HRESULT;
+            fn DoesSupportTransform(&self, #[in] #[out] puiWidth: *mut u32, #[in] #[out] puiHeight: *mut u32, dstTransform: WICBitmapTransformOptions, dstPlanarOptions: WICPlanarOptions, #[len_param(6)] pguidDstFormats: *const WICPixelFormatGUID, #[len_param(6)] pPlaneDescriptions: *mut WICBitmapPlaneDescription, cPlanes: u32, pfIsSupported: *mut BOOL) -> HRESULT;
+            fn CopyPixels(&self, prcSource: *const WICRect, uiWidth: u32, uiHeight: u32, dstTransform: WICBitmapTransformOptions, dstPlanarOptions: WICPlanarOptions, #[len_param(6)] pDstPlanes: *const WICBitmapPlane, cPlanes: u32) -> HRESULT;
         }
         #[guid(0xbebee9cb_83b0_4dcc_8132_b0aaa55eac96)]
         interface IWICPlanarFormatConverter: IWICBitmapSource {
-            fn Initialize(&self, ppPlanes: *const IWICBitmapSource, cPlanes: u32, dstFormat: REFWICPixelFormatGUID, dither: WICBitmapDitherType, pIPalette: IWICPalette, alphaThresholdPercent: f64, paletteTranslate: WICBitmapPaletteType) -> HRESULT;
-            fn CanConvert(&self, pSrcPixelFormats: *const WICPixelFormatGUID, cSrcPlanes: u32, dstPixelFormat: REFWICPixelFormatGUID, pfCanConvert: *mut BOOL) -> HRESULT;
+            fn Initialize(&self, #[len_param(1)] ppPlanes: *const IWICBitmapSource, cPlanes: u32, dstFormat: REFWICPixelFormatGUID, dither: WICBitmapDitherType, pIPalette: IWICPalette, alphaThresholdPercent: f64, paletteTranslate: WICBitmapPaletteType) -> HRESULT;
+            fn CanConvert(&self, #[len_param(1)] pSrcPixelFormats: *const WICPixelFormatGUID, cSrcPlanes: u32, dstPixelFormat: REFWICPixelFormatGUID, pfCanConvert: *mut BOOL) -> HRESULT;
         }
         #[guid(0x4776f9cd_9517_45fa_bf24_e89c5ec5c60c)]
         interface IWICProgressCallback: IUnknown {
@@ -538,7 +538,7 @@ mod Windows {
         interface IWICStream: IStream {
             fn InitializeFromIStream(&self, pIStream: IStream) -> HRESULT;
             fn InitializeFromFilename(&self, wzFileName: PCWSTR, dwDesiredAccess: u32) -> HRESULT;
-            fn InitializeFromMemory(&self, pbBuffer: *const u8, cbBufferSize: u32) -> HRESULT;
+            fn InitializeFromMemory(&self, #[len_param(1)] pbBuffer: *const u8, cbBufferSize: u32) -> HRESULT;
             fn InitializeFromIStreamRegion(&self, pIStream: IStream, ulOffset: u64, ulMaxSize: u64) -> HRESULT;
         }
         extern fn PFNProgressNotification(pvData: *mut void, uFrameNum: u32, operation: WICProgressOperation, dblProgress: f64) -> HRESULT;
@@ -725,10 +725,13 @@ mod Windows {
             WICAllComponents = 63,
             WICCOMPONENTTYPE_FORCE_DWORD = 2147483647,
         }
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICConvertBitmapSource(dstFormat: REFWICPixelFormatGUID, pISrc: IWICBitmapSource, ppIDst: *mut IWICBitmapSource) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICCreateBitmapFromSection(width: u32, height: u32, pixelFormat: REFWICPixelFormatGUID, hSection: HANDLE, stride: u32, offset: u32, ppIBitmap: *mut IWICBitmap) -> HRESULT;
+        #[supported_os("windows6.1")]
         #[library("WindowsCodecs.dll")]
         extern fn WICCreateBitmapFromSectionEx(width: u32, height: u32, pixelFormat: REFWICPixelFormatGUID, hSection: HANDLE, stride: u32, offset: u32, desiredAccessLevel: WICSectionAccessLevel, ppIBitmap: *mut IWICBitmap) -> HRESULT;
         #[repr(i32)]
@@ -933,10 +936,13 @@ mod Windows {
             WICJpegYCrCbSubsampling440 = 4,
             WICJPEGYCRCBSUBSAMPLING_FORCE_DWORD = 2147483647,
         }
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICMapGuidToShortName(guid: *const GUID, cchName: u32, #[len_param(1)] #[in] #[out] #[opt] wzName: *mut u16, pcchActual: *mut u32) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICMapSchemaToName(guidMetadataFormat: *const GUID, pwzSchema: PCWSTR, cchName: u32, #[len_param(2)] #[in] #[out] #[opt] wzName: *mut u16, pcchActual: *mut u32) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("WindowsCodecs.dll")]
         extern fn WICMapShortNameToGuid(wzName: PCWSTR, pguid: *mut GUID) -> HRESULT;
         #[repr(i32)]

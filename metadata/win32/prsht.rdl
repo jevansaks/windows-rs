@@ -1,10 +1,13 @@
 #[win32]
 mod Windows {
     mod Win32 {
+        #[supported_os("windows6.0.6000")]
         #[library("COMCTL32.dll")]
         extern fn CreatePropertySheetPageA(constPropSheetPagePointer: LPCPROPSHEETPAGEA) -> HPROPSHEETPAGE;
+        #[supported_os("windows6.0.6000")]
         #[library("COMCTL32.dll")]
         extern fn CreatePropertySheetPageW(constPropSheetPagePointer: LPCPROPSHEETPAGEW) -> HPROPSHEETPAGE;
+        #[supported_os("windows6.0.6000")]
         #[library("COMCTL32.dll")]
         extern fn DestroyPropertySheetPage(param0: *mut _PSP) -> BOOL;
         type HPROPSHEETPAGE = *mut _PSP;
@@ -28,10 +31,11 @@ mod Windows {
         type LPCPROPSHEETPAGEW_V2 = *const PROPSHEETPAGEW_V2;
         type LPCPROPSHEETPAGEW_V3 = *const PROPSHEETPAGEW_V3;
         type LPCPROPSHEETPAGEW_V4 = *const PROPSHEETPAGEW_V4;
-        extern fn LPFNADDPROPSHEETPAGE(param0: *mut _PSP, param1: LPARAM) -> BOOL;
-        extern fn LPFNADDPROPSHEETPAGES(param0: *mut void, param1: LPFNADDPROPSHEETPAGE, param2: LPARAM) -> BOOL;
+        extern fn LPFNADDPROPSHEETPAGES(param0: *mut void, param1: LPFNSVADDPROPSHEETPAGE, param2: LPARAM) -> BOOL;
         extern fn LPFNPSPCALLBACKA(hwnd: HWND, uMsg: u32, ppsp: *mut PROPSHEETPAGEA_V4) -> u32;
         extern fn LPFNPSPCALLBACKW(hwnd: HWND, uMsg: u32, ppsp: *mut PROPSHEETPAGEW_V4) -> u32;
+        extern fn LPFNSVADDPROPSHEETPAGE(param0: *mut _PSP, param1: LPARAM) -> BOOL;
+        type LPFNSVADDPROPSHEETPAGE = LPFNSVADDPROPSHEETPAGE;
         type LPPROPSHEETHEADERA = LPPROPSHEETHEADERA_V2;
         type LPPROPSHEETHEADERA_V1 = *mut PROPSHEETHEADERA_V1;
         type LPPROPSHEETHEADERA_V2 = *mut PROPSHEETHEADERA_V2;
@@ -482,8 +486,10 @@ mod Windows {
         const PSWIZB_RESTORE: i32 = 1;
         const PSWIZB_SHOW: i32 = 0;
         const PSWIZF_SETCOLOR: u32 = 4294967295;
+        #[supported_os("windows6.0.6000")]
         #[library("COMCTL32.dll")]
         extern fn PropertySheetA(param0: LPCPROPSHEETHEADERA) -> isize;
+        #[supported_os("windows6.0.6000")]
         #[library("COMCTL32.dll")]
         extern fn PropertySheetW(param0: LPCPROPSHEETHEADERW) -> isize;
         const WIZ_BODYCX: i32 = 184;

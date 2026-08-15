@@ -51,11 +51,11 @@ mod Windows {
             fn GetDouble(&self, guidKey: *const GUID, pfValue: *mut f64) -> HRESULT;
             fn GetGUID(&self, guidKey: *const GUID, pguidValue: *mut GUID) -> HRESULT;
             fn GetStringLength(&self, guidKey: *const GUID, pcchLength: *mut u32) -> HRESULT;
-            fn GetString(&self, guidKey: *const GUID, #[out] pwszValue: PWSTR, cchBufSize: u32, #[in] #[out] pcchLength: *mut u32) -> HRESULT;
+            fn GetString(&self, guidKey: *const GUID, #[len_param(2)] #[out] pwszValue: PWSTR, cchBufSize: u32, #[in] #[out] pcchLength: *mut u32) -> HRESULT;
             fn GetAllocatedString(&self, guidKey: *const GUID, ppwszValue: *mut PWSTR, pcchLength: *mut u32) -> HRESULT;
             fn GetBlobSize(&self, guidKey: *const GUID, pcbBlobSize: *mut u32) -> HRESULT;
-            fn GetBlob(&self, guidKey: *const GUID, pBuf: *mut u8, cbBufSize: u32, #[in] #[out] pcbBlobSize: *mut u32) -> HRESULT;
-            fn GetAllocatedBlob(&self, guidKey: *const GUID, ppBuf: *mut *mut u8, pcbSize: *mut u32) -> HRESULT;
+            fn GetBlob(&self, guidKey: *const GUID, #[len_param(2)] pBuf: *mut u8, cbBufSize: u32, #[in] #[out] pcbBlobSize: *mut u32) -> HRESULT;
+            fn GetAllocatedBlob(&self, guidKey: *const GUID, #[len_param(2)] ppBuf: *mut *mut u8, pcbSize: *mut u32) -> HRESULT;
             fn GetUnknown(&self, guidKey: *const GUID, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
             fn SetItem(&self, guidKey: *const GUID, Value: *const PROPVARIANT) -> HRESULT;
             fn DeleteItem(&self, guidKey: *const GUID) -> HRESULT;
@@ -65,7 +65,7 @@ mod Windows {
             fn SetDouble(&self, guidKey: *const GUID, fValue: f64) -> HRESULT;
             fn SetGUID(&self, guidKey: *const GUID, guidValue: *const GUID) -> HRESULT;
             fn SetString(&self, guidKey: *const GUID, wszValue: PCWSTR) -> HRESULT;
-            fn SetBlob(&self, guidKey: *const GUID, pBuf: *const u8, cbBufSize: u32) -> HRESULT;
+            fn SetBlob(&self, guidKey: *const GUID, #[len_param(2)] pBuf: *const u8, cbBufSize: u32) -> HRESULT;
             fn SetUnknown(&self, guidKey: *const GUID, pUnknown: IUnknown) -> HRESULT;
             fn LockStore(&self) -> HRESULT;
             fn UnlockStore(&self) -> HRESULT;
@@ -149,7 +149,7 @@ mod Windows {
         }
         #[guid(0x2cd0bd52_bcd5_4b89_b62c_eadc0c031e7d)]
         interface IMFMediaEventGenerator: IUnknown {
-            fn GetEvent(&self, dwFlags: u32, ppEvent: *mut IMFMediaEvent) -> HRESULT;
+            fn GetEvent(&self, dwFlags: MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS, ppEvent: *mut IMFMediaEvent) -> HRESULT;
             fn BeginGetEvent(&self, pCallback: IMFAsyncCallback, punkState: IUnknown) -> HRESULT;
             fn EndGetEvent(&self, pResult: IMFAsyncResult, ppEvent: *mut IMFMediaEvent) -> HRESULT;
             fn QueueEvent(&self, met: MediaEventType, guidExtendedType: *const GUID, hrStatus: HRESULT, pvValue: *const PROPVARIANT) -> HRESULT;
@@ -263,6 +263,12 @@ mod Windows {
         const MEConnectStart: i32 = 124;
         const MEContentProtectionMessage: i32 = 402;
         const MEContentProtectionMetadata: i32 = 900;
+        #[repr(i32)]
+        #[scoped]
+        enum MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS {
+            MF_EVENT_FLAG_NONE = 0,
+            MF_EVENT_FLAG_NO_WAIT = 1,
+        }
         const MEDeviceThermalStateChanged: i32 = 950;
         const MEEnablerCompleted: i32 = 119;
         const MEEnablerProgress: i32 = 118;
@@ -645,7 +651,6 @@ mod Windows {
             MF_DXGI_DEVICE_MANAGER_MODE_D3D11 = 1,
             MF_DXGI_DEVICE_MANAGER_MODE_D3D12 = 2,
         }
-        const MF_EVENT_FLAG_NO_WAIT: i32 = 1;
         #[repr(i32)]
         enum MF_FILE_ACCESSMODE {
             MF_ACCESSMODE_READ = 1,

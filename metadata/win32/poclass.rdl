@@ -123,7 +123,6 @@ mod Windows {
         }
         const BATTERY_SYSTEM_BATTERY: u32 = 2147483648;
         const BATTERY_TAG_INVALID: i32 = 0;
-        const BATTERY_TEST_EXEMPT: i32 = 16;
         const BATTERY_UNKNOWN_CAPACITY: u32 = 4294967295;
         const BATTERY_UNKNOWN_CURRENT: u32 = 4294967295;
         const BATTERY_UNKNOWN_RATE: u32 = 2147483648;

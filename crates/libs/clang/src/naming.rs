@@ -24,6 +24,22 @@ pub(crate) fn build_tag_rename_map(tu: &TranslationUnit) -> HashMap<String, Stri
     map
 }
 
+pub(crate) fn collect_interface_aliases(cursor: Cursor, remaps: &mut HashMap<String, String>) {
+    for child in cursor.children() {
+        if child.kind() == CXCursor_LinkageSpec {
+            collect_interface_aliases(child, remaps);
+        } else if child.kind() == CXCursor_TypedefDecl {
+            let underlying = child.typedef_underlying_type();
+            if underlying.is_interface() {
+                let target = underlying.ty().name();
+                if !target.is_empty() {
+                    remaps.entry(child.name()).or_insert(target);
+                }
+            }
+        }
+    }
+}
+
 /// Merge `enum _FOO { ... }; typedef DWORD FOO;` into one public enum.
 ///
 /// The typedef supplies the backing type and signedness; the enum supplies the members.

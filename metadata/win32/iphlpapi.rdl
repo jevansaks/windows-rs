@@ -48,6 +48,8 @@ mod Windows {
         #[library("IPHLPAPI.DLL")]
         extern fn GetBestInterface(dwDestAddr: IPAddr, pdwBestIfIndex: *mut u32) -> u32;
         #[library("IPHLPAPI.DLL")]
+        extern fn GetBestInterfaceEx(pDestAddr: *const SOCKADDR, pdwBestIfIndex: *mut u32) -> u32;
+        #[library("IPHLPAPI.DLL")]
         extern fn GetBestRoute(dwDestAddr: u32, #[opt] dwSourceAddr: u32, pBestRoute: *mut MIB_IPFORWARDROW) -> u32;
         #[library("IPHLPAPI.DLL")]
         extern fn GetExtendedTcpTable(#[size_param(1)] #[opt] pTcpTable: *mut void, #[in] #[out] pdwSize: *mut u32, bOrder: BOOL, ulAf: u32, TableClass: TCP_TABLE_CLASS, Reserved: u32) -> u32;
@@ -105,7 +107,7 @@ mod Windows {
         extern fn GetPerTcp6ConnectionEStats(Row: *const MIB_TCP6ROW, EstatsType: TCP_ESTATS_TYPE, #[size_param(4)] #[opt] Rw: *mut u8, RwVersion: u32, RwSize: u32, #[size_param(7)] #[opt] Ros: *mut u8, RosVersion: u32, RosSize: u32, #[size_param(10)] #[opt] Rod: *mut u8, RodVersion: u32, RodSize: u32) -> u32;
         #[library("IPHLPAPI.DLL")]
         extern fn GetPerTcpConnectionEStats(Row: *const MIB_TCPROW_LH, EstatsType: TCP_ESTATS_TYPE, #[size_param(4)] #[opt] Rw: *mut u8, RwVersion: u32, RwSize: u32, #[size_param(7)] #[opt] Ros: *mut u8, RosVersion: u32, RosSize: u32, #[size_param(10)] #[opt] Rod: *mut u8, RodVersion: u32, RodSize: u32) -> u32;
-        #[library("IPHLPAPI.DLL")]
+        #[library("IPHLPAPI.DLL", set_last_error)]
         extern fn GetRTTAndHopCount(DestIpAddress: IPAddr, HopCount: *mut u32, MaxHops: u32, RTT: *mut u32) -> BOOL;
         #[library("IPHLPAPI.DLL")]
         extern fn GetTcp6Table(#[size_param(1)] TcpTable: *mut MIB_TCP6TABLE, #[in] #[out] SizePointer: *mut u32, Order: BOOL) -> u32;

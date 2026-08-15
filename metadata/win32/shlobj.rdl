@@ -187,8 +187,10 @@ mod Windows {
         const PANE_ZONE: i32 = 1;
         type PBANDINFOSFB = *mut BANDINFOSFB;
         type PCSFV_SETITEMPOS = *const SFV_SETITEMPOS;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn PathIsSlowA(pszFile: PCSTR, dwAttr: u32) -> BOOL;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn PathIsSlowW(pszFile: PCWSTR, dwAttr: u32) -> BOOL;
         #[library("SHELL32.dll")]
@@ -238,6 +240,7 @@ mod Windows {
             dwReserved: u32,
             wszFolder: [u16; 260],
         }
+        #[supported_os("windows6.0.6000")]
         #[library("SHELL32.dll")]
         extern fn SHChangeNotifyRegisterThread(status: SCNRT_STATUS);
         #[packed(1)]
@@ -246,18 +249,23 @@ mod Windows {
             wszProductKey: [u16; 39],
             cbZero: u16,
         }
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHCreatePropSheetExtArray(hKey: HKEY, #[opt] pszSubKey: PCWSTR, max_iface: u32) -> HPSXA;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHCreateQueryCancelAutoPlayMoniker(ppmoniker: *mut IMoniker) -> HRESULT;
+        #[supported_os("windows5.0")]
         #[library("SHELL32.dll")]
         extern fn SHMultiFileProperties(pdtobj: IDataObject, dwFlags: u32) -> HRESULT;
+        #[supported_os("windows5.1.2600")]
         #[library("SHELL32.dll")]
         extern fn SHOpenPropSheetW(#[opt] pszCaption: PCWSTR, #[len_param(2)] #[opt] ahkeys: *const HKEY, ckeys: u32, #[opt] pclsidDefault: *const GUID, pdtobj: IDataObject, #[opt] psb: IShellBrowser, #[opt] pStartPage: PCWSTR) -> BOOL;
         const SSM_CLEAR: i32 = 0;
         const SSM_REFRESH: i32 = 2;
         const SSM_SET: i32 = 1;
         const SSM_UPDATE: i32 = 4;
+        #[supported_os("windows5.0")]
         #[library("SHDOCVW.dll")]
         extern fn SoftwareUpdateMessageBox(#[opt] hWnd: HWND, pszDistUnit: PCWSTR, dwFlags: u32, #[opt] psdi: *mut SOFTDISTINFO) -> u32;
         const TBIF_APPEND: i32 = 0;

@@ -109,7 +109,7 @@ mod Windows {
             Anonymous: union {
                 pOleStr: PWSTR,
                 uOffset: u32,
-                cStr: [i8; 260],
+                cStr: [u8; 260],
             },
         }
         #[repr(i32)]

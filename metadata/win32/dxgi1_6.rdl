@@ -1,6 +1,7 @@
 #[win32]
 mod Windows {
     mod Win32 {
+        #[supported_os("windows10.0.17134")]
         #[library("dxgi.dll")]
         extern fn DXGIDeclareAdapterRemovalSupport() -> HRESULT;
         #[library("dxgi.dll")]

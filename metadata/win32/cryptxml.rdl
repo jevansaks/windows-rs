@@ -334,7 +334,7 @@ mod Windows {
         #[library("CRYPTXML.dll")]
         extern fn CryptXmlSetHMACSecret(hSignature: HCRYPTXML, #[size_param(2)] pbSecret: *const u8, cbSecret: u32) -> HRESULT;
         #[library("CRYPTXML.dll")]
-        extern fn CryptXmlSign(hSignature: HCRYPTXML, #[opt] hKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, dwKeySpec: u32, dwFlags: u32, dwKeyInfoSpec: CRYPT_XML_KEYINFO_SPEC, #[opt] pvKeyInfoSpec: *const void, pSignatureMethod: *const CRYPT_XML_ALGORITHM, pCanonicalization: *const CRYPT_XML_ALGORITHM) -> HRESULT;
+        extern fn CryptXmlSign(hSignature: HCRYPTXML, #[opt] hKey: HCRYPTPROV_OR_NCRYPT_KEY_HANDLE, dwKeySpec: CERT_KEY_SPEC, dwFlags: u32, dwKeyInfoSpec: CRYPT_XML_KEYINFO_SPEC, #[opt] pvKeyInfoSpec: *const void, pSignatureMethod: *const CRYPT_XML_ALGORITHM, pCanonicalization: *const CRYPT_XML_ALGORITHM) -> HRESULT;
         #[library("CRYPTXML.dll")]
         extern fn CryptXmlVerifySignature(hSignature: HCRYPTXML, #[opt] hKey: BCRYPT_KEY_HANDLE, dwFlags: u32) -> HRESULT;
         type HCRYPTXML = *mut void;
