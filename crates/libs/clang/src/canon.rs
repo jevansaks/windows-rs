@@ -63,9 +63,12 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
         })
     }
 
-    // Namespaced scrape: semantic scalars remain primitive regardless of partition ownership.
-    // Other names resolve through reference metadata or are scheduled for a follow-up pass.
+    // Namespaced scrape: canonical portability scalars remain primitive regardless of partition
+    // ownership. Some reference maps retain aliases such as UINT even though no corresponding
+    // metadata type exists, so these name-keyed ABI collapses must precede reference lookup.
     if let Some(scalar) = semantic_scalar(&name) {
+        scalar
+    } else if let Some(scalar) = fundamental_scalar(&name) {
         scalar
     } else if let Some(ns) = parser.ref_map.get(&name) {
         metadata::Type::value_named(ns, &name)
