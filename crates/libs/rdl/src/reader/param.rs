@@ -102,6 +102,18 @@ impl Encoder<'_> {
                 param.attributes,
             );
 
+            if matches!(param.ty, metadata::Type::PtrConst(..))
+                && !param
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.path().is_ident("native_const"))
+            {
+                self.emit_marker_attribute(
+                    metadata::writer::HasAttribute::Param(param_id),
+                    "ConstAttribute",
+                );
+            }
+
             // Emit parameter pseudo-attributes in the fixed table order so the winmd
             // custom-attribute layout is stable regardless of the source attribute order (the
             // clang scrape and the winmd -> RDL writer place them differently). The generic

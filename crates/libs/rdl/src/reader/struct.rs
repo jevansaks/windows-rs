@@ -120,6 +120,17 @@ impl Encoder<'_> {
             if is_union {
                 self.output.FieldLayout(field_id, 0);
             }
+            if matches!(mt, metadata::Type::PtrConst(..))
+                && !field
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.path().is_ident("native_const"))
+            {
+                self.emit_marker_attribute(
+                    metadata::writer::HasAttribute::Field(field_id),
+                    "ConstAttribute",
+                );
+            }
             self.encode_attrs(
                 metadata::writer::HasAttribute::Field(field_id),
                 &field.attrs,

@@ -109,6 +109,7 @@ pub(crate) struct Parser<'a> {
 /// Per-namespace inputs for one emission pass over cached translation units.
 struct NamespaceSpec<'a> {
     input: Option<&'a str>,
+    include_main_file: bool,
     flatten_namespaces: bool,
     namespace: &'a str,
     library: &'a str,
@@ -124,6 +125,8 @@ pub struct PartitionSpec {
     pub name: String,
     /// Translation unit to parse.
     pub input: PathBuf,
+    /// Whether declarations spelled directly in the translation unit are selected.
+    pub include_main_file: bool,
     /// Metadata namespace assigned to declarations selected by `filters`.
     pub namespace: String,
     /// Defining header path suffixes included in this partition.
@@ -937,6 +940,7 @@ impl Clang {
         let reference = self.load_reference()?;
         let spec = NamespaceSpec {
             input: None,
+            include_main_file: true,
             flatten_namespaces: false,
             namespace: &self.namespace,
             library: &self.library,
@@ -978,6 +982,7 @@ impl Clang {
             .zip(&inputs)
             .map(|(partition, input)| NamespaceSpec {
                 input: Some(input),
+                include_main_file: partition.include_main_file,
                 flatten_namespaces: true,
                 namespace: &partition.namespace,
                 library: &self.library,
@@ -1520,11 +1525,15 @@ impl Clang {
             }
             let mut ref_map = build_ref_map(reference, spec.namespace);
             apply_canonical_owners(&mut ref_map, spec.namespace);
-            let required = reference
-                .iter()
-                .filter(|(namespace, _, _)| *namespace == spec.namespace)
-                .map(|(_, name, _)| name.to_string())
-                .collect::<HashSet<_>>();
+            let required = if spec.include_main_file {
+                reference
+                    .iter()
+                    .filter(|(namespace, _, _)| *namespace == spec.namespace)
+                    .map(|(_, name, _)| name.to_string())
+                    .collect::<HashSet<_>>()
+            } else {
+                HashSet::new()
+            };
             let mut collector = Collector::new();
             for (input, tu) in &parsed.h_tus {
                 if spec.input.is_some_and(|expected| expected != input) {
@@ -1584,11 +1593,15 @@ impl Clang {
             }
             let mut ref_map = build_resolution_map(reference, &in_house, spec.namespace);
             apply_canonical_owners(&mut ref_map, spec.namespace);
-            let required = reference
-                .iter()
-                .filter(|(namespace, _, _)| *namespace == spec.namespace)
-                .map(|(_, name, _)| name.to_string())
-                .collect::<HashSet<_>>();
+            let required = if spec.include_main_file {
+                reference
+                    .iter()
+                    .filter(|(namespace, _, _)| *namespace == spec.namespace)
+                    .map(|(_, name, _)| name.to_string())
+                    .collect::<HashSet<_>>()
+            } else {
+                HashSet::new()
+            };
             let mut collector = Collector::new();
 
             for (input, tu) in &parsed.h_tus {
@@ -1705,7 +1718,15 @@ impl Clang {
 
         for child in tu.cursor().children() {
             if spec.flatten_namespaces {
-                process_partition_cursor(child, &mut parser, collector, tu, spec.filter, false)?;
+                process_partition_cursor(
+                    child,
+                    &mut parser,
+                    collector,
+                    tu,
+                    spec.filter,
+                    spec.include_main_file,
+                    false,
+                )?;
                 continue;
             }
 
@@ -1855,28 +1876,56 @@ fn process_partition_cursor(
     collector: &mut Collector,
     tu: &TranslationUnit,
     filters: &[String],
+    include_main_file: bool,
     extern_c: bool,
 ) -> Result<(), Error> {
     if cursor.kind() == CXCursor_Namespace {
         for child in cursor.children() {
-            process_partition_cursor(child, parser, collector, tu, filters, extern_c)?;
+            process_partition_cursor(
+                child,
+                parser,
+                collector,
+                tu,
+                filters,
+                include_main_file,
+                extern_c,
+            )?;
         }
         Ok(())
     } else if cursor.kind() == CXCursor_LinkageSpec {
         for child in cursor.children() {
-            process_partition_cursor(child, parser, collector, tu, filters, true)?;
+            process_partition_cursor(
+                child,
+                parser,
+                collector,
+                tu,
+                filters,
+                include_main_file,
+                true,
+            )?;
         }
         Ok(())
     } else {
-        let selected = cursor.is_from_main_file()
+        let selected = (include_main_file && cursor.is_from_main_file())
             || filters
                 .iter()
                 .any(|filter| matches_filter(&cursor.file_name(), filter))
-            || (cursor.is_expansion_from_main_file(tu)
+            || ((include_main_file && cursor.is_expansion_from_main_file(tu))
                 || filters
                     .iter()
                     .any(|filter| matches_filter(&cursor.expansion_file_name(), filter)));
         if selected {
+            if cursor.kind() == CXCursor_TypedefDecl {
+                let underlying = cursor.typedef_underlying_type();
+                let underlying = if underlying.kind() == CXType_Elaborated {
+                    underlying.underlying_type()
+                } else {
+                    underlying
+                };
+                if matches!(underlying.kind(), CXType_Record | CXType_Enum) {
+                    parser.process_cursor(underlying.ty(), collector, extern_c)?;
+                }
+            }
             parser.process_cursor(cursor, collector, extern_c)?;
         }
         Ok(())

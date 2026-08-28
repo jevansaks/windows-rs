@@ -1228,6 +1228,7 @@ fn load_partitions(
         result.push(PartitionSpec {
             name,
             input,
+            include_main_file: true,
             namespace,
             filters,
             exclude,
@@ -1259,6 +1260,7 @@ fn filter_partitions_to_header(partitions: &mut Vec<PartitionSpec>, header: &str
         .and_then(|stem| stem.to_str())
         .expect("WIN32METADATA_HEADER_FILTER must name a header")
         .to_string();
+    partitions[0].include_main_file = false;
 }
 
 fn metadata_namespace(partition_namespace: &str) -> String {
@@ -1425,6 +1427,7 @@ mod tests {
         PartitionSpec {
             name: name.to_string(),
             input: std::path::PathBuf::from(format!("{name}/main.cpp")),
+            include_main_file: true,
             namespace: format!("Windows.Win32.{name}"),
             filters: filters.iter().map(|filter| filter.to_string()).collect(),
             exclude: std::collections::HashSet::new(),
@@ -1440,6 +1443,7 @@ mod tests {
         assert_eq!(partitions.len(), 1);
         assert_eq!(partitions[0].name, "winspool");
         assert_eq!(partitions[0].filters, ["um/winspool.h"]);
+        assert!(!partitions[0].include_main_file);
     }
 
     #[test]

@@ -28,6 +28,7 @@ fn partition_by_translation_unit() {
             windows_clang::PartitionSpec {
                 name: "left".to_string(),
                 input: left,
+                include_main_file: true,
                 namespace: "Test.1394".to_string(),
                 filters: vec!["partition_input/left.h".to_string()],
                 exclude: ["Excluded".to_string()].into(),
@@ -35,6 +36,7 @@ fn partition_by_translation_unit() {
             windows_clang::PartitionSpec {
                 name: "right".to_string(),
                 input: right,
+                include_main_file: true,
                 namespace: "Test.Right".to_string(),
                 filters: vec!["partition_input/right-only.h".to_string()],
                 exclude: Default::default(),
@@ -66,6 +68,39 @@ fn partition_by_translation_unit() {
         "right.rdl:\n{right}"
     );
     assert!(!right.contains("LeftOnly"), "right.rdl:\n{right}");
+}
+
+#[test]
+fn partition_can_exclude_main_file() {
+    let _guard = test_clang::libclang_guard();
+    let scratch = format!("{}/translation_unit_header_only", env!("OUT_DIR"));
+    std::fs::create_dir_all(&scratch).unwrap();
+
+    let input = std::path::PathBuf::from("partition_input/left.cpp");
+    let mut clang = windows_clang::clang();
+    clang
+        .args([
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+            "-fms-extensions",
+        ])
+        .library("test.dll")
+        .input(&input)
+        .output(&scratch)
+        .write_partitions(&[windows_clang::PartitionSpec {
+            name: "left_header_only".to_string(),
+            input,
+            include_main_file: false,
+            namespace: "Test.HeaderOnly".to_string(),
+            filters: vec!["partition_input/left.h".to_string()],
+            exclude: Default::default(),
+        }])
+        .unwrap();
+
+    let rdl = read(&scratch, "left_header_only");
+    assert!(rdl.contains("LEFT_VALUE"), "left_header_only.rdl:\n{rdl}");
+    assert!(!rdl.contains("LeftOnly"), "left_header_only.rdl:\n{rdl}");
 }
 
 #[test]

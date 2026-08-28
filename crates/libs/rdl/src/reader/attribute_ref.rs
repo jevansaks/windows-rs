@@ -486,6 +486,16 @@ impl Encoder<'_> {
         Ok(())
     }
 
+    pub fn emit_marker_attribute(&mut self, target: metadata::writer::HasAttribute, name: &str) {
+        self.encode_named_attribute(
+            target,
+            &AttributeRef {
+                type_name: metadata::TypeName::named(METADATA_NAMESPACE, name),
+                args: vec![],
+            },
+        );
+    }
+
     fn resolve_pseudo_attr_ref(
         &self,
         attr: &syn::Attribute,

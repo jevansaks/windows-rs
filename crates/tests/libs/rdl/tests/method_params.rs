@@ -182,6 +182,7 @@ fn write_attribute_definitions(path: &Path) {
     define_attribute(&mut file, "ReservedAttribute", &[], &[]);
     define_attribute(&mut file, "DoesNotReturnAttribute", &[], &[]);
     define_attribute(&mut file, "ScopedEnumAttribute", &[], &[]);
+    define_attribute(&mut file, "ConstAttribute", &[], &[]);
     define_attribute(
         &mut file,
         "NativeEncodingAttribute",
@@ -461,6 +462,7 @@ fn all_supported_param_attributes_and_directions_round_trip() {
 
     let constant_out = params.params()[5].unwrap();
     assert_eq!(constant_out.flags(), metadata::ParamAttributes::Out);
+    assert_attribute(constant_out, "ConstAttribute", &[]);
 
     let inout_optional = params.params()[6].unwrap();
     assert_eq!(
@@ -479,6 +481,7 @@ fn all_supported_param_attributes_and_directions_round_trip() {
         "NativeArrayInfoAttribute",
         &[("CountParamIndex".to_string(), metadata::Value::I16(2))],
     );
+    assert_attribute(counted, "ConstAttribute", &[]);
 
     let fixed = params.params()[8].unwrap();
     assert_eq!(fixed.flags(), metadata::ParamAttributes::In);
@@ -487,6 +490,7 @@ fn all_supported_param_attributes_and_directions_round_trip() {
         "NativeArrayInfoAttribute",
         &[("CountConst".to_string(), metadata::Value::I32(4))],
     );
+    assert_attribute(fixed, "ConstAttribute", &[]);
 
     let bytes = params.params()[9].unwrap();
     assert_eq!(bytes.flags(), metadata::ParamAttributes::Out);
