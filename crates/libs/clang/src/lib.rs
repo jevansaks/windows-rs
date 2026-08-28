@@ -182,6 +182,25 @@ impl<'a> Parser<'a> {
         self.force_emit.contains_key(name) || !self.ref_map.contains_key(name)
     }
 
+    fn is_selected_symbol(&self, child: &Cursor) -> bool {
+        let name = child.name();
+        if self.symbols.contains(&name) || self.symbols.contains(&self.canonical_name(name.clone()))
+        {
+            return true;
+        }
+        if let Some(name) = self.tag_rename.get(&name)
+            && self.symbols.contains(&self.canonical_name(name.clone()))
+        {
+            return true;
+        }
+        if let Some(name) = self.tag_rename.get(&child.location_id())
+            && self.symbols.contains(&self.canonical_name(name.clone()))
+        {
+            return true;
+        }
+        false
+    }
+
     /// Applies the lib-less drop policy before inserting a function.
     fn insert_fn(&self, item: Fn, collector: &mut Collector) {
         if self.drop_lib_less && item.library.is_empty() {
@@ -199,27 +218,19 @@ impl<'a> Parser<'a> {
     ) -> Result<(), Error> {
         validate_win32_metadata_annotation_tree(&child)?;
 
-        // Allowlist mode emits only named functions as roots. Bare tag dependencies are
-        // not scheduled here; a missing one fails later as an unresolved reference.
+        // Allowlist mode emits only explicitly named declarations as roots. Dependencies
+        // referenced by those declarations are still collected normally.
         if !self.symbols.is_empty() {
-            match child.kind() {
-                CXCursor_FunctionDecl
-                    if !child.is_definition()
-                        && self.symbols.contains(&child.name())
-                        && !is_midl_proxy_stub(&child, self.libraries) =>
-                {
-                    let item = Fn::parse(child, self, extern_c)?;
-                    self.insert_fn(item, collector);
+            if child.kind() == CXCursor_LinkageSpec {
+                for inner in child.children() {
+                    let inner_extern_c = inner.language() == CXLanguage_C;
+                    self.process_cursor(inner, collector, inner_extern_c)?;
                 }
-                CXCursor_LinkageSpec => {
-                    for inner in child.children() {
-                        let inner_extern_c = inner.language() == CXLanguage_C;
-                        self.process_cursor(inner, collector, inner_extern_c)?;
-                    }
-                }
-                _ => {}
+                return Ok(());
             }
-            return Ok(());
+            if !self.is_selected_symbol(&child) {
+                return Ok(());
+            }
         }
         match child.kind() {
             CXCursor_StructDecl | CXCursor_ClassDecl if child.is_definition() => {

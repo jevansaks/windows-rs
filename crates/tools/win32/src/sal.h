@@ -31,6 +31,8 @@
 #define _Out_z_ __attribute__((annotate("_Out_z_")))
 #undef _Out_opt_
 #define _Out_opt_ __attribute__((annotate("_Out_opt_")))
+#undef _Out_retval_
+#define _Out_retval_ __attribute__((annotate("_Out_retval_")))
 #undef _Inout_
 #define _Inout_ __attribute__((annotate("_Inout_")))
 #undef _Inout_z_
@@ -53,6 +55,8 @@
 #define _COM_Outptr_result_maybenull_ __attribute__((annotate("_COM_Outptr_result_maybenull_")))
 #undef _COM_Outptr_opt_result_maybenull_
 #define _COM_Outptr_opt_result_maybenull_ __attribute__((annotate("_COM_Outptr_opt_result_maybenull_")))
+#undef _COM_Outptr_retval_
+#define _COM_Outptr_retval_ __attribute__((annotate("_COM_Outptr_retval_")))
 #undef _Reserved_
 #define _Reserved_ __attribute__((annotate("_Reserved_")))
 

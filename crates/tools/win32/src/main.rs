@@ -1029,6 +1029,7 @@ fn scrape_um() -> Summary {
         resolution_winmds: RESOLUTION_WINMDS.iter().map(Into::into).collect(),
         seed: Some(METADATA_SEED.into()),
         parallel: std::env::var_os("WIN32METADATA_SEQUENTIAL").is_none(),
+        rdl_only: false,
         partitions: None,
     });
 
@@ -1056,6 +1057,9 @@ fn scrape_um_partitions(root: &std::path::Path) -> Summary {
                 .collect::<std::collections::HashSet<_>>()
         });
     let mut partitions = load_partitions(&partition_root, selected.as_ref());
+    if let Ok(header) = std::env::var("WIN32METADATA_HEADER_FILTER") {
+        filter_partitions_to_header(&mut partitions, &header);
+    }
     partitions.sort_by(|left, right| left.name.cmp(&right.name));
     assert!(!partitions.is_empty(), "no win32metadata partitions found");
 
@@ -1093,6 +1097,14 @@ fn scrape_um_partitions(root: &std::path::Path) -> Summary {
         .args(["-DWIN32METADATA=1"])
         .args(include_args)
         .inputs(partitions.iter().map(|partition| &partition.input));
+    if let Ok(symbols) = std::env::var("WIN32METADATA_SYMBOL_FILTER") {
+        clang.symbols(
+            symbols
+                .split(',')
+                .map(str::trim)
+                .filter(|symbol| !symbol.is_empty()),
+        );
+    }
     let namespace_reference = root.join("bin/Windows.Win32.winmd");
     if namespace_reference.is_file() {
         clang.reference(namespace_reference);
@@ -1132,16 +1144,20 @@ fn scrape_um_partitions(root: &std::path::Path) -> Summary {
         out_dir,
         winmd: winmd.clone(),
         archs,
-        reference_winmds: [
-            root.join("bin/Windows.Win32.winmd"),
-            WIN32_SEED_WINMD.into(),
-        ]
-        .into_iter()
-        .filter(|path| path.is_file())
-        .collect(),
+        reference_winmds: std::env::var_os("WIN32METADATA_REFERENCE_WINMD")
+            .map(std::path::PathBuf::from)
+            .into_iter()
+            .chain(std::env::var_os("WIN32METADATA_DEPENDENCY_WINMD").map(std::path::PathBuf::from))
+            .chain([
+                root.join("bin/Windows.Win32.winmd"),
+                WIN32_SEED_WINMD.into(),
+            ])
+            .filter(|path| path.is_file())
+            .collect(),
         resolution_winmds: RESOLUTION_WINMDS.iter().map(Into::into).collect(),
         seed: Some(METADATA_SEED.into()),
         parallel: std::env::var_os("WIN32METADATA_SEQUENTIAL").is_none(),
+        rdl_only: std::env::var_os("WIN32METADATA_RDL_ONLY").is_some(),
         partitions: Some(&partitions),
     });
     print!("{summary}");
@@ -1218,6 +1234,31 @@ fn load_partitions(
         });
     }
     result
+}
+
+fn filter_partitions_to_header(partitions: &mut Vec<PartitionSpec>, header: &str) {
+    let header = header.trim().replace('\\', "/").to_ascii_lowercase();
+    assert!(!header.is_empty(), "WIN32METADATA_HEADER_FILTER is empty");
+
+    for partition in partitions.iter_mut() {
+        partition.filters.retain(|filter| {
+            let filter = filter.replace('\\', "/").to_ascii_lowercase();
+            filter == header || filter.ends_with(&format!("/{header}"))
+        });
+    }
+    partitions.retain(|partition| !partition.filters.is_empty());
+
+    assert!(
+        partitions.len() == 1,
+        "WIN32METADATA_HEADER_FILTER `{header}` matched {} partitions; set WIN32METADATA_PARTITION_FILTER to select exactly one",
+        partitions.len()
+    );
+
+    partitions[0].name = std::path::Path::new(&header)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .expect("WIN32METADATA_HEADER_FILTER must name a header")
+        .to_string();
 }
 
 fn metadata_namespace(partition_namespace: &str) -> String {
@@ -1379,6 +1420,27 @@ fn resolve(name: &str, dirs: &[String], kind: &str, var: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn partition(name: &str, filters: &[&str]) -> PartitionSpec {
+        PartitionSpec {
+            name: name.to_string(),
+            input: std::path::PathBuf::from(format!("{name}/main.cpp")),
+            namespace: format!("Windows.Win32.{name}"),
+            filters: filters.iter().map(|filter| filter.to_string()).collect(),
+            exclude: std::collections::HashSet::new(),
+        }
+    }
+
+    #[test]
+    fn filters_partition_to_one_header() {
+        let mut partitions = vec![partition("Printing", &["um/winspool.h", "um/printoem.h"])];
+
+        filter_partitions_to_header(&mut partitions, "winspool.h");
+
+        assert_eq!(partitions.len(), 1);
+        assert_eq!(partitions[0].name, "winspool");
+        assert_eq!(partitions[0].filters, ["um/winspool.h"]);
+    }
 
     #[test]
     fn numeric_partition_suffix_is_not_a_metadata_namespace() {

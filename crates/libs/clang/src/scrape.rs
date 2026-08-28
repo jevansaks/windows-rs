@@ -68,6 +68,8 @@ pub struct ScrapePlan<'a> {
     pub seed: Option<PathBuf>,
     /// Scrape architectures concurrently.
     pub parallel: bool,
+    /// Emit RDL without compiling a winmd. Intended for isolated header inspection.
+    pub rdl_only: bool,
     /// Explicit translation-unit partitions. When absent, output is partitioned by header.
     pub partitions: Option<&'a [PartitionSpec]>,
 }
@@ -223,7 +225,7 @@ impl Clang {
                 )
             });
             winmd_wall = w.elapsed().as_secs_f32();
-        } else {
+        } else if !plan.rdl_only {
             // Single arch: publish the canonical job's winmd.
             std::fs::copy(&canonical_winmd, &plan.winmd).unwrap_or_else(|e| {
                 panic!("failed to publish winmd to `{}`: {e}", plan.winmd.display())
@@ -285,6 +287,10 @@ impl Clang {
                 rdl_dir.display()
             )
         });
+
+        if plan.rdl_only {
+            return;
+        }
 
         let mut rdl_paths = collect_rdl_paths(rdl_dir);
         if let Some(seed) = &plan.seed
