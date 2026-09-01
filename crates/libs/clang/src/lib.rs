@@ -346,6 +346,7 @@ impl<'a> Parser<'a> {
                 {
                     e.name.clone_from(alias);
                 }
+                e.name = self.canonical_name(e.name);
                 if is_anonymous_name(&e.name) || is_midl_anonymous_enum_name(&e.name) {
                     // Nameless and MIDL-synthesized enums emit as loose constants.
                     for (name, value) in e.variants {

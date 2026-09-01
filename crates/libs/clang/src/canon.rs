@@ -50,6 +50,11 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
     {
         return metadata::Type::value_named(namespace, &name);
     }
+    if parser.header_root.is_some()
+        && let Some(ty) = typedef_string_pointer(cursor, parser)
+    {
+        return ty;
+    }
     if let Some(ty) = canonical_string_pointer(&name) {
         return ty;
     }
@@ -76,17 +81,6 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
         }
         return flat_canonical(parser.namespace, &name, cursor, parser)
             .unwrap_or_else(|| metadata::Type::value_named(parser.namespace, &name));
-    }
-
-    fn canonical_string_pointer(name: &str) -> Option<metadata::Type> {
-        let canonical = string_alias_canonical(name)?;
-        Some(match canonical {
-            "PCSTR" => metadata::Type::PtrConst(Box::new(metadata::Type::U8), 1),
-            "PCWSTR" => metadata::Type::PtrConst(Box::new(metadata::Type::U16), 1),
-            "PSTR" => metadata::Type::PtrMut(Box::new(metadata::Type::U8), 1),
-            "PWSTR" => metadata::Type::PtrMut(Box::new(metadata::Type::U16), 1),
-            _ => return None,
-        })
     }
 
     // Namespaced scrape: canonical portability scalars remain primitive regardless of partition
@@ -150,6 +144,26 @@ fn flat_canonical(
             .then(|| data_pointer_alias(cursor, parser))
             .flatten()
     })
+}
+
+pub(crate) fn canonical_string_pointer(name: &str) -> Option<metadata::Type> {
+    let canonical = string_alias_canonical(name)?;
+    Some(match canonical {
+        "PCSTR" => metadata::Type::PtrConst(Box::new(metadata::Type::U8), 1),
+        "PCWSTR" => metadata::Type::PtrConst(Box::new(metadata::Type::U16), 1),
+        "PSTR" => metadata::Type::PtrMut(Box::new(metadata::Type::U8), 1),
+        "PWSTR" => metadata::Type::PtrMut(Box::new(metadata::Type::U16), 1),
+        _ => return None,
+    })
+}
+
+pub(crate) fn typedef_string_pointer(cursor: &Type, parser: &Parser<'_>) -> Option<metadata::Type> {
+    let underlying = cursor.ty().typedef_underlying_type();
+    if underlying.kind() != CXType_Typedef {
+        return None;
+    }
+    let target = parser.canonical_name(underlying.ty().name());
+    canonical_string_pointer(&target)
 }
 
 fn data_pointer_alias(cursor: &Type, parser: &mut Parser<'_>) -> Option<metadata::Type> {

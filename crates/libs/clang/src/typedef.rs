@@ -58,6 +58,9 @@ impl Typedef {
         {
             return Ok(None);
         }
+        if parser.header_root.is_some() && typedef_string_pointer(&cursor.ty(), parser).is_some() {
+            return Ok(None);
+        }
 
         // Flat Win32 scrapes collapse curated portability/ABI aliases to primitives; keeping
         // pointer-sized aliases named would create false per-arch width splits.

@@ -879,6 +879,12 @@ impl Type {
                 if name == "GUID" || name == "Guid" {
                     return metadata::Type::value_named("System", "Guid");
                 }
+                if let Some(scalar) = semantic_scalar(&name) {
+                    return scalar;
+                }
+                if let Some(scalar) = fundamental_scalar(&name) {
+                    return scalar;
+                }
                 // Inline anonymous enums have no referenceable type; their constants are
                 // emitted separately, so references use the underlying integer type.
                 if self.kind() == CXType_Enum && is_anonymous_name(&name) {
