@@ -82,6 +82,28 @@ impl Typedef {
             return Ok(None);
         }
 
+        // Data-pointer aliases carry no distinct metadata identity. Their reference sites
+        // collapse to the underlying pointer in `flat_canonical`.
+        if (parser.header_root.is_some() || parser.collapse_data_pointer_aliases)
+            && underlying.kind() == CXType_Pointer
+            && !underlying.is_function_pointer()
+            && !underlying.is_handle_tag(&name)
+        {
+            return Ok(None);
+        }
+        if parser.collapse_data_pointer_aliases {
+            let target = underlying.ty().name();
+            if target == format!("{name}A")
+                || target == format!("{name}W")
+                || (matches!(
+                    underlying.canonical_type().kind(),
+                    CXType_Record | CXType_Enum
+                ) && target != name)
+            {
+                return Ok(None);
+            }
+        }
+
         // Skip self-aliases, but preserve secondary record aliases in per-header mode.
         let elaborated = underlying.kind() == CXType_Elaborated;
         let inner_kind = if elaborated {

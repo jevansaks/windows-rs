@@ -1,5 +1,5 @@
 #[win32]
 mod Test {
-    const COLE_DEFAULT_PRINCIPAL: PWSTR = -1;
-    const COLE_NARROW_SENTINEL: PSTR = -1;
+    const COLE_DEFAULT_PRINCIPAL: Windows::Win32::Foundation::PWSTR = -1;
+    const COLE_NARROW_SENTINEL: Windows::Win32::Foundation::PSTR = -1;
 }

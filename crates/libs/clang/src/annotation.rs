@@ -106,6 +106,7 @@ impl Win32MetadataAnnotation {
                 let value = value?;
                 quote! { #[struct_size_field(#value)] }
             }
+            "flexible_array" => quote! { #[flexible_array] },
             "native_encoding" => {
                 let value = value?;
                 quote! { #[encoding(#value)] }
@@ -271,6 +272,7 @@ fn validate_win32_metadata_annotation(
             | "ansi"
             | "unicode"
             | "reduce_pointer_level"
+            | "flexible_array"
     );
 
     let error = if !requires_value && !valueless {
@@ -338,6 +340,7 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
         | "memory_size_param" | "in" | "out" | "optional" | "reserved" | "retval"
         | "com_out_ptr" => target == CXCursor_ParmDecl,
         "array_count_field" => target == CXCursor_FieldDecl,
+        "flexible_array" => target == CXCursor_FieldDecl,
         "also_usable_for" | "canonical_name" => target == CXCursor_TypedefDecl,
         "project_as" | "associated_enum" => matches!(
             target,
@@ -429,6 +432,24 @@ impl ParamAnnotation {
 
     pub fn is_annotated(&self) -> bool {
         self.has_sal_annotation() || !self.win32_metadata.is_empty()
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.in_param |= other.in_param;
+        self.out_param |= other.out_param;
+        self.optional |= other.optional;
+        self.retval |= other.retval;
+        self.reserved |= other.reserved;
+        self.com_out_ptr |= other.com_out_ptr;
+        self.com_out_ptr_token |= other.com_out_ptr_token;
+        self.null_terminated |= other.null_terminated;
+        if other.size.is_some() {
+            self.size = other.size;
+        }
+        if other.array.is_some() {
+            self.array = other.array;
+        }
+        self.win32_metadata.extend(other.win32_metadata);
     }
 }
 
@@ -549,8 +570,11 @@ fn capture_sal_size(name: &str, arg: Option<&str>) -> Option<SalSize> {
 }
 
 fn sal_size_kind(name: &str) -> Option<bool> {
-    let is_size =
-        name.contains("_reads_") || name.contains("_writes_") || name.contains("_updates_");
+    let is_size = name.contains("_reads_")
+        || name.contains("_writes_")
+        || name.contains("_updates_")
+        || name.contains("_readable_size_")
+        || name.contains("_writable_size_");
     is_size.then(|| name.contains("_bytes"))
 }
 
@@ -671,14 +695,14 @@ pub(crate) fn parse_params(
         if name.is_empty() || is_midl_synthetic_param_name(&name) {
             name = format!("param{param_idx}");
         }
-        let sal_annotation = extract_param_annotation(&child, parser.tu);
-        let mut annotation = if sal_annotation.has_sal_annotation() {
-            sal_annotation
-        } else {
-            let mut fallback = midl_annotations.get(param_idx).cloned().unwrap_or_default();
-            fallback.win32_metadata = sal_annotation.win32_metadata;
-            fallback
-        };
+        let mut annotation = midl_annotations.get(param_idx).cloned().unwrap_or_default();
+        annotation.merge(extract_param_annotation(&child, parser.tu));
+        if parser.preserve_native_constness && is_const_string_alias(&child.ty().spelling()) {
+            annotation.win32_metadata.push(Win32MetadataAnnotation {
+                key: "const".to_string(),
+                value: None,
+            });
+        }
         let mut ty = param_metadata_type(&child.ty(), &annotation, parser);
         ty = apply_metadata_type_annotations(ty, &annotation.win32_metadata);
         // Token-recovered `_COM_Outptr_` becomes ComOutPtr only for caller-chosen `void**`.
@@ -759,7 +783,7 @@ pub fn scan_method_param_annotations(
     let mut paren_depth: i32 = 0;
     let mut in_params = false;
 
-    for (kind, spelling) in tokens {
+    for (token_index, (kind, spelling)) in tokens.iter().enumerate() {
         if !past_name {
             if *kind == CXToken_Identifier && spelling == method_name {
                 past_name = true;
@@ -817,29 +841,51 @@ pub fn scan_method_param_annotations(
             {
                 current.optional = true;
             }
-            // Recover bare pure `_z_` SAL tokens for COM methods; counted buffers stay raw.
-            (CXToken_Identifier, s)
-                if in_params && paren_depth == 1 && s.starts_with("_COM_Outptr_") =>
-            {
-                current.out_param = true;
-                current.com_out_ptr_token = true;
-                if s.starts_with("_COM_Outptr_opt") {
-                    current.optional = true;
+            // Nested `_When_` and `_At_` expressions hide their directional/count SAL from
+            // the ParmDecl cursor. Aggregate every SAL token inside the current parameter.
+            (CXToken_Identifier, s) if in_params && paren_depth >= 1 => {
+                if s.starts_with("_COM_Outptr_") {
+                    current.com_out_ptr_token = true;
+                }
+                apply_sal_string(s, &mut current);
+                if current.size.is_none() {
+                    let arg = macro_first_argument(tokens, token_index);
+                    current.size = capture_sal_size(s, arg.as_deref());
                 }
             }
-            // Abstract COM methods can expose `_COM_Outptr_` only as a token. Record it
-            // speculatively, including `_opt_`; `parse_params` promotes only `void**`.
-            (CXToken_Identifier, s)
-                if in_params
-                    && paren_depth == 1
-                    && matches!(
-                        s,
-                        "_In_z_" | "_In_opt_z_" | "_Out_z_" | "_Inout_z_" | "_Inout_opt_z_"
-                    ) =>
-            {
-                apply_sal_string(s, &mut current);
-            }
             _ => {}
+        }
+
+        fn macro_first_argument(
+            tokens: &[(CXTokenKind, String)],
+            macro_index: usize,
+        ) -> Option<String> {
+            if tokens.get(macro_index + 1)?.1 != "(" {
+                return None;
+            }
+            let mut depth = 0usize;
+            let mut result = String::new();
+            for (_, spelling) in &tokens[macro_index + 1..] {
+                match spelling.as_str() {
+                    "(" => {
+                        depth += 1;
+                        if depth > 1 {
+                            result.push('(');
+                        }
+                    }
+                    ")" => {
+                        depth = depth.checked_sub(1)?;
+                        if depth == 0 {
+                            return Some(result);
+                        }
+                        result.push(')');
+                    }
+                    "," if depth == 1 => return Some(result),
+                    _ if depth >= 1 => result.push_str(spelling),
+                    _ => {}
+                }
+            }
+            None
         }
     }
 
@@ -886,6 +932,7 @@ fn apply_sal_string(sal: &str, annotation: &mut ParamAnnotation) {
 
     if sal == "_Reserved_" {
         annotation.reserved = true;
+        annotation.optional = true;
     }
 
     // Only the pure `_z_` names promote a raw character pointer to a string wrapper.

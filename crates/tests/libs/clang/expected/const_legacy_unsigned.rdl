@@ -1,0 +1,6 @@
+#[win32]
+mod Test {
+    const LARGE_POSITIVE: u64 = 4294967296;
+    const NEGATIVE: i32 = -5;
+    const POSITIVE: u32 = 42;
+}

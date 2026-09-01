@@ -34,11 +34,37 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
             }
         }
     }
+    if parser.preserve_native_constness
+        && let Some(canonical) = string_alias_canonical(&name)
+        && let Some(metadata_name) = compatibility_string_name(canonical)
+        && let Some(namespace) = parser.ref_map.get(metadata_name)
+    {
+        return metadata::Type::value_named(namespace, metadata_name);
+    }
+    if parser.preserve_native_constness && name == "WCHAR" {
+        return metadata::Type::Char;
+    }
+    if parser.preserve_native_constness
+        && name == "CHAR"
+        && let Some(namespace) = parser.ref_map.get(&name)
+    {
+        return metadata::Type::value_named(namespace, &name);
+    }
     if let Some(ty) = canonical_string_pointer(&name) {
         return ty;
     }
     if name == "GUID" || name == "Guid" {
         return metadata::Type::value_named("System", "Guid");
+    }
+    if parser.collapse_data_pointer_aliases
+        && let Some(ty) = data_pointer_alias(cursor, parser)
+    {
+        return ty;
+    }
+    if parser.collapse_data_pointer_aliases
+        && let Some(ty) = compatibility_alias(cursor, &name, parser)
+    {
+        return ty;
     }
     // String normalisation and the flat collapses are gated to the per-header scrape: a
     // namespaced scrape (WebView2) resolves `PCWSTR`/`PCSTR` through a reference winmd where they
@@ -119,7 +145,40 @@ fn flat_canonical(
             None => metadata::Type::value_named(namespace, base),
         });
     }
-    interface_alias(cursor, parser)
+    interface_alias(cursor, parser).or_else(|| {
+        (parser.header_root.is_some() || parser.collapse_data_pointer_aliases)
+            .then(|| data_pointer_alias(cursor, parser))
+            .flatten()
+    })
+}
+
+fn data_pointer_alias(cursor: &Type, parser: &mut Parser<'_>) -> Option<metadata::Type> {
+    let underlying = cursor.ty().typedef_underlying_type();
+    if underlying.kind() != CXType_Pointer || underlying.is_function_pointer() {
+        return None;
+    }
+    let pointee = underlying.pointee_type().canonical_type();
+    if pointee.kind() == CXType_Void
+        || (pointee.kind() == CXType_Record && pointee.ty().name().ends_with("__"))
+    {
+        return None;
+    }
+    Some(underlying.to_type(parser))
+}
+
+fn compatibility_alias(
+    cursor: &Type,
+    name: &str,
+    parser: &mut Parser<'_>,
+) -> Option<metadata::Type> {
+    let underlying = cursor.ty().typedef_underlying_type();
+    let target = underlying.ty().name();
+    let charset_alias = target == format!("{name}A") || target == format!("{name}W");
+    let record_alias = matches!(
+        underlying.canonical_type().kind(),
+        CXType_Record | CXType_Enum
+    ) && target != name;
+    (charset_alias || record_alias).then(|| underlying.to_type(parser))
 }
 
 /// GUID synonyms and generic `void*` aliases collapse in *every* scrape mode, not just the flat
@@ -420,6 +479,18 @@ pub(crate) fn string_alias_canonical(name: &str) -> Option<&'static str> {
     }
 }
 
+pub(crate) fn is_const_string_alias(name: &str) -> bool {
+    matches!(string_alias_canonical(name), Some("PCSTR" | "PCWSTR"))
+}
+
+fn compatibility_string_name(canonical: &str) -> Option<&'static str> {
+    match canonical {
+        "PCSTR" | "PSTR" => Some("PSTR"),
+        "PCWSTR" | "PWSTR" => Some("PWSTR"),
+        _ => None,
+    }
+}
+
 /// Normalise a string-pointer alias *reference* to its canonical value type. Applied at every
 /// reference site from [`Type::to_type`], so fields speak the four canonical spellings bindgen
 /// recognises (an `LPCWSTR` field would otherwise degrade to `*const u16`). SAL const-ness is
@@ -476,7 +547,11 @@ pub(crate) fn param_metadata_type(
     let base = cursor_ty.to_type(parser);
     let base = decay_array_param(cursor_ty, base, parser);
     let base = collapse_pointer_alias_param(cursor_ty, base, parser);
-    let ty = apply_sal_constness(base, annotation);
+    let ty = if parser.preserve_native_constness {
+        base
+    } else {
+        apply_sal_constness(base, annotation)
+    };
     let ty = normalize_pointer_const_chain(ty);
     let ty = promote_null_terminated_string(ty, annotation, parser);
     requalify_string_alias(ty, parser)

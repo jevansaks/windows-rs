@@ -8,13 +8,7 @@ mod Test {
     }
     const IID_ISample: GUID = 0x12345678_1234_5678_9abc_def011223344;
     #[guid(0x12345678_1234_5678_9abc_def011223344)]
-    interface ISample: IUnknown {
+    interface ISample: Windows::Win32::System::Com::IUnknown {
         fn GetValue(&self,) -> i32;
-    }
-    #[no_guid]
-    interface IUnknown {
-        fn QueryInterface(&self, riid: *const void, ppvObject: *mut *mut void) -> i32;
-        fn AddRef(&self,) -> u32;
-        fn Release(&self,) -> u32;
     }
 }

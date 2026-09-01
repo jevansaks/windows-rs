@@ -107,6 +107,7 @@ fn run(name: &str) {
     //                               names (comma-separated); only those functions and
     //                               their transitive type/const closure are emitted,
     //                               every other root is suppressed.
+    //   //! legacy_unsigned_constants - project non-negative untyped macros as unsigned.
     let contents = std::fs::read_to_string(&input_path).unwrap();
     let mut namespace = "Test".to_string();
     let mut library = String::new();
@@ -116,6 +117,7 @@ fn run(name: &str) {
     let mut references: Vec<String> = vec![];
     let mut flat = false;
     let mut symbols: Vec<String> = vec![];
+    let mut legacy_unsigned_constants = false;
 
     for line in contents.lines() {
         let Some(rest) = line.strip_prefix("//!") else {
@@ -143,6 +145,8 @@ fn run(name: &str) {
             symbols.extend(s.split(',').map(|t| t.trim().to_string()));
         } else if rest == "flat" {
             flat = true;
+        } else if rest == "legacy_unsigned_constants" {
+            legacy_unsigned_constants = true;
         }
     }
 
@@ -176,6 +180,9 @@ fn run(name: &str) {
         .namespace(&namespace);
 
     clang.resolution_default();
+    if legacy_unsigned_constants {
+        clang.nonnegative_macro_constants_unsigned();
+    }
 
     clang.reference_byte_sets(&reference_winmds);
 

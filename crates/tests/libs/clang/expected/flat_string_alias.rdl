@@ -2,12 +2,12 @@
 mod Windows {
     mod Win32 {
         #[library("")]
-        extern fn ReturnsWide(in_ptr: PCWSTR, out_ptr: PWSTR) -> PWSTR;
+        extern fn ReturnsWide(in_ptr: *const u16, out_ptr: *mut u16) -> *mut u16;
         struct STRINGS {
-            name: PCWSTR,
-            buffer: PWSTR,
-            ansi: PCSTR,
-            ole: PWSTR,
+            name: *const u16,
+            buffer: *mut u16,
+            ansi: *const u8,
+            ole: *mut u16,
         }
     }
 }

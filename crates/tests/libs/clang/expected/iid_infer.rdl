@@ -2,11 +2,11 @@
 mod Windows {
     mod Win32 {
         #[library("")]
-        extern fn CreateFactory(iid: *const GUID, #[iid_is] factory: *mut *mut void) -> HRESULT;
+        extern fn CreateFactory(iid: *const GUID, factory: *mut IUnknown) -> HRESULT;
         #[library("")]
-        extern fn CreateInspectable(iid: *const GUID, #[iid_is] inspectable: *mut *mut void) -> HRESULT;
+        extern fn CreateInspectable(iid: *const GUID, inspectable: *mut IInspectable) -> HRESULT;
         #[library("")]
-        extern fn CreateThing(iid: *const GUID, #[iid_is] ppThing: *mut *mut void) -> HRESULT;
+        extern fn CreateThing(iid: *const GUID, ppThing: *mut *mut void) -> HRESULT;
         #[library("")]
         extern fn CreateTyped(iid: *const GUID, ppFoo: *mut IFoo) -> HRESULT;
         struct GUID {
@@ -25,21 +25,20 @@ mod Windows {
         }
         #[guid(0xaec22fb8_76f3_4639_9be0_28eb43a67a2e)]
         interface IThingFactory {
-            fn GetService(&self, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
+            fn GetService(&self, riid: *const GUID, ppv: *mut *mut void) -> HRESULT;
             fn GetBuffer(&self, ppBuffer: *mut *mut void) -> HRESULT;
         }
         #[no_guid]
         interface IUnknown {
-            fn QueryInterface(&self, riid: *const GUID, #[iid_is] ppvObject: *mut *mut void) -> HRESULT;
+            fn QueryInterface(&self, riid: *const GUID, ppvObject: *mut *mut void) -> HRESULT;
             fn AddRef(&self,) -> u32;
             fn Release(&self,) -> u32;
         }
         #[library("")]
-        extern fn LoadThing(flags: u32, mode: u32, riid: *const GUID, #[iid_is] ppv: *mut *mut void) -> HRESULT;
+        extern fn LoadThing(flags: u32, mode: u32, riid: *const GUID, ppv: *mut *mut void) -> HRESULT;
         #[library("")]
         extern fn NextThings(celt: u32, riid: *const GUID, #[len_param(0)] rgelt: *mut *mut void, pFetched: *mut u32) -> HRESULT;
         #[library("")]
         extern fn QueryThing(iid: *const GUID, ppThing: *mut *mut void) -> u32;
-        type REFIID = *const GUID;
     }
 }

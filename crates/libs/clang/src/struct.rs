@@ -154,9 +154,15 @@ impl Struct {
                 unit_size = 0;
                 remaining_bits = 0;
                 let child_is_union = decl.kind() == CXCursor_UnionDecl;
-                let nested = Self::parse(decl, parser, child_is_union)?;
+                let field_name = demacro_member_name(child.name(), parser.macro_defs);
+                let mut nested = Self::parse(decl, parser, child_is_union)?;
+                nested.name = format!(
+                    "_{}_e__{}",
+                    field_name,
+                    if child_is_union { "Union" } else { "Struct" }
+                );
                 fields.push(Field {
-                    name: demacro_member_name(child.name(), parser.macro_defs),
+                    name: field_name,
                     ty: metadata::Type::Void,
                     nested: Some(Box::new(nested)),
                     bitfields: vec![],
@@ -212,7 +218,13 @@ impl Struct {
             remaining_bits = 0;
 
             let name = demacro_member_name(child.name(), parser.macro_defs);
-            let annotations = extract_win32_metadata_annotations(&child);
+            let mut annotations = extract_win32_metadata_annotations(&child);
+            if parser.preserve_native_constness && is_const_string_alias(&child.ty().spelling()) {
+                annotations.push(Win32MetadataAnnotation {
+                    key: "const".to_string(),
+                    value: None,
+                });
+            }
             let ty = apply_metadata_type_annotations(child.ty().to_type(parser), &annotations);
             fields.push(Field {
                 name,

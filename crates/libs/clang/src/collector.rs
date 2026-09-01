@@ -59,4 +59,12 @@ impl Collector {
             }
         }
     }
+
+    pub fn make_nonnegative_constants_unsigned(&mut self) {
+        for item in self.0.values_mut() {
+            if let Item::Const(value) = item {
+                value.make_nonnegative_unsigned();
+            }
+        }
+    }
 }

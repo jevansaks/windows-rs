@@ -104,6 +104,10 @@ pub(crate) struct Parser<'a> {
     pub drop_lib_less: bool,
     /// Resolution-winmd names that keep true WinRT ABI types out of the flat root.
     pub winrt_types: Option<&'a HashSet<String>>,
+    /// Compatibility mode: data-pointer typedefs have no standalone metadata identity.
+    pub collapse_data_pointer_aliases: bool,
+    /// Compatibility mode: SAL direction does not rewrite the C type's constness.
+    pub preserve_native_constness: bool,
 }
 
 /// Per-namespace inputs for one emission pass over cached translation units.
@@ -173,6 +177,8 @@ impl<'a> Parser<'a> {
             symbols,
             drop_lib_less: false,
             winrt_types: None,
+            collapse_data_pointer_aliases: false,
+            preserve_native_constness: false,
         }
     }
 
@@ -583,6 +589,12 @@ pub struct Clang {
     symbols: HashSet<String>,
     /// Drops functions with no resolved import library; off for fixtures without `.lib` inputs.
     drop_lib_less: bool,
+    /// Matches win32metadata's historical projection of non-negative untyped macros.
+    nonnegative_macro_constants_unsigned: bool,
+    /// Collapses data-pointer typedefs to their underlying pointer representation.
+    collapse_data_pointer_aliases: bool,
+    /// Preserves native C constness instead of deriving it from SAL direction.
+    preserve_native_constness: bool,
     /// Winmds used only to classify `ABI::Windows::*` projection declarations.
     resolution_input: Vec<PathBuf>,
     reference_default: bool,
@@ -735,6 +747,25 @@ impl Clang {
     /// Drops functions with no resolved import library; leave off without `.lib` inputs.
     pub fn drop_lib_less(&mut self) -> &mut Self {
         self.drop_lib_less = true;
+        self
+    }
+
+    /// Projects non-negative signed macro results as unsigned constants for legacy
+    /// win32metadata compatibility.
+    pub fn nonnegative_macro_constants_unsigned(&mut self) -> &mut Self {
+        self.nonnegative_macro_constants_unsigned = true;
+        self
+    }
+
+    /// Collapses data-pointer aliases instead of emitting NativeTypedef wrappers.
+    pub fn collapse_data_pointer_aliases(&mut self) -> &mut Self {
+        self.collapse_data_pointer_aliases = true;
+        self
+    }
+
+    /// Keeps native pointer constness while SAL continues to control direction metadata.
+    pub fn preserve_native_constness(&mut self) -> &mut Self {
+        self.preserve_native_constness = true;
         self
     }
 
@@ -1425,9 +1456,17 @@ impl Clang {
         let evaluated = evaluate_macros_parallel(&all_consts, eval.source, eval.args)?;
         for ((stem, _pending), consts) in all_consts.into_iter().zip(evaluated) {
             let collector = collectors.entry(stem).or_default();
-            for c in consts {
+            for mut c in consts {
+                if self.nonnegative_macro_constants_unsigned {
+                    c.make_nonnegative_unsigned();
+                }
                 if global_names.insert(c.name.clone()) {
                     collector.insert(Item::Const(c));
+                }
+            }
+            if self.nonnegative_macro_constants_unsigned {
+                for collector in collectors.values_mut() {
+                    collector.make_nonnegative_constants_unsigned();
                 }
             }
         }
@@ -1617,7 +1656,10 @@ impl Clang {
                     winrt_types,
                     true,
                 )?;
-                for c in Const::evaluate_macros(input, &pending, &parsed.index, &arg_refs)? {
+                for mut c in Const::evaluate_macros(input, &pending, &parsed.index, &arg_refs)? {
+                    if self.nonnegative_macro_constants_unsigned {
+                        c.make_nonnegative_unsigned();
+                    }
                     collector.insert(Item::Const(c));
                 }
             }
@@ -1635,11 +1677,18 @@ impl Clang {
                     winrt_types,
                     true,
                 )?;
-                for c in Const::evaluate_macros_str(content, &pending, &parsed.index, &arg_refs)? {
+                for mut c in
+                    Const::evaluate_macros_str(content, &pending, &parsed.index, &arg_refs)?
+                {
+                    if self.nonnegative_macro_constants_unsigned {
+                        c.make_nonnegative_unsigned();
+                    }
                     collector.insert(Item::Const(c));
                 }
             }
-
+            if self.nonnegative_macro_constants_unsigned {
+                collector.make_nonnegative_constants_unsigned();
+            }
             apply_exclusions(&mut collector, spec.exclude);
             seed_native_string_typedefs(&mut collector, spec.namespace);
             let mut groups = BTreeMap::<String, Collector>::new();
@@ -1715,6 +1764,8 @@ impl Clang {
             spec.symbols,
         );
         parser.winrt_types = winrt_types;
+        parser.collapse_data_pointer_aliases = self.collapse_data_pointer_aliases;
+        parser.preserve_native_constness = self.preserve_native_constness;
 
         for child in tu.cursor().children() {
             if spec.flatten_namespaces {

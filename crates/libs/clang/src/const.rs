@@ -232,6 +232,17 @@ impl PropertyKeyConst {
 }
 
 impl Const {
+    pub(crate) fn make_nonnegative_unsigned(&mut self) {
+        if self.ty.is_some() {
+            return;
+        }
+        self.value = match self.value {
+            metadata::Value::I32(value) if value >= 0 => metadata::Value::U32(value as u32),
+            metadata::Value::I64(value) if value >= 0 => metadata::Value::U64(value as u64),
+            ref value => value.clone(),
+        };
+    }
+
     /// Evaluate macro expressions by injecting per-name enum probes into a synthetic TU.
     /// Independent probes and `CXTranslationUnit_KeepGoing` let one bad macro fail without
     /// hiding the rest; size/signedness probes recover the C integer type clang otherwise drops.

@@ -120,7 +120,9 @@ impl Encoder<'_> {
             if is_union {
                 self.output.FieldLayout(field_id, 0);
             }
-            if matches!(mt, metadata::Type::PtrConst(..))
+            if (matches!(mt, metadata::Type::PtrConst(..))
+                || matches!(&mt, metadata::Type::ValueName(name)
+                    if name.name == "PCSTR" || name.name == "PCWSTR"))
                 && !field
                     .attrs
                     .iter()

@@ -8,5 +8,4 @@ mod Test {
     extern "C" fn FailFast(code: u32);
     #[library("kernel32.dll")]
     extern "C" fn GetCode() -> u32;
-    type UINT = u32;
 }

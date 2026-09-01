@@ -162,6 +162,11 @@ pub(crate) const PSEUDO_ATTRS: &[PseudoAttr] = &[
         prop: None,
     },
     PseudoAttr {
+        short: "flexible_array",
+        metadata: "FlexibleArrayAttribute",
+        prop: None,
+    },
+    PseudoAttr {
         short: "ansi",
         metadata: "AnsiAttribute",
         prop: None,

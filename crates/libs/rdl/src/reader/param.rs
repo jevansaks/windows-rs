@@ -102,7 +102,9 @@ impl Encoder<'_> {
                 param.attributes,
             );
 
-            if matches!(param.ty, metadata::Type::PtrConst(..))
+            if (matches!(param.ty, metadata::Type::PtrConst(..))
+                || matches!(&param.ty, metadata::Type::ValueName(name)
+                    if name.name == "PCSTR" || name.name == "PCWSTR"))
                 && !param
                     .attrs
                     .iter()

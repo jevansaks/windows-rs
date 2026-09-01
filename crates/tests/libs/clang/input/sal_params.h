@@ -23,6 +23,9 @@
 #define _Inout_updates_to_(c, w) __attribute__((annotate("_Inout_updates_to_(" #c "," #w ")")))
 #define _Outptr_result_buffer_(c) __attribute__((annotate("_Outptr_result_buffer_(" #c ")")))
 #define _Reserved_ __attribute__((annotate("_Reserved_")))
+#define _When_(condition, annotation)
+#define _At_(target, annotation)
+#define _Pre_readable_size_(c)
 
 typedef unsigned long DWORD;
 typedef void* HANDLE;
@@ -101,4 +104,18 @@ extern "C" {
 
     // _Reserved_ by value -> Reserved marker, In default (no direction attribute).
     BOOL DoWork(_In_ HANDLE object, _Reserved_ DWORD reserved);
+
+    // Conditional SAL must be aggregated even though `_When_` itself has no ParmDecl
+    // annotation. Any branch requiring input makes the pointer input; optional and
+    // reserved branches are conservatively preserved.
+    BOOL SetConditional(
+        DWORD level,
+        _When_(level == 0, _Reserved_)
+        _When_(level == 1, _In_reads_bytes_(4))
+        void* value);
+
+    // `_At_` applies the readable count to the pointee rather than the pointer variable.
+    BOOL FreeArray(
+        DWORD count,
+        _Inout_opt_ _At_(*values, _Pre_readable_size_(count)) void** values);
 }

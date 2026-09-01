@@ -1002,6 +1002,9 @@ fn scrape_um() -> Summary {
         .args(CLANG_ARGS)
         .args(["-include", SAL_SHIM])
         .args(include_args)
+        .nonnegative_macro_constants_unsigned()
+        .collapse_data_pointer_aliases()
+        .preserve_native_constness()
         .drop_lib_less()
         .scopes(SCOPE.iter().copied())
         .scope_headers(scope_headers.iter().copied())
@@ -1096,6 +1099,9 @@ fn scrape_um_partitions(root: &std::path::Path) -> Summary {
         .args(["-include", SAL_SHIM])
         .args(["-DWIN32METADATA=1"])
         .args(include_args)
+        .nonnegative_macro_constants_unsigned()
+        .collapse_data_pointer_aliases()
+        .preserve_native_constness()
         .inputs(partitions.iter().map(|partition| &partition.input));
     if let Ok(symbols) = std::env::var("WIN32METADATA_SYMBOL_FILTER") {
         clang.symbols(
