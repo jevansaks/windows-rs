@@ -44,12 +44,6 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
     if parser.preserve_native_constness && name == "WCHAR" {
         return metadata::Type::Char;
     }
-    if parser.preserve_native_constness
-        && name == "CHAR"
-        && let Some(namespace) = parser.ref_map.get(&name)
-    {
-        return metadata::Type::value_named(namespace, &name);
-    }
     if parser.header_root.is_some()
         && let Some(ty) = typedef_string_pointer(cursor, parser)
     {
