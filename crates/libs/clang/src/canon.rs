@@ -9,6 +9,7 @@ use super::*;
 pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadata::Type {
     let decl = cursor.ty();
     let name = parser.canonical_name(decl.name());
+    let spelling = parser.canonical_name(cursor.spelling());
     let canonical = cursor.canonical_type();
     if parser.winrt_types.is_some()
         && canonical.kind() == CXType_Pointer
@@ -70,6 +71,9 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
     // are `const PWSTR`, not distinct types, so forcing them here would leave the reference
     // dangling.
     if parser.header_root.is_some() {
+        if preserved_pointer_sized_alias(&spelling) {
+            return metadata::Type::value_named(parser.namespace, &spelling);
+        }
         if let Some(normalized) = normalize_string_alias(parser.namespace, &name) {
             return normalized;
         }
@@ -109,6 +113,9 @@ fn flat_canonical(
 ) -> Option<metadata::Type> {
     if let Some(scalar) = semantic_scalar(name) {
         return Some(scalar);
+    }
+    if preserved_pointer_sized_alias(name) {
+        return None;
     }
     if let Some(scalar) = fundamental_scalar(name) {
         return Some(scalar);
@@ -238,6 +245,9 @@ pub(crate) fn is_interface_alias(underlying: &Type) -> bool {
 /// Callers must check the reference metadata first: a scalar typedef the reference preserves
 /// (`HRESULT`, `BOOL`) must resolve to that type, not collapse.
 fn collapse_scalar_typedef(name: &str, ty: &Type) -> Option<metadata::Type> {
+    if preserved_pointer_sized_alias(name) {
+        return None;
+    }
     if let Some(scalar) = pointer_sized_abi(name) {
         return Some(scalar);
     }
@@ -413,6 +423,26 @@ pub(crate) fn pointer_sized_abi(name: &str) -> Option<metadata::Type> {
         }
         _ => None,
     }
+}
+
+/// Pointer-sized message payload aliases that win32metadata preserves as semantic types.
+pub(crate) fn preserved_pointer_sized_alias(name: &str) -> bool {
+    matches!(name, "LPARAM" | "WPARAM")
+}
+
+pub(crate) fn message_parameter_alias(
+    namespace: &str,
+    ref_map: &HashMap<String, String>,
+    name: &str,
+    ty: &metadata::Type,
+) -> Option<metadata::Type> {
+    let alias = match (name, ty) {
+        ("lParam", metadata::Type::ISize | metadata::Type::I64 | metadata::Type::I32) => "LPARAM",
+        ("wParam", metadata::Type::USize | metadata::Type::U64 | metadata::Type::U32) => "WPARAM",
+        _ => return None,
+    };
+    let ns = ref_map.get(alias).map_or(namespace, String::as_str);
+    Some(metadata::Type::value_named(ns, alias))
 }
 
 /// The name-keyed policy for the handful of parameter aliases whose treatment cannot be decided

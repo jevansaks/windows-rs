@@ -704,6 +704,10 @@ pub(crate) fn parse_params(
             });
         }
         let mut ty = param_metadata_type(&child.ty(), &annotation, parser);
+        if let Some(alias) = message_parameter_alias(parser.namespace, &parser.ref_map, &name, &ty)
+        {
+            ty = alias;
+        }
         ty = apply_metadata_type_annotations(ty, &annotation.win32_metadata);
         // Token-recovered `_COM_Outptr_` becomes ComOutPtr only for caller-chosen `void**`.
         if annotation.com_out_ptr_token && is_void_double_ptr(&ty) {

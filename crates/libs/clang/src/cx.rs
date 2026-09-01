@@ -846,6 +846,14 @@ impl Type {
     }
 
     pub fn to_type(&self, parser: &mut Parser<'_>) -> metadata::Type {
+        let spelling = parser.canonical_name(self.spelling());
+        if parser.header_root.is_some() && preserved_pointer_sized_alias(&spelling) {
+            let ns = parser
+                .ref_map
+                .get(&spelling)
+                .map_or(parser.namespace, String::as_str);
+            return metadata::Type::value_named(ns, &spelling);
+        }
         if is_fundamental_scalar_kind(self.kind()) {
             return scalar_kind_to_type(self.kind());
         }

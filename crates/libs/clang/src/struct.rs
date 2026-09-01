@@ -129,6 +129,12 @@ impl Struct {
                 }
                 let child_is_union = child.kind() == CXCursor_UnionDecl;
                 let nested = Self::parse(child, parser, child_is_union)?;
+                let mut nested = nested;
+                nested.name = format!(
+                    "_{}_e__{}",
+                    name,
+                    if child_is_union { "Union" } else { "Struct" }
+                );
                 fields.push(Field {
                     name,
                     ty: metadata::Type::Void,
@@ -225,7 +231,13 @@ impl Struct {
                     value: None,
                 });
             }
-            let ty = apply_metadata_type_annotations(child.ty().to_type(parser), &annotations);
+            let mut ty = child.ty().to_type(parser);
+            if let Some(alias) =
+                message_parameter_alias(parser.namespace, &parser.ref_map, &name, &ty)
+            {
+                ty = alias;
+            }
+            let ty = apply_metadata_type_annotations(ty, &annotations);
             fields.push(Field {
                 name,
                 ty,

@@ -66,6 +66,7 @@ impl Typedef {
         // pointer-sized aliases named would create false per-arch width splits.
         if parser.header_root.is_some()
             && (fundamental_scalar(&name).is_some() || pointer_sized_abi(&name).is_some())
+            && !preserved_pointer_sized_alias(&name)
         {
             return Ok(None);
         }
@@ -181,7 +182,11 @@ impl Typedef {
 
         // Base pointer-sized ABI typedefs become `usize`/`isize`; chained aliases inherit.
         let ty = match (pointer_sized_abi(&name), &ty) {
-            (Some(scalar), metadata::Type::U64 | metadata::Type::I64) => scalar,
+            (Some(scalar), metadata::Type::U64 | metadata::Type::I64)
+                if !preserved_pointer_sized_alias(&name) =>
+            {
+                scalar
+            }
             _ => ty,
         };
         Ok(Some(Self {
