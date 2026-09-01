@@ -445,6 +445,23 @@ pub(crate) fn message_parameter_alias(
     Some(metadata::Type::value_named(ns, alias))
 }
 
+pub(crate) fn pointer_to_preserved_alias(
+    namespace: &str,
+    ref_map: &HashMap<String, String>,
+    spelling: &str,
+) -> Option<metadata::Type> {
+    let spelling = spelling.replace(' ', "");
+    let alias = match spelling.as_str() {
+        "BSTR*" => "BSTR",
+        _ => return None,
+    };
+    let ns = ref_map.get(alias).map_or(namespace, String::as_str);
+    Some(metadata::Type::PtrMut(
+        Box::new(metadata::Type::value_named(ns, alias)),
+        1,
+    ))
+}
+
 /// The name-keyed policy for the handful of parameter aliases whose treatment cannot be decided
 /// structurally: a `void*` handle (`HANDLE`) and a `void*` data pointer (`PVOID`) are the same C
 /// type, and `BSTR` and `LPCWSTR` are both `wchar_t*`. Everything not listed is decided

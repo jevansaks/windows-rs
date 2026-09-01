@@ -703,7 +703,9 @@ pub(crate) fn parse_params(
                 value: None,
             });
         }
-        let mut ty = param_metadata_type(&child.ty(), &annotation, parser);
+        let mut ty =
+            pointer_to_preserved_alias(parser.namespace, &parser.ref_map, &child.ty().spelling())
+                .unwrap_or_else(|| param_metadata_type(&child.ty(), &annotation, parser));
         if let Some(alias) = message_parameter_alias(parser.namespace, &parser.ref_map, &name, &ty)
         {
             ty = alias;
