@@ -26,9 +26,14 @@ impl Typedef {
     }
 
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>) -> Result<Option<Self>, Error> {
-        let name = parser.canonical_name(cursor.name());
+        let source_name = cursor.name();
+        let name = parser.canonical_name(source_name.clone());
         let underlying = cursor.typedef_underlying_type();
         let annotations = extract_win32_metadata_annotations(&cursor);
+
+        if parser.header_root.is_some() && source_name != name {
+            return Ok(None);
+        }
 
         // The enum/flags merge emits the public name with this typedef's storage type.
         if parser.enum_merge.contains_key(&name) {
@@ -189,6 +194,10 @@ impl Typedef {
             }
             _ => ty,
         };
+        if matches!(&ty, metadata::Type::ValueName(target) | metadata::Type::ClassName(target) if target.name == name)
+        {
+            return Ok(None);
+        }
         Ok(Some(Self {
             name,
             ty,

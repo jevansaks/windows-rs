@@ -66,6 +66,7 @@ impl Struct {
                 .cloned()
                 .unwrap_or(tag_name)
         };
+        let name = parser.canonical_name(name);
         let mut fields = vec![];
 
         // Packing lowers the struct alignment below its largest field alignment.

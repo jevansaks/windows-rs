@@ -1004,7 +1004,16 @@ impl Type {
                 }
             }
             CXType_ConstantArray => {
-                let element = self.array_element_type().to_type(parser);
+                let element_type = self.array_element_type();
+                let element = if element_type.spelling() == "CHAR" {
+                    let ns = parser
+                        .ref_map
+                        .get("CHAR")
+                        .map_or(parser.namespace, String::as_str);
+                    metadata::Type::value_named(ns, "CHAR")
+                } else {
+                    element_type.to_type(parser)
+                };
                 let size = self.array_size();
                 metadata::Type::ArrayFixed(Box::new(element), size)
             }
