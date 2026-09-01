@@ -1102,7 +1102,11 @@ fn scrape_um_partitions(root: &std::path::Path) -> Summary {
         .nonnegative_macro_constants_unsigned()
         .collapse_data_pointer_aliases()
         .preserve_native_constness()
+        .drop_lib_less()
         .inputs(partitions.iter().map(|partition| &partition.input));
+    if std::env::var_os("WIN32METADATA_DISABLE_DEPENDENCY_CLOSURE").is_some() {
+        clang.disable_dependency_closure();
+    }
     if let Ok(symbols) = std::env::var("WIN32METADATA_SYMBOL_FILTER") {
         clang.symbols(
             symbols

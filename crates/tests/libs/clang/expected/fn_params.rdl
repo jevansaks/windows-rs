@@ -8,7 +8,7 @@ mod Test {
     #[library("kernel32.dll")]
     extern "C" fn OpenFile(name: *const u8, flags: u32) -> HANDLE;
     #[library("kernel32.dll")]
-    extern "C" fn ReadFile(file: HANDLE, buffer: *mut void, size: u32, bytesRead: *mut u32) -> Windows::Win32::Foundation::BOOL;
+    extern "C" fn ReadFile(file: HANDLE, #[in] #[out] buffer: *mut void, size: u32, #[in] #[out] bytesRead: *mut u32) -> Windows::Win32::Foundation::BOOL;
     #[library("kernel32.dll")]
-    extern "C" fn WriteFile(file: HANDLE, buffer: *const void, size: u32, bytesWritten: *mut u32) -> Windows::Win32::Foundation::BOOL;
+    extern "C" fn WriteFile(file: HANDLE, buffer: *const void, size: u32, #[in] #[out] bytesWritten: *mut u32) -> Windows::Win32::Foundation::BOOL;
 }

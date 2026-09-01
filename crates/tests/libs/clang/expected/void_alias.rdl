@@ -11,5 +11,5 @@ mod Test {
     #[library("kernel32.dll")]
     extern "C" fn OpenThing() -> HANDLE;
     #[library("kernel32.dll")]
-    extern "C" fn Store(mem: *mut void, out: *mut *mut void);
+    extern "C" fn Store(#[in] #[out] mem: *mut void, #[in] #[out] out: *mut *mut void);
 }

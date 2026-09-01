@@ -6,6 +6,6 @@ mod Test {
     }
     #[guid(0x20000000_0000_0000_c000_000000000046)]
     interface ISurface: IResource {
-        fn GetDesc(&self, desc: *mut void) -> i32;
+        fn GetDesc(&self, #[in] #[out] desc: *mut void) -> i32;
     }
 }

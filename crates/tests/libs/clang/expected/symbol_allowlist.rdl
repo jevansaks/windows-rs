@@ -2,6 +2,6 @@
 mod Test {
     mod Wdk {
         #[library("ntdll.dll")]
-        extern fn GetTheVersion(info: *mut super::Win32::INFO) -> super::Win32::STATUS;
+        extern fn GetTheVersion(#[in] #[out] info: *mut super::Win32::INFO) -> super::Win32::STATUS;
     }
 }

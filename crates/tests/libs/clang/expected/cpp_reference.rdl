@@ -1,7 +1,7 @@
 #[win32]
 mod Test {
     #[library("")]
-    extern fn CoThing(rguid: REFGUID, out: *mut GUID, count: *const i32) -> Windows::Win32::Foundation::HRESULT;
+    extern fn CoThing(rguid: REFGUID, #[in] #[out] out: *mut GUID, count: *const i32) -> Windows::Win32::Foundation::HRESULT;
     struct GUID {
         Data1: u32,
         Data2: u16,

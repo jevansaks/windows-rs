@@ -212,7 +212,7 @@ impl<'a> Parser<'a> {
 
     /// Applies the lib-less drop policy before inserting a function.
     fn insert_fn(&self, item: Fn, collector: &mut Collector) {
-        if self.drop_lib_less && item.library.is_empty() {
+        if self.drop_lib_less && item.library.trim().is_empty() {
             return;
         }
         collector.insert(Item::Fn(item));
@@ -596,6 +596,8 @@ pub struct Clang {
     collapse_data_pointer_aliases: bool,
     /// Preserves native C constness instead of deriving it from SAL direction.
     preserve_native_constness: bool,
+    /// Emits only selected roots without the referenced dependency closure.
+    disable_dependency_closure: bool,
     /// Winmds used only to classify `ABI::Windows::*` projection declarations.
     resolution_input: Vec<PathBuf>,
     reference_default: bool,
@@ -767,6 +769,12 @@ impl Clang {
     /// Keeps native pointer constness while SAL continues to control direction metadata.
     pub fn preserve_native_constness(&mut self) -> &mut Self {
         self.preserve_native_constness = true;
+        self
+    }
+
+    /// Disables dependency closure for root inventory RDL.
+    pub fn disable_dependency_closure(&mut self) -> &mut Self {
+        self.disable_dependency_closure = true;
         self
     }
 
@@ -1655,7 +1663,7 @@ impl Clang {
                     &required,
                     spec,
                     winrt_types,
-                    true,
+                    !self.disable_dependency_closure,
                 )?;
                 for mut c in Const::evaluate_macros(input, &pending, &parsed.index, &arg_refs)? {
                     if self.nonnegative_macro_constants_unsigned {
@@ -1676,7 +1684,7 @@ impl Clang {
                     &required,
                     spec,
                     winrt_types,
-                    true,
+                    !self.disable_dependency_closure,
                 )?;
                 for mut c in
                     Const::evaluate_macros_str(content, &pending, &parsed.index, &arg_refs)?

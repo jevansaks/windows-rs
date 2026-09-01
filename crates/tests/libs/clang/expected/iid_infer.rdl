@@ -2,18 +2,18 @@
 mod Windows {
     mod Win32 {
         #[library("")]
-        extern fn CreateFactory(iid: *const GUID, factory: *mut IUnknown) -> HRESULT;
+        extern fn CreateFactory(iid: *const GUID, #[in] #[out] factory: *mut IUnknown) -> HRESULT;
         #[library("")]
-        extern fn CreateInspectable(iid: *const GUID, inspectable: *mut IInspectable) -> HRESULT;
+        extern fn CreateInspectable(iid: *const GUID, #[in] #[out] inspectable: *mut IInspectable) -> HRESULT;
         #[library("")]
-        extern fn CreateThing(iid: *const GUID, ppThing: *mut *mut void) -> HRESULT;
+        extern fn CreateThing(iid: *const GUID, #[in] #[out] ppThing: *mut *mut void) -> HRESULT;
         #[library("")]
-        extern fn CreateTyped(iid: *const GUID, ppFoo: *mut IFoo) -> HRESULT;
+        extern fn CreateTyped(iid: *const GUID, #[in] #[out] ppFoo: *mut IFoo) -> HRESULT;
         struct GUID {
             Data1: u32,
         }
         #[library("")]
-        extern fn GetThing(providerGuid: *const GUID, ppData: *mut *mut void) -> HRESULT;
+        extern fn GetThing(providerGuid: *const GUID, #[in] #[out] ppData: *mut *mut void) -> HRESULT;
         type HRESULT = i32;
         #[no_guid]
         interface IFoo: IUnknown {
@@ -21,24 +21,24 @@ mod Windows {
         }
         #[no_guid]
         interface IInspectable: IUnknown {
-            fn GetIids(&self, count: *mut u32, iids: *mut *mut GUID) -> HRESULT;
+            fn GetIids(&self, #[in] #[out] count: *mut u32, #[in] #[out] iids: *mut *mut GUID) -> HRESULT;
         }
         #[guid(0xaec22fb8_76f3_4639_9be0_28eb43a67a2e)]
         interface IThingFactory {
-            fn GetService(&self, riid: *const GUID, ppv: *mut *mut void) -> HRESULT;
-            fn GetBuffer(&self, ppBuffer: *mut *mut void) -> HRESULT;
+            fn GetService(&self, riid: *const GUID, #[in] #[out] ppv: *mut *mut void) -> HRESULT;
+            fn GetBuffer(&self, #[in] #[out] ppBuffer: *mut *mut void) -> HRESULT;
         }
         #[no_guid]
         interface IUnknown {
-            fn QueryInterface(&self, riid: *const GUID, ppvObject: *mut *mut void) -> HRESULT;
+            fn QueryInterface(&self, riid: *const GUID, #[in] #[out] ppvObject: *mut *mut void) -> HRESULT;
             fn AddRef(&self,) -> u32;
             fn Release(&self,) -> u32;
         }
         #[library("")]
-        extern fn LoadThing(flags: u32, mode: u32, riid: *const GUID, ppv: *mut *mut void) -> HRESULT;
+        extern fn LoadThing(flags: u32, mode: u32, riid: *const GUID, #[in] #[out] ppv: *mut *mut void) -> HRESULT;
         #[library("")]
-        extern fn NextThings(celt: u32, riid: *const GUID, #[len_param(0)] rgelt: *mut *mut void, pFetched: *mut u32) -> HRESULT;
+        extern fn NextThings(celt: u32, riid: *const GUID, #[len_param(0)] rgelt: *mut *mut void, #[in] #[out] pFetched: *mut u32) -> HRESULT;
         #[library("")]
-        extern fn QueryThing(iid: *const GUID, ppThing: *mut *mut void) -> u32;
+        extern fn QueryThing(iid: *const GUID, #[in] #[out] ppThing: *mut *mut void) -> u32;
     }
 }

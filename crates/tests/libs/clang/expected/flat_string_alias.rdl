@@ -2,7 +2,7 @@
 mod Windows {
     mod Win32 {
         #[library("")]
-        extern fn ReturnsWide(in_ptr: *const u16, out_ptr: *mut u16) -> *mut u16;
+        extern fn ReturnsWide(in_ptr: *const u16, #[in] #[out] out_ptr: *mut u16) -> *mut u16;
         struct STRINGS {
             name: *const u16,
             buffer: *mut u16,

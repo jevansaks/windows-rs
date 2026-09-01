@@ -953,6 +953,9 @@ pub fn param_attrs_for_annotation(
     ty: &metadata::Type,
 ) -> Vec<TokenStream> {
     if !annotation.is_annotated() {
+        if matches!(ty, metadata::Type::PtrMut(..) | metadata::Type::RefMut(_)) {
+            return vec![quote! { #[r#in] }, quote! { #[out] }];
+        }
         return vec![];
     }
 
