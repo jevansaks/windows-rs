@@ -62,16 +62,24 @@ impl Interface {
 
         let mut methods = vec![];
         for child in cursor.children() {
-            if child.kind() != CXCursor_CXXMethod || !child.is_pure_virtual() {
-                continue;
-            }
-
-            // `DECLARE_INTERFACE_` redeclarations reuse base slots; emitting them doubles slots.
-            if child.overrides_base_method() {
+            if child.kind() != CXCursor_CXXMethod
+                || (!child.is_pure_virtual() && !child.is_virtual())
+            {
                 continue;
             }
 
             let method_name = demacro_member_name(child.name(), parser.macro_defs);
+            // `DECLARE_INTERFACE_` redeclarations reuse base slots; emitting them doubles slots.
+            // Some old COM macros confuse Clang's override bit for new methods, so restrict the
+            // skip to actual IUnknown/base redeclarations by name.
+            if child.overrides_base_method()
+                && matches!(
+                    method_name.as_str(),
+                    "QueryInterface" | "AddRef" | "Release"
+                )
+            {
+                continue;
+            }
             let tokens = parser
                 .tu
                 .tokenize(parser.tu.to_expansion_range(child.extent()));

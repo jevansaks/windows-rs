@@ -394,6 +394,10 @@ impl Cursor {
         unsafe { clang_CXXMethod_isPureVirtual(self.0) != 0 }
     }
 
+    pub fn is_virtual(&self) -> bool {
+        unsafe { clang_CXXMethod_isVirtual(self.0) != 0 }
+    }
+
     /// Old-style COM headers redeclare inherited methods; those occupy existing vtable
     /// slots and must not be emitted as new methods.
     pub fn overrides_base_method(&self) -> bool {
