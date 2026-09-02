@@ -703,6 +703,12 @@ pub(crate) fn parse_params(
                 value: None,
             });
         }
+        if is_direct_counted_character_param(&child.ty().spelling()) {
+            annotation.win32_metadata.push(Win32MetadataAnnotation {
+                key: "not_null_terminated".to_string(),
+                value: None,
+            });
+        }
         let mut ty =
             pointer_to_preserved_alias(parser.namespace, &parser.ref_map, &child.ty().spelling())
                 .unwrap_or_else(|| param_metadata_type(&child.ty(), &annotation, parser));
@@ -740,6 +746,13 @@ pub(crate) fn parse_params(
     }
     resolve_param_array_info(&mut params);
     params
+}
+
+fn is_direct_counted_character_param(spelling: &str) -> bool {
+    matches!(
+        spelling.replace(' ', "").as_str(),
+        "LPCCH" | "PCCH" | "LPCH" | "PCH" | "LPWCH" | "PWCH"
+    )
 }
 
 /// Resolves SAL sizes to parameter indices or constants; unresolved names and constant
@@ -974,6 +987,14 @@ pub fn param_attrs_for_annotation(
 
     let mut attrs = vec![];
 
+    attrs.extend(
+        annotation
+            .win32_metadata
+            .iter()
+            .filter(|annotation| annotation.is("const"))
+            .filter_map(Win32MetadataAnnotation::to_rdl_attr),
+    );
+
     // Keep array/size attributes before direction attributes to match the writer.
     if let Some(array) = &annotation.array {
         attrs.push(array_info_attr(array));
@@ -1010,6 +1031,7 @@ pub fn param_attrs_for_annotation(
         annotation
             .win32_metadata
             .iter()
+            .filter(|annotation| !annotation.is("const"))
             .filter_map(Win32MetadataAnnotation::to_rdl_attr),
     );
 

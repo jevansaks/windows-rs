@@ -488,22 +488,22 @@ fn alias_policy(name: &str) -> Option<AliasPolicy> {
     const WIDE: (&str, &str) = ("PWSTR", "PCWSTR");
     const NARROW: (&str, &str) = ("PSTR", "PCSTR");
     Some(match name {
-        "LPWSTR" | "PWSTR" => AliasPolicy::String {
+        "LPWSTR" | "PWSTR" | "LPWCH" | "PWCH" => AliasPolicy::String {
             canonical: WIDE.0,
             mut_name: WIDE.0,
             const_name: WIDE.1,
         },
-        "LPCWSTR" | "PCWSTR" => AliasPolicy::String {
+        "LPCWSTR" | "PCWSTR" | "LPCWCH" | "PCWCH" => AliasPolicy::String {
             canonical: WIDE.1,
             mut_name: WIDE.0,
             const_name: WIDE.1,
         },
-        "LPSTR" | "PSTR" => AliasPolicy::String {
+        "LPSTR" | "PSTR" | "LPCH" | "PCH" => AliasPolicy::String {
             canonical: NARROW.0,
             mut_name: NARROW.0,
             const_name: NARROW.1,
         },
-        "LPCSTR" | "PCSTR" => AliasPolicy::String {
+        "LPCSTR" | "PCSTR" | "LPCCH" | "PCCH" => AliasPolicy::String {
             canonical: NARROW.1,
             mut_name: NARROW.0,
             const_name: NARROW.1,
