@@ -64,6 +64,8 @@ impl Enum {
                 "i64" => "u64",
                 other => other,
             }
+        } else if self.name == "ADS_AUTHENTICATION_ENUM" {
+            "u32"
         } else {
             self.repr
         };

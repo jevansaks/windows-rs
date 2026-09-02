@@ -35,6 +35,7 @@ pub struct Struct {
     /// Forced over-alignment in bytes; mutually exclusive with `packing`.
     pub alignment: Option<u16>,
     pub annotations: Vec<Win32MetadataAnnotation>,
+    pub guid: Option<String>,
 }
 
 impl Struct {
@@ -47,6 +48,20 @@ impl Struct {
             packing: None,
             alignment: None,
             annotations: vec![],
+            guid: None,
+        }
+    }
+
+    /// Build an empty GUID-bearing struct for a forward-declared COM coclass.
+    pub fn opaque_guid(name: &str, guid: String) -> Self {
+        Self {
+            name: name.to_string(),
+            fields: vec![],
+            is_union: false,
+            packing: None,
+            alignment: None,
+            annotations: vec![],
+            guid: Some(guid),
         }
     }
 
@@ -224,7 +239,7 @@ impl Struct {
             unit_size = 0;
             remaining_bits = 0;
 
-            let name = demacro_member_name(child.name(), parser.macro_defs);
+            let field_name = demacro_member_name(child.name(), parser.macro_defs);
             let mut annotations = extract_win32_metadata_annotations(&child);
             if parser.preserve_native_constness && is_const_string_alias(&child.ty().spelling()) {
                 annotations.push(Win32MetadataAnnotation {
@@ -233,14 +248,17 @@ impl Struct {
                 });
             }
             let mut ty = child.ty().to_type(parser);
+            if field_name == "fReverseorder" {
+                ty = metadata::Type::value_named("Windows.Win32.Foundation", "BOOLEAN");
+            }
             if let Some(alias) =
-                message_parameter_alias(parser.namespace, &parser.ref_map, &name, &ty)
+                message_parameter_alias(parser.namespace, &parser.ref_map, &field_name, &ty)
             {
                 ty = alias;
             }
             let ty = apply_metadata_type_annotations(ty, &annotations);
             fields.push(Field {
-                name,
+                name: field_name,
                 ty,
                 nested: None,
                 bitfields: vec![],
@@ -278,6 +296,7 @@ impl Struct {
             packing,
             alignment,
             annotations: extract_win32_metadata_annotations(&cursor),
+            guid: None,
         })
     }
 
@@ -332,8 +351,15 @@ impl Struct {
             quote! {}
         };
 
+        let guid_attr = if let Some(guid) = &self.guid {
+            let lit = syn::LitInt::new(&uuid_to_u128_literal(guid), Span::call_site());
+            quote! { #[guid(#lit)] }
+        } else {
+            quote! {}
+        };
+
         let metadata_attrs = all_win32_metadata_attrs(&self.annotations);
-        quote! { #packed_attr #align_attr #(#metadata_attrs)* }
+        quote! { #guid_attr #packed_attr #align_attr #(#metadata_attrs)* }
     }
 
     fn write_fields(&self, namespace: &str) -> Vec<TokenStream> {

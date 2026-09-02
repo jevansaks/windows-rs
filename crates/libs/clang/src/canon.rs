@@ -11,6 +11,25 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
     let name = parser.canonical_name(decl.name());
     let spelling = parser.canonical_name(cursor.spelling());
     let canonical = cursor.canonical_type();
+    if let Some(ty) = adsi_private_alias(&name) {
+        return ty;
+    }
+    if name == "PADS_SEARCH_HANDLE" {
+        return metadata::Type::PtrMut(
+            Box::new(metadata::Type::value_named(
+                parser.namespace,
+                "ADS_SEARCH_HANDLE",
+            )),
+            1,
+        );
+    }
+    if (name == "BOOLEAN" || spelling == "BOOLEAN") && parser.header_root.is_some() {
+        let ns = parser
+            .ref_map
+            .get("BOOLEAN")
+            .map_or("Windows.Win32.Foundation", String::as_str);
+        return metadata::Type::value_named(ns, "BOOLEAN");
+    }
     if parser.winrt_types.is_some()
         && canonical.kind() == CXType_Pointer
         && let Some(projected) = canonical.pointee_type().abi_projection(parser)
@@ -49,6 +68,13 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
         && let Some(ty) = typedef_string_pointer(cursor, parser)
     {
         return ty;
+    }
+    if name == "BSTR" {
+        let ns = parser
+            .ref_map
+            .get("BSTR")
+            .map_or(parser.namespace, String::as_str);
+        return metadata::Type::value_named(ns, "BSTR");
     }
     if let Some(ty) = canonical_string_pointer(&name) {
         return ty;
@@ -203,6 +229,30 @@ fn universal_alias(_namespace: &str, name: &str) -> Option<metadata::Type> {
         return Some(metadata::Type::value_named("System", "Guid"));
     }
     void_pointer_alias(name)
+}
+
+pub(crate) fn adsi_private_alias(name: &str) -> Option<metadata::Type> {
+    match name {
+        "ADS_DN_STRING"
+        | "ADS_CASE_EXACT_STRING"
+        | "ADS_CASE_IGNORE_STRING"
+        | "ADS_PRINTABLE_STRING"
+        | "ADS_NUMERIC_STRING"
+        | "ADS_OBJECT_CLASS" => Some(metadata::Type::PtrMut(Box::new(metadata::Type::U16), 1)),
+        "ADS_BOOLEAN" | "ADS_INTEGER" => Some(metadata::Type::U32),
+        "BYTE" => Some(metadata::Type::U8),
+        _ => None,
+    }
+}
+
+pub(crate) fn adsi_search_handle_alias(name: &str, ty: &metadata::Type) -> Option<metadata::Type> {
+    if name == "ADS_SEARCH_HANDLE"
+        && matches!(ty, metadata::Type::ValueName(type_name) if type_name.name == "HANDLE")
+    {
+        Some(metadata::Type::ISize)
+    } else {
+        None
+    }
 }
 
 /// Collapse a `typedef IFoo NAME` / `typedef IFoo *NAME` COM-interface alias to the interface

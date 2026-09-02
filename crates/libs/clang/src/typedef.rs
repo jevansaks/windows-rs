@@ -40,6 +40,10 @@ impl Typedef {
             return Ok(None);
         }
 
+        if adsi_private_alias(&name).is_some() {
+            return Ok(None);
+        }
+
         // GUID synonyms collapse to `GUID` at reference sites.
         if guid_alias(&name) {
             return Ok(None);
@@ -194,6 +198,7 @@ impl Typedef {
             }
             _ => ty,
         };
+        let ty = adsi_search_handle_alias(&name, &ty).unwrap_or(ty);
         if matches!(&ty, metadata::Type::ValueName(target) | metadata::Type::ClassName(target) if target.name == name)
         {
             return Ok(None);

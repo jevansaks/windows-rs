@@ -76,7 +76,9 @@ impl Win32MetadataAnnotation {
                 quote! { #[size_param(#value)] }
             }
             "can_return_errors_as_success" => quote! { #[errors_as_success] },
-            "can_return_multiple_success_values" => quote! { #[multiple_success_values] },
+            "can_return_multiple_success_values" | "preserve_result" => {
+                quote! { #[multiple_success_values] }
+            }
             "retained" => quote! { #[retained] },
             "ignore_if_return" => {
                 let value = value?;
@@ -257,6 +259,7 @@ fn validate_win32_metadata_annotation(
         "set_last_error"
             | "can_return_errors_as_success"
             | "can_return_multiple_success_values"
+            | "preserve_result"
             | "agile"
             | "do_not_release"
             | "not_null_terminated"
@@ -315,7 +318,9 @@ fn validate_win32_metadata_annotation(
 fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
     match key {
         "set_last_error" | "import_library" | "static_library" => target == CXCursor_FunctionDecl,
-        "can_return_errors_as_success" | "can_return_multiple_success_values" => {
+        "can_return_errors_as_success"
+        | "can_return_multiple_success_values"
+        | "preserve_result" => {
             matches!(target, CXCursor_FunctionDecl | CXCursor_CXXMethod)
         }
         "agile" => matches!(
@@ -917,9 +922,6 @@ pub fn apply_midl_param_comment(comment: &str, annotation: &mut ParamAnnotation)
     }
     if comment.contains("[out]") {
         annotation.out_param = true;
-    }
-    if comment.contains("[retval]") {
-        annotation.retval = true;
     }
     if comment.contains("[optional]") {
         annotation.optional = true;

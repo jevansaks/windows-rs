@@ -327,13 +327,13 @@ impl<'a> Parser<'a> {
                     collector.insert(Item::Interface(Interface::parse(child, self)?));
                 }
             }
-            // Forward-declared `uuid` classes are COM server CLSIDs, not interface types.
+            // Forward-declared `uuid` classes are COM server coclasses.
             CXCursor_ClassDecl if !child.is_definition() && !child.has_definition() => {
                 if let Some(uuid) = child.extract_uuid(self.tu) {
                     let tag_name = child.name();
                     let name = self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name);
                     if !name.is_empty() && self.should_emit(&name) {
-                        collector.insert(Item::GuidConst(GuidConst { name, uuid }));
+                        collector.insert(Item::Struct(Struct::opaque_guid(&name, uuid)));
                     }
                 }
             }
@@ -2290,6 +2290,7 @@ mod tests {
             packing: None,
             alignment: None,
             annotations: vec![],
+            guid: None,
         };
         let field = Field {
             name: "Anonymous".to_string(),

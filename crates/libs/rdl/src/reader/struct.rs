@@ -189,10 +189,12 @@ impl Encoder<'_> {
             self.emit_arch_attribute(metadata::writer::HasAttribute::TypeDef(type_def), arch_bits);
         }
 
+        self.encode_guid_pseudo_attrs(metadata::writer::HasAttribute::TypeDef(type_def), attrs)?;
+
         self.encode_attrs(
             metadata::writer::HasAttribute::TypeDef(type_def),
             attrs,
-            &["packed", "align"],
+            &["packed", "align", "guid"],
         )
     }
 }
