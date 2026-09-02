@@ -23,6 +23,9 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
             1,
         );
     }
+    if name == "RPC_AUTH_IDENTITY_HANDLE" || spelling == "RPC_AUTH_IDENTITY_HANDLE" {
+        return metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1);
+    }
     if (name == "BOOLEAN" || spelling == "BOOLEAN") && parser.header_root.is_some() {
         let ns = parser
             .ref_map
@@ -585,6 +588,8 @@ pub(crate) fn string_alias_canonical(name: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn is_const_string_alias(name: &str) -> bool {
+    let name = name.replace(' ', "");
+    let name = name.trim_end_matches('*');
     matches!(string_alias_canonical(name), Some("PCSTR" | "PCWSTR"))
 }
 

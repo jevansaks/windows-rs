@@ -702,13 +702,17 @@ pub(crate) fn parse_params(
         }
         let mut annotation = midl_annotations.get(param_idx).cloned().unwrap_or_default();
         annotation.merge(extract_param_annotation(&child, parser.tu));
-        if parser.preserve_native_constness && is_const_string_alias(&child.ty().spelling()) {
+        let type_spelling = child.ty().spelling();
+        let compact_type_spelling = type_spelling.replace(' ', "");
+        if parser.preserve_native_constness
+            && (is_const_string_alias(&type_spelling) || compact_type_spelling == "constPSCHEDULE")
+        {
             annotation.win32_metadata.push(Win32MetadataAnnotation {
                 key: "const".to_string(),
                 value: None,
             });
         }
-        if is_direct_counted_character_param(&child.ty().spelling()) {
+        if is_direct_counted_character_param(&type_spelling) {
             annotation.win32_metadata.push(Win32MetadataAnnotation {
                 key: "not_null_terminated".to_string(),
                 value: None,
@@ -720,6 +724,11 @@ pub(crate) fn parse_params(
         if let Some(alias) = message_parameter_alias(parser.namespace, &parser.ref_map, &name, &ty)
         {
             ty = alias;
+        }
+        if child.ty().is_function_pointer() && type_spelling.contains("(*)") {
+            annotation.in_param = true;
+            annotation.out_param = false;
+            ty = metadata::Type::ISize;
         }
         ty = apply_metadata_type_annotations(ty, &annotation.win32_metadata);
         // Token-recovered `_COM_Outptr_` becomes ComOutPtr only for caller-chosen `void**`.
