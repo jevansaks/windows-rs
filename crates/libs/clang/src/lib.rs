@@ -183,7 +183,7 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         match child.kind() {
-            CXCursor_StructDecl if child.is_definition() => {
+            CXCursor_StructDecl | CXCursor_ClassDecl if child.is_definition() => {
                 let tag_name = child.name();
                 let name = if is_anonymous_name(&tag_name) {
                     self.tag_rename
@@ -258,18 +258,6 @@ impl<'a> Parser<'a> {
                 }
                 if !is_anonymous_name(&name) && !self.ref_map.contains_key(&name) {
                     collector.insert(Item::Struct(Struct::parse(child, self, true)?));
-                }
-            }
-            CXCursor_ClassDecl
-                if child.is_definition()
-                    && (child.has_pure_virtual_methods()
-                        || child.extract_uuid(self.tu).is_some()
-                        || (child.has_interface_base() && !child.has_data_fields())) =>
-            {
-                let tag_name = child.name();
-                let name = self.tag_rename.get(&tag_name).cloned().unwrap_or(tag_name);
-                if !self.ref_map.contains_key(&name) {
-                    collector.insert(Item::Interface(Interface::parse(child, self)?));
                 }
             }
             // Forward-declared `uuid` classes are COM server CLSIDs, not interface types.
