@@ -248,7 +248,8 @@ fn semantic_scalar_entry(name: &str) -> Option<SemanticScalar> {
             ty: metadata::Type::I64,
             declaration: SemanticScalarDeclaration::Typedef,
         },
-        "mdToken"
+        "SCRIPTTHREADID"
+        | "mdToken"
         | "mdModule"
         | "mdTypeRef"
         | "mdTypeDef"

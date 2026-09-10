@@ -1,5 +1,8 @@
 #[win32]
 mod Test {
+    struct ACTIVE_SCRIPT_THREAD {
+        id: u32,
+    }
     struct COR_FIELD_OFFSET {
         ridOfField: u32,
         offset: u32,
