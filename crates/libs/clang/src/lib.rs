@@ -936,15 +936,17 @@ impl Clang {
         let reference = self.load_reference()?;
         let mut exclude_types: HashSet<String> = HashSet::new();
         let mut exclude_values: HashSet<String> = HashSet::new();
+        let mut reference_types: HashSet<String> = HashSet::new();
         // Reference enums the scrape may carry in full: a reference (`um`) header can truncate
         // an enum (for example `winternl.h` cuts `FILE_INFORMATION_CLASS` to one member) while
         // the scraped (`km`) headers define it completely. Record each reference enum's member
         // set so an enum the scrape extends can be un-excluded below and emitted in full; the
         // winmd merge then unions the truncated reference copy with this complete one.
         let mut reference_enums: HashMap<String, HashSet<String>> = HashMap::new();
-        for (_, name, item) in reference.iter_items() {
+        for (namespace, name, item) in reference.iter_items() {
             match item {
                 metadata::reader::Item::Type(def) => {
+                    reference_types.insert(format!("{namespace}.{name}"));
                     if def.category() == metadata::reader::TypeCategory::Enum {
                         reference_enums.insert(
                             name.to_string(),
@@ -1120,6 +1122,7 @@ impl Clang {
 
         // Choose duplicate typedef owners only after every partition and item filter has run.
         dedup_typedefs(&mut collectors);
+        drop_dangling_typed_constants(&mut collectors, root, &reference_types);
 
         let mut outputs = BTreeMap::new();
         for (stem, collector) in &collectors {
@@ -1643,6 +1646,37 @@ fn remove_shadowed_opaque(collectors: &mut BTreeMap<String, Collector>) {
     }
 }
 
+/// Pointer-sentinel macros may carry a cast to an alias intentionally suppressed from metadata,
+/// such as MMC's `(LPDATAOBJECT)-1`. ECMA constants cannot encode pointer values, so drop a typed
+/// constant when its target type exists in neither this scrape nor the reference metadata.
+fn drop_dangling_typed_constants(
+    collectors: &mut BTreeMap<String, Collector>,
+    root: &str,
+    reference_types: &HashSet<String>,
+) {
+    let local_types: HashSet<String> = collectors
+        .values()
+        .flat_map(|collector| collector.values())
+        .filter(|item| item.is_type())
+        .map(ToString::to_string)
+        .collect();
+
+    for collector in collectors.values_mut() {
+        collector.retain_items(|_, item| {
+            let Item::Const(Const {
+                value: metadata::Value::EnumValue(name, _),
+                ..
+            }) = item
+            else {
+                return true;
+            };
+            name.namespace != root
+                || local_types.contains(&name.name)
+                || reference_types.contains(&format!("{}.{}", name.namespace, name.name))
+        });
+    }
+}
+
 /// Flattens linkage blocks and, when configured, descends into `ABI::Windows::*`.
 ///
 /// Resolution-winmd membership separates true WinRT ABI projections from Win32 COM interop
@@ -1915,6 +1949,24 @@ mod tests {
         assert!(enum_member_eq(-2147483648, 0x8000_0000));
         // Wide constants do not match by low 32 bits alone.
         assert!(!enum_member_eq(0, 0x1_0000_0000));
+    }
+
+    #[test]
+    fn dangling_typed_pointer_constant_is_dropped() {
+        let mut collector = Collector::new();
+        collector.insert(Item::Const(Const {
+            name: "DOBJ_CUSTOMOCX".to_string(),
+            ty: None,
+            value: metadata::Value::EnumValue(
+                metadata::TypeName::named("Windows.Win32", "LPDATAOBJECT"),
+                Box::new(metadata::Value::I32(-1)),
+            ),
+        }));
+        let mut collectors = BTreeMap::from([("mmc".to_string(), collector)]);
+
+        drop_dangling_typed_constants(&mut collectors, "Windows.Win32", &HashSet::new());
+
+        assert!(collectors["mmc"].is_empty());
     }
 
     #[test]
