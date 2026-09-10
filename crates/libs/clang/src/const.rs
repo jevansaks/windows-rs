@@ -58,9 +58,19 @@ impl Const {
         if !ty.is_const() {
             return None;
         }
+        let value = cursor.evaluate_double()?;
+        if !value.is_finite() {
+            return None;
+        }
         let value = match ty.canonical_type().kind() {
-            CXType_Float => metadata::Value::F32(cursor.evaluate_double()? as f32),
-            CXType_Double | CXType_LongDouble => metadata::Value::F64(cursor.evaluate_double()?),
+            CXType_Float => {
+                let value = value as f32;
+                if !value.is_finite() {
+                    return None;
+                }
+                metadata::Value::F32(value)
+            }
+            CXType_Double | CXType_LongDouble => metadata::Value::F64(value),
             _ => return None,
         };
         Some(Self {

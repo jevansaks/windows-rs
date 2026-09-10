@@ -12,4 +12,6 @@
 
 const float FConst = 2.5f;
 const double DConst = -1;
+const float PositiveInfinity = ((float)(1e308 * 10));
+const float NotANumber = ((float)((1e308 * 10) * 0.));
 double NotConst = 9.0;
