@@ -5,6 +5,7 @@ mod Test {
         mutable_signature: *mut u8,
         signature: *const u8,
         enumerator: *mut void,
+        name: *const i8,
     }
     struct COR_FIELD_OFFSET {
         ridOfField: u32,
