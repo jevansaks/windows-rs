@@ -1,0 +1,10 @@
+#[win32]
+mod Test {
+    struct COR_FIELD_OFFSET {
+        ridOfField: u32,
+        offset: u32,
+    }
+    struct COR_SECATTR {
+        constructor: u32,
+    }
+}

@@ -248,6 +248,35 @@ fn semantic_scalar_entry(name: &str) -> Option<SemanticScalar> {
             ty: metadata::Type::I64,
             declaration: SemanticScalarDeclaration::Typedef,
         },
+        "mdToken"
+        | "mdModule"
+        | "mdTypeRef"
+        | "mdTypeDef"
+        | "mdFieldDef"
+        | "mdMethodDef"
+        | "mdParamDef"
+        | "mdInterfaceImpl"
+        | "mdMemberRef"
+        | "mdCustomAttribute"
+        | "mdPermission"
+        | "mdSignature"
+        | "mdEvent"
+        | "mdProperty"
+        | "mdModuleRef"
+        | "mdAssembly"
+        | "mdAssemblyRef"
+        | "mdFile"
+        | "mdExportedType"
+        | "mdManifestResource"
+        | "mdTypeSpec"
+        | "mdGenericParam"
+        | "mdMethodSpec"
+        | "mdGenericParamConstraint"
+        | "mdString"
+        | "mdCPToken" => SemanticScalar {
+            ty: metadata::Type::U32,
+            declaration: SemanticScalarDeclaration::Typedef,
+        },
         "LARGE_INTEGER" => SemanticScalar {
             ty: metadata::Type::I64,
             declaration: SemanticScalarDeclaration::Record,
