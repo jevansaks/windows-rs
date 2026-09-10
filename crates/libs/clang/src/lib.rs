@@ -1002,6 +1002,8 @@ impl Clang {
             )?;
         }
 
+        remove_shadowed_opaque(&mut collectors);
+
         // Drop excluded root partitions before the sweep.
         if !self.exclude_headers.is_empty() {
             collectors.retain(|stem, _| !self.exclude_headers.contains(stem));
@@ -1603,6 +1605,7 @@ fn dedup_typedefs(collectors: &mut BTreeMap<String, Collector>) {
                 std::collections::hash_map::Entry::Vacant(entry) => {
                     entry.insert((stem.clone(), direct));
                 }
+
                 std::collections::hash_map::Entry::Occupied(mut entry)
                     if direct && !entry.get().1 =>
                 {
@@ -1616,6 +1619,26 @@ fn dedup_typedefs(collectors: &mut BTreeMap<String, Collector>) {
         collector.retain_items(|name, item| {
             !matches!(item, Item::Typedef(_))
                 || owners.get(name).is_some_and(|(owner, _)| owner == stem)
+        });
+    }
+}
+
+/// Remove forward-declaration placeholders once another translation unit contributes the real
+/// definition. Without this reconciliation, an earlier `struct IFoo {}` can coexist with the
+/// later COM `interface IFoo`, causing RDL type resolution to select the value type as a base.
+fn remove_shadowed_opaque(collectors: &mut BTreeMap<String, Collector>) {
+    let real: HashSet<String> = collectors
+        .values()
+        .flat_map(|collector| collector.iter())
+        .filter_map(|(name, item)| match item {
+            Item::Struct(item) if item.fields.is_empty() => None,
+            _ => Some(name.clone()),
+        })
+        .collect();
+
+    for collector in collectors.values_mut() {
+        collector.retain_items(|name, item| {
+            !matches!(item, Item::Struct(item) if item.fields.is_empty() && real.contains(name))
         });
     }
 }
