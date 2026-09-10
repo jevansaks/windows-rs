@@ -18,6 +18,25 @@ impl Collector {
 
     pub fn insert(&mut self, item: Item) {
         let name = item.to_string();
+        let value_key = format!("\0value:{name}");
+
+        if item.is_type() {
+            if self
+                .0
+                .get(&name)
+                .is_some_and(|existing| !existing.is_type())
+            {
+                let value = self.0.remove(&name).expect("checked above");
+                self.0.insert(value_key, value);
+            }
+        } else if self.0.get(&name).is_some_and(Item::is_type) {
+            self.0.insert(value_key, item);
+            return;
+        } else if self.0.contains_key(&value_key) {
+            self.0.insert(value_key, item);
+            return;
+        }
+
         if let (Some(Item::Typedef(existing)), Item::Typedef(candidate)) =
             (self.0.get(&name), &item)
             && (existing.is_direct_pointer_alias() || !candidate.is_direct_pointer_alias())

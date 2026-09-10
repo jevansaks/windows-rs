@@ -27,3 +27,10 @@ typedef struct ACTIVE_SCRIPT_THREAD
     HCORENUM enumerator;
     MDUTF8CSTR name;
 } ACTIVE_SCRIPT_THREAD;
+
+typedef struct AE_ACLMOD
+{
+    unsigned long action;
+} AE_ACLMOD;
+
+#define AE_ACLMOD 12
