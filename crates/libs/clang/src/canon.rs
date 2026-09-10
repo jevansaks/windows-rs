@@ -244,6 +244,10 @@ fn semantic_scalar_entry(name: &str) -> Option<SemanticScalar> {
             ty: metadata::Type::Bool,
             declaration: SemanticScalarDeclaration::Typedef,
         },
+        "HNSTIME" => SemanticScalar {
+            ty: metadata::Type::I64,
+            declaration: SemanticScalarDeclaration::Typedef,
+        },
         "LARGE_INTEGER" => SemanticScalar {
             ty: metadata::Type::I64,
             declaration: SemanticScalarDeclaration::Record,
