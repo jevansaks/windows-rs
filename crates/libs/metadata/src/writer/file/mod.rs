@@ -34,15 +34,19 @@ pub struct File {
 
 impl File {
     pub fn new(name: &str) -> Self {
+        Self::new_with_version(name, [0xFF; 4])
+    }
+
+    pub fn new_with_version(name: &str, version: [u16; 4]) -> Self {
         let mut file = Self::default();
 
         file.records.Assembly.push(rec::Assembly {
             Name: file.strings.insert(name),
             HashAlgId: 0x00008004,
-            MajorVersion: 0xFF,
-            MinorVersion: 0xFF,
-            BuildNumber: 0xFF,
-            RevisionNumber: 0xFF,
+            MajorVersion: version[0],
+            MinorVersion: version[1],
+            BuildNumber: version[2],
+            RevisionNumber: version[3],
             Flags: AssemblyFlags::WindowsRuntime,
             ..Default::default()
         });

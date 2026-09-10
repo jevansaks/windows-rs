@@ -36,6 +36,21 @@ fn writer_missing_output_is_rejected() {
 }
 
 #[test]
+fn assembly_identity_can_be_configured() {
+    let path = out_path("assembly_identity");
+    windows_rdl::reader()
+        .input_text("#[winrt] mod Test {}")
+        .assembly_name("Contoso.Metadata")
+        .assembly_version([1, 2, 3, 4])
+        .output(&path)
+        .write()
+        .unwrap();
+
+    let file = windows_metadata::reader::File::read(&path).unwrap();
+    assert_eq!(file.assembly_name(), Some("Contoso.Metadata"));
+}
+
+#[test]
 fn malformed_metadata_reports_its_role() {
     let reference_error = windows_rdl::reader()
         .input_text("#[winrt] mod Test {}")

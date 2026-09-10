@@ -60,6 +60,8 @@ pub struct Reader {
     reference_default: bool,
     reference_bytes: Vec<Vec<u8>>,
     output: PathBuf,
+    assembly_name: Option<String>,
+    assembly_version: Option<[u16; 4]>,
 }
 
 impl Reader {
@@ -152,6 +154,18 @@ impl Reader {
         self
     }
 
+    /// Sets the output assembly name. Defaults to the output file stem.
+    pub fn assembly_name(&mut self, name: impl Into<String>) -> &mut Self {
+        self.assembly_name = Some(name.into());
+        self
+    }
+
+    /// Sets the output assembly version. Defaults to `255.255.255.255`.
+    pub fn assembly_version(&mut self, version: [u16; 4]) -> &mut Self {
+        self.assembly_version = Some(version);
+        self
+    }
+
     /// Compiles the inputs and writes the `.winmd` to the configured output.
     pub fn write(&self) -> Result<(), Error> {
         if self.output.as_os_str().is_empty() {
@@ -199,13 +213,19 @@ impl Reader {
         let reference = metadata::reader::Index::new(reference);
         validate_use_declarations(&input, &index, &reference)?;
 
-        let assembly_name = self
-            .output
-            .file_stem()
-            .and_then(|file_name| file_name.to_str())
-            .ok_or_else(|| Error::new("invalid output", &self.output.to_string_lossy(), 0, 0))?;
+        let assembly_name = if let Some(name) = &self.assembly_name {
+            name
+        } else {
+            self.output
+                .file_stem()
+                .and_then(|file_name| file_name.to_str())
+                .ok_or_else(|| Error::new("invalid output", &self.output.to_string_lossy(), 0, 0))?
+        };
 
-        let mut output = metadata::writer::File::new(assembly_name);
+        let mut output = metadata::writer::File::new_with_version(
+            assembly_name,
+            self.assembly_version.unwrap_or([0xFF; 4]),
+        );
         output.set_reference(reference);
 
         for (namespace, members) in &index.namespaces {
