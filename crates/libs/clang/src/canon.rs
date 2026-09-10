@@ -260,6 +260,10 @@ fn semantic_scalar_entry(name: &str) -> Option<SemanticScalar> {
             ty: metadata::Type::PtrConst(Box::new(metadata::Type::U8), 1),
             declaration: SemanticScalarDeclaration::Typedef,
         },
+        "HCORENUM" => SemanticScalar {
+            ty: metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1),
+            declaration: SemanticScalarDeclaration::Typedef,
+        },
         "SCRIPTTHREADID"
         | "mdToken"
         | "mdModule"
