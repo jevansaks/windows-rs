@@ -248,6 +248,18 @@ fn semantic_scalar_entry(name: &str) -> Option<SemanticScalar> {
             ty: metadata::Type::I64,
             declaration: SemanticScalarDeclaration::Typedef,
         },
+        "COR_SIGNATURE" => SemanticScalar {
+            ty: metadata::Type::U8,
+            declaration: SemanticScalarDeclaration::Typedef,
+        },
+        "PCOR_SIGNATURE" => SemanticScalar {
+            ty: metadata::Type::PtrMut(Box::new(metadata::Type::U8), 1),
+            declaration: SemanticScalarDeclaration::Typedef,
+        },
+        "PCCOR_SIGNATURE" => SemanticScalar {
+            ty: metadata::Type::PtrConst(Box::new(metadata::Type::U8), 1),
+            declaration: SemanticScalarDeclaration::Typedef,
+        },
         "SCRIPTTHREADID"
         | "mdToken"
         | "mdModule"

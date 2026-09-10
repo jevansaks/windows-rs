@@ -2,6 +2,9 @@ typedef unsigned long mdToken;
 typedef mdToken mdFieldDef;
 typedef mdToken mdMemberRef;
 typedef unsigned long SCRIPTTHREADID;
+typedef unsigned char COR_SIGNATURE;
+typedef COR_SIGNATURE* PCOR_SIGNATURE;
+typedef const COR_SIGNATURE* PCCOR_SIGNATURE;
 
 typedef struct COR_FIELD_OFFSET
 {
@@ -17,4 +20,6 @@ typedef struct COR_SECATTR
 typedef struct ACTIVE_SCRIPT_THREAD
 {
     SCRIPTTHREADID id;
+    PCOR_SIGNATURE mutable_signature;
+    PCCOR_SIGNATURE signature;
 } ACTIVE_SCRIPT_THREAD;

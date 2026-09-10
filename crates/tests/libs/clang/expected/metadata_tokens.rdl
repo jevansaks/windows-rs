@@ -2,6 +2,8 @@
 mod Test {
     struct ACTIVE_SCRIPT_THREAD {
         id: u32,
+        mutable_signature: *mut u8,
+        signature: *const u8,
     }
     struct COR_FIELD_OFFSET {
         ridOfField: u32,
