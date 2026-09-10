@@ -1147,6 +1147,13 @@ impl Clang {
             if !diag.is_err() {
                 continue;
             }
+            // MSVC accepts the long-standing Windows SDK bit-mask idiom
+            // `~((~0) << n)` in enum initializers. Clang diagnoses it as a
+            // non-constant C++ expression but still supplies the correct enum
+            // value in the AST, so retain that recoverable declaration.
+            if diag.message == "expression is not an integral constant expression" {
+                continue;
+            }
             let emitted = self.scope.is_empty()
                 || diag.file_name.is_empty()
                 || self
