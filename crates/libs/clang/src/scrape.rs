@@ -262,7 +262,7 @@ impl Clang {
             .target(&arch.triple)
             .args(arch.defines.iter().map(String::as_str));
         if let Some(dir) = resource_dir {
-            clang.args(["-resource-dir", dir]);
+            clang.args(["-resource-dir", dir]).exclude_path(dir);
         }
         for reference in &plan.reference_winmds {
             clang.reference(reference);

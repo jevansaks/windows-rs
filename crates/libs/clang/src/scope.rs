@@ -69,6 +69,16 @@ pub(crate) fn header_path_of(cursor: &Cursor) -> Option<String> {
     if file.is_empty() { None } else { Some(file) }
 }
 
+/// True when `path` is the root itself or is contained beneath it.
+pub(crate) fn path_is_under(path: &str, root: &str) -> bool {
+    let path = path.replace('\\', "/").to_lowercase();
+    let root = root.replace('\\', "/").trim_end_matches('/').to_lowercase();
+    path == root
+        || path
+            .strip_prefix(&root)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
 /// True when a normalized directory component matches a scope segment.
 pub(crate) fn header_in_scope(path: &str, scope: &[String]) -> bool {
     let norm = path.replace('\\', "/").to_lowercase();
@@ -157,6 +167,7 @@ pub(crate) fn item_refs(item: &Item, out: &mut HashSet<String>) {
                 collect_type_refs(&method.return_type, out);
             }
         }
+
         Item::Struct(item) => collect_field_refs(&item.fields, out),
         Item::Typedef(item) => collect_type_refs(&item.ty, out),
         Item::Const(item) => {
@@ -237,4 +248,29 @@ pub(crate) fn matches_filter(file: &str, filter: &str) -> bool {
     let filter = filter.replace('\\', "/");
     file.ends_with(filter.as_str())
         && (file.len() == filter.len() || file.as_bytes()[file.len() - filter.len() - 1] == b'/')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_containment_accepts_root_and_descendants() {
+        assert!(path_is_under(
+            r"C:\cache\clang-resource\include\avxintrin.h",
+            r"C:\cache\clang-resource"
+        ));
+        assert!(path_is_under(
+            r"C:\cache\clang-resource",
+            r"C:\cache\clang-resource"
+        ));
+    }
+
+    #[test]
+    fn path_containment_rejects_prefix_siblings() {
+        assert!(!path_is_under(
+            r"C:\cache\clang-resource-old\include\avxintrin.h",
+            r"C:\cache\clang-resource"
+        ));
+    }
 }

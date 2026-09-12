@@ -515,6 +515,8 @@ pub struct Clang {
     scope_headers: HashSet<String>,
     /// Root header stems dropped before the reachability sweep.
     exclude_headers: HashSet<String>,
+    /// Header directory roots excluded from declaration collection.
+    exclude_paths: Vec<String>,
     /// Targeted function-symbol allowlist. Empty leaves emission unrestricted.
     symbols: HashSet<String>,
     /// Drops functions with no resolved import library; off for fixtures without `.lib` inputs.
@@ -813,6 +815,13 @@ impl Clang {
         for header in headers {
             self.exclude_header(header.as_ref());
         }
+        self
+    }
+
+    /// Excludes declarations originating beneath a header directory root.
+    pub fn exclude_path(&mut self, path: impl AsRef<Path>) -> &mut Self {
+        self.exclude_paths
+            .push(path.as_ref().to_string_lossy().into_owned());
         self
     }
 
@@ -1192,6 +1201,13 @@ impl Clang {
         let mut chosen: BTreeMap<String, (Cursor, bool)> = BTreeMap::new();
         for (child, extern_c) in decls {
             if is_handle_tag_struct(&child) {
+                continue;
+            }
+            if header_path_of(&child).is_some_and(|path| {
+                self.exclude_paths
+                    .iter()
+                    .any(|root| path_is_under(&path, root))
+            }) {
                 continue;
             }
             if header_stem_of(&child).is_none() {
