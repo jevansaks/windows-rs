@@ -415,6 +415,9 @@ fn semantic_scalars_are_universal() {
         .output(winmd)
         .write()
         .unwrap();
+}
+
+#[test]
 fn rejects_invalid_win32metadata_annotations() {
     let _guard = test_clang::libclang_guard();
     let output = format!("{}/invalid_win32metadata.rdl", env!("OUT_DIR"));
