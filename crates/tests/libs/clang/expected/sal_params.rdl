@@ -5,6 +5,8 @@ mod Test {
     type BOOL = i32;
     #[library("kernel32.dll")]
     extern "C" fn CloseObject(object: HANDLE) -> i32;
+    #[library("kernel32.dll")]
+    extern "C" fn CreateAggregated(#[opt] outer: HANDLE) -> i32;
     type DWORD = u32;
     #[library("kernel32.dll")]
     extern "C" fn DoWork(object: HANDLE, #[reserved] reserved: u32) -> i32;

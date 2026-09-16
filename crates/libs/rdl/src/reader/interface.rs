@@ -249,6 +249,7 @@ impl Encoder<'_> {
                     };
 
                     let mut is_special = false;
+                    let mut impl_flags = metadata::MethodImplAttributes::default();
                     for attr in &method.attrs {
                         if attr.path().is_ident("special") {
                             if !matches!(attr.meta, syn::Meta::Path(_)) {
@@ -256,6 +257,14 @@ impl Encoder<'_> {
                                     .err(attr, "`special` attribute does not accept arguments");
                             }
                             is_special = true;
+                        } else if attr.path().is_ident("preserve_sig") {
+                            if !matches!(attr.meta, syn::Meta::Path(_)) {
+                                return self.err(
+                                    attr,
+                                    "`preserve_sig` attribute does not accept arguments",
+                                );
+                            }
+                            impl_flags |= metadata::MethodImplAttributes::PreserveSig;
                         }
                     }
 
@@ -268,13 +277,13 @@ impl Encoder<'_> {
                         &method.sig.ident.to_string(),
                         &signature,
                         flags,
-                        Default::default(),
+                        impl_flags,
                     );
 
                     self.encode_attrs(
                         metadata::writer::HasAttribute::MethodDef(method_def),
                         &method.attrs,
-                        &["special"],
+                        &["special", "preserve_sig"],
                     )?;
 
                     self.encode_return_attrs(&method.return_attrs)?;

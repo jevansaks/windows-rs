@@ -75,6 +75,7 @@ impl Win32MetadataAnnotation {
             }
             "can_return_errors_as_success" => quote! { #[errors_as_success] },
             "can_return_multiple_success_values" => quote! { #[multiple_success_values] },
+            "preserve_result" => quote! { #[preserve_sig] },
             "retained" => quote! { #[retained] },
             "ignore_if_return" => {
                 let value = value?;
@@ -226,6 +227,7 @@ fn validate_win32_metadata_annotation(
     let valueless = matches!(
         annotation.key.as_str(),
         "set_last_error"
+            | "preserve_result"
             | "can_return_errors_as_success"
             | "can_return_multiple_success_values"
             | "agile"
@@ -285,7 +287,9 @@ fn validate_win32_metadata_annotation(
 fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
     match key {
         "set_last_error" | "import_library" | "static_library" => target == CXCursor_FunctionDecl,
-        "can_return_errors_as_success" | "can_return_multiple_success_values" => {
+        "preserve_result"
+        | "can_return_errors_as_success"
+        | "can_return_multiple_success_values" => {
             matches!(target, CXCursor_FunctionDecl | CXCursor_CXXMethod)
         }
         "agile" => matches!(
@@ -341,7 +345,38 @@ pub fn extract_win32_metadata_annotations(cursor: &Cursor) -> Vec<Win32MetadataA
         .into_iter()
         .filter(|child| child.kind() == CXCursor_AnnotateAttr)
         .filter_map(|child| parse_win32_metadata_annotation(&child.name()))
+        .flat_map(expand_win32_metadata_annotation)
         .collect()
+}
+
+fn expand_win32_metadata_annotation(
+    annotation: Win32MetadataAnnotation,
+) -> Vec<Win32MetadataAnnotation> {
+    if annotation.key != "raii_free" {
+        return vec![annotation];
+    }
+
+    let Some(value) = annotation.value.as_deref() else {
+        return vec![annotation];
+    };
+    let mut values = value.split(',').map(str::trim);
+    let Some(cleanup) = values.next() else {
+        return vec![annotation];
+    };
+
+    let mut result = vec![Win32MetadataAnnotation {
+        key: "raii_free".to_string(),
+        value: Some(cleanup.to_string()),
+    }];
+    result.extend(
+        values
+            .filter(|value| !value.is_empty())
+            .map(|value| Win32MetadataAnnotation {
+                key: "invalid_handle".to_string(),
+                value: Some(value.to_string()),
+            }),
+    );
+    result
 }
 
 pub fn win32_metadata_attrs(
@@ -867,7 +902,9 @@ fn apply_sal_string(sal: &str, annotation: &mut ParamAnnotation) {
         annotation.out_param = true;
     }
     // `_opt_`, or a plain (non-`_COM_`) `_Outptr_..._result_maybenull_`, marks optional.
-    if sal.contains("_opt_") || (sal.starts_with("_Outptr_") && sal.contains("_result_maybenull_"))
+    if sal == "_Pre_null_"
+        || sal.contains("_opt_")
+        || (sal.starts_with("_Outptr_") && sal.contains("_result_maybenull_"))
     {
         annotation.optional = true;
     }

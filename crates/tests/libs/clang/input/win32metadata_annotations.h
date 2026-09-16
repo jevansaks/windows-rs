@@ -31,6 +31,7 @@ W32M("win32metadata:set_last_error")
 W32M("win32metadata:supported_os=windows10.0.10240")
 W32M("win32metadata:can_return_errors_as_success")
 W32M("win32metadata:can_return_multiple_success_values")
+W32M("win32metadata:preserve_result")
 W32M("win32metadata:import_library=override.dll")
 W32M("win32metadata:static_library=example.lib")
 W32M("win32metadata:ansi")
@@ -54,6 +55,8 @@ BOOL AnnotatedParameters(
     DWORD count,
     void* bytes W32M_POSTFIX("win32metadata:memory_size_param=7"),
     DWORD byteCount,
+    HANDLE* combined
+        W32M_POSTFIX("win32metadata:raii_free=AmsiCloseSession, 0"),
     HANDLE* retained W32M_POSTFIX("win32metadata:retained"),
     HANDLE* direction
         W32M_POSTFIX("win32metadata:in")

@@ -22,6 +22,7 @@
 #define _Out_writes_all_(c) __attribute__((annotate("_Out_writes_all_(" #c ")")))
 #define _Inout_updates_to_(c, w) __attribute__((annotate("_Inout_updates_to_(" #c "," #w ")")))
 #define _Outptr_result_buffer_(c) __attribute__((annotate("_Outptr_result_buffer_(" #c ")")))
+#define _Pre_null_ __attribute__((annotate("_Pre_null_")))
 #define _Reserved_ __attribute__((annotate("_Reserved_")))
 
 typedef unsigned long DWORD;
@@ -101,4 +102,8 @@ extern "C" {
 
     // _Reserved_ by value -> Reserved marker, In default (no direction attribute).
     BOOL DoWork(_In_ HANDLE object, _Reserved_ DWORD reserved);
+
+    // `_Pre_null_` requires the pointer value to be null on entry. This is stronger
+    // than optionality in SAL, but projects to the metadata Optional marker.
+    BOOL CreateAggregated(_Pre_null_ HANDLE outer);
 }

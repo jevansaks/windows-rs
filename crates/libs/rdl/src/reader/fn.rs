@@ -70,9 +70,17 @@ impl Encoder<'_> {
 
         let name = item.sig.ident.unraw_to_string();
 
-        let method_def = self
-            .output
-            .MethodDef(&name, &signature, flags, Default::default());
+        let mut impl_flags = metadata::MethodImplAttributes::default();
+        for attr in &item.attrs {
+            if attr.path().is_ident("preserve_sig") {
+                if !matches!(attr.meta, syn::Meta::Path(_)) {
+                    return self.err(attr, "`preserve_sig` attribute does not accept arguments");
+                }
+                impl_flags |= metadata::MethodImplAttributes::PreserveSig;
+            }
+        }
+
+        let method_def = self.output.MethodDef(&name, &signature, flags, impl_flags);
 
         self.encode_return_attrs(&item.return_attrs)?;
         self.encode_params(&params)?;
@@ -143,7 +151,7 @@ impl Encoder<'_> {
         self.encode_attrs(
             metadata::writer::HasAttribute::MethodDef(method_def),
             &item.attrs,
-            &["library"],
+            &["library", "preserve_sig"],
         )?;
 
         Ok(())
