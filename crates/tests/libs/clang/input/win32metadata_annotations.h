@@ -56,7 +56,7 @@ BOOL AnnotatedParameters(
     void* bytes W32M_POSTFIX("win32metadata:memory_size_param=7"),
     DWORD byteCount,
     HANDLE* combined
-        W32M_POSTFIX("win32metadata:raii_free=AmsiCloseSession, 0"),
+        W32M_POSTFIX("win32metadata:raii_free=AmsiCloseSession, -1, 0"),
     HANDLE* retained W32M_POSTFIX("win32metadata:retained"),
     HANDLE* direction
         W32M_POSTFIX("win32metadata:in")

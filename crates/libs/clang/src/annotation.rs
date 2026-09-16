@@ -494,20 +494,22 @@ pub fn extract_param_annotation(cursor: &Cursor, tu: &TranslationUnit) -> ParamA
                 // Portable SAL stubs keep the macro argument in the spelling.
                 let spelling = child.name();
                 if let Some(metadata) = parse_win32_metadata_annotation(&spelling) {
-                    match metadata.key.as_str() {
-                        "in" => annotation.in_param = true,
-                        "out" => annotation.out_param = true,
-                        "optional" => annotation.optional = true,
-                        "reserved" => {
-                            annotation.reserved = true;
-                            annotation.optional = true;
+                    for metadata in expand_win32_metadata_annotation(metadata) {
+                        match metadata.key.as_str() {
+                            "in" => annotation.in_param = true,
+                            "out" => annotation.out_param = true,
+                            "optional" => annotation.optional = true,
+                            "reserved" => {
+                                annotation.reserved = true;
+                                annotation.optional = true;
+                            }
+                            "retval" => annotation.retval = true,
+                            "com_out_ptr" => {
+                                annotation.com_out_ptr = true;
+                                annotation.out_param = true;
+                            }
+                            _ => annotation.win32_metadata.push(metadata),
                         }
-                        "retval" => annotation.retval = true,
-                        "com_out_ptr" => {
-                            annotation.com_out_ptr = true;
-                            annotation.out_param = true;
-                        }
-                        _ => annotation.win32_metadata.push(metadata),
                     }
                     continue;
                 }

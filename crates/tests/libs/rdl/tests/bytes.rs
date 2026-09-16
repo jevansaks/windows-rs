@@ -27,6 +27,32 @@ mod Test {
 }
 
 #[test]
+fn default_input_resolves_win32_pseudo_attributes() {
+    windows_rdl::reader()
+        .input_text(
+            r#"
+#[win32]
+mod Test {
+    #[repr(i32)]
+    #[associated_constant("VALUE_ALL")]
+    enum VALUE {
+        VALUE_NONE = 0,
+    }
+
+    const VALUE_ALL: i32 = 1;
+
+    #[supported_os("windows5.0")]
+    extern fn Open(#[raii_free("Close")] #[invalid_handle(-1)] #[invalid_handle(0)] value: *mut isize);
+}
+"#,
+        )
+        .reference_default()
+        .output(temp_path("default_win32_pseudo_attributes", "winmd"))
+        .write()
+        .unwrap();
+}
+
+#[test]
 fn reference_bytes_resolve_metadata() {
     let reference = temp_path("reference_bytes_reference", "winmd");
 
