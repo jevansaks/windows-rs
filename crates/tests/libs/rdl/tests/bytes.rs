@@ -28,6 +28,9 @@ mod Test {
 
 #[test]
 fn default_input_resolves_win32_pseudo_attributes() {
+    let winmd = temp_path("default_win32_pseudo_attributes", "winmd");
+    let rdl = temp_path("default_win32_pseudo_attributes", "rdl");
+
     windows_rdl::reader()
         .input_text(
             r#"
@@ -47,9 +50,19 @@ mod Test {
 "#,
         )
         .reference_default()
-        .output(temp_path("default_win32_pseudo_attributes", "winmd"))
+        .output(&winmd)
         .write()
         .unwrap();
+
+    windows_rdl::writer()
+        .input(&winmd)
+        .output(&rdl)
+        .write()
+        .unwrap();
+
+    let output = std::fs::read_to_string(rdl).unwrap();
+    assert!(output.contains("#[invalid_handle(-1)]"));
+    assert!(output.contains("#[invalid_handle(0)]"));
 }
 
 #[test]
