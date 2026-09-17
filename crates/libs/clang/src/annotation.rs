@@ -32,6 +32,7 @@ impl Win32MetadataAnnotation {
                 | "do_not_release"
                 | "not_null_terminated"
                 | "null_null_terminated"
+                | "associated_enum"
         )
     }
 
@@ -188,7 +189,7 @@ pub fn validate_win32_metadata_annotation_tree(cursor: &Cursor) -> Result<(), Er
         if child.kind() == CXCursor_AnnotateAttr {
             let spelling = child.name();
             if spelling.starts_with(WIN32_METADATA_PREFIX) {
-                validate_win32_metadata_annotation(cursor.kind(), &spelling, &child)?;
+                validate_win32_metadata_annotation(cursor, &spelling, &child)?;
             }
         } else {
             validate_win32_metadata_annotation_tree(&child)?;
@@ -198,7 +199,7 @@ pub fn validate_win32_metadata_annotation_tree(cursor: &Cursor) -> Result<(), Er
 }
 
 fn validate_win32_metadata_annotation(
-    target: CXCursorKind,
+    target: &Cursor,
     spelling: &str,
     cursor: &Cursor,
 ) -> Result<(), Error> {
@@ -267,11 +268,16 @@ fn validate_win32_metadata_annotation(
             "win32metadata annotation `{}` does not accept a value",
             annotation.key
         ))
-    } else if !annotation_target_allowed(&annotation.key, target) {
+    } else if !annotation_target_allowed(&annotation.key, target.kind()) {
         Some(format!(
             "win32metadata annotation `{}` is not valid on this declaration",
             annotation.key
         ))
+    } else if annotation.is("associated_enum")
+        && matches!(target.kind(), CXCursor_FunctionDecl | CXCursor_CXXMethod)
+        && target.result_type().kind() == CXType_Void
+    {
+        Some("win32metadata annotation `associated_enum` requires a non-void return".to_string())
     } else {
         None
     };
@@ -313,7 +319,12 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
         "also_usable_for" | "canonical_name" => target == CXCursor_TypedefDecl,
         "associated_enum" => matches!(
             target,
-            CXCursor_ParmDecl | CXCursor_FieldDecl | CXCursor_VarDecl | CXCursor_EnumConstantDecl
+            CXCursor_FunctionDecl
+                | CXCursor_CXXMethod
+                | CXCursor_ParmDecl
+                | CXCursor_FieldDecl
+                | CXCursor_VarDecl
+                | CXCursor_EnumConstantDecl
         ),
         "associated_constant" => target == CXCursor_EnumDecl,
         "native_inheritance" | "struct_size_field" => {
@@ -419,6 +430,31 @@ pub struct ParamAnnotation {
 }
 
 impl ParamAnnotation {
+    fn with_source_sal(mut self, source: &Self) -> Self {
+        self.in_param |= source.in_param;
+        self.out_param |= source.out_param;
+        self.optional |= source.optional;
+        self.reserved |= source.reserved;
+        self.com_out_ptr_token |= source.com_out_ptr_token;
+        self.null_terminated |= source.null_terminated;
+        if self.size.is_none() {
+            self.size.clone_from(&source.size);
+        }
+        self
+    }
+
+    fn with_midl_fallback(mut self, midl: &Self) -> Self {
+        if !self.in_param && !self.out_param {
+            self.in_param = midl.in_param;
+            self.out_param = midl.out_param;
+        }
+        self.optional |= midl.optional;
+        self.retval |= midl.retval;
+        self.reserved |= midl.reserved;
+        self.com_out_ptr |= midl.com_out_ptr;
+        self
+    }
+
     pub fn has_sal_annotation(&self) -> bool {
         self.in_param
             || self.out_param
@@ -433,6 +469,12 @@ impl ParamAnnotation {
     pub fn is_annotated(&self) -> bool {
         self.has_sal_annotation() || !self.win32_metadata.is_empty()
     }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct SourceParamAnnotation {
+    sal: ParamAnnotation,
+    midl: ParamAnnotation,
 }
 
 #[derive(Debug, Clone)]
@@ -522,9 +564,13 @@ pub fn extract_param_annotation(cursor: &Cursor, tu: &TranslationUnit) -> ParamA
             CXCursor_UnexposedAttr => {
                 // Windows SDK SAL attributes surface as unexposed attribute tokens.
                 let tokens = tu.tokenize(tu.to_expansion_range(child.extent()));
-                for (kind, spelling) in &tokens {
+                for (index, (kind, spelling)) in tokens.iter().enumerate() {
                     if *kind == CXToken_Identifier {
                         apply_sal_string(spelling, &mut annotation);
+                        if annotation.size.is_none() {
+                            annotation.size =
+                                capture_source_sal_size(spelling, &tokens[index + 1..]);
+                        }
                     }
                 }
             }
@@ -551,6 +597,29 @@ fn capture_sal_size(name: &str, arg: Option<&str>) -> Option<SalSize> {
         bytes,
         arg: parse_size_arg(first)?,
     })
+}
+
+fn capture_source_sal_size(name: &str, tokens: &[(CXTokenKind, String)]) -> Option<SalSize> {
+    sal_size_kind(name)?;
+    if tokens.first()?.1 != "(" {
+        return None;
+    }
+    let mut depth = 0;
+    let mut argument = String::new();
+    for (kind, spelling) in &tokens[1..] {
+        if *kind == CXToken_Comment {
+            continue;
+        }
+        match spelling.as_str() {
+            ")" | "," if depth == 0 => return capture_sal_size(name, Some(&argument)),
+            "(" => depth += 1,
+            ")" => depth -= 1,
+            _ => {}
+        }
+        argument.push_str(spelling);
+        argument.push(' ');
+    }
+    None
 }
 
 fn sal_size_kind(name: &str) -> Option<bool> {
@@ -681,7 +750,7 @@ pub(crate) fn infer_iid_is(params: &mut [Param], return_type: &metadata::Type) {
 
 pub(crate) fn parse_params(
     cursor: &Cursor,
-    midl_annotations: &[ParamAnnotation],
+    source_annotations: &[SourceParamAnnotation],
     parser: &mut Parser<'_>,
 ) -> Vec<Param> {
     let mut params = vec![];
@@ -694,14 +763,13 @@ pub(crate) fn parse_params(
         if name.is_empty() || is_midl_synthetic_param_name(&name) {
             name = format!("param{param_idx}");
         }
-        let sal_annotation = extract_param_annotation(&child, parser.tu);
-        let mut annotation = if sal_annotation.has_sal_annotation() {
-            sal_annotation
-        } else {
-            let mut fallback = midl_annotations.get(param_idx).cloned().unwrap_or_default();
-            fallback.win32_metadata = sal_annotation.win32_metadata;
-            fallback
-        };
+        let source = source_annotations
+            .get(param_idx)
+            .cloned()
+            .unwrap_or_default();
+        let mut annotation = extract_param_annotation(&child, parser.tu)
+            .with_source_sal(&source.sal)
+            .with_midl_fallback(&source.midl);
         let cursor_ty = child.ty();
         normalize_direct_interface_annotation(&cursor_ty, &mut annotation);
         let mut ty = param_metadata_type(&cursor_ty, &annotation, parser);
@@ -771,20 +839,20 @@ pub fn resolve_param_array_info(params: &mut [Param]) {
     }
 }
 
-/// Maps MIDL parameter block comments by token position; also recovers SAL tokens that
-/// abstract COM methods do not expose as `ParmDecl` attributes.
+/// Maps source SAL and MIDL comments by parameter position, including macros that expand to
+/// nothing when SDK analysis is disabled. Nested callback parameters and SAL arguments are skipped.
 pub fn scan_method_param_annotations(
     tokens: &[(CXTokenKind, String)],
     method_name: &str,
     macro_defs: &HashMap<String, Vec<String>>,
-) -> Vec<ParamAnnotation> {
+) -> Vec<SourceParamAnnotation> {
     let mut result = Vec::new();
-    let mut current = ParamAnnotation::default();
+    let mut current = SourceParamAnnotation::default();
     let mut past_name = false;
     let mut paren_depth: i32 = 0;
     let mut in_params = false;
 
-    for (kind, spelling) in tokens {
+    for (index, (kind, spelling)) in tokens.iter().enumerate() {
         if !past_name {
             if *kind == CXToken_Identifier && spelling == method_name {
                 past_name = true;
@@ -797,7 +865,7 @@ pub fn scan_method_param_annotations(
                 paren_depth += 1;
                 if paren_depth == 1 {
                     in_params = true;
-                    current = ParamAnnotation::default();
+                    current = SourceParamAnnotation::default();
                 }
             }
             (CXToken_Punctuation, ")") => {
@@ -806,7 +874,10 @@ pub fn scan_method_param_annotations(
                 }
                 if paren_depth == 0 && in_params {
                     // Avoid a fake default for zero-/single-parameter methods with no MIDL comment.
-                    if !result.is_empty() || current.is_annotated() {
+                    if !result.is_empty()
+                        || current.sal.is_annotated()
+                        || current.midl.is_annotated()
+                    {
                         result.push(current.clone());
                     }
                     break;
@@ -814,10 +885,10 @@ pub fn scan_method_param_annotations(
             }
             (CXToken_Punctuation, ",") if in_params && paren_depth == 1 => {
                 result.push(current.clone());
-                current = ParamAnnotation::default();
+                current = SourceParamAnnotation::default();
             }
             (CXToken_Comment, s) if in_params && paren_depth == 1 => {
-                apply_midl_param_comment(s, &mut current);
+                apply_midl_param_comment(s, &mut current.midl);
             }
             // The SDK's empty legacy macros are the predecessors of `_In_`, `_Out_`, and `_opt_`.
             // Require the empty macro definition so unrelated identifiers are not annotations.
@@ -826,49 +897,53 @@ pub fn scan_method_param_annotations(
                     && paren_depth == 1
                     && macro_defs.get("IN").is_some_and(Vec::is_empty) =>
             {
-                current.in_param = true;
+                current.sal.in_param = true;
             }
             (CXToken_Identifier, "OUT")
                 if in_params
                     && paren_depth == 1
                     && macro_defs.get("OUT").is_some_and(Vec::is_empty) =>
             {
-                current.out_param = true;
+                current.sal.out_param = true;
             }
             (CXToken_Identifier, "OPTIONAL")
                 if in_params
                     && paren_depth == 1
                     && macro_defs.get("OPTIONAL").is_some_and(Vec::is_empty) =>
             {
-                current.optional = true;
+                current.sal.optional = true;
             }
-            // Recover bare pure `_z_` SAL tokens for COM methods; counted buffers stay raw.
-            (CXToken_Identifier, s)
-                if in_params && paren_depth == 1 && s.starts_with("_COM_Outptr_") =>
-            {
-                current.out_param = true;
-                current.com_out_ptr_token = true;
-                if s.starts_with("_COM_Outptr_opt") {
-                    current.optional = true;
-                }
-            }
-            // Abstract COM methods can expose `_COM_Outptr_` only as a token. Record it
-            // speculatively, including `_opt_`; `parse_params` promotes only `void**`.
             (CXToken_Identifier, s)
                 if in_params
                     && paren_depth == 1
-                    && matches!(
-                        s,
-                        "_In_z_" | "_In_opt_z_" | "_Out_z_" | "_Inout_z_" | "_Inout_opt_z_"
-                    ) =>
+                    && is_sal_name(s)
+                    && macro_defs.contains_key(s) =>
             {
-                apply_sal_string(s, &mut current);
+                apply_sal_string(s, &mut current.sal);
+                if current.sal.size.is_none() {
+                    current.sal.size = capture_source_sal_size(s, &tokens[index + 1..]);
+                }
+                // A source-only COM marker is promoted only for caller-chosen `void**`.
+                if s.starts_with("_COM_Outptr_") {
+                    current.sal.com_out_ptr = false;
+                    current.sal.com_out_ptr_token = true;
+                }
             }
             _ => {}
         }
     }
 
     result
+}
+
+pub(crate) fn is_sal_name(name: &str) -> bool {
+    name.ends_with('_')
+        && (name.starts_with("_In_")
+            || name.starts_with("_Out_")
+            || name.starts_with("_Inout_")
+            || name.starts_with("_Outptr_")
+            || name.starts_with("_COM_Outptr_")
+            || matches!(name, "_Reserved_" | "_Pre_null_"))
 }
 
 pub fn apply_midl_param_comment(comment: &str, annotation: &mut ParamAnnotation) {

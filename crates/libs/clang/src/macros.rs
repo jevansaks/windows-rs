@@ -183,7 +183,7 @@ pub(crate) fn collect_macro_defs(tu: &TranslationUnit) -> HashMap<String, Vec<St
         // Keep export macros with leading `__declspec(dllimport)` under the length gate.
         strip_declspec(&mut body);
 
-        if body.len() <= 4 {
+        if body.len() <= 4 || is_sal_name(&name) {
             defs.insert(name, body);
         }
     }
