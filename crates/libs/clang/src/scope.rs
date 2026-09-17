@@ -8,9 +8,30 @@ pub(crate) fn extend_libraries(
     let source = path.to_string_lossy();
     let bytes = std::fs::read(path).map_err(|_| Error::new("invalid input", &source, 0, 0))?;
     for import in implib::read(&bytes)? {
-        map.entry(import.symbol).or_insert(import.dll);
+        add_library_mapping(map, path, import.symbol, import.dll);
     }
     Ok(())
+}
+
+fn add_library_mapping(
+    map: &mut HashMap<String, String>,
+    path: &Path,
+    symbol: String,
+    dll: String,
+) {
+    let direct = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .zip(Path::new(&dll).file_stem().and_then(|name| name.to_str()))
+        .is_some_and(|(library, module)| library.eq_ignore_ascii_case(module));
+
+    if direct {
+        // A symbol may appear first in mincore/OneCore/API-set umbrella libraries. The
+        // dedicated import library is the authoritative physical DLL mapping.
+        map.insert(symbol, dll);
+    } else {
+        map.entry(symbol).or_insert(dll);
+    }
 }
 
 /// Build reference name resolution, excluding the namespace currently being generated.
@@ -66,7 +87,11 @@ pub(crate) fn header_path_of(cursor: &Cursor) -> Option<String> {
     } else {
         file
     };
-    if file.is_empty() { None } else { Some(file) }
+    if file.is_empty() {
+        None
+    } else {
+        Some(file)
+    }
 }
 
 /// True when `path` is the root itself or is contained beneath it.
@@ -253,6 +278,50 @@ pub(crate) fn matches_filter(file: &str, filter: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dedicated_import_library_overrides_umbrella_mapping() {
+        let mut libraries = HashMap::new();
+        add_library_mapping(
+            &mut libraries,
+            Path::new("mincore.lib"),
+            "PowerRegisterSuspendResumeNotification".to_string(),
+            "api-ms-win-power-base-l1-1-0.dll".to_string(),
+        );
+        add_library_mapping(
+            &mut libraries,
+            Path::new("powrprof.lib"),
+            "PowerRegisterSuspendResumeNotification".to_string(),
+            "POWRPROF.dll".to_string(),
+        );
+
+        assert_eq!(
+            libraries["PowerRegisterSuspendResumeNotification"],
+            "POWRPROF.dll"
+        );
+    }
+
+    #[test]
+    fn later_umbrella_mapping_does_not_replace_dedicated_library() {
+        let mut libraries = HashMap::new();
+        add_library_mapping(
+            &mut libraries,
+            Path::new("powrprof.lib"),
+            "PowerRegisterSuspendResumeNotification".to_string(),
+            "POWRPROF.dll".to_string(),
+        );
+        add_library_mapping(
+            &mut libraries,
+            Path::new("OneCore.lib"),
+            "PowerRegisterSuspendResumeNotification".to_string(),
+            "api-ms-win-power-base-l1-1-0.dll".to_string(),
+        );
+
+        assert_eq!(
+            libraries["PowerRegisterSuspendResumeNotification"],
+            "POWRPROF.dll"
+        );
+    }
 
     #[test]
     fn path_containment_accepts_root_and_descendants() {
