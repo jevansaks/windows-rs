@@ -117,7 +117,7 @@ impl Encoder<'_> {
         self.output.Field(
             "value__",
             &ty,
-            metadata::FieldAttributes::Private
+            metadata::FieldAttributes::Public
                 | metadata::FieldAttributes::SpecialName
                 | metadata::FieldAttributes::RTSpecialName,
         );
@@ -132,7 +132,8 @@ impl Encoder<'_> {
                 &type_name,
                 metadata::FieldAttributes::Public
                     | metadata::FieldAttributes::Static
-                    | metadata::FieldAttributes::Literal,
+                    | metadata::FieldAttributes::Literal
+                    | metadata::FieldAttributes::HasDefault,
             );
 
             let Some((_, value)) = &variant.discriminant else {
