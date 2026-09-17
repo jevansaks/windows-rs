@@ -145,7 +145,7 @@ fn source_macro_return_type(
         .filter(|&i| tokens.get(i + 1).is_some_and(|(_, token)| token == "("))?;
 
     tokens[..name_idx].iter().rev().find_map(|(_, candidate)| {
-        let source_type = canonical_foundation_type(candidate).or_else(|| {
+        let source_type = preserved_native_typedef(parser.namespace, candidate).or_else(|| {
             parser
                 .ref_map
                 .get(candidate)

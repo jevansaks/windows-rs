@@ -91,18 +91,13 @@ fn dependency_typedef_and_macro_return_identities_use_reference_metadata() {
     }
 
     let text = std::fs::read_to_string(&rdl).unwrap();
-    assert!(text.contains("fn GetStatus() -> Windows::Win32::Foundation::NTSTATUS"));
-    assert!(text.contains("fn GetBoolean() -> Windows::Win32::Foundation::BOOLEAN"));
-    assert!(text.contains("Flag: Windows::Win32::Foundation::BOOLEAN"));
+    assert!(text.contains("fn GetStatus() -> NTSTATUS"));
+    assert!(text.contains("fn GetBoolean() -> BOOLEAN"));
+    assert!(text.contains("Flag: BOOLEAN"));
 
     windows_rdl::reader()
         .input(&rdl)
-        .input_text(
-            "#[win32] mod Windows { mod Win32 { mod Foundation {\n\
-                 type BOOLEAN = u8;\n\
-                 type NTSTATUS = i32;\n\
-             } } }",
-        )
+        .input_text("#[win32] mod Test { type BOOLEAN = u8; type NTSTATUS = i32; }")
         .input_text(windows_rdl::WIN32_METADATA_RDL)
         .reference_default()
         .output(&winmd)
@@ -111,11 +106,11 @@ fn dependency_typedef_and_macro_return_identities_use_reference_metadata() {
     let index = metadata::reader::Index::read(&winmd).unwrap();
     assert_eq!(
         method(&index, "GetStatus").signature(&[]).return_type,
-        metadata::Type::value_named("Windows.Win32.Foundation", "NTSTATUS")
+        metadata::Type::value_named("Test", "NTSTATUS")
     );
     assert_eq!(
         method(&index, "GetBoolean").signature(&[]).return_type,
-        metadata::Type::value_named("Windows.Win32.Foundation", "BOOLEAN")
+        metadata::Type::value_named("Test", "BOOLEAN")
     );
 }
 

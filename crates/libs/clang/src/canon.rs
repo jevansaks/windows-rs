@@ -14,7 +14,7 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
         return ty;
     }
     if !decl.is_from_main_file() {
-        if let Some(ty) = canonical_foundation_type(&name) {
+        if let Some(ty) = preserved_native_typedef(parser.namespace, &name) {
             return ty;
         }
         if let Some(ns) = parser.ref_map.get(&name) {
@@ -140,9 +140,8 @@ pub(crate) fn canonical_hresult(name: &str) -> Option<metadata::Type> {
     (name == "HRESULT").then(|| metadata::Type::value_named("Windows.Foundation", "HResult"))
 }
 
-pub(crate) fn canonical_foundation_type(name: &str) -> Option<metadata::Type> {
-    matches!(name, "BOOLEAN" | "NTSTATUS")
-        .then(|| metadata::Type::value_named("Windows.Win32.Foundation", name))
+pub(crate) fn preserved_native_typedef(namespace: &str, name: &str) -> Option<metadata::Type> {
+    matches!(name, "BOOLEAN" | "NTSTATUS").then(|| metadata::Type::value_named(namespace, name))
 }
 
 pub(crate) fn is_hresult(ty: &metadata::Type) -> bool {
