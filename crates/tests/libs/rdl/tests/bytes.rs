@@ -49,10 +49,14 @@ mod Test {
 }
 "#,
         )
+        .input_text(windows_rdl::WIN32_METADATA_RDL)
         .reference_default()
         .output(&winmd)
         .write()
         .unwrap();
+
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    index.expect("Windows.Win32.Foundation.Metadata", "MemorySizeAttribute");
 
     windows_rdl::writer()
         .input(&winmd)

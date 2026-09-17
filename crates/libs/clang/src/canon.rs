@@ -13,6 +13,14 @@ pub(crate) fn resolve_typedef(cursor: &Type, parser: &mut Parser<'_>) -> metadat
     if let Some(ty) = canonical_hresult(&name) {
         return ty;
     }
+    if !decl.is_from_main_file() {
+        if let Some(ty) = canonical_foundation_type(&name) {
+            return ty;
+        }
+        if let Some(ns) = parser.ref_map.get(&name) {
+            return metadata::Type::value_named(ns, &name);
+        }
+    }
     if let Some(ty) = semantic_scalar(&name) {
         return ty;
     }
@@ -132,6 +140,11 @@ pub(crate) fn canonical_hresult(name: &str) -> Option<metadata::Type> {
     (name == "HRESULT").then(|| metadata::Type::value_named("Windows.Foundation", "HResult"))
 }
 
+pub(crate) fn canonical_foundation_type(name: &str) -> Option<metadata::Type> {
+    matches!(name, "BOOLEAN" | "NTSTATUS")
+        .then(|| metadata::Type::value_named("Windows.Win32.Foundation", name))
+}
+
 pub(crate) fn is_hresult(ty: &metadata::Type) -> bool {
     matches!(ty, metadata::Type::ValueName(tn)
         if tn.name == "HRESULT"
@@ -222,11 +235,10 @@ impl SemanticScalarDeclaration {
 }
 
 /// Named Win32 types whose canonical projection is a primitive, not their header shape:
-/// `BOOLEAN` -> `bool` (a semantically-boolean `BYTE`) and `LARGE_INTEGER`/`ULARGE_INTEGER` ->
-/// `i64`/`u64` (64-bit overlay unions every consumer uses as one scalar). Collapsed at every
-/// reference like `DWORD` -> `u32`. Name-keyed because the collapse cannot be structural
-/// (`BOOLEAN` is byte-identical to `BYTE`, and RPC's lowercase `boolean` stays `u8`); the
-/// declaration kind keeps definition suppression paired with each reference mapping.
+/// `LARGE_INTEGER`/`ULARGE_INTEGER` -> `i64`/`u64` (64-bit overlay unions every consumer uses as
+/// one scalar). Collapsed at every reference like `DWORD` -> `u32`. Name-keyed because the
+/// collapse cannot be structural; the declaration kind keeps definition suppression paired with
+/// each reference mapping.
 pub(crate) fn semantic_scalar(name: &str) -> Option<metadata::Type> {
     semantic_scalar_entry(name).map(|entry| entry.ty)
 }
@@ -240,10 +252,6 @@ pub(crate) fn semantic_scalar_definition(name: &str, kind: CXCursorKind) -> Opti
 
 fn semantic_scalar_entry(name: &str) -> Option<SemanticScalar> {
     Some(match name {
-        "BOOLEAN" => SemanticScalar {
-            ty: metadata::Type::Bool,
-            declaration: SemanticScalarDeclaration::Typedef,
-        },
         "HNSTIME" => SemanticScalar {
             ty: metadata::Type::I64,
             declaration: SemanticScalarDeclaration::Typedef,
@@ -687,10 +695,8 @@ fn collapse_pointer_alias_param(
     }
 }
 
-/// Override a collapsed pointer parameter's const-ness from its SAL direction: `_In_`/`_Reserved_`
-/// -> `*const`, `_Out_`/`_Inout_` -> `*mut`. SAL is the author's read/write intent, so it wins over
-/// the C typedef's mutability (`_In_ LPWSTR` is a read-only buffer). Named aliases and non-pointers
-/// are unchanged, except a canonical string wrapper flips between its const/non-const variant.
+/// Override a collapsed pointer parameter's const-ness from its SAL direction. Raw `void*`
+/// remains source-mutable because SAL direction is represented independently by parameter flags.
 fn apply_sal_constness(ty: metadata::Type, annotation: &ParamAnnotation) -> metadata::Type {
     if !annotation.is_annotated() {
         return ty;
@@ -704,6 +710,11 @@ fn apply_sal_constness(ty: metadata::Type, annotation: &ParamAnnotation) -> meta
         return ty;
     };
     match ty {
+        metadata::Type::PtrMut(ref inner, _) | metadata::Type::PtrConst(ref inner, _)
+            if matches!(inner.as_ref(), metadata::Type::Void) =>
+        {
+            ty
+        }
         metadata::Type::PtrMut(inner, n) | metadata::Type::PtrConst(inner, n) => {
             if make_const {
                 metadata::Type::PtrConst(inner, n)

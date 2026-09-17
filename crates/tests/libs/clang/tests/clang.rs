@@ -228,7 +228,7 @@ fn namespaced_hresult_survives_the_binding_round_trip() {
 }
 
 #[test]
-fn semantic_scalars_are_universal() {
+fn semantic_scalars_and_native_typedefs_are_stable() {
     let scratch = std::path::Path::new(env!("OUT_DIR")).join("semantic_scalars");
     std::fs::create_dir_all(&scratch).unwrap();
 
@@ -357,7 +357,6 @@ fn semantic_scalars_are_universal() {
         flat_dir.join("semantic.rdl").as_path(),
     ] {
         let contents = std::fs::read_to_string(path).unwrap();
-        assert!(!contents.contains("type BOOLEAN"));
         for declaration in [
             "struct LARGE_INTEGER {",
             "union LARGE_INTEGER {",
@@ -366,29 +365,44 @@ fn semantic_scalars_are_universal() {
         ] {
             assert!(!contents.contains(declaration));
         }
-        assert!(!contents.contains("Other::"));
-        assert!(contents.contains("Boolean: bool"));
         assert!(contents.contains("Signed: i64"));
         assert!(contents.contains("Unsigned: u64"));
         assert!(contents.contains("DirectSigned: i64"));
         assert!(contents.contains("DirectUnsigned: u64"));
-        assert!(contents.contains("const BOOLEAN_TRUE: bool = true"));
-        assert!(contents.contains("const BOOLEAN_COMPLEMENT: bool = true"));
-        assert!(contents.contains("fn ReadBoolean() -> bool"));
         assert!(contents.contains("fn ReadSigned() -> i64"));
         assert!(contents.contains("fn ReadUnsigned() -> u64"));
         assert!(contents.contains("fn ReadDirectSigned() -> i64"));
         assert!(contents.contains("fn ReadDirectUnsigned() -> u64"));
-        assert!(contents.contains("boolean: *mut bool"));
         assert!(contents.contains("signed_value: *mut i64"));
         assert!(contents.contains("unsigned_value: *mut u64"));
     }
+
+    let direct = std::fs::read_to_string(&direct_rdl).unwrap();
+    assert!(direct.contains("type BOOLEAN = u8"));
+    assert!(direct.contains("Boolean: u8"));
+    assert!(direct.contains("const BOOLEAN_TRUE: BOOLEAN = 1"));
+    assert!(direct.contains("const BOOLEAN_COMPLEMENT: BOOLEAN = -1"));
+    assert!(direct.contains("fn ReadBoolean() -> u8"));
+    assert!(direct.contains("boolean: *mut u8"));
+
+    let referenced = std::fs::read_to_string(&referenced_rdl).unwrap();
+    assert!(!referenced.contains("type BOOLEAN"));
+    assert!(referenced.contains("Boolean: Other::BOOLEAN"));
+    assert!(referenced.contains("fn ReadBoolean() -> Other::BOOLEAN"));
+    assert!(referenced.contains("boolean: *mut Other::BOOLEAN"));
+
+    let flat = std::fs::read_to_string(flat_dir.join("semantic.rdl")).unwrap();
+    assert!(flat.contains("type BOOLEAN = u8"));
+    assert!(flat.contains("Boolean: BOOLEAN"));
+    assert!(flat.contains("fn ReadBoolean() -> BOOLEAN"));
+    assert!(flat.contains("boolean: *mut BOOLEAN"));
 
     let midl = std::fs::read_to_string(&midl_rdl).unwrap();
     for declaration in ["struct LARGE_INTEGER {", "struct ULARGE_INTEGER {"] {
         assert!(!midl.contains(declaration));
     }
-    assert!(midl.contains("Boolean: bool"));
+    assert!(midl.contains("type BOOLEAN = u8"));
+    assert!(midl.contains("Boolean: u8"));
     assert!(midl.contains("Signed: i64"));
     assert!(midl.contains("Unsigned: u64"));
     assert!(midl.contains("DirectSigned: i64"));
@@ -412,6 +426,7 @@ fn semantic_scalars_are_universal() {
     windows_rdl::reader()
         .input(&direct_rdl)
         .input(&referenced_rdl)
+        .reference(&hostile_reference)
         .output(winmd)
         .write()
         .unwrap();

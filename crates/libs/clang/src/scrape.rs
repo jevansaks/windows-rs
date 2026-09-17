@@ -198,8 +198,13 @@ impl Clang {
                 })
                 .collect();
             let m = std::time::Instant::now();
-            merge_arch_rdl(&arch_inputs, plan.seed.as_deref(), &plan.rdl_dir)
-                .unwrap_or_else(|e| panic!("arch-merge failed: {e}"));
+            merge_arch_rdl(
+                &arch_inputs,
+                plan.seed.as_deref(),
+                &plan.root,
+                &plan.rdl_dir,
+            )
+            .unwrap_or_else(|e| panic!("arch-merge failed: {e}"));
             merge_wall = m.elapsed().as_secs_f32();
 
             let w = std::time::Instant::now();

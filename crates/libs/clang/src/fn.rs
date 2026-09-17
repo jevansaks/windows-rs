@@ -133,10 +133,36 @@ fn token_names_function(tokens: &[(CXTokenKind, String)], name: &str) -> bool {
         .is_some_and(|i| tokens.get(i + 1).is_some_and(|(_, s)| s == "("))
 }
 
+fn source_macro_return_type(
+    tokens: &[(CXTokenKind, String)],
+    name: &str,
+    return_type: &metadata::Type,
+    parser: &Parser<'_>,
+) -> Option<metadata::Type> {
+    let name_idx = tokens
+        .iter()
+        .position(|(_, token)| token == name)
+        .filter(|&i| tokens.get(i + 1).is_some_and(|(_, token)| token == "("))?;
+
+    tokens[..name_idx].iter().rev().find_map(|(_, candidate)| {
+        let source_type = canonical_foundation_type(candidate).or_else(|| {
+            parser
+                .ref_map
+                .get(candidate)
+                .map(|namespace| metadata::Type::value_named(namespace, candidate))
+        })?;
+        let body = parser.macro_defs.get(candidate)?;
+        body.iter()
+            .filter_map(|token| fundamental_scalar(token))
+            .any(|ty| &ty == return_type)
+            .then_some(source_type)
+    })
+}
+
 impl Fn {
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>, extern_c: bool) -> Result<Self, Error> {
         let export_name = cursor.name();
-        let return_type = cursor.result_type().to_type(parser);
+        let mut return_type = cursor.result_type().to_type(parser);
 
         let is_variadic = cursor.ty().is_variadic();
         let does_not_return = detect_does_not_return(&cursor);
@@ -159,6 +185,11 @@ impl Fn {
             .cloned();
         let anchor = source_name.as_deref().unwrap_or(&export_name);
 
+        if let Some(source_type) =
+            source_macro_return_type(&fn_tokens, anchor, &return_type, parser)
+        {
+            return_type = source_type;
+        }
         let midl_annotations = scan_method_param_annotations(&fn_tokens, anchor, parser.macro_defs);
         let calling_convention = detect_calling_convention(&fn_tokens, anchor, parser.macro_defs);
 

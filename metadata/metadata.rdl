@@ -1,13 +1,14 @@
 // Hand-authored metadata vocabulary seed (NOT generated from headers).
 //
 // These attribute types live only in metadata, not in any C header, so the
-// scraper cannot derive them. They are the `Windows.Win32.Metadata` attributes
+// scraper cannot derive them. They are the `Windows.Win32.Foundation.Metadata` attributes
 // that the converter emits and that bindgen consumes, making the merged
 // `Windows.Win32.winmd` self-contained without an upstream reference winmd.
 #[win32]
 mod Windows {
     mod Win32 {
-        mod Metadata {
+        mod Foundation {
+            mod Metadata {
             // Marks a function that never returns (`__declspec(noreturn)`). RDL: `#[noreturn]`.
             attribute DoesNotReturnAttribute {
                 fn();
@@ -147,6 +148,7 @@ mod Windows {
             attribute ConstAttribute {
                 fn();
             }
+        }
         }
     }
 }

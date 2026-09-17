@@ -31,6 +31,7 @@ fn compile(name: &str, source: &str) -> (String, metadata::reader::Index) {
     }
     windows_rdl::reader()
         .input(&rdl)
+        .input_text(windows_rdl::WIN32_METADATA_RDL)
         .reference_default()
         .output(&winmd)
         .write()
@@ -47,6 +48,75 @@ fn method<'a>(index: &'a metadata::reader::Index, name: &str) -> metadata::reade
         .methods()
         .find(|m| m.name() == name)
         .unwrap()
+}
+
+#[test]
+fn dependency_typedef_and_macro_return_identities_use_reference_metadata() {
+    let dir = scratch("dependency_return_identities");
+    let dependency = dir.join("dependency.h");
+    let source = dir.join("input.h");
+    let rdl = dir.join("input.rdl");
+    let winmd = dir.join("output.winmd");
+    std::fs::write(
+        &dependency,
+        "#define NTSTATUS LONG\n\
+         typedef long LONG;\n\
+         typedef unsigned char BOOLEAN;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &source,
+        "#include \"dependency.h\"\n\
+         typedef struct CAPABILITIES { BOOLEAN Flag; } CAPABILITIES;\n\
+         extern \"C\" NTSTATUS GetStatus(void);\n\
+         extern \"C\" BOOLEAN GetBoolean(void);\n\
+         extern \"C\" void GetCapabilities(CAPABILITIES *value);\n",
+    )
+    .unwrap();
+    {
+        let _guard = test_clang::libclang_guard();
+        windows_clang::clang()
+            .args([
+                "-x",
+                "c++",
+                "--target=x86_64-pc-windows-msvc",
+                "-fms-extensions",
+            ])
+            .input(&source)
+            .namespace("Test")
+            .library("test.dll")
+            .output(&rdl)
+            .write()
+            .unwrap();
+    }
+
+    let text = std::fs::read_to_string(&rdl).unwrap();
+    assert!(text.contains("fn GetStatus() -> Windows::Win32::Foundation::NTSTATUS"));
+    assert!(text.contains("fn GetBoolean() -> Windows::Win32::Foundation::BOOLEAN"));
+    assert!(text.contains("Flag: Windows::Win32::Foundation::BOOLEAN"));
+
+    windows_rdl::reader()
+        .input(&rdl)
+        .input_text(
+            "#[win32] mod Windows { mod Win32 { mod Foundation {\n\
+                 type BOOLEAN = u8;\n\
+                 type NTSTATUS = i32;\n\
+             } } }",
+        )
+        .input_text(windows_rdl::WIN32_METADATA_RDL)
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = metadata::reader::Index::read(&winmd).unwrap();
+    assert_eq!(
+        method(&index, "GetStatus").signature(&[]).return_type,
+        metadata::Type::value_named("Windows.Win32.Foundation", "NTSTATUS")
+    );
+    assert_eq!(
+        method(&index, "GetBoolean").signature(&[]).return_type,
+        metadata::Type::value_named("Windows.Win32.Foundation", "BOOLEAN")
+    );
 }
 
 #[test]
@@ -98,7 +168,7 @@ fn sal_source_and_attributes_preserve_buffer_contracts() {
         // SAL projection constness is separate from the native signature asserted in the TU.
         assert_eq!(
             signature.types[1],
-            metadata::Type::PtrConst(Box::new(metadata::Type::Void), 1)
+            metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1)
         );
         assert_eq!(
             signature.types[3],
@@ -177,16 +247,22 @@ fn associated_enum_targets_parameter_and_return_rows() {
         r#"
         #define ASSOCIATED(name) __attribute__((annotate("win32metadata:associated_enum=" #name)))
         typedef unsigned long DWORD;
+        typedef unsigned long ULONG;
         ASSOCIATED(ERROR_KIND) DWORD __stdcall Select(ASSOCIATED(FLAGS) DWORD *flags);
         static_assert(__is_same(decltype(&Select), DWORD (__stdcall *)(DWORD *)));
         enum FLAGS : unsigned long { FIRST = 1, SECOND = 2 };
-        enum ERROR_KIND : unsigned long { SUCCESS = 0, FAILURE = 5 };
+        enum ERROR_KIND : ULONG { SUCCESS = 0, FAILURE = 5 };
         struct __declspec(uuid("12345678-1234-1234-1234-123456789abc")) ISelector {
             virtual ASSOCIATED(ERROR_KIND) DWORD Select(ASSOCIATED(FLAGS) DWORD flags) = 0;
         };
         "#,
     );
     assert!(rdl.contains("-> #[associated_enum(\"ERROR_KIND\")] u32"));
+    assert!(rdl.contains("#[repr(u32)]\n    enum ERROR_KIND"));
+    index.expect(
+        "Windows.Win32.Foundation.Metadata",
+        "AssociatedEnumAttribute",
+    );
     assert_eq!(
         index.expect("Test", "FLAGS").category(),
         metadata::reader::TypeCategory::Enum

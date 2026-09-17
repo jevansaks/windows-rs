@@ -24,7 +24,11 @@ pub use reader::Reader;
 pub use writer::Writer;
 
 /// The metadata namespace that owns the Win32 attribute vocabulary.
-pub(crate) const METADATA_NAMESPACE: &str = "Windows.Win32.Metadata";
+pub(crate) const METADATA_NAMESPACE: &str = "Windows.Win32.Foundation.Metadata";
+
+/// Hand-authored Win32 metadata attribute definitions required to make generated images
+/// self-contained.
+pub const WIN32_METADATA_RDL: &str = include_str!("../../../../metadata/metadata.rdl");
 
 /// Short RDL attribute spelling and the metadata attribute it maps to.
 pub(crate) struct PseudoAttr {
@@ -232,6 +236,7 @@ pub struct ArchInput {
 pub fn merge_arch_rdl(
     inputs: &[ArchInput],
     seed: Option<&Path>,
+    namespace: &str,
     output_dir: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let output_dir = output_dir.as_ref();
@@ -292,7 +297,7 @@ pub fn merge_arch_rdl(
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            for name in reader::item_names(&path, "Windows.Win32")? {
+            for name in reader::item_names(&path, namespace)? {
                 map.entry(name).or_insert_with(|| stem.to_string());
             }
         }
