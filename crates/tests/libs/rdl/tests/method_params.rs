@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use windows_metadata as metadata;
 use windows_metadata::HasAttributes;
 
-const METADATA_NAMESPACE: &str = "Windows.Win32.Metadata";
+const METADATA_NAMESPACE: &str = "Windows.Win32.Foundation.Metadata";
 
 struct AttributeSpec {
     name: String,
