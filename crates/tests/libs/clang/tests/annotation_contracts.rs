@@ -271,6 +271,15 @@ fn associated_enum_targets_parameter_and_return_rows() {
         index.expect("Test", "ERROR_KIND").category(),
         metadata::reader::TypeCategory::Enum
     );
+    assert_eq!(
+        index
+            .expect("Test", "ERROR_KIND")
+            .fields()
+            .find(|field| field.name() == "value__")
+            .unwrap()
+            .ty(),
+        metadata::Type::U32
+    );
     for method in [
         method(&index, "Select"),
         index.expect("Test", "ISelector").methods().next().unwrap(),
