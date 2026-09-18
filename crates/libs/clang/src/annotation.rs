@@ -933,12 +933,7 @@ pub fn scan_method_param_annotations(
             {
                 current.sal.optional = true;
             }
-            (CXToken_Identifier, s)
-                if in_params
-                    && paren_depth == 1
-                    && is_sal_name(s)
-                    && macro_defs.contains_key(s) =>
-            {
+            (CXToken_Identifier, s) if in_params && paren_depth == 1 && is_sal_name(s) => {
                 apply_sal_string(s, &mut current.sal);
                 if current.sal.size.is_none() {
                     current.sal.size = capture_source_sal_size(s, &tokens[index + 1..]);

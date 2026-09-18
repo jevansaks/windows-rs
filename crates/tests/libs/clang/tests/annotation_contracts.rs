@@ -86,11 +86,18 @@ fn callback_typedefs_preserve_source_sal() {
         typedef CALLBACK_V1 *CALLBACK_ALIAS;
 
         #define ASSOCIATED(name) __attribute__((annotate("win32metadata:associated_enum=" #name)))
+        #define SUPPORTED(version) __attribute__((annotate("win32metadata:supported_os=" version)))
+        SUPPORTED("windows8.0")
         typedef ASSOCIATED(WIN32_ERROR) DWORD DEVICE_CALLBACK(
             _In_opt_ PVOID Context,
             _In_ DWORD Type,
             _In_ PVOID Setting);
         typedef DEVICE_CALLBACK *PDEVICE_CALLBACK;
+
+        SUPPORTED("windows8.0")
+        typedef struct RECORD { DWORD value; } RECORD;
+        SUPPORTED("windows8.0")
+        typedef enum KIND { KIND_NONE = 0 } KIND;
     "#;
 
     let (rdl, index) = compile("callback_typedef_sal", source);
@@ -119,6 +126,11 @@ fn callback_typedefs_preserve_source_sal() {
     );
 
     let callback = callback_method(&index, "DEVICE_CALLBACK");
+    assert!(
+        index
+            .expect("Test", "DEVICE_CALLBACK")
+            .has_attribute("SupportedOSPlatformAttribute")
+    );
     let params = callback.params_by_sequence(3).unwrap();
     assert_eq!(
         params.params()[0].unwrap().flags(),
@@ -140,6 +152,14 @@ fn callback_typedefs_preserve_source_sal() {
             metadata::Value::Utf8("WIN32_ERROR".to_string())
         )]
     );
+    for name in ["RECORD", "KIND"] {
+        assert!(
+            index
+                .expect("Test", name)
+                .has_attribute("SupportedOSPlatformAttribute"),
+            "{name}"
+        );
+    }
 }
 
 #[test]

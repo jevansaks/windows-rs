@@ -63,6 +63,23 @@ impl Collector {
         }
     }
 
+    /// Prefix annotations on `typedef struct/enum ... NAME` belong to the emitted record
+    /// or enum, which Clang exposes as a separate declaration cursor.
+    pub fn apply_typedef_annotations(
+        &mut self,
+        name: &str,
+        annotations: &[Win32MetadataAnnotation],
+    ) {
+        if annotations.is_empty() {
+            return;
+        }
+        match self.0.get_mut(name) {
+            Some(Item::Enum(item)) => item.annotations.extend_from_slice(annotations),
+            Some(Item::Struct(item)) => item.annotations.extend_from_slice(annotations),
+            _ => {}
+        }
+    }
+
     /// Fill missing interface GUIDs from `IID_<Name>` variable declarations.
     pub fn apply_iid_vars(&mut self, iid_vars: &HashMap<String, String>) {
         for (name, item) in &mut self.0 {

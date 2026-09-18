@@ -306,6 +306,8 @@ impl<'a> Parser<'a> {
             CXCursor_TypedefDecl if child.is_definition() => {
                 let name = child.name();
                 if !self.ref_map.contains_key(&name) {
+                    let annotations = extract_win32_metadata_annotations(&child);
+                    collector.apply_typedef_annotations(&name, &annotations);
                     if let Some(cb) = Callback::parse(child, self)? {
                         collector.insert(Item::Callback(cb));
                     } else if let Some(td) = Typedef::parse(child, self)? {
