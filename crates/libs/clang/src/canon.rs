@@ -412,13 +412,8 @@ pub(crate) fn pointer_sized_abi(name: &str) -> Option<metadata::Type> {
 #[derive(Clone, Copy)]
 enum AliasPolicy {
     /// A canonical string-pointer wrapper, kept named so the `windows` projection maps it to a
-    /// string type. `canonical` is this spelling's variant; `mut_name`/`const_name` are the
-    /// variants SAL selects between (`PWSTR`<->`PCWSTR`, `PSTR`<->`PCSTR`).
-    String {
-        canonical: &'static str,
-        mut_name: &'static str,
-        const_name: &'static str,
-    },
+    /// string type. `canonical` preserves this spelling's source constness.
+    String { canonical: &'static str },
     /// Kept named verbatim. `BSTR` is a length-prefixed, `SysAllocString`-owned COM string, not a
     /// bare `OLECHAR*`.
     KeepNamed,
@@ -431,37 +426,17 @@ fn alias_policy(name: &str) -> Option<AliasPolicy> {
     const WIDE: (&str, &str) = ("PWSTR", "PCWSTR");
     const NARROW: (&str, &str) = ("PSTR", "PCSTR");
     Some(match name {
-        "LPWSTR" | "PWSTR" => AliasPolicy::String {
-            canonical: WIDE.0,
-            mut_name: WIDE.0,
-            const_name: WIDE.1,
-        },
-        "LPCWSTR" | "PCWSTR" => AliasPolicy::String {
-            canonical: WIDE.1,
-            mut_name: WIDE.0,
-            const_name: WIDE.1,
-        },
+        "LPWSTR" | "PWSTR" => AliasPolicy::String { canonical: WIDE.0 },
+        "LPCWSTR" | "PCWSTR" => AliasPolicy::String { canonical: WIDE.1 },
         "LPSTR" | "PSTR" => AliasPolicy::String {
             canonical: NARROW.0,
-            mut_name: NARROW.0,
-            const_name: NARROW.1,
         },
         "LPCSTR" | "PCSTR" => AliasPolicy::String {
             canonical: NARROW.1,
-            mut_name: NARROW.0,
-            const_name: NARROW.1,
         },
         // The OLE string family (`OLECHAR` = `wchar_t`): same wide wrappers as `LP*WSTR`.
-        "LPOLESTR" | "POLESTR" => AliasPolicy::String {
-            canonical: WIDE.0,
-            mut_name: WIDE.0,
-            const_name: WIDE.1,
-        },
-        "LPCOLESTR" | "PCOLESTR" => AliasPolicy::String {
-            canonical: WIDE.1,
-            mut_name: WIDE.0,
-            const_name: WIDE.1,
-        },
+        "LPOLESTR" | "POLESTR" => AliasPolicy::String { canonical: WIDE.0 },
+        "LPCOLESTR" | "PCOLESTR" => AliasPolicy::String { canonical: WIDE.1 },
         "BSTR" => AliasPolicy::KeepNamed,
         _ => return None,
     })
@@ -524,7 +499,7 @@ fn decay_array_param(
 }
 
 /// Resolve a parameter's metadata type after general typedef canonicalization. This path also
-/// decays arrays, collapses remaining pointer aliases, applies SAL constness, and normalizes
+/// decays arrays, collapses remaining pointer aliases, preserves source constness, and normalizes
 /// pointer shapes.
 pub(crate) fn param_metadata_type(
     cursor_ty: &Type,
@@ -534,8 +509,7 @@ pub(crate) fn param_metadata_type(
     let base = cursor_ty.to_type(parser);
     let base = decay_array_param(cursor_ty, base, parser);
     let base = collapse_pointer_alias_param(cursor_ty, base, parser);
-    let ty = apply_sal_constness(base, annotation);
-    let ty = normalize_pointer_const_chain(ty);
+    let ty = normalize_pointer_const_chain(base);
     let ty = promote_null_terminated_string(ty, annotation, parser);
     requalify_string_alias(ty, parser)
 }
@@ -556,9 +530,8 @@ pub(crate) fn inline_array_param_count(cursor_ty: &Type) -> Option<i32> {
 /// The winmd `Type` model stores a pointer run as a single const bit plus a depth, so it cannot
 /// represent a chain whose levels differ in const-ness: serialising `PtrMut(PtrConst(T))` corrupts
 /// it on the winmd round-trip (the inner modifier is misread and the run degrades to
-/// `*const *const T`). The outermost level carries the real read/write direction (set by
-/// [`apply_sal_constness`]), so it governs the whole chain. Uniform chains are already collapsed by
-/// [`Type::to_type`], so only a genuinely mixed chain nests here.
+/// `*const *const T`). The source outermost qualifier governs the whole chain. Uniform chains are
+/// already collapsed by [`Type::to_type`], so only a genuinely mixed chain nests here.
 fn normalize_pointer_const_chain(ty: metadata::Type) -> metadata::Type {
     fn flatten(inner: metadata::Type, depth: usize) -> (metadata::Type, usize) {
         match inner {
@@ -643,9 +616,9 @@ pub(crate) fn normalize_rdl_type(ty: &metadata::Type) -> metadata::Type {
 }
 
 /// Collapse an `LP*`/`P*` pointer typedef parameter (`LPDWORD`, `PHKEY`, ...) to the raw pointer it
-/// spells, so the pointer level - and its SAL-driven const-ness - is expressed structurally rather
-/// than hidden in an opaque alias bindgen cannot const-qualify. The named pointee and its C
-/// const-ness are preserved. Kept named: string wrappers, non-pointer aliases, and handles (a
+/// spells, so the pointer level and source constness are expressed structurally rather than hidden
+/// in an opaque alias. The named pointee and its C constness are preserved. Kept named: string
+/// wrappers, non-pointer aliases, and handles (a
 /// `void*` handle or a `DECLARE_HANDLE` tag), which are opaque values, not pointers-to-data.
 fn collapse_pointer_alias_param(
     cursor_ty: &Type,
@@ -694,57 +667,12 @@ fn collapse_pointer_alias_param(
     }
 }
 
-/// Override a collapsed pointer parameter's const-ness from its SAL direction. Raw `void*`
-/// remains source-mutable because SAL direction is represented independently by parameter flags.
-fn apply_sal_constness(ty: metadata::Type, annotation: &ParamAnnotation) -> metadata::Type {
-    if !annotation.is_annotated() {
-        return ty;
-    }
-    // A bare `_*_opt_`/array annotation with no direction leaves the C const-ness intact.
-    let make_const = if annotation.out_param {
-        false
-    } else if annotation.in_param || annotation.reserved {
-        true
-    } else {
-        return ty;
-    };
-    match ty {
-        metadata::Type::PtrMut(ref inner, _) | metadata::Type::PtrConst(ref inner, _)
-            if matches!(inner.as_ref(), metadata::Type::Void) =>
-        {
-            ty
-        }
-        metadata::Type::PtrMut(inner, n) | metadata::Type::PtrConst(inner, n) => {
-            if make_const {
-                metadata::Type::PtrConst(inner, n)
-            } else {
-                metadata::Type::PtrMut(inner, n)
-            }
-        }
-        // A canonical string wrapper flips between its const/non-const named variant.
-        metadata::Type::ValueName(ref type_name) => {
-            if let Some(AliasPolicy::String {
-                mut_name,
-                const_name,
-                ..
-            }) = alias_policy(&type_name.name)
-            {
-                let variant = if make_const { const_name } else { mut_name };
-                metadata::Type::value_named(&type_name.namespace, variant)
-            } else {
-                ty
-            }
-        }
-        other => other,
-    }
-}
-
 /// Promote a raw null-terminated string parameter (`_In_z_ WCHAR const*` with no named alias) to
 /// its canonical wrapper, so bindgen's string projection applies exactly as to the named aliases.
 /// Gated on the `_z_` SAL bit ([`ParamAnnotation::null_terminated`]) - without it a `WCHAR const*`
 /// is an opaque buffer; the `size`/`array` guard excludes counted `_*_reads_z_` shapes. The
-/// variant follows the const-ness [`apply_sal_constness`] resolved and the pointee width. Flat
-/// scrape only, like [`normalize_string_alias`].
+/// variant follows the source pointee constness and width. Flat scrape only, like
+/// [`normalize_string_alias`].
 fn promote_null_terminated_string(
     ty: metadata::Type,
     annotation: &ParamAnnotation,

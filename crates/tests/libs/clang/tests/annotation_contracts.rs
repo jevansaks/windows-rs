@@ -100,11 +100,12 @@ fn callback_typedefs_preserve_source_sal() {
         typedef enum KIND { KIND_NONE = 0 } KIND, *PKIND;
     "#;
 
-    let (rdl, index) = compile("callback_typedef_sal", source);
-    assert!(rdl.contains("#[size_param(1)] Name: *const i8"));
-    assert!(rdl.contains("#[size_param(3)] Description: *const i8"));
+    let (_, index) = compile("callback_typedef_sal", source);
 
     let callback = callback_method(&index, "CALLBACK_V1");
+    let signature = callback.signature(&[]);
+    assert!(matches!(signature.types[2], metadata::Type::PtrMut(_, 1)));
+    assert!(matches!(signature.types[4], metadata::Type::PtrMut(_, 1)));
     let params = callback.params_by_sequence(7).unwrap();
     assert_eq!(
         params.params()[2].unwrap().buffer_relationship(),
@@ -246,6 +247,7 @@ fn sal_source_and_attributes_preserve_buffer_contracts() {
             typedef void *PVOID;
             typedef void *HANDLE;
             typedef struct {{ DWORD value; }} CAPABILITIES, *PCAPABILITIES;
+            typedef struct {{ DWORD Data1; }} GUID;
             extern "C" long __stdcall Exchange(
                 DWORD level,
                 _In_reads_bytes_opt_(inputLength) PVOID input,
@@ -263,6 +265,9 @@ fn sal_source_and_attributes_preserve_buffer_contracts() {
                 void *buffer, const void *constant);
             void Nested(void (*callback)(_Out_ DWORD *nested), DWORD plain);
             void CommentPriority(/* [out] */ _In_ DWORD *value);
+            void NativeConstness(_In_ CAPABILITIES *record, _In_ DWORD *scalar,
+                _In_ PVOID buffer, _In_ PCAPABILITIES alias,
+                _In_ const DWORD *readonly, _In_ const GUID *guid);
             "#
         );
         let (rdl, index) = compile(name, &source);
@@ -344,6 +349,22 @@ fn sal_source_and_attributes_preserve_buffer_contracts() {
                 .flags(),
             metadata::ParamAttributes::In
         );
+        let native = method(&index, "NativeConstness").signature(&[]).types;
+        assert!(matches!(native[0], metadata::Type::PtrMut(_, 1)));
+        assert_eq!(
+            native[1],
+            metadata::Type::PtrMut(Box::new(metadata::Type::U32), 1)
+        );
+        assert_eq!(
+            native[2],
+            metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1)
+        );
+        assert!(matches!(native[3], metadata::Type::PtrMut(_, 1)));
+        assert_eq!(
+            native[4],
+            metadata::Type::PtrConst(Box::new(metadata::Type::U32), 1)
+        );
+        assert!(matches!(native[5], metadata::Type::PtrConst(_, 1)));
     }
 }
 
