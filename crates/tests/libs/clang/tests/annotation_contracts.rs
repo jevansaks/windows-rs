@@ -76,6 +76,7 @@ fn callback_typedefs_preserve_source_sal() {
         typedef void *LPARAM;
         typedef int BOOLEAN;
         typedef struct POLICY { DWORD value; } POLICY, *PPOLICY;
+        #define TEST_CONSTANT 7
 
         typedef BOOLEAN CALLBACK_V1(
             _In_ DWORD Index,
@@ -163,6 +164,20 @@ fn callback_typedefs_preserve_source_sal() {
             "{name}"
         );
     }
+    let constant = index
+        .expect("Test", "Apis")
+        .fields()
+        .find(|field| field.name() == "TEST_CONSTANT")
+        .unwrap();
+    assert!(
+        constant
+            .flags()
+            .contains(metadata::FieldAttributes::HasDefault)
+    );
+    assert_eq!(
+        constant.constant().unwrap().value(),
+        metadata::Value::I32(7)
+    );
 }
 
 #[test]

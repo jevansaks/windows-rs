@@ -244,10 +244,36 @@ impl TranslationUnit {
             let Ok(bytes) = std::fs::read(path) else {
                 return self.tokenize(range);
             };
-            let Some(source) = bytes.get(start_offset as usize..end_offset as usize) else {
+            let Some(source) = bytes.get(start_offset as usize..) else {
                 return self.tokenize(range);
             };
-            Self::lex_source_tokens(source)
+            let mut tokens = Self::lex_source_tokens(source);
+            let mut saw_params = false;
+            let mut depth = 0;
+            let end = tokens.iter().position(|(kind, spelling)| {
+                if *kind != CXToken_Punctuation {
+                    return false;
+                }
+                match spelling.as_str() {
+                    "(" => {
+                        saw_params = true;
+                        depth += 1;
+                    }
+                    ")" if depth > 0 => depth -= 1,
+                    ";" if saw_params && depth == 0 => return true,
+                    _ => {}
+                }
+                false
+            });
+            if let Some(end) = end {
+                tokens.truncate(end + 1);
+            } else {
+                let Some(source) = bytes.get(start_offset as usize..end_offset as usize) else {
+                    return self.tokenize(range);
+                };
+                tokens = Self::lex_source_tokens(source);
+            }
+            tokens
         }
     }
 
