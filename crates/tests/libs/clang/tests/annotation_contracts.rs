@@ -466,6 +466,156 @@ fn associated_enum_targets_parameter_and_return_rows() {
 }
 
 #[test]
+fn associated_constants_preserve_canonical_namespace_across_partition_units() {
+    let dir = scratch("associated_constant_partitions");
+    let foundation_header = dir.join("foundation.h");
+    let foundation_rdl = dir.join("foundation.rdl");
+    let setupapi_header = dir.join("setupapi.h");
+    let setupapi_rdl = dir.join("setupapi.rdl");
+    let registry_header = dir.join("registry.h");
+    let registry_rdl = dir.join("registry.rdl");
+    let winmd = dir.join("output.winmd");
+
+    std::fs::write(
+        &foundation_header,
+        r#"
+        #define ASSOCIATED_CONSTANT(name) \
+            __attribute__((annotate("win32metadata:associated_constant=" #name)))
+        #define ERROR_CORE 1
+        #pragma push_macro("ERROR_CORE")
+        #undef ERROR_CORE
+        enum [[clang::flag_enum]]
+            ASSOCIATED_CONSTANT(ERROR_SETUPAPI)
+            ASSOCIATED_CONSTANT(ERROR_ABSENT)
+            ASSOCIATED_CONSTANT(ERROR_REGISTRY)
+            WIN32_ERROR : unsigned long {
+                ERROR_CORE = 1,
+        };
+        #pragma pop_macro("ERROR_CORE")
+        "#,
+    )
+    .unwrap();
+    std::fs::write(&setupapi_header, "#define ERROR_SETUPAPI 2\n").unwrap();
+    std::fs::write(&registry_header, "#define ERROR_REGISTRY 3\n").unwrap();
+
+    let emit = |input: &Path, output: &Path, namespace: &str| {
+        let _guard = test_clang::libclang_guard();
+        windows_clang::clang()
+            .args([
+                "-x",
+                "c++",
+                "--target=x86_64-pc-windows-msvc",
+                "-fms-extensions",
+            ])
+            .input(input)
+            .namespace(namespace)
+            .library("test.dll")
+            .output(output)
+            .write()
+            .unwrap();
+    };
+    emit(
+        &foundation_header,
+        &foundation_rdl,
+        "Windows.Win32.Foundation",
+    );
+    emit(&setupapi_header, &setupapi_rdl, "Windows.Win32.Foundation");
+    emit(
+        &registry_header,
+        &registry_rdl,
+        "Windows.Win32.System.Registry",
+    );
+
+    let foundation = std::fs::read_to_string(&foundation_rdl).unwrap();
+    assert!(foundation.contains("mod Foundation"));
+    assert!(foundation.contains("#[flags]"));
+    for name in ["ERROR_SETUPAPI", "ERROR_ABSENT", "ERROR_REGISTRY"] {
+        assert!(foundation.contains(&format!("#[associated_constant(\"{name}\")]")));
+    }
+
+    windows_rdl::reader()
+        .input(&foundation_rdl)
+        .input(&setupapi_rdl)
+        .input(&registry_rdl)
+        .input_text(windows_rdl::WIN32_METADATA_RDL)
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = metadata::reader::Index::read(&winmd).unwrap();
+    let error = index.expect("Windows.Win32.Foundation", "WIN32_ERROR");
+    assert_eq!(error.category(), metadata::reader::TypeCategory::Enum);
+    assert!(error.has_attribute("FlagsAttribute"));
+
+    let mut associated: Vec<_> = error
+        .attributes()
+        .filter(|attribute| attribute.name() == "AssociatedConstantAttribute")
+        .map(|attribute| match attribute.value().as_slice() {
+            [(name, metadata::Value::Utf8(value))] if name.is_empty() => value.clone(),
+            value => panic!("unexpected associated constant value: {value:?}"),
+        })
+        .collect();
+    associated.sort();
+    assert_eq!(
+        associated,
+        ["ERROR_ABSENT", "ERROR_REGISTRY", "ERROR_SETUPAPI"]
+    );
+
+    let foundation_constants = index.expect("Windows.Win32.Foundation", "Apis");
+    assert!(
+        foundation_constants
+            .fields()
+            .any(|field| field.name() == "ERROR_SETUPAPI")
+    );
+    assert!(
+        !foundation_constants
+            .fields()
+            .any(|field| field.name() == "ERROR_ABSENT")
+    );
+    assert!(
+        !foundation_constants
+            .fields()
+            .any(|field| field.name() == "ERROR_REGISTRY")
+    );
+    assert!(
+        index
+            .expect("Windows.Win32.System.Registry", "Apis")
+            .fields()
+            .any(|field| field.name() == "ERROR_REGISTRY")
+    );
+
+    let bindings = dir.join("bindings.rs");
+    windows_bindgen::bindgen([
+        "--in",
+        winmd.to_str().unwrap(),
+        "--out",
+        bindings.to_str().unwrap(),
+        "--filter",
+        "Windows.Win32.Foundation.WIN32_ERROR",
+    ]);
+    let bindings = std::fs::read_to_string(bindings).unwrap();
+    assert!(bindings.contains("pub type WIN32_ERROR = u32;"));
+    assert!(bindings.contains("pub const ERROR_CORE: WIN32_ERROR = 1;"));
+    assert!(!bindings.contains("ERROR_SETUPAPI"));
+    assert!(!bindings.contains("ERROR_ABSENT"));
+    assert!(!bindings.contains("ERROR_REGISTRY"));
+
+    let namespace_bindings = dir.join("namespace_bindings.rs");
+    windows_bindgen::bindgen([
+        "--in",
+        winmd.to_str().unwrap(),
+        "--out",
+        namespace_bindings.to_str().unwrap(),
+        "--filter",
+        "Windows.Win32.Foundation",
+    ]);
+    let namespace_bindings = std::fs::read_to_string(namespace_bindings).unwrap();
+    assert!(namespace_bindings.contains("pub const ERROR_SETUPAPI: i32 = 2;"));
+    assert!(!namespace_bindings.contains("ERROR_ABSENT"));
+    assert!(!namespace_bindings.contains("ERROR_REGISTRY"));
+}
+
+#[test]
 fn rejects_malformed_or_misplaced_enum_associations() {
     let _guard = test_clang::libclang_guard();
     for (source, message) in [
