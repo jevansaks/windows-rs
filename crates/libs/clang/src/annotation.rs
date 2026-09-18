@@ -268,14 +268,33 @@ fn validate_win32_metadata_annotation(
             "win32metadata annotation `{}` does not accept a value",
             annotation.key
         ))
+    } else if annotation.is("associated_enum")
+        && target.kind() == CXCursor_TypedefDecl
+        && target
+            .typedef_underlying_type()
+            .function_pointee()
+            .is_none()
+    {
+        Some(format!(
+            "win32metadata annotation `{}` is not valid on this declaration",
+            annotation.key
+        ))
     } else if !annotation_target_allowed(&annotation.key, target.kind()) {
         Some(format!(
             "win32metadata annotation `{}` is not valid on this declaration",
             annotation.key
         ))
     } else if annotation.is("associated_enum")
-        && matches!(target.kind(), CXCursor_FunctionDecl | CXCursor_CXXMethod)
-        && target.result_type().kind() == CXType_Void
+        && match target.kind() {
+            CXCursor_FunctionDecl | CXCursor_CXXMethod => {
+                target.result_type().kind() == CXType_Void
+            }
+            CXCursor_TypedefDecl => target
+                .typedef_underlying_type()
+                .function_pointee()
+                .is_some_and(|ty| ty.fn_result_type().kind() == CXType_Void),
+            _ => false,
+        }
     {
         Some("win32metadata annotation `associated_enum` requires a non-void return".to_string())
     } else {
@@ -325,6 +344,7 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
                 | CXCursor_FieldDecl
                 | CXCursor_VarDecl
                 | CXCursor_EnumConstantDecl
+                | CXCursor_TypedefDecl
         ),
         "associated_constant" => target == CXCursor_EnumDecl,
         "native_inheritance" | "struct_size_field" => {

@@ -50,6 +50,98 @@ fn method<'a>(index: &'a metadata::reader::Index, name: &str) -> metadata::reade
         .unwrap()
 }
 
+fn callback_method<'a>(
+    index: &'a metadata::reader::Index,
+    name: &str,
+) -> metadata::reader::MethodDef<'a> {
+    index
+        .expect("Test", name)
+        .methods()
+        .find(|m| m.name() == "Invoke")
+        .unwrap()
+}
+
+#[test]
+fn callback_typedefs_preserve_source_sal() {
+    let source = r#"
+        #define CALLBACK __stdcall
+        #define _In_
+        #define _In_opt_
+        #define _Inout_opt_
+        #define _In_reads_bytes_(n)
+        typedef unsigned long DWORD;
+        typedef void *PVOID;
+        typedef void *LPARAM;
+        typedef int BOOLEAN;
+        typedef struct POLICY { DWORD value; } POLICY, *PPOLICY;
+
+        typedef BOOLEAN CALLBACK_V1(
+            _In_ DWORD Index,
+            _In_ DWORD NameSize,
+            _In_reads_bytes_(NameSize) char *Name,
+            _In_ DWORD DescriptionSize,
+            _In_reads_bytes_(DescriptionSize) char *Description,
+            _In_ PPOLICY Policy,
+            _Inout_opt_ LPARAM Context);
+        typedef CALLBACK_V1 *CALLBACK_ALIAS;
+
+        #define ASSOCIATED(name) __attribute__((annotate("win32metadata:associated_enum=" #name)))
+        typedef ASSOCIATED(WIN32_ERROR) DWORD DEVICE_CALLBACK(
+            _In_opt_ PVOID Context,
+            _In_ DWORD Type,
+            _In_ PVOID Setting);
+        typedef DEVICE_CALLBACK *PDEVICE_CALLBACK;
+    "#;
+
+    let (rdl, index) = compile("callback_typedef_sal", source);
+    assert!(rdl.contains("#[size_param(1)] Name: *const i8"));
+    assert!(rdl.contains("#[size_param(3)] Description: *const i8"));
+
+    let callback = callback_method(&index, "CALLBACK_V1");
+    let params = callback.params_by_sequence(7).unwrap();
+    assert_eq!(
+        params.params()[2].unwrap().buffer_relationship(),
+        Some(metadata::reader::BufferRelationship::BytesParam(1))
+    );
+    assert_eq!(
+        params.params()[4].unwrap().buffer_relationship(),
+        Some(metadata::reader::BufferRelationship::BytesParam(3))
+    );
+    assert_eq!(
+        params.params()[5].unwrap().flags(),
+        metadata::ParamAttributes::In
+    );
+    assert_eq!(
+        params.params()[6].unwrap().flags(),
+        metadata::ParamAttributes::In
+            | metadata::ParamAttributes::Out
+            | metadata::ParamAttributes::Optional
+    );
+
+    let callback = callback_method(&index, "DEVICE_CALLBACK");
+    let params = callback.params_by_sequence(3).unwrap();
+    assert_eq!(
+        params.params()[0].unwrap().flags(),
+        metadata::ParamAttributes::In | metadata::ParamAttributes::Optional
+    );
+    assert_eq!(
+        params.params()[2].unwrap().flags(),
+        metadata::ParamAttributes::In
+    );
+    assert_eq!(
+        params
+            .return_param()
+            .unwrap()
+            .find_attribute("AssociatedEnumAttribute")
+            .unwrap()
+            .value(),
+        [(
+            String::new(),
+            metadata::Value::Utf8("WIN32_ERROR".to_string())
+        )]
+    );
+}
+
 #[test]
 fn dependency_typedef_and_macro_return_identities_use_reference_metadata() {
     let dir = scratch("dependency_return_identities");

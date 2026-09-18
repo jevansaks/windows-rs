@@ -5,6 +5,7 @@ pub struct Callback {
     pub name: String,
     pub params: Vec<Param>,
     pub return_type: metadata::Type,
+    pub annotations: Vec<Win32MetadataAnnotation>,
     /// Non-default source calling convention; `None` is the platform default.
     pub calling_convention: Option<CallingConvention>,
 }
@@ -58,14 +59,15 @@ impl Callback {
         };
 
         let source_name = param_source.name();
-        let tokens = parser
-            .tu
-            .tokenize(parser.tu.to_expansion_range(param_source.extent()));
+        // Callback typedef extents already cover the source declaration. Keep the spelling
+        // range so SAL macros that expand away remain available to the source-token scanner.
+        let tokens = parser.tu.tokenize(param_source.extent());
 
         // Use the shared SAL/MIDL path so callbacks match functions and COM methods.
         let midl_annotations =
             scan_method_param_annotations(&tokens, &source_name, parser.macro_defs);
         let params = parse_params(&param_source, &midl_annotations, parser);
+        let annotations = extract_win32_metadata_annotations(&param_source);
 
         // clang erases x64 conventions from the type, so recover non-default ones from tokens.
         let calling_convention =
@@ -75,6 +77,7 @@ impl Callback {
             name,
             params,
             return_type,
+            annotations,
             calling_convention,
         }))
     }
@@ -93,9 +96,11 @@ impl Callback {
             metadata::Type::Void => quote! {},
             ty => {
                 let ty = write_type(namespace, ty);
-                quote! { -> #ty }
+                let attrs = win32_metadata_attrs(&self.annotations, true);
+                quote! { -> #(#attrs)* #ty }
             }
         };
+        let attrs = win32_metadata_attrs(&self.annotations, false);
 
         // Bare `extern fn` encodes the platform default in the reader.
         let abi = match self.calling_convention {
@@ -105,6 +110,7 @@ impl Callback {
         };
 
         Ok(quote! {
+            #(#attrs)*
             extern #abi fn #name(#(#params),*) #return_type;
         })
     }
