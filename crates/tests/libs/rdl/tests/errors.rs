@@ -36,6 +36,24 @@ fn writer_missing_output_is_rejected() {
 }
 
 #[test]
+fn invalid_interface_base_names_both_types() {
+    let error = windows_rdl::reader()
+        .input_text(
+            "#[win32] mod Test {\n\
+             struct VALUE { value: i32, }\n\
+             interface Derived: VALUE {}\n\
+             }",
+        )
+        .output(out_path("interface_base"))
+        .write()
+        .unwrap_err();
+    assert_eq!(
+        error.message,
+        "interface `Derived` base `VALUE` must resolve to an interface type"
+    );
+}
+
+#[test]
 fn assembly_identity_can_be_configured() {
     let path = out_path("assembly_identity");
     windows_rdl::reader()
