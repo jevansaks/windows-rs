@@ -95,9 +95,9 @@ fn callback_typedefs_preserve_source_sal() {
         typedef DEVICE_CALLBACK *PDEVICE_CALLBACK;
 
         SUPPORTED("windows8.0")
-        typedef struct RECORD { DWORD value; } RECORD;
+        typedef struct RECORD { DWORD value; } RECORD, *PRECORD;
         SUPPORTED("windows8.0")
-        typedef enum KIND { KIND_NONE = 0 } KIND;
+        typedef enum KIND { KIND_NONE = 0 } KIND, *PKIND;
     "#;
 
     let (rdl, index) = compile("callback_typedef_sal", source);
@@ -152,7 +152,7 @@ fn callback_typedefs_preserve_source_sal() {
             metadata::Value::Utf8("WIN32_ERROR".to_string())
         )]
     );
-    for name in ["RECORD", "KIND"] {
+    for name in ["RECORD", "PRECORD", "KIND", "PKIND"] {
         assert!(
             index
                 .expect("Test", name)
