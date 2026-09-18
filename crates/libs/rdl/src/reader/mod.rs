@@ -322,7 +322,12 @@ pub(crate) fn item_names(path: impl AsRef<Path>, namespace: &str) -> Result<Vec<
         }
     }
     let mut names = vec![];
-    if let Some(ns) = index.namespaces.get(namespace) {
+    for (_, ns) in index.namespaces.iter().filter(|(candidate, _)| {
+        *candidate == namespace
+            || candidate
+                .strip_prefix(namespace)
+                .is_some_and(|suffix| suffix.starts_with('.'))
+    }) {
         names.extend(ns.types.keys().cloned());
         names.extend(ns.functions.keys().cloned());
         names.extend(ns.constants.keys().cloned());

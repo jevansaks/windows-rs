@@ -215,7 +215,7 @@ pub fn reader() -> Reader {
     Reader::new()
 }
 
-/// Parses one `.rdl` file and returns the items it defines under `namespace`.
+/// Parses one `.rdl` file and returns the items it defines in `namespace` or its descendants.
 pub fn item_names(path: impl AsRef<Path>, namespace: &str) -> Result<Vec<String>, Error> {
     reader::item_names(path, namespace)
 }
