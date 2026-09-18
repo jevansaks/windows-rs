@@ -471,7 +471,8 @@ fn associated_constants_preserve_canonical_namespace_across_partition_units() {
     let foundation_header = dir.join("foundation.h");
     let foundation_rdl = dir.join("foundation.rdl");
     let setupapi_header = dir.join("setupapi.h");
-    let setupapi_rdl = dir.join("setupapi.rdl");
+    let setupapi_dir = dir.join("setupapi");
+    let setupapi_rdl = setupapi_dir.join("setupapi.rdl");
     let registry_header = dir.join("registry.h");
     let registry_rdl = dir.join("registry.rdl");
     let winmd = dir.join("output.winmd");
@@ -495,7 +496,13 @@ fn associated_constants_preserve_canonical_namespace_across_partition_units() {
         "#,
     )
     .unwrap();
-    std::fs::write(&setupapi_header, "#define ERROR_SETUPAPI 2\n").unwrap();
+    std::fs::write(
+        &setupapi_header,
+        "#define ERROR_SETUPAPI 2\n\
+         #define ERROR_UNRELATED 4\n\
+         extern \"C\" void SetupApiFunction(void);\n",
+    )
+    .unwrap();
     std::fs::write(&registry_header, "#define ERROR_REGISTRY 3\n").unwrap();
 
     let emit = |input: &Path, output: &Path, namespace: &str| {
@@ -519,7 +526,23 @@ fn associated_constants_preserve_canonical_namespace_across_partition_units() {
         &foundation_rdl,
         "Windows.Win32.Foundation",
     );
-    emit(&setupapi_header, &setupapi_rdl, "Windows.Win32.Foundation");
+    {
+        let _guard = test_clang::libclang_guard();
+        windows_clang::clang()
+            .args([
+                "-x",
+                "c++",
+                "--target=x86_64-pc-windows-msvc",
+                "-fms-extensions",
+            ])
+            .input(&setupapi_header)
+            .namespace("Windows.Win32.Foundation")
+            .library("test.dll")
+            .constant("ERROR_SETUPAPI")
+            .output(&setupapi_dir)
+            .write_by_header()
+            .unwrap();
+    }
     emit(
         &registry_header,
         &registry_rdl,
@@ -532,6 +555,15 @@ fn associated_constants_preserve_canonical_namespace_across_partition_units() {
     for name in ["ERROR_SETUPAPI", "ERROR_ABSENT", "ERROR_REGISTRY"] {
         assert!(foundation.contains(&format!("#[associated_constant(\"{name}\")]")));
     }
+    let setupapi = std::fs::read_to_string(&setupapi_rdl).unwrap();
+    assert!(setupapi.contains("const ERROR_SETUPAPI: i32 = 2;"));
+    assert!(!setupapi.contains("ERROR_UNRELATED"));
+    assert!(!setupapi.contains("SetupApiFunction"));
+    assert!(
+        std::fs::read_to_string(&registry_rdl)
+            .unwrap()
+            .contains("mod Registry")
+    );
 
     windows_rdl::reader()
         .input(&foundation_rdl)
@@ -613,6 +645,65 @@ fn associated_constants_preserve_canonical_namespace_across_partition_units() {
     assert!(namespace_bindings.contains("pub const ERROR_SETUPAPI: i32 = 2;"));
     assert!(!namespace_bindings.contains("ERROR_ABSENT"));
     assert!(!namespace_bindings.contains("ERROR_REGISTRY"));
+}
+
+#[test]
+fn constant_only_selection_rejects_absent_and_duplicate_sources() {
+    let dir = scratch("constant_only_selection_errors");
+    let source = dir.join("source.h");
+    std::fs::write(&source, "#define ERROR_PRESENT 1\n").unwrap();
+
+    {
+        let _guard = test_clang::libclang_guard();
+        let error = windows_clang::clang()
+            .args(["-x", "c++", "--target=x86_64-pc-windows-msvc"])
+            .input(&source)
+            .namespace("Windows.Win32.Foundation")
+            .constant("ERROR_ABSENT")
+            .output(dir.join("absent"))
+            .write_by_header()
+            .unwrap_err();
+        assert!(
+            error
+                .message
+                .contains("selected constant `ERROR_ABSENT` was not found")
+        );
+    }
+
+    let first = dir.join("first.h");
+    let second = dir.join("second.h");
+    let duplicate = dir.join("duplicate.h");
+    std::fs::write(&first, "#define ERROR_DUPLICATE 1\n").unwrap();
+    std::fs::write(&second, "#define ERROR_DUPLICATE 1\n").unwrap();
+    std::fs::write(
+        &duplicate,
+        "#include \"first.h\"\n\
+         #undef ERROR_DUPLICATE\n\
+         #include \"second.h\"\n",
+    )
+    .unwrap();
+    {
+        let _guard = test_clang::libclang_guard();
+        let error = windows_clang::clang()
+            .args([
+                "-x",
+                "c++",
+                "--target=x86_64-pc-windows-msvc",
+                "-I",
+                dir.to_str().unwrap(),
+            ])
+            .input(&duplicate)
+            .namespace("Windows.Win32.Foundation")
+            .constant("ERROR_DUPLICATE")
+            .output(dir.join("duplicate"))
+            .write_by_header()
+            .unwrap_err();
+        assert!(
+            error
+                .message
+                .contains("selected constant `ERROR_DUPLICATE` has multiple")
+        );
+    }
 }
 
 #[test]

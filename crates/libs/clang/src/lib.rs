@@ -523,6 +523,8 @@ pub struct Clang {
     exclude_paths: Vec<String>,
     /// Targeted function-symbol allowlist. Empty leaves emission unrestricted.
     symbols: HashSet<String>,
+    /// Exact loose constant allowlist. Non-empty switches output to constant-only emission.
+    constants: HashSet<String>,
     /// Drops functions with no resolved import library; off for fixtures without `.lib` inputs.
     drop_lib_less: bool,
     /// Winmds used only to classify `ABI::Windows::*` projection declarations.
@@ -847,6 +849,24 @@ impl Clang {
         self
     }
 
+    /// Restricts output to an exact source-owned loose constant.
+    pub fn constant(&mut self, constant: &str) -> &mut Self {
+        self.constants.insert(constant.to_string());
+        self
+    }
+
+    /// Restricts output to exact source-owned loose constants.
+    pub fn constants<I, S>(&mut self, constants: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for constant in constants {
+            self.constant(constant.as_ref());
+        }
+        self
+    }
+
     /// Returns the version string reported by the loaded libclang.
     pub fn version() -> Result<String, Error> {
         let lib = Library::new()?;
@@ -1018,6 +1038,48 @@ impl Clang {
         }
 
         remove_shadowed_opaque(&mut collectors);
+
+        if !self.constants.is_empty() {
+            let mut owners: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+            for (stem, collector) in &collectors {
+                for (name, item) in collector.iter() {
+                    if self.constants.contains(name) && matches!(item, Item::Const(_)) {
+                        owners.entry(name).or_default().push(stem);
+                    }
+                }
+            }
+            for name in &self.constants {
+                match owners.get(name.as_str()).map(Vec::as_slice) {
+                    None | Some([]) => {
+                        return Err(Error::new(
+                            &format!("selected constant `{name}` was not found"),
+                            "",
+                            0,
+                            0,
+                        ));
+                    }
+                    Some([_]) => {}
+                    Some(stems) => {
+                        return Err(Error::new(
+                            &format!(
+                                "selected constant `{name}` has multiple source owners: {}",
+                                stems.join(", ")
+                            ),
+                            "",
+                            0,
+                            0,
+                        ));
+                    }
+                }
+            }
+            drop(owners);
+            for collector in collectors.values_mut() {
+                collector.retain_items(|name, item| {
+                    self.constants.contains(name) && matches!(item, Item::Const(_))
+                });
+            }
+            collectors.retain(|_, collector| !collector.is_empty());
+        }
 
         // Drop excluded root partitions before the sweep.
         if !self.exclude_headers.is_empty() {
@@ -1315,6 +1377,17 @@ impl Clang {
         for ((stem, _pending), consts) in all_consts.into_iter().zip(evaluated) {
             let collector = collectors.entry(stem).or_default();
             for c in consts {
+                if self.constants.contains(&c.name) && global_names.contains(&c.name) {
+                    return Err(Error::new(
+                        &format!(
+                            "selected constant `{}` has multiple or conflicting source declarations",
+                            c.name
+                        ),
+                        "",
+                        0,
+                        0,
+                    ));
+                }
                 if global_names.insert(c.name.clone()) {
                     collector.insert(Item::Const(c));
                 }
