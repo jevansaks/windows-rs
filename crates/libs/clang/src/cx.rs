@@ -210,40 +210,44 @@ impl TranslationUnit {
         }
     }
 
-    /// Moves both range endpoints to spelling locations so tokenization retains source macros
-    /// that expand away, such as SDK SAL on callback typedef parameters.
-    pub fn to_spelling_range(&self, range: CXSourceRange) -> CXSourceRange {
+    /// Reads and lexes the exact source bytes for a range. Unlike `clang_tokenize`, this keeps
+    /// empty source macros such as SDK SAL instead of returning only their preprocessed expansion.
+    pub fn source_tokens(&self, range: CXSourceRange) -> Vec<(CXTokenKind, String)> {
         unsafe {
             let start = clang_getRangeStart(range);
             let end = clang_getRangeEnd(range);
 
             let mut start_file: CXFile = std::ptr::null_mut();
-            let mut start_line: u32 = 0;
-            let mut start_col: u32 = 0;
             let mut start_offset: u32 = 0;
-            clang_getSpellingLocation(
+            clang_getExpansionLocation(
                 start,
                 &mut start_file,
-                &mut start_line,
-                &mut start_col,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
                 &mut start_offset,
             );
 
             let mut end_file: CXFile = std::ptr::null_mut();
-            let mut end_line: u32 = 0;
-            let mut end_col: u32 = 0;
             let mut end_offset: u32 = 0;
-            clang_getSpellingLocation(
+            clang_getExpansionLocation(
                 end,
                 &mut end_file,
-                &mut end_line,
-                &mut end_col,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
                 &mut end_offset,
             );
 
-            let new_start = clang_getLocation(self.0, start_file, start_line, start_col);
-            let new_end = clang_getLocation(self.0, end_file, end_line, end_col);
-            clang_getRange(new_start, new_end)
+            if start_file.is_null() || start_file != end_file || end_offset < start_offset {
+                return self.tokenize(range);
+            }
+            let path = to_string(clang_getFileName(start_file));
+            let Ok(bytes) = std::fs::read(path) else {
+                return self.tokenize(range);
+            };
+            let Some(source) = bytes.get(start_offset as usize..end_offset as usize) else {
+                return self.tokenize(range);
+            };
+            Self::lex_source_tokens(source)
         }
     }
 
@@ -269,6 +273,86 @@ impl TranslationUnit {
             clang_disposeTokens(self.0, tokens, n_tokens);
             result
         }
+    }
+
+    fn lex_source_tokens(source: &[u8]) -> Vec<(CXTokenKind, String)> {
+        let mut result = Vec::new();
+        let mut i = 0;
+        while i < source.len() {
+            if source[i].is_ascii_whitespace() {
+                i += 1;
+                continue;
+            }
+            if source[i] == b'/' && source.get(i + 1) == Some(&b'/') {
+                let start = i;
+                i += 2;
+                while i < source.len() && source[i] != b'\n' {
+                    i += 1;
+                }
+                result.push((
+                    CXToken_Comment,
+                    String::from_utf8_lossy(&source[start..i]).into_owned(),
+                ));
+                continue;
+            }
+            if source[i] == b'/' && source.get(i + 1) == Some(&b'*') {
+                let start = i;
+                i += 2;
+                while i + 1 < source.len() && &source[i..i + 2] != b"*/" {
+                    i += 1;
+                }
+                i = (i + 2).min(source.len());
+                result.push((
+                    CXToken_Comment,
+                    String::from_utf8_lossy(&source[start..i]).into_owned(),
+                ));
+                continue;
+            }
+            if source[i].is_ascii_alphabetic() || source[i] == b'_' {
+                let start = i;
+                i += 1;
+                while i < source.len() && (source[i].is_ascii_alphanumeric() || source[i] == b'_') {
+                    i += 1;
+                }
+                result.push((
+                    CXToken_Identifier,
+                    String::from_utf8_lossy(&source[start..i]).into_owned(),
+                ));
+                continue;
+            }
+            if source[i].is_ascii_digit() || matches!(source[i], b'"' | b'\'') {
+                let start = i;
+                let quote = matches!(source[i], b'"' | b'\'').then_some(source[i]);
+                i += 1;
+                while i < source.len() {
+                    if let Some(quote) = quote {
+                        if source[i] == b'\\' {
+                            i = (i + 2).min(source.len());
+                            continue;
+                        }
+                        i += 1;
+                        if source[i - 1] == quote {
+                            break;
+                        }
+                    } else if source[i].is_ascii_alphanumeric() || source[i] == b'_' {
+                        i += 1;
+                    } else {
+                        break;
+                    }
+                }
+                result.push((
+                    CXToken_Literal,
+                    String::from_utf8_lossy(&source[start..i]).into_owned(),
+                ));
+                continue;
+            }
+            result.push((
+                CXToken_Punctuation,
+                String::from_utf8_lossy(&source[i..i + 1]).into_owned(),
+            ));
+            i += 1;
+        }
+        result
     }
 
     /// Source-adjacency check for function-like macros; libclang can misreport some

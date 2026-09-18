@@ -11,8 +11,10 @@ fn scratch(name: &str) -> PathBuf {
 
 fn compile(name: &str, source: &str) -> (String, metadata::reader::Index) {
     let dir = scratch(name);
+    let header = dir.join("input.h");
     let rdl = dir.join("input.rdl");
     let winmd = dir.join("output.winmd");
+    std::fs::write(&header, source).unwrap();
     {
         let _guard = test_clang::libclang_guard();
         windows_clang::clang()
@@ -22,7 +24,7 @@ fn compile(name: &str, source: &str) -> (String, metadata::reader::Index) {
                 "--target=x86_64-pc-windows-msvc",
                 "-fms-extensions",
             ])
-            .input_text(source)
+            .input(&header)
             .namespace("Test")
             .library("test.dll")
             .output(&rdl)
