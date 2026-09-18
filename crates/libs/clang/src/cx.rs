@@ -210,6 +210,43 @@ impl TranslationUnit {
         }
     }
 
+    /// Moves both range endpoints to spelling locations so tokenization retains source macros
+    /// that expand away, such as SDK SAL on callback typedef parameters.
+    pub fn to_spelling_range(&self, range: CXSourceRange) -> CXSourceRange {
+        unsafe {
+            let start = clang_getRangeStart(range);
+            let end = clang_getRangeEnd(range);
+
+            let mut start_file: CXFile = std::ptr::null_mut();
+            let mut start_line: u32 = 0;
+            let mut start_col: u32 = 0;
+            let mut start_offset: u32 = 0;
+            clang_getSpellingLocation(
+                start,
+                &mut start_file,
+                &mut start_line,
+                &mut start_col,
+                &mut start_offset,
+            );
+
+            let mut end_file: CXFile = std::ptr::null_mut();
+            let mut end_line: u32 = 0;
+            let mut end_col: u32 = 0;
+            let mut end_offset: u32 = 0;
+            clang_getSpellingLocation(
+                end,
+                &mut end_file,
+                &mut end_line,
+                &mut end_col,
+                &mut end_offset,
+            );
+
+            let new_start = clang_getLocation(self.0, start_file, start_line, start_col);
+            let new_end = clang_getLocation(self.0, end_file, end_line, end_col);
+            clang_getRange(new_start, new_end)
+        }
+    }
+
     pub fn tokenize(&self, range: CXSourceRange) -> Vec<(CXTokenKind, String)> {
         unsafe {
             let mut tokens: *mut CXToken = std::ptr::null_mut();

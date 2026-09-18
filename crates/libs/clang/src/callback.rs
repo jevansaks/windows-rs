@@ -61,7 +61,8 @@ impl Callback {
         let source_name = param_source.name();
         // Callback typedef extents already cover the source declaration. Keep the spelling
         // range so SAL macros that expand away remain available to the source-token scanner.
-        let tokens = parser.tu.tokenize(param_source.extent());
+        let spelling_range = parser.tu.to_spelling_range(param_source.extent());
+        let tokens = parser.tu.tokenize(spelling_range);
 
         // Use the shared SAL/MIDL path so callbacks match functions and COM methods.
         let midl_annotations =
