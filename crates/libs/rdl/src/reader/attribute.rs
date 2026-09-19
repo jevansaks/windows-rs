@@ -89,7 +89,7 @@ impl Encoder<'_> {
             let types = params.iter().map(|param| param.ty.clone()).collect();
 
             let signature = metadata::Signature {
-                flags: Default::default(),
+                flags: metadata::MethodCallAttributes::HASTHIS,
                 return_type: metadata::Type::Void,
                 types,
             };

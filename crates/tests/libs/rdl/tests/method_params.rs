@@ -569,3 +569,52 @@ fn malformed_param_sequence_is_reported() {
             .contains("method `Method` has invalid parameter metadata: duplicate Param.Sequence 1")
     );
 }
+
+#[test]
+fn attribute_constructor_definitions_match_custom_attribute_references() {
+    let scratch = scratch("attribute_constructor_signatures");
+    let input = scratch.join("input.rdl");
+    let winmd = scratch.join("output.winmd");
+    std::fs::write(
+        &input,
+        r#"
+            #[win32]
+            mod Test {
+                attribute CustomAttribute {
+                    fn(value: i64);
+                }
+                #[Custom(-1)]
+                struct Target {}
+            }
+        "#,
+    )
+    .unwrap();
+
+    windows_rdl::reader()
+        .input(&input)
+        .output(&winmd)
+        .write()
+        .unwrap();
+
+    let index = metadata::reader::Index::read(&winmd).unwrap();
+    let attribute_type = index.expect("Test", "CustomAttribute");
+    let definition = attribute_type
+        .methods()
+        .find(|method| method.name() == ".ctor")
+        .unwrap();
+    let reference = index
+        .expect("Test", "Target")
+        .find_attribute("CustomAttribute")
+        .unwrap()
+        .ctor();
+
+    assert_eq!(
+        definition.signature(&[]).flags,
+        metadata::MethodCallAttributes::HASTHIS
+    );
+    let definition = definition.signature(&[]);
+    let reference = reference.signature(&[]);
+    assert_eq!(reference.flags, definition.flags);
+    assert_eq!(reference.return_type, definition.return_type);
+    assert_eq!(reference.types, definition.types);
+}
