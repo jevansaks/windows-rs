@@ -389,6 +389,7 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
                 | CXCursor_CXXMethod
                 | CXCursor_ClassDecl
                 | CXCursor_StructDecl
+                | CXCursor_UnionDecl
                 | CXCursor_EnumDecl
                 | CXCursor_TypedefDecl
         ),

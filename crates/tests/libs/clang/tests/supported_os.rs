@@ -190,6 +190,7 @@ fn repeated_os_tags_on_types_remain_exact() {
         &header,
         format!(
             "struct {attrs} RECORD {{ int field; }};\n\
+             union {attrs} UNION {{ int integer; void* pointer; }};\n\
              enum {attrs} KIND {{ KIND_ONE = 1 }};\n\
              typedef {attrs} unsigned long ALIAS;\n\
              typedef {attrs} unsigned long CALLBACK_TYPE();"
@@ -201,7 +202,7 @@ fn repeated_os_tags_on_types_remain_exact() {
     let image = dir.join("output.winmd");
     compile(&rdl, &image);
     let index = metadata::reader::Index::read(&image).unwrap();
-    for name in ["RECORD", "KIND", "ALIAS", "CALLBACK_TYPE"] {
+    for name in ["RECORD", "UNION", "KIND", "ALIAS", "CALLBACK_TYPE"] {
         assert_eq!(
             tags(index.expect("Test", name)),
             [VISTA, SERVER2003],
