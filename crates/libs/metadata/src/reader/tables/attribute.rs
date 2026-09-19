@@ -56,6 +56,30 @@ impl<'a> Attribute<'a> {
         debug_assert_eq!(blob.len(), 0);
         values
     }
+
+    pub fn named_arg_kinds(&self) -> Vec<u8> {
+        let signature = self.ctor().signature(&[]);
+        let mut blob = self.blob(2);
+        let prolog = blob.read_u16();
+        debug_assert_eq!(prolog, 1);
+
+        for ty in &signature.types {
+            read_value(&mut blob, ty);
+        }
+
+        let named_arg_count = blob.read_u16();
+        let mut kinds = Vec::with_capacity(named_arg_count as usize);
+
+        for _ in 0..named_arg_count {
+            kinds.push(blob.read_u8());
+            let ty = blob.read_type_code(&[]);
+            blob.read_utf8();
+            read_value(&mut blob, &ty);
+        }
+
+        debug_assert_eq!(blob.len(), 0);
+        kinds
+    }
 }
 
 fn read_value(blob: &mut Blob, ty: &Type) -> Value {

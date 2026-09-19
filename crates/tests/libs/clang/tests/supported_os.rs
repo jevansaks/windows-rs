@@ -40,6 +40,52 @@ fn compile(rdl: &Path, image: &Path) {
         .unwrap();
 }
 
+fn verify_attribute_definition(image: &Path) {
+    let index = metadata::reader::Index::read(image).unwrap();
+    let definition = index.expect(
+        "Windows.Win32.Foundation.Metadata",
+        "SupportedOSPlatformAttribute",
+    );
+    let attributes: Vec<_> = definition.attributes().collect();
+    assert_eq!(attributes.len(), 1);
+
+    let usage = attributes[0];
+    assert_eq!(usage.namespace(), "System");
+    assert_eq!(usage.name(), "AttributeUsageAttribute");
+
+    let metadata::reader::AttributeType::MemberRef(ctor) = usage.ctor() else {
+        panic!("AttributeUsage must use a typed member reference");
+    };
+    let metadata::reader::MemberRefParent::TypeRef(provider) = ctor.parent() else {
+        panic!("AttributeUsage constructor must be provided by a type reference");
+    };
+    assert_eq!(provider.namespace(), "System");
+    assert_eq!(provider.name(), "AttributeUsageAttribute");
+    let metadata::reader::ResolutionScope::AssemblyRef(_) = provider.scope() else {
+        panic!("System.AttributeUsageAttribute must resolve through an assembly reference");
+    };
+
+    let targets = metadata::TypeName::named("System", "AttributeTargets");
+    let signature = ctor.signature(&[]);
+    assert_eq!(signature.flags, metadata::MethodCallAttributes::HASTHIS);
+    assert_eq!(signature.return_type, metadata::Type::Void);
+    assert_eq!(
+        signature.types,
+        [metadata::Type::ValueName(targets.clone())]
+    );
+    assert_eq!(
+        usage.value(),
+        [
+            (
+                String::new(),
+                metadata::Value::EnumValue(targets, Box::new(metadata::Value::I32(4184))),
+            ),
+            ("AllowMultiple".to_string(), metadata::Value::Bool(true)),
+        ]
+    );
+    assert_eq!(usage.named_arg_kinds(), [0x54]);
+}
+
 fn tags<'a>(item: impl HasAttributes<'a>) -> Vec<String> {
     let mut values: Vec<_> = item
         .attributes()
@@ -201,6 +247,7 @@ fn repeated_os_tags_on_types_remain_exact() {
     builder(&header).output(&rdl).write().unwrap();
     let image = dir.join("output.winmd");
     compile(&rdl, &image);
+    verify_attribute_definition(&image);
     let index = metadata::reader::Index::read(&image).unwrap();
     for name in ["RECORD", "UNION", "KIND", "ALIAS", "CALLBACK_TYPE"] {
         assert_eq!(
