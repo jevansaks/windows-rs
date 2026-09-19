@@ -140,7 +140,7 @@ mod Windows {
                 fn();
             }
             // The Win32 RDL reader attaches System.AttributeUsage for the approved
-            // Method | Struct | Enum | Delegate targets with AllowMultiple enabled.
+            // Method | Struct | Enum | Interface | Delegate targets with AllowMultiple enabled.
             attribute SupportedOSPlatformAttribute {
                 fn(platform: String);
             }

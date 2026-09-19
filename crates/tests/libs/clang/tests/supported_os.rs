@@ -78,7 +78,7 @@ fn verify_attribute_definition(image: &Path) {
         [
             (
                 String::new(),
-                metadata::Value::EnumValue(targets, Box::new(metadata::Value::I32(4184))),
+                metadata::Value::EnumValue(targets, Box::new(metadata::Value::I32(4216))),
             ),
             ("AllowMultiple".to_string(), metadata::Value::Bool(true)),
         ]
@@ -239,7 +239,8 @@ fn repeated_os_tags_on_types_remain_exact() {
              union {attrs} UNION {{ int integer; void* pointer; }};\n\
              enum {attrs} KIND {{ KIND_ONE = 1 }};\n\
              typedef {attrs} unsigned long ALIAS;\n\
-             typedef {attrs} unsigned long CALLBACK_TYPE();"
+             typedef {attrs} unsigned long CALLBACK_TYPE();\n\
+             struct {attrs} __declspec(uuid(\"12345678-1234-1234-1234-123456789abc\")) IANNOTATED {{ virtual unsigned long Pick() = 0; }};"
         ),
     )
     .unwrap();
@@ -249,13 +250,24 @@ fn repeated_os_tags_on_types_remain_exact() {
     compile(&rdl, &image);
     verify_attribute_definition(&image);
     let index = metadata::reader::Index::read(&image).unwrap();
-    for name in ["RECORD", "UNION", "KIND", "ALIAS", "CALLBACK_TYPE"] {
+    for name in [
+        "RECORD",
+        "UNION",
+        "KIND",
+        "ALIAS",
+        "CALLBACK_TYPE",
+        "IANNOTATED",
+    ] {
         assert_eq!(
             tags(index.expect("Test", name)),
             [VISTA, SERVER2003],
             "{name}"
         );
     }
+    assert_eq!(
+        index.expect("Test", "IANNOTATED").category(),
+        metadata::reader::TypeCategory::Interface
+    );
 }
 
 #[test]
