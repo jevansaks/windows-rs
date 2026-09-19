@@ -101,7 +101,14 @@ fn arch_merge_preserves_method_and_parameter_contracts() {
     assert_contracts(
         &inputs,
         &roundtrip,
-        &["Version", "Parameter", "Association", "Import", "Identical"],
+        &[
+            "Version",
+            "Parameter",
+            "Association",
+            "Import",
+            "Implementation",
+            "Identical",
+        ],
     );
 }
 

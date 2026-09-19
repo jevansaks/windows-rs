@@ -52,10 +52,15 @@ pub fn write_fn(namespace: &str, item: &metadata::reader::MethodDef) -> Result<T
         library_opts.extend(quote! { , set_last_error });
     }
     let library_attr = quote! { #[library(#library #library_opts)] };
+    let preserve_sig_attr = item
+        .impl_flags()
+        .contains(metadata::MethodImplAttributes::PreserveSig)
+        .then(|| quote! { #[preserve_sig] });
 
     Ok(quote! {
         #arch_attr
         #(#custom_attrs)*
+        #preserve_sig_attr
         #library_attr
         extern #abi fn #name(#(#params),*) #return_type;
     })
