@@ -69,6 +69,10 @@ fn callback_method<'a>(
 
 fn verify_callback_shape(index: &metadata::reader::Index, name: &str, convention: i32) {
     let callback = index.expect("Test", name);
+    assert_eq!(
+        callback.flags(),
+        metadata::TypeAttributes::Public | metadata::TypeAttributes::Sealed
+    );
     let attribute = callback
         .find_attribute("UnmanagedFunctionPointerAttribute")
         .unwrap();
@@ -85,11 +89,23 @@ fn verify_callback_shape(index: &metadata::reader::Index, name: &str, convention
         )
     );
 
-    let ctor = callback
-        .methods()
-        .find(|method| method.name() == ".ctor")
-        .unwrap();
+    let methods: Vec<_> = callback.methods().collect();
+    assert_eq!(methods.len(), 2);
+    let ctors: Vec<_> = methods
+        .iter()
+        .filter(|method| method.name() == ".ctor")
+        .collect();
+    assert_eq!(ctors.len(), 1);
+    let ctor = *ctors[0];
+    assert_eq!(
+        ctor.flags(),
+        metadata::MethodAttributes::Public
+            | metadata::MethodAttributes::HideBySig
+            | metadata::MethodAttributes::SpecialName
+            | metadata::MethodAttributes::RTSpecialName
+    );
     let signature = ctor.signature(&[]);
+    assert_eq!(signature.return_type, metadata::Type::Void);
     assert_eq!(signature.flags, metadata::MethodCallAttributes::HASTHIS);
     assert_eq!(
         signature.types,
@@ -97,7 +113,19 @@ fn verify_callback_shape(index: &metadata::reader::Index, name: &str, convention
     );
     assert_eq!(ctor.impl_flags(), metadata::MethodImplAttributes::Runtime);
 
-    let invoke = callback_method(index, name);
+    let invokes: Vec<_> = methods
+        .iter()
+        .filter(|method| method.name() == "Invoke")
+        .collect();
+    assert_eq!(invokes.len(), 1);
+    let invoke = *invokes[0];
+    assert_eq!(
+        invoke.flags(),
+        metadata::MethodAttributes::Public
+            | metadata::MethodAttributes::Virtual
+            | metadata::MethodAttributes::HideBySig
+            | metadata::MethodAttributes::NewSlot
+    );
     assert_eq!(
         invoke.signature(&[]).flags,
         metadata::MethodCallAttributes::HASTHIS

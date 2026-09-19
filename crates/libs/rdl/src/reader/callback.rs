@@ -72,7 +72,6 @@ impl Encoder<'_> {
 
         let flags = metadata::MethodAttributes::Public
             | metadata::MethodAttributes::HideBySig
-            | metadata::MethodAttributes::Abstract
             | metadata::MethodAttributes::NewSlot
             | metadata::MethodAttributes::Virtual;
 
