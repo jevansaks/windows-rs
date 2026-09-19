@@ -1275,7 +1275,9 @@ pub fn param_attrs_for_annotation(
         return vec![];
     }
 
-    let in_param = annotation.in_param;
+    // A directionless `_Reserved_` parameter is caller-supplied, even when its
+    // mutable pointer type would otherwise default to an output parameter.
+    let in_param = annotation.in_param || (annotation.reserved && !annotation.out_param);
     let out_param = annotation.out_param;
     let optional = annotation.optional;
     let retval = annotation.retval;

@@ -706,6 +706,79 @@ fn conditional_sal_does_not_invent_other_contracts() {
 }
 
 #[test]
+fn reserved_parameters_default_to_input_without_overriding_direction() {
+    let (rdl, index) = compile(
+        "reserved_direction",
+        r#"
+        #define _Reserved_
+        #define _In_
+        #define _Out_
+        #define _Inout_
+        #define _In_opt_
+        #define _Out_opt_
+        void ReservedDirections(
+            _Reserved_ void *reserved_pointer,
+            _Reserved_ unsigned long reserved_scalar,
+            _Reserved_ _Out_ void *reserved_output,
+            _Reserved_ _Inout_ void *reserved_inout,
+            _Reserved_ _In_opt_ void *reserved_optional,
+            _In_ void *input,
+            _Out_ void *output,
+            _Inout_ void *inout,
+            _Out_opt_ void *optional_output,
+            void *plain);
+        "#,
+    );
+
+    assert!(rdl.contains("#[reserved] #[in] reserved_pointer: *mut void"));
+    assert!(rdl.contains("#[reserved] reserved_scalar: u32"));
+    assert!(rdl.contains("#[reserved] reserved_output: *mut void"));
+    assert!(rdl.contains("#[reserved] #[in] #[out] reserved_inout: *mut void"));
+    assert!(rdl.contains("#[reserved] #[in] #[opt] reserved_optional: *mut void"));
+
+    let params = method(&index, "ReservedDirections")
+        .params_by_sequence(10)
+        .unwrap();
+    for (name, expected) in [
+        ("reserved_pointer", metadata::ParamAttributes::In),
+        ("reserved_scalar", metadata::ParamAttributes::In),
+        ("reserved_output", metadata::ParamAttributes::Out),
+        (
+            "reserved_inout",
+            metadata::ParamAttributes::In | metadata::ParamAttributes::Out,
+        ),
+        (
+            "reserved_optional",
+            metadata::ParamAttributes::In | metadata::ParamAttributes::Optional,
+        ),
+        ("input", metadata::ParamAttributes::In),
+        ("output", metadata::ParamAttributes::Out),
+        (
+            "inout",
+            metadata::ParamAttributes::In | metadata::ParamAttributes::Out,
+        ),
+        (
+            "optional_output",
+            metadata::ParamAttributes::Out | metadata::ParamAttributes::Optional,
+        ),
+        ("plain", metadata::ParamAttributes::Out),
+    ] {
+        let param = params
+            .params()
+            .iter()
+            .flatten()
+            .find(|param| param.name() == name)
+            .unwrap();
+        assert_eq!(param.flags(), expected, "{name}");
+        assert_eq!(
+            param.has_attribute("ReservedAttribute"),
+            name.starts_with("reserved_") || name == "reserved_scalar",
+            "{name}"
+        );
+    }
+}
+
+#[test]
 fn associated_enum_targets_parameter_and_return_rows() {
     let (rdl, index) = compile(
         "associated_enum",
