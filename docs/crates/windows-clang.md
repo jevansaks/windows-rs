@@ -84,6 +84,9 @@ an optional hand-authored seed, and parallel execution; it is intended for SDK-s
   Exact function and loose-constant selections cannot be combined in one per-header pass.
 - Use `scope` or `scope_header` to choose roots for a per-header reachability sweep.
 - Use `exclude_header` to remove a partition before that sweep.
+- Per-header output drops an unreferenced loose constant only when an emitted enum member has the
+  same name and integer value. Comparisons use the enum's emitted width and signedness, including
+  unsigned flag values, without truncating wider constants or treating distinct names as duplicates.
 - In per-header output, an emitted enum's `associated_constant` annotations retain the named native
   integer constants from the parsed translation units, without explicit constant selectors.
   Dependency-only headers contribute those constants, not their unrelated declarations. Providers

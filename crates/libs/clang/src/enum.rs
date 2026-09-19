@@ -53,10 +53,9 @@ impl Enum {
         })
     }
 
-    pub fn write(&self) -> Result<TokenStream, Error> {
-        let name = write_ident(&self.name);
+    pub fn output_repr(&self) -> &'static str {
         // Flag enums are bit masks; promote signed backing to same-width unsigned.
-        let repr_str = if self.flags {
+        if self.flags {
             match self.repr {
                 "i8" => "u8",
                 "i16" => "u16",
@@ -66,7 +65,12 @@ impl Enum {
             }
         } else {
             self.repr
-        };
+        }
+    }
+
+    pub fn write(&self) -> Result<TokenStream, Error> {
+        let name = write_ident(&self.name);
+        let repr_str = self.output_repr();
         let repr = write_ident(repr_str);
 
         let variants = self.variants.iter().map(|(name, value)| {

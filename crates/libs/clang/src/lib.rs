@@ -1246,7 +1246,7 @@ impl Clang {
                     else {
                         return true;
                     };
-                    !values.iter().any(|&member| enum_member_eq(member, value))
+                    !values.contains(&value)
                 });
             }
         }
@@ -1986,13 +1986,17 @@ fn is_midl_user_marshal_stub(cursor: &Cursor) -> bool {
 }
 
 /// Collects enum member values across partitions for duplicate loose-constant pruning.
-fn enum_member_values(collectors: &BTreeMap<String, Collector>) -> HashMap<String, Vec<i64>> {
-    let mut members: HashMap<String, Vec<i64>> = HashMap::new();
+fn enum_member_values(collectors: &BTreeMap<String, Collector>) -> HashMap<String, Vec<i128>> {
+    let mut members: HashMap<String, Vec<i128>> = HashMap::new();
     for collector in collectors.values() {
         for item in collector.values() {
             if let Item::Enum(e) = item {
                 for (name, value) in &e.variants {
-                    members.entry(name.clone()).or_default().push(*value);
+                    let value = enum_variant_value(e.output_repr(), *value);
+                    members
+                        .entry(name.clone())
+                        .or_default()
+                        .push(const_integer_bits(&value).unwrap());
                 }
             }
         }
@@ -2017,11 +2021,6 @@ fn const_integer_bits(value: &metadata::Value) -> Option<i128> {
         metadata::Value::EnumValue(_, inner) => return const_integer_bits(inner),
         _ => return None,
     })
-}
-
-/// Matches high-bit flags that clang sign-extends on the enum side.
-fn enum_member_eq(member: i64, constant: i128) -> bool {
-    member as i128 == constant || member as u32 as i128 == constant
 }
 
 /// Emits a collector under the nested `mod` path for `namespace`.
@@ -2135,14 +2134,32 @@ mod tests {
     }
 
     #[test]
-    fn enum_member_eq_matches_value_and_high_bit_flag() {
-        // Plain equal values match.
-        assert!(enum_member_eq(22, 22));
-        assert!(!enum_member_eq(22, 23));
-        // High-bit signed enum flags can match unsigned macro constants.
-        assert!(enum_member_eq(-2147483648, 0x8000_0000));
-        // Wide constants do not match by low 32 bits alone.
-        assert!(!enum_member_eq(0, 0x1_0000_0000));
+    fn enum_member_values_use_emitted_representation() {
+        for (repr, flags, native, emitted) in [
+            ("i8", true, -128, 0x80),
+            ("i16", true, -32768, 0x8000),
+            ("i32", true, -2147483648, 0x8000_0000),
+            ("i64", true, i64::MIN, 0x8000_0000_0000_0000),
+            ("u8", false, -128, 0x80),
+            ("u16", true, -32768, 0x8000),
+            ("u32", false, -2147483648, 0x8000_0000),
+            ("u64", false, -1, u64::MAX as i128),
+            ("i16", false, -32768, -32768),
+            ("i32", false, -1, -1),
+            ("i64", false, 0x1_0000_0001, 0x1_0000_0001),
+        ] {
+            let mut collector = Collector::new();
+            collector.insert(Item::Enum(Enum {
+                name: "GROUP".to_string(),
+                repr,
+                variants: vec![("VALUE".to_string(), native)],
+                flags,
+                scoped: false,
+                annotations: vec![],
+            }));
+            let members = enum_member_values(&[("input".to_string(), collector)].into());
+            assert_eq!(members["VALUE"], [emitted], "{repr}, flags={flags}");
+        }
     }
 
     #[test]
