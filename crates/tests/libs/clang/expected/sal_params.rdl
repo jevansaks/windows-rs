@@ -1,7 +1,9 @@
 #[win32]
 mod Test {
     #[library("kernel32.dll")]
-    extern "C" fn AllocBuffer(buffer: *mut *mut void, count: u32) -> i32;
+    extern "C" fn AllocBuffer(#[len_param(1)] buffer: *mut *mut void, count: u32) -> i32;
+    #[library("kernel32.dll")]
+    extern "C" fn AllocBufferIndirect(#[len_param(1)] buffer: *mut *mut void, count: *mut u32) -> i32;
     type BOOL = i32;
     #[library("kernel32.dll")]
     extern "C" fn CloseObject(object: HANDLE) -> i32;

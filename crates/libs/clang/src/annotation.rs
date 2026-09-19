@@ -710,8 +710,10 @@ fn capture_source_sal_size(name: &str, tokens: &[(CXTokenKind, String)]) -> Opti
 }
 
 fn sal_size_kind(name: &str) -> Option<bool> {
-    let is_size =
-        name.contains("_reads_") || name.contains("_writes_") || name.contains("_updates_");
+    let is_size = name.contains("_reads_")
+        || name.contains("_writes_")
+        || name.contains("_updates_")
+        || (name.starts_with("_Outptr_") && name.contains("_result_buffer_"));
     is_size.then(|| name.contains("_bytes"))
 }
 

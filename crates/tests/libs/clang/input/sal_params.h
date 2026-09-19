@@ -93,9 +93,12 @@ extern "C" {
     // _Inout_updates_to_ -> #[in] #[out] + NativeArrayInfo(CountParamIndex = 1).
     BOOL GrowBuffer(_Inout_updates_to_(count, *count) DWORD* buffer, DWORD count);
 
-    // _Outptr_result_buffer_ marks an out-pointer; its element count is not captured
-    // (the name carries no _reads_/_writes_/_updates_ stem).
+    // _Outptr_result_buffer_ marks an out-pointer whose allocated element count is
+    // carried by another parameter.
     BOOL AllocBuffer(_Outptr_result_buffer_(count) void** buffer, DWORD count);
+
+    // The count carrier may itself be an output pointer, as in jobapi2.h.
+    BOOL AllocBufferIndirect(_Outptr_result_buffer_(*count) void** buffer, DWORD* count);
 
     // Complex size expression is not representable -> no size attribute.
     BOOL ReadScaled(_In_reads_bytes_(cb * 2) const void* buffer, DWORD cb);
