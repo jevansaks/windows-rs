@@ -84,6 +84,12 @@ an optional hand-authored seed, and parallel execution; it is intended for SDK-s
   Exact function and loose-constant selections cannot be combined in one per-header pass.
 - Use `scope` or `scope_header` to choose roots for a per-header reachability sweep.
 - Use `exclude_header` to remove a partition before that sweep.
+- In per-header output, an emitted enum's `associated_constant` annotations retain the named native
+  integer constants from the parsed translation units, without explicit constant selectors.
+  Dependency-only headers contribute those constants, not their unrelated declarations. Providers
+  retain their source-header partitions and the enum's configured namespace. Missing providers,
+  distinct source owners, conflicting native values or types, and reference-provider conflicts are
+  errors. This does not infer a canonical namespace or discover headers outside the input set.
 - Load per-DLL import libraries before umbrella libraries so first-wins symbol resolution keeps the
   real DLL. `libraries` supplies reviewed symbol overrides.
 - Enable `drop_lib_less` only when import-library coverage is available; otherwise valid functions

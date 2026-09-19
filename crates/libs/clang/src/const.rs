@@ -213,7 +213,7 @@ impl Const {
 
         let synthetic = format!("{input}.__rdl_eval__.cpp");
 
-        Self::evaluate_names(&prefix, &synthetic, names, index, args)
+        Self::evaluate_names(&prefix, &synthetic, names, index, args, false)
     }
 
     /// Evaluate macro names from in-memory source by embedding it into the synthetic TU.
@@ -231,7 +231,35 @@ impl Const {
         let prefix = format!("{content}\n{NARG_PROLOGUE}");
         const SYNTHETIC: &str = "__rdl_input_text_eval__.cpp";
 
-        Self::evaluate_names(&prefix, SYNTHETIC, names, index, args)
+        Self::evaluate_names(&prefix, SYNTHETIC, names, index, args, false)
+    }
+
+    pub(crate) fn evaluate_dependencies(
+        source: MacroSource<'_>,
+        names: &[String],
+        index: &Index,
+        args: &[&str],
+    ) -> Result<Vec<Self>, Error> {
+        if names.is_empty() {
+            return Ok(vec![]);
+        }
+        let (prefix, synthetic) = match source {
+            MacroSource::File(path) => {
+                let name = Path::new(path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap();
+                (
+                    format!("#include \"{name}\"\n{NARG_PROLOGUE}"),
+                    format!("{path}.__rdl_eval__.cpp"),
+                )
+            }
+            MacroSource::Str(text) => (
+                format!("{text}\n{NARG_PROLOGUE}"),
+                "__rdl_input_text_eval__.cpp".to_string(),
+            ),
+        };
+        Self::evaluate_names(&prefix, &synthetic, names, index, args, true)
     }
 
     /// Evaluate names in batches, retrying swallowed probe enums in smaller batches.
@@ -243,6 +271,7 @@ impl Const {
         names: &[String],
         index: &Index,
         args: &[&str],
+        exact_type: bool,
     ) -> Result<Vec<Self>, Error> {
         let eval_args = with_unlimited_errors(args);
         let mut results = vec![];
@@ -259,7 +288,7 @@ impl Const {
             }
             let tu =
                 index.parse_unsaved(synthetic, &source, &eval_args, CXTranslationUnit_KeepGoing)?;
-            let (consts, present) = collect_eval_results(&tu);
+            let (consts, present) = collect_eval_results(&tu, exact_type);
             results.extend(consts);
 
             let missing: Vec<String> = batch
@@ -315,7 +344,7 @@ fn eval_probe(name: &str) -> String {
 /// Collect kept eval probes and the names whose gating probes were fully parsed.
 /// Missing gates mean a preceding macro swallowed later enum declarations, so the caller
 /// retries those names; failed gates are real rejects and are not retried.
-fn collect_eval_results(tu: &TranslationUnit) -> (Vec<Const>, HashSet<String>) {
+fn collect_eval_results(tu: &TranslationUnit, exact_type: bool) -> (Vec<Const>, HashSet<String>) {
     let mut evals: Vec<(String, u64, i64, Option<metadata::Type>)> = vec![];
     let mut eval_seen: HashSet<String> = HashSet::new();
     let mut ok_seen: HashSet<String> = HashSet::new();
@@ -334,7 +363,25 @@ fn collect_eval_results(tu: &TranslationUnit) -> (Vec<Const>, HashSet<String>) {
             eval_seen.insert(original_name.to_string());
             if let Some((unsigned, signed)) = child.evaluate_integer() {
                 let ty = child.ty();
-                let semantic = pointer_sized_abi(&ty.ty().name());
+                let semantic = pointer_sized_abi(&ty.ty().name()).or_else(|| {
+                    exact_type
+                        .then(|| match ty.canonical_type().kind() {
+                            CXType_Bool => Some(metadata::Type::Bool),
+                            CXType_Char_S | CXType_SChar => Some(metadata::Type::I8),
+                            CXType_Char_U | CXType_UChar => Some(metadata::Type::U8),
+                            CXType_Short => Some(metadata::Type::I16),
+                            CXType_UShort => Some(metadata::Type::U16),
+                            CXType_Int | CXType_Long => Some(metadata::Type::I32),
+                            CXType_UInt | CXType_ULong => Some(metadata::Type::U32),
+                            CXType_LongLong => Some(metadata::Type::I64),
+                            CXType_ULongLong => Some(metadata::Type::U64),
+                            _ => None,
+                        })
+                        .flatten()
+                });
+                if exact_type && semantic.is_none() {
+                    continue;
+                }
                 evals.push((original_name.to_string(), unsigned, signed, semantic));
             }
             continue;
@@ -421,9 +468,18 @@ fn eval_integer_value(
     }
 }
 
-/// Store native-sized fields in the smallest fixed-width Constant type that retains the value.
+/// Match the native type, using the smallest lossless fixed-width Constant for pointer-sized fields.
 fn native_integer_value(unsigned: u64, signed: i64, ty: &metadata::Type) -> metadata::Value {
     match ty {
+        metadata::Type::Bool => metadata::Value::Bool(unsigned != 0),
+        metadata::Type::I8 => metadata::Value::I8(signed as i8),
+        metadata::Type::U8 => metadata::Value::U8(unsigned as u8),
+        metadata::Type::I16 => metadata::Value::I16(signed as i16),
+        metadata::Type::U16 => metadata::Value::U16(unsigned as u16),
+        metadata::Type::I32 => metadata::Value::I32(signed as i32),
+        metadata::Type::U32 => metadata::Value::U32(unsigned as u32),
+        metadata::Type::I64 => metadata::Value::I64(signed),
+        metadata::Type::U64 => metadata::Value::U64(unsigned),
         metadata::Type::USize => u32::try_from(unsigned)
             .map(metadata::Value::U32)
             .unwrap_or(metadata::Value::U64(unsigned)),

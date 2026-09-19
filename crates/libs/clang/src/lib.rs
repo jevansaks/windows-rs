@@ -25,6 +25,7 @@ mod collector;
 use collector::*;
 use field::*;
 mod annotation;
+mod associated;
 mod field;
 use annotation::*;
 mod typedef;
@@ -1253,6 +1254,7 @@ impl Clang {
         // Choose duplicate typedef owners only after every partition and item filter has run.
         dedup_typedefs(&mut collectors);
         drop_dangling_typed_constants(&mut collectors, root, &reference_types);
+        self.resolve_associated_constants(&parsed, root, &reference, &mut collectors)?;
 
         let mut outputs = BTreeMap::new();
         for (stem, collector) in &collectors {
