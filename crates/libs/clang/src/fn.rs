@@ -225,16 +225,15 @@ impl Fn {
 
         // Restore source aliases only when this prototype was written with the alias; some
         // back-compat aliases point at a real export prototype that must keep its name.
-        let source_name = parser
+        let source_alias = parser
             .alias_map
             .get(&export_name)
             .filter(|alias| {
                 token_names_function(&fn_tokens, alias)
                     && !token_names_function(&fn_tokens, &export_name)
-                    && !parser.export_names.contains(alias.as_str())
             })
             .cloned();
-        let anchor = source_name.as_deref().unwrap_or(&export_name);
+        let anchor = source_alias.as_deref().unwrap_or(&export_name);
 
         if let Some(source_type) =
             source_macro_return_type(&fn_tokens, anchor, &return_type, parser)
@@ -258,6 +257,7 @@ impl Fn {
             .or_else(|| parser.libraries.get(&export_name).cloned())
             .unwrap_or_else(|| parser.library.to_string());
 
+        let source_name = source_alias.filter(|alias| !parser.export_names.contains(alias));
         let (name, import_name) = match source_name {
             Some(source) => (source, Some(export_name)),
             None => (export_name, None),

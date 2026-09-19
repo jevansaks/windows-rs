@@ -479,11 +479,17 @@ fn preserves_alias_export_when_another_translation_unit_defines_source_name() {
 
     windows_clang::clang()
         .args(["-x", "c++", "--target=x86_64-pc-windows-msvc"])
-        .input_text(r#"extern "C" int Api(void);"#)
         .input_text(
             r#"
+            #define WINAPI __stdcall
+            extern "C" int WINAPI Api(void);
+            "#,
+        )
+        .input_text(
+            r#"
+            #define WINAPI __stdcall
             #define Api K32Api
-            extern "C" int Api(void);
+            extern "C" int WINAPI Api(void);
             "#,
         )
         .libraries([("Api", "PSAPI.dll"), ("K32Api", "KERNEL32.dll")])
@@ -495,6 +501,7 @@ fn preserves_alias_export_when_another_translation_unit_defines_source_name() {
     let rdl = std::fs::read_to_string(output).unwrap();
     assert_eq!(rdl.matches("fn Api(").count(), 1, "{rdl}");
     assert_eq!(rdl.matches("fn K32Api(").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches(r#"extern "system" fn"#).count(), 2, "{rdl}");
     assert!(rdl.contains(r#"#[library("PSAPI.dll")]"#), "{rdl}");
     assert!(rdl.contains(r#"#[library("KERNEL32.dll")]"#), "{rdl}");
     assert!(!rdl.contains("import ="), "{rdl}");
@@ -508,10 +515,11 @@ fn preserves_alias_export_across_header_partition_translation_units() {
     std::fs::write(
         scratch.join("api.h"),
         r#"
+        #define WINAPI __stdcall
         #if API_VERSION > 1
         #define Api K32Api
         #endif
-        extern "C" int Api(void);
+        extern "C" int WINAPI Api(void);
         "#,
     )
     .unwrap();
@@ -536,6 +544,7 @@ fn preserves_alias_export_across_header_partition_translation_units() {
     let rdl = std::fs::read_to_string(output.join("api.rdl")).unwrap();
     assert_eq!(rdl.matches("fn Api(").count(), 1, "{rdl}");
     assert_eq!(rdl.matches("fn K32Api(").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches(r#"extern "system" fn"#).count(), 2, "{rdl}");
     assert!(rdl.contains(r#"#[library("PSAPI.dll")]"#), "{rdl}");
     assert!(rdl.contains(r#"#[library("KERNEL32.dll")]"#), "{rdl}");
     assert!(!rdl.contains("import ="), "{rdl}");
