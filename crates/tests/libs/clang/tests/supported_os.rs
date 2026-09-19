@@ -41,6 +41,22 @@ fn compile(rdl: &Path, image: &Path) {
 }
 
 fn verify_attribute_definition(image: &Path) {
+    const ASSEMBLY: i32 = 1;
+    const MODULE: i32 = 2;
+    const CLASS: i32 = 4;
+    const STRUCT: i32 = 8;
+    const ENUM: i32 = 16;
+    const CONSTRUCTOR: i32 = 32;
+    const METHOD: i32 = 64;
+    const PROPERTY: i32 = 128;
+    const FIELD: i32 = 256;
+    const EVENT: i32 = 512;
+    const INTERFACE: i32 = 1024;
+    const PARAMETER: i32 = 2048;
+    const DELEGATE: i32 = 4096;
+    const RETURN_VALUE: i32 = 8192;
+    const GENERIC_PARAMETER: i32 = 16384;
+
     let index = metadata::reader::Index::read(image).unwrap();
     let definition = index.expect(
         "Windows.Win32.Foundation.Metadata",
@@ -73,15 +89,35 @@ fn verify_attribute_definition(image: &Path) {
         signature.types,
         [metadata::Type::ValueName(targets.clone())]
     );
+    let values = usage.value();
+    let metadata::Value::EnumValue(actual_targets, value) = &values[0].1 else {
+        panic!("AttributeUsage target must be a typed enum value");
+    };
+    assert_eq!(actual_targets, &targets);
+    let metadata::Value::I32(mask) = **value else {
+        panic!("AttributeUsage target mask must be an i32");
+    };
+    for required in [METHOD, STRUCT, ENUM, INTERFACE, DELEGATE] {
+        assert_ne!(mask & required, 0, "required target {required} is missing");
+    }
+    for excluded in [
+        ASSEMBLY,
+        MODULE,
+        CLASS,
+        CONSTRUCTOR,
+        PROPERTY,
+        FIELD,
+        EVENT,
+        PARAMETER,
+        RETURN_VALUE,
+        GENERIC_PARAMETER,
+    ] {
+        assert_eq!(mask & excluded, 0, "excluded target {excluded} is present");
+    }
+    assert_eq!(mask, METHOD | STRUCT | ENUM | INTERFACE | DELEGATE);
     assert_eq!(
-        usage.value(),
-        [
-            (
-                String::new(),
-                metadata::Value::EnumValue(targets, Box::new(metadata::Value::I32(4216))),
-            ),
-            ("AllowMultiple".to_string(), metadata::Value::Bool(true)),
-        ]
+        values[1],
+        ("AllowMultiple".to_string(), metadata::Value::Bool(true))
     );
     assert_eq!(usage.named_arg_kinds(), [0x54]);
 }

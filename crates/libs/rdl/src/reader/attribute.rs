@@ -132,7 +132,12 @@ impl Encoder<'_> {
     }
 
     fn encode_supported_os_attribute_usage(&mut self, attr_type: metadata::writer::TypeDef) {
-        const METHOD_STRUCT_ENUM_INTERFACE_DELEGATE: i32 = 64 | 8 | 16 | 32 | 4096;
+        const STRUCT: i32 = 8;
+        const ENUM: i32 = 16;
+        const METHOD: i32 = 64;
+        const INTERFACE: i32 = 1024;
+        const DELEGATE: i32 = 4096;
+        const SUPPORTED_OS_TARGETS: i32 = STRUCT | ENUM | METHOD | INTERFACE | DELEGATE;
 
         let targets = metadata::TypeName::named("System", "AttributeTargets");
         let usage = self.output.TypeRef("System", "AttributeUsageAttribute");
@@ -151,7 +156,7 @@ impl Encoder<'_> {
                 String::new(),
                 metadata::Value::EnumValue(
                     targets,
-                    Box::new(metadata::Value::I32(METHOD_STRUCT_ENUM_INTERFACE_DELEGATE)),
+                    Box::new(metadata::Value::I32(SUPPORTED_OS_TARGETS)),
                 ),
             ),
             ("AllowMultiple".to_string(), metadata::Value::Bool(true)),
