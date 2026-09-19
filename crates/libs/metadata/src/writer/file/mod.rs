@@ -105,11 +105,16 @@ impl File {
     }
 
     fn AssemblyRef(&mut self, assembly_name: &str) -> AssemblyRef {
+        let assembly_name = if assembly_name == "System" {
+            "mscorlib"
+        } else {
+            assembly_name
+        };
         if let Some(pos) = self.AssemblyRef.get(assembly_name) {
             return *pos;
         }
 
-        let pos = AssemblyRef(if assembly_name == "System" {
+        let pos = AssemblyRef(if assembly_name == "mscorlib" {
             self.records.AssemblyRef.push_pos(rec::AssemblyRef {
                 Name: self.strings.insert("mscorlib"),
                 MajorVersion: 4,
@@ -174,7 +179,7 @@ impl File {
 
             let scope = if let Some(assembly_name) = assembly_name {
                 ResolutionScope::AssemblyRef(self.AssemblyRef(&assembly_name))
-            } else if namespace == "System" {
+            } else if namespace == "System" || namespace.starts_with("System.") {
                 ResolutionScope::AssemblyRef(self.AssemblyRef("System"))
             } else {
                 ResolutionScope::Module(Module(0))
