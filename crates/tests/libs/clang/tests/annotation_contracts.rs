@@ -67,6 +67,44 @@ fn callback_method<'a>(
         .unwrap()
 }
 
+fn verify_callback_shape(index: &metadata::reader::Index, name: &str, convention: i32) {
+    let callback = index.expect("Test", name);
+    let attribute = callback
+        .find_attribute("UnmanagedFunctionPointerAttribute")
+        .unwrap();
+    let values = attribute.value();
+    let [(_, metadata::Value::EnumValue(ty, value))] = values.as_slice() else {
+        panic!("unexpected calling-convention attribute {values:?}");
+    };
+    assert_eq!(
+        (ty.namespace.as_str(), ty.name.as_str(), value.as_ref()),
+        (
+            "System.Runtime.InteropServices",
+            "CallingConvention",
+            &metadata::Value::I32(convention)
+        )
+    );
+
+    let ctor = callback
+        .methods()
+        .find(|method| method.name() == ".ctor")
+        .unwrap();
+    let signature = ctor.signature(&[]);
+    assert_eq!(signature.flags, metadata::MethodCallAttributes::HASTHIS);
+    assert_eq!(
+        signature.types,
+        [metadata::Type::Object, metadata::Type::ISize]
+    );
+    assert_eq!(ctor.impl_flags(), metadata::MethodImplAttributes::Runtime);
+
+    let invoke = callback_method(index, name);
+    assert_eq!(
+        invoke.signature(&[]).flags,
+        metadata::MethodCallAttributes::HASTHIS
+    );
+    assert_eq!(invoke.impl_flags(), metadata::MethodImplAttributes::Runtime);
+}
+
 #[test]
 fn raii_free_resolves_symbolic_invalid_handle() {
     let source = r#"
@@ -149,7 +187,7 @@ fn callback_typedefs_preserve_source_sal() {
         typedef struct POLICY { DWORD value; } POLICY, *PPOLICY;
         #define TEST_CONSTANT 7
 
-        typedef BOOLEAN CALLBACK_V1(
+        typedef BOOLEAN CALLBACK CALLBACK_V1(
             _In_ DWORD Index,
             _In_ DWORD NameSize,
             _In_reads_bytes_(NameSize) char *Name,
@@ -175,6 +213,9 @@ fn callback_typedefs_preserve_source_sal() {
     "#;
 
     let (_, index) = compile("callback_typedef_sal", source);
+
+    verify_callback_shape(&index, "CALLBACK_V1", 1);
+    verify_callback_shape(&index, "DEVICE_CALLBACK", 2);
 
     let callback = callback_method(&index, "CALLBACK_V1");
     let signature = callback.signature(&[]);

@@ -125,14 +125,34 @@ impl Encoder<'_> {
             &[(String::new(), windows_metadata::Value::I32(abi))],
         );
 
+        let ctor_flags = metadata::MethodAttributes::Public
+            | metadata::MethodAttributes::HideBySig
+            | metadata::MethodAttributes::SpecialName
+            | metadata::MethodAttributes::RTSpecialName;
+        let ctor_signature = metadata::Signature {
+            flags: metadata::MethodCallAttributes::HASTHIS,
+            return_type: metadata::Type::Void,
+            types: vec![metadata::Type::Object, metadata::Type::ISize],
+        };
+        self.output.MethodDef(
+            ".ctor",
+            &ctor_signature,
+            ctor_flags,
+            metadata::MethodImplAttributes::Runtime,
+        );
+
         let signature = metadata::Signature {
-            flags: Default::default(),
+            flags: metadata::MethodCallAttributes::HASTHIS,
             return_type,
             types,
         };
 
-        self.output
-            .MethodDef("Invoke", &signature, flags, Default::default());
+        self.output.MethodDef(
+            "Invoke",
+            &signature,
+            flags,
+            metadata::MethodImplAttributes::Runtime,
+        );
 
         self.encode_return_attrs(&item.return_attrs)?;
         self.encode_params(&params)?;

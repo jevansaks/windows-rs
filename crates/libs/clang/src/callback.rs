@@ -102,11 +102,10 @@ impl Callback {
         };
         let attrs = win32_metadata_attrs(&self.annotations, false);
 
-        // Bare `extern fn` encodes the platform default in the reader.
         let abi = match self.calling_convention {
-            Some(CallingConvention::Cdecl) => quote! { "C" },
+            Some(CallingConvention::Cdecl) | None => quote! { "C" },
             Some(CallingConvention::Fastcall) => quote! { "fastcall" },
-            Some(CallingConvention::Stdcall) | None => quote! {},
+            Some(CallingConvention::Stdcall) => quote! {},
         };
 
         Ok(quote! {
