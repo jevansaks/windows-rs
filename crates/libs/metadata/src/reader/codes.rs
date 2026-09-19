@@ -132,14 +132,22 @@ impl<'a> TypeDefOrRef<'a> {
         }
 
         if let Self::TypeDef(def) = self {
-            let tn = TypeName::named(def.namespace(), def.name());
+            let tn = def.type_name();
             return match def.category() {
                 TypeCategory::Struct | TypeCategory::Enum => Type::ValueName(tn),
                 _ => Type::ClassName(tn),
             };
         }
 
-        Type::ClassName(TypeName::named(self.namespace(), self.name()))
+        Type::ClassName(self.type_name())
+    }
+
+    pub(crate) fn type_name(&self) -> TypeName {
+        match self {
+            Self::TypeDef(def) => def.type_name(),
+            Self::TypeRef(reference) => reference.type_name(),
+            rest => panic!("{rest:?}"),
+        }
     }
 }
 

@@ -122,6 +122,7 @@ impl Remapper {
 
     fn target(&self, namespace: &str, name: &str) -> String {
         if self.sources.iter().any(|s| s == namespace) {
+            let name = name.split('/').next().unwrap();
             self.routes
                 .get(trim_tick(name))
                 .cloned()

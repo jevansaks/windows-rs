@@ -52,6 +52,11 @@ The writer API is lower-level. `writer::File` builds ECMA-335 rows and `into_str
 finished bytes. Prefer [`windows-rdl`](windows-rdl.md) when a reviewable source format is useful;
 use the writer directly when a tool is copying or synthesizing table rows.
 
+`TypeDef::type_name()` and `TypeRef::type_name()` return the outer namespace and a slash-separated
+enclosing path for nested types. Decoded signatures retain that path so copying and merging preserve
+TypeRef ResolutionScope chains. Namespace remapping routes nested references with their outer type.
+The row-level `name()` and `namespace()` accessors still return the stored leaf values.
+
 ## Common tool tasks
 
 | Task | API |
@@ -68,6 +73,10 @@ use the writer directly when a tool is copying or synthesizing table rows.
 
 The merger accepts files or directories. Architecture merge retains one neutral definition only
 when the same shape is present on every merged architecture; divergent shapes are tagged and kept.
+API methods with the same name and signature coalesce only when their flags, import map, method
+attributes, and return/parameter rows also match. Distinct contracts retain separate MethodDefs
+with architecture masks. Existing architecture attributes in either metadata vocabulary namespace
+are replaced by the merged mask rather than participating in contract identity.
 The remapper rewrites definitions and references together and splits Win32 `Apis` members across
 their routed target namespaces.
 

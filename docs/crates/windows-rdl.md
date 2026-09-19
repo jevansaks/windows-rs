@@ -181,6 +181,10 @@ The `clang` path uses `clang-sys` to parse C or C++ translation units. It projec
 into the RDL syntax tree. The header path and hand-authored RDL path share the same lowering code.
 The `formatter` module pretty-prints generated RDL.
 
+Inline struct and union fields retain nested metadata identity. Their signatures use TypeRef
+ResolutionScope chains through every enclosing type, while NestedClass rows relate the definitions.
+The writer recognizes those scoped field references and restores inline RDL without flattening them.
+
 ### Testing
 
 Dedicated test crates cover the crate:

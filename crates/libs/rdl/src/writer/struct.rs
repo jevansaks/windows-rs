@@ -36,23 +36,25 @@ fn write_record(
 ) -> Result<TokenStream, Error> {
     let nested: Vec<metadata::reader::TypeDef> = item.index().nested(*item).collect();
 
-    let bare: HashSet<String> = item
+    let inline_names: HashSet<String> = item
         .fields()
         .filter_map(|field| match field.ty() {
-            metadata::Type::ValueName(tn) if tn.namespace.is_empty() && !tn.name.contains('/') => {
-                Some(tn.name)
-            }
+            metadata::Type::ValueName(tn) => nested
+                .iter()
+                .find(|child| references_child(&tn, child))
+                .map(|child| child.name().to_string()),
             _ => None,
         })
         .collect();
 
-    // Non-bare nested references must be hoisted to flat helper names.
+    // Nested records used through pointers or arrays need named RDL helpers.
     let mut flat_names: HashMap<String, String> = HashMap::new();
     for (index, child) in nested.iter().enumerate() {
-        if bare.contains(child.name()) {
+        if inline_names.contains(child.name()) {
             continue;
         }
         let flat_name = format!("{}_{index}", item.name());
+        flat_names.insert(child.type_name().name, flat_name.clone());
         flat_names.insert(child.name().to_string(), flat_name.clone());
         let effective_arches = parent_arches | child.arches();
         let effective_packing = packing_of(child).or(parent_packing);
@@ -68,7 +70,7 @@ fn write_record(
 
     let inline_map: HashMap<String, metadata::reader::TypeDef> = nested
         .iter()
-        .filter(|child| bare.contains(child.name()))
+        .filter(|child| inline_names.contains(child.name()))
         .map(|child| (child.name().to_string(), *child))
         .collect();
 
@@ -76,8 +78,9 @@ fn write_record(
         .fields()
         .map(|field| -> Result<TokenStream, Error> {
             if let metadata::Type::ValueName(tn) = field.ty()
-                && tn.namespace.is_empty()
-                && let Some(child) = inline_map.get(&tn.name)
+                && let Some(child) = inline_map
+                    .values()
+                    .find(|child| references_child(&tn, child))
             {
                 let effective_arches = parent_arches | child.arches();
                 let effective_packing = packing_of(child).or(parent_packing);
@@ -147,6 +150,7 @@ fn hoist_subtree(
     let mut child_flat_names: HashMap<String, String> = HashMap::new();
     for (index, child) in node.index().nested(*node).enumerate() {
         let child_flat = format!("{flat_name}_{index}");
+        child_flat_names.insert(child.type_name().name, child_flat.clone());
         child_flat_names.insert(child.name().to_string(), child_flat.clone());
         let effective_arches = arches | child.arches();
         let effective_packing = packing_of(&child).or(packing);
@@ -260,9 +264,8 @@ fn resolve_nested(
     flat_names: &HashMap<String, String>,
 ) -> metadata::Type {
     match ty {
-        metadata::Type::ValueName(tn) if tn.namespace.is_empty() => {
-            let leaf = tn.name.rsplit('/').next().unwrap_or(&tn.name);
-            if let Some(flat) = flat_names.get(leaf) {
+        metadata::Type::ValueName(tn) if tn.namespace.is_empty() || tn.namespace == namespace => {
+            if let Some(flat) = flat_names.get(&tn.name) {
                 metadata::Type::value_named(namespace, flat)
             } else {
                 ty.clone()
@@ -281,6 +284,10 @@ fn resolve_nested(
         ),
         _ => ty.clone(),
     }
+}
+
+fn references_child(name: &metadata::TypeName, child: &metadata::reader::TypeDef) -> bool {
+    *name == child.type_name() || (name.namespace.is_empty() && name.name == child.name())
 }
 
 fn struct_keyword(item: &metadata::reader::TypeDef) -> TokenStream {

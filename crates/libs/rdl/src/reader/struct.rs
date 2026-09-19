@@ -34,9 +34,10 @@ impl syn::parse::Parse for Struct {
 }
 
 #[derive(Clone, Copy)]
-pub struct Enclosing {
+pub struct Enclosing<'a> {
     outer: metadata::writer::TypeDef,
     arch: Option<i32>,
+    name: &'a str,
 }
 
 impl Encoder<'_> {
@@ -53,8 +54,12 @@ impl Encoder<'_> {
         is_union: bool,
         fields: &[Field],
         attrs: &[syn::Attribute],
-        enclosing: Option<Enclosing>,
+        enclosing: Option<Enclosing<'_>>,
     ) -> Result<metadata::writer::TypeDef, Error> {
+        let qualified_name = enclosing.map_or_else(
+            || name.to_string(),
+            |parent| format!("{}/{name}", parent.name),
+        );
         let value_type = self.output.TypeRef("System", "ValueType");
 
         let layout_flag = if is_union {
@@ -107,9 +112,11 @@ impl Encoder<'_> {
                     mt
                 }
                 FieldType::Nested(rec) => {
-                    // Empty-namespace leaf names are resolved through NestedClass.
                     let child_name = format!("{name}_{index}");
-                    let mt = metadata::Type::value_named("", &child_name);
+                    let mt = metadata::Type::value_named(
+                        self.namespace,
+                        &format!("{qualified_name}/{child_name}"),
+                    );
                     deferred.push((child_name, rec));
                     mt
                 }
@@ -151,6 +158,7 @@ impl Encoder<'_> {
                 Some(Enclosing {
                     outer: type_def,
                     arch: effective_arch,
+                    name: &qualified_name,
                 }),
             )?;
         }

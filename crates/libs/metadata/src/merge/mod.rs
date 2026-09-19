@@ -391,9 +391,7 @@ fn write_field(file: &mut writer::File, field: reader::Field, arch_override: Opt
 /// Returns the `SupportedArchitectureAttribute` bits on a type, or 0 (arch-neutral) if absent.
 fn type_arch_bits(def: reader::TypeDef) -> i32 {
     for attribute in def.attributes() {
-        let ty = attribute.ctor().parent();
-        if ty.namespace() == "Windows.Win32.Metadata"
-            && ty.name() == "SupportedArchitectureAttribute"
+        if is_architecture_attribute(attribute)
             && let Some((_, Value::I32(bits))) = attribute.value().first()
         {
             return *bits;
@@ -657,7 +655,7 @@ fn merge_native_sized_callback(
     let first_def = copies[0].1;
     if copies.iter().any(|(_, def, _)| {
         def.flags() != first_def.flags()
-            || callback_attributes(*def) != callback_attributes(first_def)
+            || contract_attributes(*def) != contract_attributes(first_def)
     }) {
         return None;
     }
@@ -675,8 +673,8 @@ fn merge_native_sized_callback(
     if methods.iter().any(|(method, _)| {
         method.flags() != first.flags()
             || method.impl_flags() != first.impl_flags()
-            || callback_attributes(*method) != callback_attributes(first)
-            || callback_params(*method) != callback_params(first)
+            || contract_attributes(*method) != contract_attributes(first)
+            || method_params(*method) != method_params(first)
     }) {
         return None;
     }
@@ -727,7 +725,7 @@ fn is_unmanaged_callback(def: reader::TypeDef) -> bool {
         })
 }
 
-fn callback_params(
+fn method_params(
     method: reader::MethodDef,
 ) -> Vec<(
     String,
@@ -742,27 +740,25 @@ fn callback_params(
                 param.name().to_string(),
                 param.sequence(),
                 param.flags(),
-                callback_attributes(param),
+                contract_attributes(param),
             )
         })
         .collect()
 }
 
-fn callback_attributes<'a, R: HasAttributes<'a>>(
+fn contract_attributes<'a, R: HasAttributes<'a>>(
     row: R,
 ) -> Vec<(String, String, Vec<(String, Value)>)> {
     row.attributes()
         .filter_map(|attribute| {
             let ty = attribute.ctor().parent();
-            (!(ty.namespace() == "Windows.Win32.Metadata"
-                && ty.name() == "SupportedArchitectureAttribute"))
-                .then(|| {
-                    (
-                        ty.namespace().to_string(),
-                        ty.name().to_string(),
-                        attribute.value(),
-                    )
-                })
+            (!is_architecture_attribute(attribute)).then(|| {
+                (
+                    ty.namespace().to_string(),
+                    ty.name().to_string(),
+                    attribute.value(),
+                )
+            })
         })
         .collect()
 }
@@ -873,7 +869,18 @@ fn write_type_arch_merged(
         let mut methods: BTreeMap<String, (reader::MethodDef, i32)> = BTreeMap::new();
         for (_, ty, bits) in copies {
             for method in ty.methods() {
-                let key = format!("{}|{:?}", method.name(), method.signature(&generics));
+                let import = method
+                    .impl_map()
+                    .map(|map| (map.flags(), map.import_name(), map.import_scope().name()));
+                let key = format!(
+                    "{}|{:?}|{:?}|{:?}|{:?}|{:?}|{import:?}",
+                    method.name(),
+                    method.signature(&generics),
+                    method.flags(),
+                    method.impl_flags(),
+                    contract_attributes(method),
+                    method_params(method),
+                );
                 methods.entry(key).or_insert((method, 0)).1 |= bits;
             }
         }
@@ -942,6 +949,13 @@ fn write_attributes<'a, R: HasAttributes<'a>>(
     write_attributes_with_arch(file, parent, row, None);
 }
 
+fn is_architecture_attribute(attribute: reader::Attribute) -> bool {
+    matches!(
+        attribute.namespace(),
+        "Windows.Win32.Metadata" | "Windows.Win32.Foundation.Metadata"
+    ) && attribute.name() == "SupportedArchitectureAttribute"
+}
+
 /// Copies attributes, optionally replacing `SupportedArchitectureAttribute`.
 fn write_attributes_with_arch<'a, R: HasAttributes<'a>>(
     file: &mut writer::File,
@@ -953,10 +967,7 @@ fn write_attributes_with_arch<'a, R: HasAttributes<'a>>(
         let ctor = attribute.ctor();
         let ty = ctor.parent();
 
-        if arch_override.is_some()
-            && ty.namespace() == "Windows.Win32.Metadata"
-            && ty.name() == "SupportedArchitectureAttribute"
-        {
+        if arch_override.is_some() && is_architecture_attribute(attribute) {
             continue;
         }
 
