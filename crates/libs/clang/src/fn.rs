@@ -216,7 +216,7 @@ impl Fn {
 
         let is_variadic = cursor.ty().is_variadic();
         let does_not_return = detect_does_not_return(&cursor);
-        let annotations = extract_win32_metadata_annotations(&cursor);
+        let annotations = extract_resolved_win32_metadata_annotations(&cursor, parser)?;
 
         // SAL annotations take priority; MIDL comments are a fallback.
         let fn_tokens = parser
@@ -243,7 +243,7 @@ impl Fn {
         let midl_annotations = scan_method_param_annotations(&fn_tokens, anchor, parser.macro_defs);
         let calling_convention = detect_calling_convention(&fn_tokens, anchor, parser.macro_defs);
 
-        let mut params = parse_params(&cursor, &midl_annotations, parser);
+        let mut params = parse_params(&cursor, &midl_annotations, parser)?;
 
         // Recover missing caller-chosen-type COM annotations from signature shape.
         infer_iid_is(&mut params, &return_type);

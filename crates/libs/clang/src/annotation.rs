@@ -411,6 +411,88 @@ pub fn extract_win32_metadata_annotations(cursor: &Cursor) -> Vec<Win32MetadataA
         .collect()
 }
 
+pub(crate) fn extract_resolved_win32_metadata_annotations(
+    cursor: &Cursor,
+    parser: &Parser<'_>,
+) -> Result<Vec<Win32MetadataAnnotation>, Error> {
+    let mut annotations = extract_win32_metadata_annotations(cursor);
+    resolve_invalid_handle_annotations(&mut annotations, parser, cursor)?;
+    Ok(annotations)
+}
+
+fn resolve_invalid_handle_annotations(
+    annotations: &mut [Win32MetadataAnnotation],
+    parser: &Parser<'_>,
+    cursor: &Cursor,
+) -> Result<(), Error> {
+    for annotation in annotations {
+        if !annotation.is("invalid_handle") {
+            continue;
+        }
+        let Some(value) = annotation.value.as_deref() else {
+            continue;
+        };
+        if parse_integer::<i64>(value).is_some() {
+            continue;
+        }
+        let Some(resolved) = parser.invalid_handle_values.get(value.trim()) else {
+            let (file, line, column) = cursor.source_location();
+            return Err(Error::new(
+                &format!("could not evaluate invalid-handle sentinel `{value}`"),
+                &file,
+                line,
+                column,
+            ));
+        };
+        annotation.value = Some(resolved.to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn symbolic_invalid_handle_sentinels(
+    cursor: &Cursor,
+) -> Result<HashMap<String, Cursor>, Error> {
+    let mut result = HashMap::new();
+    collect_symbolic_invalid_handle_sentinels(cursor, &mut result)?;
+    Ok(result)
+}
+
+fn collect_symbolic_invalid_handle_sentinels(
+    cursor: &Cursor,
+    result: &mut HashMap<String, Cursor>,
+) -> Result<(), Error> {
+    for child in cursor.children() {
+        if child.kind() == CXCursor_AnnotateAttr {
+            if let Some(annotation) = parse_win32_metadata_annotation(&child.name()) {
+                for annotation in expand_win32_metadata_annotation(annotation) {
+                    if !annotation.is("invalid_handle") {
+                        continue;
+                    }
+                    let value = annotation.value.as_deref().unwrap_or_default().trim();
+                    if parse_integer::<i64>(value).is_some() {
+                        continue;
+                    }
+                    if !is_c_identifier(value) {
+                        let (file, line, column) = child.source_location();
+                        return Err(Error::new(
+                            &format!(
+                                "invalid-handle sentinel `{value}` must be an integer literal or object-like macro"
+                            ),
+                            &file,
+                            line,
+                            column,
+                        ));
+                    }
+                    result.entry(value.to_string()).or_insert(child);
+                }
+            }
+        } else {
+            collect_symbolic_invalid_handle_sentinels(&child, result)?;
+        }
+    }
+    Ok(())
+}
+
 fn expand_win32_metadata_annotation(
     annotation: Win32MetadataAnnotation,
 ) -> Vec<Win32MetadataAnnotation> {
@@ -870,7 +952,7 @@ pub(crate) fn parse_params(
     cursor: &Cursor,
     source_annotations: &[SourceParamAnnotation],
     parser: &mut Parser<'_>,
-) -> Vec<Param> {
+) -> Result<Vec<Param>, Error> {
     let mut params = vec![];
     let mut param_idx = 0usize;
     let children = cursor.children();
@@ -894,6 +976,7 @@ pub(crate) fn parse_params(
         let mut annotation = extract_param_annotation(&child, parser.tu)
             .with_source_sal(&source.sal)
             .with_midl_fallback(&source.midl);
+        resolve_invalid_handle_annotations(&mut annotation.win32_metadata, parser, &child)?;
         if let Some(size) = &mut annotation.size
             && let SalSizeArg::Name(name) = &size.arg
             && !names.contains(name)
@@ -951,7 +1034,7 @@ pub(crate) fn parse_params(
         });
     }
     resolve_param_array_info(&mut params);
-    params
+    Ok(params)
 }
 
 /// Resolves SAL sizes to parameter indices or element counts. Fixed byte counts require

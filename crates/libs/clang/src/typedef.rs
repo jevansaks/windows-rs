@@ -28,7 +28,7 @@ impl Typedef {
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>) -> Result<Option<Self>, Error> {
         let name = cursor.name();
         let underlying = cursor.typedef_underlying_type();
-        let annotations = extract_win32_metadata_annotations(&cursor);
+        let annotations = extract_resolved_win32_metadata_annotations(&cursor, parser)?;
 
         // The enum/flags merge emits the public name with this typedef's storage type.
         if parser.enum_merge.contains_key(&name) {

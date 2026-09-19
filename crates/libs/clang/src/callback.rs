@@ -66,8 +66,8 @@ impl Callback {
         // Use the shared SAL/MIDL path so callbacks match functions and COM methods.
         let midl_annotations =
             scan_method_param_annotations(&tokens, &source_name, parser.macro_defs);
-        let params = parse_params(&param_source, &midl_annotations, parser);
-        let annotations = extract_win32_metadata_annotations(&param_source);
+        let params = parse_params(&param_source, &midl_annotations, parser)?;
+        let annotations = extract_resolved_win32_metadata_annotations(&param_source, parser)?;
 
         // clang erases x64 conventions from the type, so recover non-default ones from tokens.
         let calling_convention =

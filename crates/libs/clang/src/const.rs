@@ -8,6 +8,65 @@ pub struct Const {
 }
 
 impl Const {
+    pub(crate) fn evaluate_invalid_handle_sentinels(
+        source: MacroSource<'_>,
+        names: &[String],
+        index: &Index,
+        args: &[&str],
+    ) -> Result<HashMap<String, i64>, Error> {
+        if names.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let (prefix, synthetic) = match source {
+            MacroSource::File(path) => {
+                let name = Path::new(path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap();
+                (
+                    format!("#include \"{name}\"\n"),
+                    format!("{path}.__rdl_invalid_handle_eval__.cpp"),
+                )
+            }
+            MacroSource::Str(text) => (
+                format!("{text}\n"),
+                "__rdl_input_text_invalid_handle_eval__.cpp".to_string(),
+            ),
+        };
+        let mut text = prefix;
+        for name in names {
+            text.push_str(&format!(
+                "__int64 __rdl_invalid_handle_{name} = (__int64)({name});\n"
+            ));
+        }
+        let eval_args = with_unlimited_errors(args);
+        let tu = index.parse_unsaved(&synthetic, &text, &eval_args, CXTranslationUnit_KeepGoing)?;
+        let mut values = HashMap::new();
+        for child in tu.cursor().children() {
+            if child.kind() != CXCursor_VarDecl || !child.is_from_main_file() {
+                continue;
+            }
+            let child_name = child.name();
+            let Some(name) = child_name.strip_prefix("__rdl_invalid_handle_") else {
+                continue;
+            };
+            if let Some(signed) = evaluate_integer_descendant(&child) {
+                values.insert(name.to_string(), signed);
+            }
+        }
+
+        fn evaluate_integer_descendant(cursor: &Cursor) -> Option<i64> {
+            if let Some((_, signed)) = cursor.evaluate_integer() {
+                return Some(signed);
+            }
+            cursor
+                .children()
+                .into_iter()
+                .find_map(|child| evaluate_integer_descendant(&child))
+        }
+        Ok(values)
+    }
+
     /// Parse object-like macros whose token body has a fixed constant shape.
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>) -> Result<Option<Self>, Error> {
         if cursor.is_macro_builtin() {

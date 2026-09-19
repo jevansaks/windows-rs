@@ -81,7 +81,7 @@ impl Interface {
                 scan_method_param_annotations(&tokens, &method_name, parser.macro_defs);
             let return_type = child.result_type().to_type(parser);
 
-            let mut params = parse_params(&child, &midl_param_annotations, parser);
+            let mut params = parse_params(&child, &midl_param_annotations, parser)?;
 
             // Recover missing caller-chosen-type COM annotations from signature shape.
             infer_iid_is(&mut params, &return_type);
@@ -92,7 +92,7 @@ impl Interface {
                 return_type,
                 is_propget: method_annotation.is_propget,
                 is_propput: method_annotation.is_propput,
-                annotations: extract_win32_metadata_annotations(&child),
+                annotations: extract_resolved_win32_metadata_annotations(&child, parser)?,
             });
         }
 

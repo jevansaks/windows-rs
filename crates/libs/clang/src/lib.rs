@@ -90,6 +90,8 @@ pub(crate) struct Parser<'a> {
     pub iid_vars: HashMap<String, String>,
     /// Object-like macro replacement tokens for resolving calling conventions.
     pub macro_defs: &'a HashMap<String, Vec<String>>,
+    /// Integer values of symbolic invalid-handle sentinels evaluated in this translation unit.
+    pub invalid_handle_values: &'a HashMap<String, i64>,
     /// Expanded export name -> source spelling for object-like function aliases.
     /// Charset-selection aliases are excluded because they choose an `A`/`W` variant.
     pub alias_map: HashMap<String, String>,
@@ -122,6 +124,7 @@ impl<'a> Parser<'a> {
         tag_rename: &'a HashMap<String, String>,
         enum_merge: &'a HashMap<String, &'static str>,
         macro_defs: &'a HashMap<String, Vec<String>>,
+        invalid_handle_values: &'a HashMap<String, i64>,
         tu: &'a TranslationUnit,
         symbols: &'a HashSet<String>,
     ) -> Self {
@@ -142,6 +145,7 @@ impl<'a> Parser<'a> {
             iid_vars: HashMap::new(),
             alias_map: build_alias_map(macro_defs),
             macro_defs,
+            invalid_handle_values,
             symbols,
             redeclarations: None,
             drop_lib_less: false,
@@ -524,6 +528,21 @@ impl<'a> Parser<'a> {
         }
         Ok(())
     }
+}
+
+fn evaluate_invalid_handle_values(
+    cursors: impl IntoIterator<Item = Cursor>,
+    eval: MacroEval<'_>,
+) -> Result<HashMap<String, i64>, Error> {
+    let mut sites = HashMap::new();
+    for cursor in cursors {
+        for (name, site) in symbolic_invalid_handle_sentinels(&cursor)? {
+            sites.entry(name).or_insert(site);
+        }
+    }
+    let names: Vec<String> = sites.keys().cloned().collect();
+    let index = Index::new()?;
+    Const::evaluate_invalid_handle_sentinels(eval.source, &names, &index, eval.args)
 }
 
 #[derive(Default, Clone)]
@@ -1423,6 +1442,12 @@ impl Clang {
         let mut all_opaque: Vec<(String, String)> = vec![];
         // Macro constants are per-bucket values but are deduplicated globally.
         let mut all_consts: Vec<(String, Vec<String>)> = vec![];
+        let invalid_handle_values = evaluate_invalid_handle_values(
+            buckets
+                .values()
+                .flat_map(|cursors| cursors.iter().map(|(cursor, _)| *cursor)),
+            eval,
+        )?;
 
         for (stem, cursors) in buckets {
             let collector = collectors.entry(stem.clone()).or_default();
@@ -1434,6 +1459,7 @@ impl Clang {
                 &tag_rename,
                 &enum_merge,
                 &macro_defs,
+                &invalid_handle_values,
                 tu,
                 &self.symbols,
             );
@@ -1576,11 +1602,25 @@ impl Clang {
         for spec in specs {
             let ref_map = build_ref_map(reference, spec.namespace);
             let mut collector = Collector::new();
-            for (_, tu) in &parsed.h_tus {
-                self.process_tu(tu, &mut collector, &ref_map, spec)?;
+            for (input, tu) in &parsed.h_tus {
+                let invalid_handle_values = evaluate_invalid_handle_values(
+                    [tu.cursor()],
+                    MacroEval {
+                        source: MacroSource::File(input),
+                        args: &arg_refs,
+                    },
+                )?;
+                self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
             }
-            for (_, tu) in &parsed.str_tus {
-                self.process_tu(tu, &mut collector, &ref_map, spec)?;
+            for (content, tu) in &parsed.str_tus {
+                let invalid_handle_values = evaluate_invalid_handle_values(
+                    [tu.cursor()],
+                    MacroEval {
+                        source: MacroSource::Str(content),
+                        args: &arg_refs,
+                    },
+                )?;
+                self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
             }
             for name in collector.keys() {
                 owners
@@ -1606,14 +1646,30 @@ impl Clang {
             let mut collector = Collector::new();
 
             for (input, tu) in &parsed.h_tus {
-                let pending = self.process_tu(tu, &mut collector, &ref_map, spec)?;
+                let invalid_handle_values = evaluate_invalid_handle_values(
+                    [tu.cursor()],
+                    MacroEval {
+                        source: MacroSource::File(input),
+                        args: &arg_refs,
+                    },
+                )?;
+                let pending =
+                    self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
                 for c in Const::evaluate_macros(input, &pending, &parsed.index, &arg_refs)? {
                     collector.insert(Item::Const(c));
                 }
             }
 
             for (content, tu) in &parsed.str_tus {
-                let pending = self.process_tu(tu, &mut collector, &ref_map, spec)?;
+                let invalid_handle_values = evaluate_invalid_handle_values(
+                    [tu.cursor()],
+                    MacroEval {
+                        source: MacroSource::Str(content),
+                        args: &arg_refs,
+                    },
+                )?;
+                let pending =
+                    self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
                 for c in Const::evaluate_macros_str(content, &pending, &parsed.index, &arg_refs)? {
                     collector.insert(Item::Const(c));
                 }
@@ -1632,6 +1688,7 @@ impl Clang {
         collector: &mut Collector,
         ref_map: &HashMap<String, String>,
         spec: &NamespaceSpec<'_>,
+        invalid_handle_values: &HashMap<String, i64>,
     ) -> Result<Vec<String>, Error> {
         for diag in tu.diagnostics() {
             if diag.is_err() {
@@ -1660,6 +1717,7 @@ impl Clang {
             &tag_rename,
             &enum_merge,
             &macro_defs,
+            invalid_handle_values,
             tu,
             spec.symbols,
         );

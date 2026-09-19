@@ -64,6 +64,63 @@ fn callback_method<'a>(
 }
 
 #[test]
+fn raii_free_resolves_symbolic_invalid_handle() {
+    let source = r#"
+        typedef __int64 LONG_PTR;
+        typedef void *HANDLE;
+        #define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
+        #define RAII_FREE(cleanup, invalid) \
+            __attribute__((annotate("win32metadata:raii_free=" #cleanup ", " #invalid)))
+
+        RAII_FREE(CloseHandle, INVALID_HANDLE_VALUE)
+        HANDLE OpenResource(void);
+    "#;
+    let (rdl, _) = compile("raii_free_symbolic_invalid_handle", source);
+    assert!(rdl.contains(
+        "extern fn OpenResource() -> #[raii_free(\"CloseHandle\")] #[invalid_handle(-1)]"
+    ));
+}
+
+#[test]
+fn raii_free_rejects_unresolved_invalid_handle() {
+    let dir = scratch("raii_free_unresolved_invalid_handle");
+    let header = dir.join("input.h");
+    let rdl = dir.join("input.rdl");
+    std::fs::write(
+        &header,
+        r#"
+            typedef void *HANDLE;
+            #define RAII_FREE(cleanup, invalid) \
+                __attribute__((annotate("win32metadata:raii_free=" #cleanup ", " #invalid)))
+
+            RAII_FREE(CloseHandle, MISSPELLED_INVALID_HANDLE_VALUE)
+            HANDLE OpenResource(void);
+        "#,
+    )
+    .unwrap();
+    let _guard = test_clang::libclang_guard();
+    let error = windows_clang::clang()
+        .args([
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+            "-fms-extensions",
+        ])
+        .input(&header)
+        .namespace("Test")
+        .library("test.dll")
+        .output(&rdl)
+        .write()
+        .unwrap_err();
+    assert!(
+        error.message.contains(
+            "could not evaluate invalid-handle sentinel `MISSPELLED_INVALID_HANDLE_VALUE`"
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn callback_typedefs_preserve_source_sal() {
     let source = r#"
         #define CALLBACK __stdcall
