@@ -160,6 +160,56 @@ fn source_macro_return_type(
 }
 
 impl Fn {
+    pub(crate) fn merge_redeclaration(
+        &mut self,
+        source: Self,
+        cursor: &Cursor,
+    ) -> Result<(), Error> {
+        let error = || {
+            let (file, line, column) = cursor.source_location();
+            Error::new(
+                &format!(
+                    "conflicting redeclaration signature or import for `{}`",
+                    self.name
+                ),
+                &file,
+                line,
+                column,
+            )
+        };
+        if self.name != source.name
+            || self.import_name != source.import_name
+            || self.return_type != source.return_type
+            || self.extern_c != source.extern_c
+            || self.is_variadic != source.is_variadic
+            || self.params.len() != source.params.len()
+            || self
+                .params
+                .iter()
+                .zip(&source.params)
+                .any(|(a, b)| a.ty != b.ty)
+            || matches!((self.calling_convention, source.calling_convention), (Some(a), Some(b)) if a != b)
+        {
+            return Err(error());
+        }
+        Win32MetadataAnnotation::merge(&mut self.annotations, &source.annotations, cursor)?;
+        if let Some(library) = self
+            .annotations
+            .iter()
+            .find_map(Win32MetadataAnnotation::import_library)
+        {
+            self.library = library.to_string();
+        } else if self.library != source.library {
+            return Err(error());
+        }
+        self.calling_convention = self.calling_convention.or(source.calling_convention);
+        self.does_not_return |= source.does_not_return;
+        for (target, source) in self.params.iter_mut().zip(&source.params) {
+            target.annotation.merge(&source.annotation, cursor)?;
+        }
+        Ok(())
+    }
+
     pub fn parse(cursor: Cursor, parser: &mut Parser<'_>, extern_c: bool) -> Result<Self, Error> {
         let export_name = cursor.name();
         let mut return_type = cursor.result_type().to_type(parser);

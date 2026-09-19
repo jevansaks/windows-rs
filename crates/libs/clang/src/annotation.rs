@@ -2,13 +2,40 @@ use super::*;
 
 const WIN32_METADATA_PREFIX: &str = "win32metadata:";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Win32MetadataAnnotation {
     pub key: String,
     pub value: Option<String>,
 }
 
 impl Win32MetadataAnnotation {
+    pub(crate) fn merge(
+        target: &mut Vec<Self>,
+        source: &[Self],
+        cursor: &Cursor,
+    ) -> Result<(), Error> {
+        let existing = std::mem::take(target);
+        for annotation in existing.iter().chain(source) {
+            if target.contains(annotation) {
+                continue;
+            }
+            if annotation.key != "invalid_handle"
+                && target.iter().any(|existing| existing.key == annotation.key)
+            {
+                let (file, line, column) = cursor.source_location();
+                return Err(Error::new(
+                    &format!("conflicting redeclaration annotation `{}`", annotation.key),
+                    &file,
+                    line,
+                    column,
+                ));
+            }
+            target.push(annotation.clone());
+        }
+        target.sort_by(|a, b| (&a.key, &a.value).cmp(&(&b.key, &b.value)));
+        Ok(())
+    }
+
     pub fn is(&self, key: &str) -> bool {
         self.key == key
     }
@@ -450,6 +477,42 @@ pub struct ParamAnnotation {
 }
 
 impl ParamAnnotation {
+    pub(crate) fn merge(&mut self, source: &Self, cursor: &Cursor) -> Result<(), Error> {
+        let direction = (self.in_param, self.out_param);
+        let other_direction = (source.in_param, source.out_param);
+        let conflicting_direction = direction != (false, false)
+            && other_direction != (false, false)
+            && direction != other_direction;
+        let conflicting_size = match (&self.array, &source.array) {
+            (Some(a), Some(b)) => a != b,
+            _ => matches!((&self.size, &source.size), (Some(a), Some(b)) if a != b),
+        };
+        if conflicting_direction || conflicting_size {
+            let (file, line, column) = cursor.source_location();
+            return Err(Error::new(
+                "conflicting redeclaration parameter contract",
+                &file,
+                line,
+                column,
+            ));
+        }
+        self.in_param |= source.in_param;
+        self.out_param |= source.out_param;
+        self.optional |= source.optional;
+        self.retval |= source.retval;
+        self.reserved |= source.reserved;
+        self.com_out_ptr |= source.com_out_ptr;
+        self.com_out_ptr_token |= source.com_out_ptr_token;
+        self.null_terminated |= source.null_terminated;
+        if self.size.is_none() {
+            self.size.clone_from(&source.size);
+        }
+        if self.array.is_none() {
+            self.array.clone_from(&source.array);
+        }
+        Win32MetadataAnnotation::merge(&mut self.win32_metadata, &source.win32_metadata, cursor)
+    }
+
     fn with_source_sal(mut self, source: &Self) -> Self {
         self.in_param |= source.in_param;
         self.out_param |= source.out_param;
@@ -497,20 +560,20 @@ pub struct SourceParamAnnotation {
     midl: ParamAnnotation,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SalSizeArg {
     Const(i32),
     Name(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SalSize {
     /// `*_bytes_*` maps to `MemorySize`; other size macros map to element counts.
     pub bytes: bool,
     pub arg: SalSizeArg,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArrayInfo {
     CountParamIndex(i16),
     CountConst(i32),

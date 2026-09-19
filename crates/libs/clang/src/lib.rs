@@ -94,6 +94,8 @@ pub(crate) struct Parser<'a> {
     pub alias_map: HashMap<String, String>,
     /// Non-empty means only listed functions are roots; dependencies still flow in later.
     pub symbols: &'a HashSet<String>,
+    /// Exact roots retain the contracts on every declaration of their clang identity.
+    pub redeclarations: Option<&'a BTreeMap<String, Vec<(Cursor, bool)>>>,
     /// Drops functions with no resolved import library; off for fixtures without `.lib` inputs.
     pub drop_lib_less: bool,
     /// Resolution-winmd names that keep true WinRT ABI types out of the flat root.
@@ -140,6 +142,7 @@ impl<'a> Parser<'a> {
             alias_map: build_alias_map(macro_defs),
             macro_defs,
             symbols,
+            redeclarations: None,
             drop_lib_less: false,
             winrt_types: None,
         }
@@ -151,6 +154,27 @@ impl<'a> Parser<'a> {
             return;
         }
         collector.insert(Item::Fn(item));
+    }
+
+    fn parse_fn(&mut self, cursor: Cursor, extern_c: bool) -> Result<Fn, Error> {
+        let mut item = Fn::parse(cursor, self, extern_c)?;
+        if let Some(declarations) = self.redeclarations.and_then(|map| map.get(&cursor.usr())) {
+            for &(other, other_extern_c) in declarations {
+                validate_win32_metadata_annotation_tree(&other)?;
+                if cursor.ty().canonical_type().spelling() != other.ty().canonical_type().spelling()
+                {
+                    let (file, line, column) = other.source_location();
+                    return Err(Error::new(
+                        "conflicting redeclaration native signature",
+                        &file,
+                        line,
+                        column,
+                    ));
+                }
+                item.merge_redeclaration(Fn::parse(other, self, other_extern_c)?, &other)?;
+            }
+        }
+        Ok(item)
     }
 
     /// Processes one cursor, inserting items or queuing macros for the second pass.
@@ -170,7 +194,7 @@ impl<'a> Parser<'a> {
                         && self.symbols.contains(&child.name())
                         && !is_midl_proxy_stub(&child, self.libraries) =>
                 {
-                    let item = Fn::parse(child, self, extern_c)?;
+                    let item = self.parse_fn(child, extern_c)?;
                     self.insert_fn(item, collector);
                     return Ok(());
                 }
@@ -323,7 +347,7 @@ impl<'a> Parser<'a> {
                     && !is_midl_proxy_stub(&child, self.libraries)
                     && !is_midl_user_marshal_stub(&child) =>
             {
-                let item = Fn::parse(child, self, extern_c)?;
+                let item = self.parse_fn(child, extern_c)?;
                 self.insert_fn(item, collector);
             }
             // Linkage blocks may nest; recurse with the per-child language.
@@ -1296,6 +1320,13 @@ impl Clang {
 
         // Prefer definitions over forward declarations so records route to defining headers.
         let mut chosen: BTreeMap<String, (Cursor, bool)> = BTreeMap::new();
+        let mut redeclarations: BTreeMap<String, Vec<(Cursor, bool)>> = BTreeMap::new();
+        let in_scope = |cursor: &Cursor| {
+            header_stem_of(cursor).is_some_and(|stem| self.scope_headers.contains(&stem))
+                || (!self.scope.is_empty()
+                    && header_path_of(cursor)
+                        .is_some_and(|path| header_in_scope(&path, &self.scope)))
+        };
         for (child, extern_c) in decls {
             if is_handle_tag_struct(&child) {
                 continue;
@@ -1310,6 +1341,17 @@ impl Clang {
             if header_stem_of(&child).is_none() {
                 continue;
             }
+            let selected =
+                child.kind() == CXCursor_FunctionDecl && self.symbols.contains(&child.name());
+            if selected {
+                if header_stem_of(&child).is_some_and(|stem| self.exclude_headers.contains(&stem)) {
+                    continue;
+                }
+                redeclarations
+                    .entry(child.usr())
+                    .or_default()
+                    .push((child, extern_c));
+            }
             let usr = child.usr();
             let key = if usr.is_empty() {
                 child.canonical().location_id()
@@ -1323,7 +1365,14 @@ impl Clang {
                 std::collections::btree_map::Entry::Occupied(mut e) => {
                     let existing = &e.get().0;
                     // Among forward declarations, keep the `uuid` one so CLSIDs survive.
-                    let replace = if child.is_definition() {
+                    let replace = if selected && !child.is_definition() && !existing.is_definition()
+                    {
+                        (in_scope(&child), std::cmp::Reverse(child.source_location()))
+                            > (
+                                in_scope(existing),
+                                std::cmp::Reverse(existing.source_location()),
+                            )
+                    } else if child.is_definition() {
                         !existing.is_definition()
                     } else if !existing.is_definition() {
                         child.extract_uuid(tu).is_some() && existing.extract_uuid(tu).is_none()
@@ -1389,6 +1438,7 @@ impl Clang {
             parser.header_root = Some(root);
             parser.drop_lib_less = self.drop_lib_less;
             parser.winrt_types = abi;
+            parser.redeclarations = Some(&redeclarations);
 
             for (child, extern_c) in cursors {
                 parser.process_cursor(child, collector, extern_c)?;

@@ -77,6 +77,10 @@ an optional hand-authored seed, and parallel execution; it is intended for SDK-s
   In per-header output, exact symbols replace header roots and retain their type dependencies,
   including functions whose first declaration belongs to another included header. Missing or
   ambiguous selections are errors; repeated selectors and redeclarations emit one function.
+  Exact roots prefer a declaration in the requested header scope, with source path/position as
+  the tie-breaker. Compatible method and parameter annotations are combined across declarations;
+  conflicting signatures, annotation values, directions, or sizes are errors. An explicit
+  `import_library` annotation overrides the scanned mapping, but header scope does not select a DLL.
   Exact function and loose-constant selections cannot be combined in one per-header pass.
 - Use `scope` or `scope_header` to choose roots for a per-header reachability sweep.
 - Use `exclude_header` to remove a partition before that sweep.
