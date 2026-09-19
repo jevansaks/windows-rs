@@ -132,20 +132,20 @@ impl<'a> TypeDefOrRef<'a> {
         }
 
         if let Self::TypeDef(def) = self {
-            let tn = def.type_name();
+            let tn = def.scoped_type_name();
             return match def.category() {
                 TypeCategory::Struct | TypeCategory::Enum => Type::ValueName(tn),
                 _ => Type::ClassName(tn),
             };
         }
 
-        Type::ClassName(self.type_name())
+        Type::ClassName(self.scoped_type_name())
     }
 
-    pub(crate) fn type_name(&self) -> TypeName {
+    pub(crate) fn scoped_type_name(&self) -> TypeName {
         match self {
-            Self::TypeDef(def) => def.type_name(),
-            Self::TypeRef(reference) => reference.type_name(),
+            Self::TypeDef(def) => def.scoped_type_name(),
+            Self::TypeRef(reference) => reference.scoped_type_name(),
             rest => panic!("{rest:?}"),
         }
     }

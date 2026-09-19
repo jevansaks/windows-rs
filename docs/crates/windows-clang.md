@@ -74,6 +74,10 @@ an optional hand-authored seed, and parallel execution; it is intended for SDK-s
 
 - Use `filter` and `filters` for normalized header path suffixes.
 - Use `symbol` and `symbols` when only named free functions should be roots.
+  In per-header output, exact symbols replace header roots and retain their type dependencies,
+  including functions whose first declaration belongs to another included header. Missing or
+  ambiguous selections are errors; repeated selectors and redeclarations emit one function.
+  Exact function and loose-constant selections cannot be combined in one per-header pass.
 - Use `scope` or `scope_header` to choose roots for a per-header reachability sweep.
 - Use `exclude_header` to remove a partition before that sweep.
 - Load per-DLL import libraries before umbrella libraries so first-wins symbol resolution keeps the
@@ -82,6 +86,10 @@ an optional hand-authored seed, and parallel execution; it is intended for SDK-s
   without mappings are discarded.
 
 ## Pitfalls
+
+Fixed SAL byte counts become `NativeArrayInfo.CountConst` only when the native pointer element is
+exactly one byte. Literal counts and object-macro aliases to integer literals are supported. Wider
+elements, `void`, function pointees, and unresolved expressions do not acquire an element count.
 
 - The parser sees the preprocessed declaration selected by your arguments. Wrong defines or target
   settings can change layouts, aliases, and exported names without a parser error.

@@ -54,7 +54,7 @@ fn write_record(
             continue;
         }
         let flat_name = format!("{}_{index}", item.name());
-        flat_names.insert(child.type_name().name, flat_name.clone());
+        flat_names.insert(child.scoped_type_name().name, flat_name.clone());
         flat_names.insert(child.name().to_string(), flat_name.clone());
         let effective_arches = parent_arches | child.arches();
         let effective_packing = packing_of(child).or(parent_packing);
@@ -150,7 +150,7 @@ fn hoist_subtree(
     let mut child_flat_names: HashMap<String, String> = HashMap::new();
     for (index, child) in node.index().nested(*node).enumerate() {
         let child_flat = format!("{flat_name}_{index}");
-        child_flat_names.insert(child.type_name().name, child_flat.clone());
+        child_flat_names.insert(child.scoped_type_name().name, child_flat.clone());
         child_flat_names.insert(child.name().to_string(), child_flat.clone());
         let effective_arches = arches | child.arches();
         let effective_packing = packing_of(&child).or(packing);
@@ -287,7 +287,7 @@ fn resolve_nested(
 }
 
 fn references_child(name: &metadata::TypeName, child: &metadata::reader::TypeDef) -> bool {
-    *name == child.type_name() || (name.namespace.is_empty() && name.name == child.name())
+    *name == child.scoped_type_name() || (name.namespace.is_empty() && name.name == child.name())
 }
 
 fn struct_keyword(item: &metadata::reader::TypeDef) -> TokenStream {

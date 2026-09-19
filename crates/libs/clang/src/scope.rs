@@ -87,11 +87,7 @@ pub(crate) fn header_path_of(cursor: &Cursor) -> Option<String> {
     } else {
         file
     };
-    if file.is_empty() {
-        None
-    } else {
-        Some(file)
-    }
+    if file.is_empty() { None } else { Some(file) }
 }
 
 /// True when `path` is the root itself or is contained beneath it.
@@ -208,10 +204,11 @@ pub(crate) fn item_refs(item: &Item, out: &mut HashSet<String>) {
     }
 }
 
-/// Remove out-of-scope declarations not reachable from an in-scope declaration.
+/// Retain dependencies of exact symbols, or of in-scope declarations when no symbols are selected.
 pub(crate) fn sweep_unreferenced(
     collectors: &mut BTreeMap<String, Collector>,
     scope_in: &BTreeMap<String, bool>,
+    symbols: &HashSet<String>,
 ) {
     // Unknown scope is treated as in-scope so the sweep only removes known out-of-scope noise.
     let in_scope = |stem: &str| scope_in.get(stem).copied().unwrap_or(true);
@@ -221,13 +218,17 @@ pub(crate) fn sweep_unreferenced(
     let mut seen: HashSet<String> = HashSet::new();
     let mut stack: Vec<String> = vec![];
     for (stem, collector) in collectors.iter() {
-        let roots = in_scope(stem);
         for (name, item) in collector.iter() {
+            let root = if symbols.is_empty() {
+                in_scope(stem)
+            } else {
+                symbols.contains(name)
+            };
             known.insert(name.clone());
             let mut refs = HashSet::new();
             item_refs(item, &mut refs);
             edges.entry(name.clone()).or_default().extend(refs);
-            if roots && seen.insert(name.clone()) {
+            if root && seen.insert(name.clone()) {
                 stack.push(name.clone());
             }
         }
@@ -244,7 +245,7 @@ pub(crate) fn sweep_unreferenced(
     }
 
     for (stem, collector) in collectors.iter_mut() {
-        if in_scope(stem) {
+        if symbols.is_empty() && in_scope(stem) {
             continue;
         }
         collector.retain(|name| seen.contains(name));

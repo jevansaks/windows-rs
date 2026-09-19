@@ -162,8 +162,7 @@ impl<'a> Parser<'a> {
     ) -> Result<(), Error> {
         validate_win32_metadata_annotation_tree(&child)?;
 
-        // Allowlist mode emits only named functions as roots. Bare tag dependencies are
-        // not scheduled here; a missing one fails later as an unresolved reference.
+        // Per-header mode retains types for the exact-root dependency sweep.
         if !self.symbols.is_empty() {
             match child.kind() {
                 CXCursor_FunctionDecl
@@ -173,16 +172,19 @@ impl<'a> Parser<'a> {
                 {
                     let item = Fn::parse(child, self, extern_c)?;
                     self.insert_fn(item, collector);
+                    return Ok(());
                 }
                 CXCursor_LinkageSpec => {
                     for inner in child.children() {
                         let inner_extern_c = inner.language() == CXLanguage_C;
                         self.process_cursor(inner, collector, inner_extern_c)?;
                     }
+                    return Ok(());
                 }
+                CXCursor_FunctionDecl => return Ok(()),
+                _ if self.header_root.is_none() => return Ok(()),
                 _ => {}
             }
-            return Ok(());
         }
         match child.kind() {
             CXCursor_StructDecl | CXCursor_ClassDecl if child.is_definition() => {
@@ -964,6 +966,14 @@ impl Clang {
 
     /// Emits one flat-root RDL string per defining-header stem.
     fn parse_and_emit_by_header(&self, root: &str) -> Result<BTreeMap<String, String>, Error> {
+        if !self.symbols.is_empty() && !self.constants.is_empty() {
+            return Err(Error::new(
+                "exact function and constant selections cannot be combined",
+                "",
+                0,
+                0,
+            ));
+        }
         // Additive scrapes skip entities already defined by input winmds. Split type and
         // value names because functions/constants live on `Apis`, not in `iter()`.
         let reference = self.load_reference()?;
@@ -1087,9 +1097,30 @@ impl Clang {
             scope_in.retain(|stem, _| !self.exclude_headers.contains(stem));
         }
 
-        // Keep out-of-scope declarations only when referenced from an in-scope root.
-        if !self.scope.is_empty() {
-            sweep_unreferenced(&mut collectors, &scope_in);
+        for name in &self.symbols {
+            let owners = collectors
+                .values()
+                .filter(|collector| {
+                    collector
+                        .iter()
+                        .any(|(candidate, item)| candidate == name && matches!(item, Item::Fn(_)))
+                })
+                .count();
+            let message = match owners {
+                0 => Some(format!("selected function `{name}` was not found")),
+                1 => None,
+                _ => Some(format!(
+                    "selected function `{name}` has multiple source owners"
+                )),
+            };
+            if let Some(message) = message {
+                return Err(Error::new(&message, "", 0, 0));
+            }
+        }
+
+        // Exact symbols replace header roots without adding the rest of their owning header.
+        if !self.scope.is_empty() || !self.symbols.is_empty() {
+            sweep_unreferenced(&mut collectors, &scope_in, &self.symbols);
         }
 
         // Un-exclude a reference enum the scrape carries with members the reference lacks: emit
@@ -1307,8 +1338,24 @@ impl Clang {
         }
 
         let mut buckets: BTreeMap<String, Vec<(Cursor, bool)>> = BTreeMap::new();
+        let mut selected_symbols = HashSet::new();
         for (_, (child, extern_c)) in chosen {
             let stem = header_stem_of(&child).expect("filtered above");
+            if child.kind() == CXCursor_FunctionDecl
+                && self.symbols.contains(&child.name())
+                && !self.exclude_headers.contains(&stem)
+                && !selected_symbols.insert(child.name())
+            {
+                return Err(Error::new(
+                    &format!(
+                        "selected function `{}` has multiple declarations",
+                        child.name()
+                    ),
+                    &child.file_name(),
+                    0,
+                    0,
+                ));
+            }
             // Keep a partition in-scope if any contributing cursor is in-scope.
             if !self.scope.is_empty() {
                 let in_scope = self.scope_headers.contains(&stem)
@@ -1322,7 +1369,6 @@ impl Clang {
         }
 
         let empty_ref: HashMap<String, String> = HashMap::new();
-        let empty_symbols: HashSet<String> = HashSet::new();
         let mut all_opaque: Vec<(String, String)> = vec![];
         // Macro constants are per-bucket values but are deduplicated globally.
         let mut all_consts: Vec<(String, Vec<String>)> = vec![];
@@ -1338,7 +1384,7 @@ impl Clang {
                 &enum_merge,
                 &macro_defs,
                 tu,
-                &empty_symbols,
+                &self.symbols,
             );
             parser.header_root = Some(root);
             parser.drop_lib_less = self.drop_lib_less;

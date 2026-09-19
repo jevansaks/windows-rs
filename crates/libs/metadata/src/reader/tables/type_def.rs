@@ -20,9 +20,9 @@ impl<'a> TypeDef<'a> {
     }
 
     /// Returns the outer namespace and the slash-separated enclosing type path.
-    pub fn type_name(&self) -> TypeName {
+    pub fn scoped_type_name(&self) -> TypeName {
         if let Some(nested) = self.equal_range::<NestedClass>(0, self.pos() + 1).next() {
-            let mut name = nested.outer().type_name();
+            let mut name = nested.outer().scoped_type_name();
             name.name.push('/');
             name.name.push_str(self.name());
             name

@@ -245,6 +245,57 @@ fn dependency_typedef_and_macro_return_identities_use_reference_metadata() {
 }
 
 #[test]
+fn fixed_byte_counts_require_one_byte_pointees() {
+    let source = r#"
+        #define _In_reads_bytes_opt_(n)
+        #define _Out_writes_bytes_opt_(n)
+        #define _In_reads_(n)
+        #define NONCE_SIZE 32
+        #define NONCE_ALIAS (NONCE_SIZE)
+        #define NotAConstant(x) 32
+        typedef unsigned char UCHAR;
+        typedef unsigned char Byte;
+        typedef unsigned short USHORT;
+        struct ONE_BYTE { UCHAR value; };
+        void FixedBytes(
+            _In_reads_bytes_opt_(32) UCHAR *literal,
+            _In_reads_bytes_opt_(NONCE_SIZE) UCHAR *macro,
+            _In_reads_bytes_opt_(NONCE_ALIAS) char *chars,
+            _In_reads_bytes_opt_(32) const Byte *bytes,
+            _In_reads_bytes_opt_(32) ONE_BYTE *records,
+            _In_reads_bytes_opt_(32) USHORT *wide,
+            _In_reads_bytes_opt_(32) void *opaque,
+            _In_reads_bytes_opt_(32) UCHAR **indirect,
+            _In_reads_(32) USHORT *elements,
+            _Out_writes_bytes_opt_(32) Byte *output,
+            _In_reads_bytes_opt_(NotAConstant) UCHAR *unresolved);
+    "#;
+    let (_, index) = compile("fixed_byte_counts", source);
+    let function = method(&index, "FixedBytes");
+    for param in function.params() {
+        let expected = match param.name() {
+            "literal" | "macro" | "chars" | "bytes" | "records" | "elements" | "output" => {
+                Some(metadata::reader::BufferRelationship::ElementsConst(32))
+            }
+            "wide" | "opaque" | "indirect" | "unresolved" => None,
+            name => panic!("unexpected parameter {name}"),
+        };
+        assert_eq!(param.buffer_relationship(), expected, "{}", param.name());
+        let direction = if param.name() == "output" {
+            metadata::ParamAttributes::Out
+        } else {
+            metadata::ParamAttributes::In
+        };
+        let optional = if param.name() == "elements" {
+            metadata::ParamAttributes::default()
+        } else {
+            metadata::ParamAttributes::Optional
+        };
+        assert_eq!(param.flags(), direction | optional, "{}", param.name());
+    }
+}
+
+#[test]
 fn sal_source_and_attributes_preserve_buffer_contracts() {
     for (name, annotation) in [
         ("empty_sal", ""),

@@ -669,6 +669,35 @@ fn parse_int_literal(s: &str) -> Option<i32> {
     }
 }
 
+fn sal_macro_constant(name: &str, parser: &Parser<'_>) -> Option<i32> {
+    let mut name = name;
+    let mut seen = HashSet::new();
+    let definitions = parser.tu.cursor().children();
+    while seen.insert(name) {
+        let mut tokens = parser.macro_defs.get(name)?.as_slice();
+        let definition = definitions
+            .iter()
+            .rev()
+            .find(|cursor| cursor.kind() == CXCursor_MacroDefinition && cursor.name() == name)?;
+        if definition.is_macro_function_like() {
+            return None;
+        }
+        while tokens.first().is_some_and(|token| token == "(")
+            && tokens.last().is_some_and(|token| token == ")")
+        {
+            tokens = &tokens[1..tokens.len() - 1];
+        }
+        let [value] = tokens else {
+            return None;
+        };
+        if let Some(value) = parse_int_literal(value) {
+            return Some(value);
+        }
+        name = value;
+    }
+    None
+}
+
 fn is_c_identifier(s: &str) -> bool {
     let mut chars = s.chars();
     match chars.next() {
@@ -775,7 +804,13 @@ pub(crate) fn parse_params(
 ) -> Vec<Param> {
     let mut params = vec![];
     let mut param_idx = 0usize;
-    for child in cursor.children() {
+    let children = cursor.children();
+    let names: HashSet<_> = children
+        .iter()
+        .filter(|child| child.kind() == CXCursor_ParmDecl)
+        .map(Cursor::name)
+        .collect();
+    for child in children {
         if child.kind() != CXCursor_ParmDecl {
             continue;
         }
@@ -790,6 +825,13 @@ pub(crate) fn parse_params(
         let mut annotation = extract_param_annotation(&child, parser.tu)
             .with_source_sal(&source.sal)
             .with_midl_fallback(&source.midl);
+        if let Some(size) = &mut annotation.size
+            && let SalSizeArg::Name(name) = &size.arg
+            && !names.contains(name)
+            && let Some(value) = sal_macro_constant(name, parser)
+        {
+            size.arg = SalSizeArg::Const(value);
+        }
         let cursor_ty = child.ty();
         normalize_direct_interface_annotation(&cursor_ty, &mut annotation);
         let mut ty = param_metadata_type(&cursor_ty, &annotation, parser);
@@ -814,6 +856,24 @@ pub(crate) fn parse_params(
         {
             annotation.array = Some(ArrayInfo::CountConst(n));
         }
+        // Byte counts equal element counts only for native one-byte pointees.
+        if let Some(SalSize {
+            bytes: true,
+            arg: SalSizeArg::Const(n),
+        }) = &annotation.size
+        {
+            let native = cursor_ty.canonical_type();
+            let pointee = native.pointee_type();
+            if native.kind() == CXType_Pointer
+                && !matches!(
+                    pointee.kind(),
+                    CXType_Void | CXType_FunctionProto | CXType_FunctionNoProto
+                )
+                && pointee.size_of() == 1
+            {
+                annotation.array = Some(ArrayInfo::CountConst(*n));
+            }
+        }
         param_idx += 1;
         params.push(Param {
             name,
@@ -825,8 +885,8 @@ pub(crate) fn parse_params(
     params
 }
 
-/// Resolves SAL sizes to parameter indices or constants; unresolved names and constant
-/// byte counts are dropped.
+/// Resolves SAL sizes to parameter indices or element counts. Fixed byte counts require
+/// native pointee-size information and are handled while parsing each parameter.
 pub fn resolve_param_array_info(params: &mut [Param]) {
     let index_of: HashMap<&str, i16> = params
         .iter()

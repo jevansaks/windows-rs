@@ -90,7 +90,7 @@ fn assert_nested(index: &reader::Index, namespace: &str) {
         &["Outer", "Outer_1", "Outer_1_1"],
     );
     assert_eq!(
-        grandchildren[0].type_name(),
+        grandchildren[0].scoped_type_name(),
         TypeName::named(namespace, "Outer/Outer_1/Outer_1_1")
     );
     assert_eq!(

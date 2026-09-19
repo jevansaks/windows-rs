@@ -20,11 +20,11 @@ impl<'a> TypeRef<'a> {
     }
 
     /// Returns the outer namespace and the slash-separated enclosing type path.
-    pub fn type_name(&self) -> TypeName {
+    pub fn scoped_type_name(&self) -> TypeName {
         if self.usize(0) != 0
             && let ResolutionScope::TypeRef(outer) = self.scope()
         {
-            let mut name = outer.type_name();
+            let mut name = outer.scoped_type_name();
             name.name.push('/');
             name.name.push_str(self.name());
             name
