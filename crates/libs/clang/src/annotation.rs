@@ -19,7 +19,7 @@ impl Win32MetadataAnnotation {
             if target.contains(annotation) {
                 continue;
             }
-            if annotation.key != "invalid_handle"
+            if !matches!(annotation.key.as_str(), "invalid_handle" | "supported_os")
                 && target.iter().any(|existing| existing.key == annotation.key)
             {
                 let (file, line, column) = cursor.source_location();
@@ -398,12 +398,16 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
 }
 
 pub fn extract_win32_metadata_annotations(cursor: &Cursor) -> Vec<Win32MetadataAnnotation> {
+    let mut supported_os = HashSet::new();
     cursor
         .children()
         .into_iter()
         .filter(|child| child.kind() == CXCursor_AnnotateAttr)
         .filter_map(|child| parse_win32_metadata_annotation(&child.name()))
         .flat_map(expand_win32_metadata_annotation)
+        .filter(|annotation| {
+            !annotation.is("supported_os") || supported_os.insert(annotation.value.clone())
+        })
         .collect()
 }
 

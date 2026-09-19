@@ -187,7 +187,7 @@ fn exact_symbol_merges_redeclaration_contracts() {
 #[test]
 fn exact_symbol_rejects_conflicting_redeclaration_contracts() {
     let _guard = test_clang::libclang_guard();
-    for key in ["supported_os", "import_library"] {
+    for key in ["static_library", "import_library"] {
         let (mut clang, dir) = fixture(&format!("header_conflicting_{key}"));
         std::fs::write(
             dir.join("foreign.h"),

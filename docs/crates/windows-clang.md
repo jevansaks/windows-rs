@@ -82,6 +82,9 @@ an optional hand-authored seed, and parallel execution; it is intended for SDK-s
   conflicting signatures, annotation values, directions, or sizes are errors. An explicit
   `import_library` annotation overrides the scanned mapping, but header scope does not select a DLL.
   Exact function and loose-constant selections cannot be combined in one per-header pass.
+- Repeated `supported_os` annotations preserve each distinct tag verbatim and remove identical tags.
+  Exact function redeclarations merge those tags as a set; distinct client/server tags are not
+  conflicts and are not replaced with a single minimum version.
 - Use `scope` or `scope_header` to choose roots for a per-header reachability sweep.
 - Use `exclude_header` to remove a partition before that sweep.
 - Per-header output drops an unreferenced loose constant only when an emitted enum member has the
