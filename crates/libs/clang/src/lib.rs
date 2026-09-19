@@ -2105,7 +2105,19 @@ fn enum_member_values(collectors: &BTreeMap<String, Collector>) -> HashMap<Strin
         for item in collector.values() {
             if let Item::Enum(e) = item {
                 for (name, value) in &e.variants {
-                    let value = enum_variant_value(e.output_repr(), *value);
+                    let value = enum_variant_value(e.repr, *value);
+                    // Compare flags by bit pattern without changing their native representation.
+                    let value = if e.flags {
+                        match value {
+                            metadata::Value::I8(value) => metadata::Value::U8(value as u8),
+                            metadata::Value::I16(value) => metadata::Value::U16(value as u16),
+                            metadata::Value::I32(value) => metadata::Value::U32(value as u32),
+                            metadata::Value::I64(value) => metadata::Value::U64(value as u64),
+                            other => other,
+                        }
+                    } else {
+                        value
+                    };
                     members
                         .entry(name.clone())
                         .or_default()

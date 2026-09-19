@@ -27,8 +27,8 @@ fn verify_high_bits(image: &Path) {
         (
             "FLAGS8",
             "HIGH8",
-            metadata::Type::U8,
-            metadata::Value::U8(0x80),
+            metadata::Type::I8,
+            metadata::Value::I8(-128),
         ),
         (
             "FLAGS16",
@@ -39,14 +39,14 @@ fn verify_high_bits(image: &Path) {
         (
             "FLAGS32",
             "HIGH32",
-            metadata::Type::U32,
-            metadata::Value::U32(0x8000_0000),
+            metadata::Type::I32,
+            metadata::Value::I32(i32::MIN),
         ),
         (
             "FLAGS64",
             "HIGH64",
-            metadata::Type::U64,
-            metadata::Value::U64(0x8000_0000_0000_0000),
+            metadata::Type::I64,
+            metadata::Value::I64(i64::MIN),
         ),
     ] {
         let group = index.expect("Test", name);
