@@ -278,6 +278,96 @@ fn arch_merge_divergent_struct() {
 }
 
 #[test]
+fn arch_merge_preserves_bitfield_layout_variants() {
+    let dir = std::env::temp_dir().join("win_merge_bitfield_layout");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let x64 = winmd(
+        &dir,
+        "x64_bitfield",
+        "#[win32] mod Test { struct PAGE { _bitfield: usize { Flag: 1, _: 31, ReservedUlong: 32 } } }",
+    );
+    let x86 = winmd(
+        &dir,
+        "x86_bitfield",
+        "#[win32] mod Test { struct PAGE { _bitfield: usize { Flag: 1, VirtualPage: 20 } } }",
+    );
+
+    let merged = dir.join("merged_bitfield.winmd");
+    merge()
+        .arch_input(&x64, 2)
+        .arch_input(&x86, 1)
+        .output(&merged)
+        .merge()
+        .unwrap();
+
+    let assert_variants = |path: &std::path::Path| {
+        let index = reader::Index::read(path.to_string_lossy().as_ref()).unwrap();
+        let pages: Vec<_> = index.types().filter(|t| t.name() == "PAGE").collect();
+        assert_eq!(pages.len(), 2);
+
+        let mut variants: Vec<_> = pages
+            .iter()
+            .map(|page| {
+                let field = page.fields().next().unwrap();
+                let members: Vec<_> = field
+                    .attributes()
+                    .filter(|attribute| {
+                        attribute.ctor().parent().name() == "NativeBitfieldAttribute"
+                    })
+                    .map(|attribute| {
+                        let values = attribute.value();
+                        (
+                            match &values[0].1 {
+                                Value::Utf8(value) => value.clone(),
+                                other => panic!("unexpected bitfield name {other:?}"),
+                            },
+                            match values[2].1 {
+                                Value::I64(value) => value,
+                                ref other => panic!("unexpected bitfield width {other:?}"),
+                            },
+                        )
+                    })
+                    .collect();
+                (type_arch_bits(*page).unwrap(), members)
+            })
+            .collect();
+        variants.sort_by_key(|(arch, _)| *arch);
+
+        assert_eq!(
+            variants,
+            vec![
+                (
+                    1,
+                    vec![("Flag".to_string(), 1), ("VirtualPage".to_string(), 20)]
+                ),
+                (
+                    2,
+                    vec![("Flag".to_string(), 1), ("ReservedUlong".to_string(), 32)]
+                ),
+            ]
+        );
+    };
+    assert_variants(&merged);
+
+    let rdl_dir = dir.join("bitfield_rdl");
+    std::fs::create_dir_all(&rdl_dir).unwrap();
+    windows_rdl::writer()
+        .input(&merged)
+        .output(&rdl_dir)
+        .split()
+        .write()
+        .unwrap();
+    let roundtrip = dir.join("roundtrip_bitfield.winmd");
+    windows_rdl::reader()
+        .input(&rdl_dir)
+        .output(&roundtrip)
+        .write()
+        .unwrap();
+    assert_variants(&roundtrip);
+}
+
+#[test]
 fn arch_merge_normalizes_native_sized_callback_signature() {
     let dir = std::env::temp_dir().join("win_merge_native_callback");
     std::fs::create_dir_all(&dir).unwrap();

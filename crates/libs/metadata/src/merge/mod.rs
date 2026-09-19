@@ -917,7 +917,12 @@ fn type_sig(index: &reader::Index, def: reader::TypeDef) -> String {
                 .constant()
                 .map(|c| format!("{:?}", c.value()))
                 .unwrap_or_default();
-            format!("{}:{:?}={val}", f.name(), f.ty())
+            format!(
+                "{}:{:?}={val}|{:?}",
+                f.name(),
+                f.ty(),
+                contract_attributes(f)
+            )
         })
         .collect();
     let methods: Vec<String> = def
