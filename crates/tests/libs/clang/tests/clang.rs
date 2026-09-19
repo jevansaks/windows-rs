@@ -472,6 +472,75 @@ fn rejects_invalid_win32metadata_annotations() {
     );
 }
 
+#[test]
+fn preserves_alias_export_when_another_translation_unit_defines_source_name() {
+    let _guard = test_clang::libclang_guard();
+    let output = format!("{}/multi_tu_alias_collision.rdl", env!("OUT_DIR"));
+
+    windows_clang::clang()
+        .args(["-x", "c++", "--target=x86_64-pc-windows-msvc"])
+        .input_text(r#"extern "C" int Api(void);"#)
+        .input_text(
+            r#"
+            #define Api K32Api
+            extern "C" int Api(void);
+            "#,
+        )
+        .libraries([("Api", "PSAPI.dll"), ("K32Api", "KERNEL32.dll")])
+        .output(&output)
+        .namespace("Test")
+        .write()
+        .unwrap();
+
+    let rdl = std::fs::read_to_string(output).unwrap();
+    assert_eq!(rdl.matches("fn Api(").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches("fn K32Api(").count(), 1, "{rdl}");
+    assert!(rdl.contains(r#"#[library("PSAPI.dll")]"#), "{rdl}");
+    assert!(rdl.contains(r#"#[library("KERNEL32.dll")]"#), "{rdl}");
+    assert!(!rdl.contains("import ="), "{rdl}");
+}
+
+#[test]
+fn preserves_alias_export_across_header_partition_translation_units() {
+    let _guard = test_clang::libclang_guard();
+    let scratch = std::path::Path::new(env!("OUT_DIR")).join("multi_tu_header_alias_collision");
+    std::fs::create_dir_all(&scratch).unwrap();
+    std::fs::write(
+        scratch.join("api.h"),
+        r#"
+        #if API_VERSION > 1
+        #define Api K32Api
+        #endif
+        extern "C" int Api(void);
+        "#,
+    )
+    .unwrap();
+    let output = scratch.join("rdl");
+
+    windows_clang::clang()
+        .args([
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+            &format!("-I{}", scratch.display()),
+        ])
+        .input_text("#define API_VERSION 1\n#include <api.h>")
+        .input_text("#define API_VERSION 2\n#include <api.h>")
+        .libraries([("Api", "PSAPI.dll"), ("K32Api", "KERNEL32.dll")])
+        .scope_header("api")
+        .output(&output)
+        .namespace("Test")
+        .write_by_header()
+        .unwrap();
+
+    let rdl = std::fs::read_to_string(output.join("api.rdl")).unwrap();
+    assert_eq!(rdl.matches("fn Api(").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches("fn K32Api(").count(), 1, "{rdl}");
+    assert!(rdl.contains(r#"#[library("PSAPI.dll")]"#), "{rdl}");
+    assert!(rdl.contains(r#"#[library("KERNEL32.dll")]"#), "{rdl}");
+    assert!(!rdl.contains("import ="), "{rdl}");
+}
+
 fn run(name: &str) {
     let input_path = format!("input/{name}.h");
     let expected_path = format!("expected/{name}.rdl");

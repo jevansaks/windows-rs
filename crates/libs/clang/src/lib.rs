@@ -95,6 +95,8 @@ pub(crate) struct Parser<'a> {
     /// Expanded export name -> source spelling for object-like function aliases.
     /// Charset-selection aliases are excluded because they choose an `A`/`W` variant.
     pub alias_map: HashMap<String, String>,
+    /// Raw function names present across every input translation unit.
+    pub export_names: &'a HashSet<String>,
     /// Non-empty means only listed functions are roots; dependencies still flow in later.
     pub symbols: &'a HashSet<String>,
     /// Exact roots retain the contracts on every declaration of their clang identity.
@@ -125,6 +127,7 @@ impl<'a> Parser<'a> {
         enum_merge: &'a HashMap<String, &'static str>,
         macro_defs: &'a HashMap<String, Vec<String>>,
         invalid_handle_values: &'a HashMap<String, i64>,
+        export_names: &'a HashSet<String>,
         tu: &'a TranslationUnit,
         symbols: &'a HashSet<String>,
     ) -> Self {
@@ -144,6 +147,7 @@ impl<'a> Parser<'a> {
             flag_enums: HashSet::new(),
             iid_vars: HashMap::new(),
             alias_map: build_alias_map(macro_defs),
+            export_names,
             macro_defs,
             invalid_handle_values,
             symbols,
@@ -1053,6 +1057,7 @@ impl Clang {
 
         let parsed = self.parse_inputs()?;
         let arg_refs: Vec<&str> = parsed.args.iter().map(String::as_str).collect();
+        let export_names = collect_function_names(&parsed);
 
         // Backtick-stripped resolution names classify `ABI::Windows::*` declarations.
         let winrt_types = self.load_winrt_types()?;
@@ -1072,6 +1077,7 @@ impl Clang {
                 &pass,
                 &mut collectors,
                 &mut scope_in,
+                &export_names,
                 MacroEval {
                     source: MacroSource::File(input),
                     args: &arg_refs,
@@ -1084,6 +1090,7 @@ impl Clang {
                 &pass,
                 &mut collectors,
                 &mut scope_in,
+                &export_names,
                 MacroEval {
                     source: MacroSource::Str(content),
                     args: &arg_refs,
@@ -1294,6 +1301,7 @@ impl Clang {
         pass: &HeaderPass<'_>,
         collectors: &mut BTreeMap<String, Collector>,
         scope_in: &mut BTreeMap<String, bool>,
+        export_names: &HashSet<String>,
         eval: MacroEval<'_>,
     ) -> Result<(), Error> {
         let HeaderPass { root, winrt_types } = *pass;
@@ -1460,6 +1468,7 @@ impl Clang {
                 &enum_merge,
                 &macro_defs,
                 &invalid_handle_values,
+                export_names,
                 tu,
                 &self.symbols,
             );
@@ -1595,6 +1604,7 @@ impl Clang {
         // Reuse translation units across all specs.
         let parsed = self.parse_inputs()?;
         let arg_refs: Vec<&str> = parsed.args.iter().map(String::as_str).collect();
+        let export_names = collect_function_names(&parsed);
 
         // Pass 1: learn unique type-name owners across specs. Shared typedef artifacts stay
         // local by being dropped from the owner table.
@@ -1610,7 +1620,14 @@ impl Clang {
                         args: &arg_refs,
                     },
                 )?;
-                self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
+                self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    spec,
+                    &invalid_handle_values,
+                    &export_names,
+                )?;
             }
             for (content, tu) in &parsed.str_tus {
                 let invalid_handle_values = evaluate_invalid_handle_values(
@@ -1620,7 +1637,14 @@ impl Clang {
                         args: &arg_refs,
                     },
                 )?;
-                self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
+                self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    spec,
+                    &invalid_handle_values,
+                    &export_names,
+                )?;
             }
             for name in collector.keys() {
                 owners
@@ -1653,8 +1677,14 @@ impl Clang {
                         args: &arg_refs,
                     },
                 )?;
-                let pending =
-                    self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
+                let pending = self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    spec,
+                    &invalid_handle_values,
+                    &export_names,
+                )?;
                 for c in Const::evaluate_macros(input, &pending, &parsed.index, &arg_refs)? {
                     collector.insert(Item::Const(c));
                 }
@@ -1668,8 +1698,14 @@ impl Clang {
                         args: &arg_refs,
                     },
                 )?;
-                let pending =
-                    self.process_tu(tu, &mut collector, &ref_map, spec, &invalid_handle_values)?;
+                let pending = self.process_tu(
+                    tu,
+                    &mut collector,
+                    &ref_map,
+                    spec,
+                    &invalid_handle_values,
+                    &export_names,
+                )?;
                 for c in Const::evaluate_macros_str(content, &pending, &parsed.index, &arg_refs)? {
                     collector.insert(Item::Const(c));
                 }
@@ -1689,6 +1725,7 @@ impl Clang {
         ref_map: &HashMap<String, String>,
         spec: &NamespaceSpec<'_>,
         invalid_handle_values: &HashMap<String, i64>,
+        export_names: &HashSet<String>,
     ) -> Result<Vec<String>, Error> {
         for diag in tu.diagnostics() {
             if diag.is_err() {
@@ -1718,6 +1755,7 @@ impl Clang {
             &enum_merge,
             &macro_defs,
             invalid_handle_values,
+            export_names,
             tu,
             spec.symbols,
         );
@@ -1781,6 +1819,23 @@ struct ParsedInputs {
     str_tus: Vec<(String, TranslationUnit)>,
     index: Index,
     _library: Library,
+}
+
+fn collect_function_names(parsed: &ParsedInputs) -> HashSet<String> {
+    fn visit(cursor: Cursor, names: &mut HashSet<String>) {
+        if cursor.kind() == CXCursor_FunctionDecl {
+            names.insert(cursor.name());
+        }
+        for child in cursor.children() {
+            visit(child, names);
+        }
+    }
+
+    let mut names = HashSet::new();
+    for (_, tu) in parsed.h_tus.iter().chain(&parsed.str_tus) {
+        visit(tu.cursor(), &mut names);
+    }
+    names
 }
 
 const HEADER_EXTENSIONS: [&str; 4] = ["h", "hpp", "hxx", "hh"];

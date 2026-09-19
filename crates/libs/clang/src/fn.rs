@@ -231,6 +231,7 @@ impl Fn {
             .filter(|alias| {
                 token_names_function(&fn_tokens, alias)
                     && !token_names_function(&fn_tokens, &export_name)
+                    && !parser.export_names.contains(alias.as_str())
             })
             .cloned();
         let anchor = source_name.as_deref().unwrap_or(&export_name);
