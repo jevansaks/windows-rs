@@ -437,6 +437,135 @@ fn sal_source_and_attributes_preserve_buffer_contracts() {
 }
 
 #[test]
+fn conditional_sal_unions_direction_facts() {
+    for (name, wrapper) in [
+        ("conditional_empty", ""),
+        (
+            "conditional_legacy",
+            "__attribute__((annotate(\"SAL_when\")))",
+        ),
+    ] {
+        let source = format!(
+            r#"
+            #define _When_(condition, annotations) {wrapper}
+            #define _In_ __attribute__((annotate("_In_")))
+            #define _Out_ __attribute__((annotate("_Out_")))
+            #define _Inout_ __attribute__((annotate("_Inout_")))
+            typedef unsigned long DWORD;
+            typedef unsigned long long SIZE_T, *PSIZE_T;
+            void Initialize(void *list,
+                _When_(list == nullptr, _Out_)
+                _When_(list != nullptr, _Inout_) PSIZE_T size);
+            static_assert(__is_same(decltype(&Initialize), void (*)(void *, PSIZE_T)));
+            void Directions(
+                _When_(mode, _In_) DWORD *input,
+                _When_(mode, _Out_) DWORD *output,
+                _When_(mode, _Inout_) DWORD *inout,
+                _When_(mode, _In_) _When_(!mode, _Out_) DWORD *exclusive,
+                _When_(!mode, _Out_) _When_(mode, _In_) DWORD *reversed,
+                _In_ _When_(mode, _Out_) DWORD *unconditional_in,
+                _Out_ _When_(mode, _In_) DWORD *unconditional_out,
+                _Inout_ _When_(mode, _Out_) DWORD *unconditional_inout,
+                _When_(mode, _In_ _Out_) DWORD *multiple,
+                _When_(choose(mode, 1), _When_(nested, _In_)) DWORD *nested,
+                _When_((_Out_, mode), _In_) DWORD *condition_only,
+                DWORD plain);
+            "#
+        );
+        let (rdl, index) = compile(name, &source);
+        assert!(rdl.contains("#[in] #[out] size: *mut u64"), "{rdl}");
+        let initialize = method(&index, "Initialize");
+        let size = initialize.params().find(|p| p.name() == "size").unwrap();
+        assert_eq!(
+            size.flags(),
+            metadata::ParamAttributes::In | metadata::ParamAttributes::Out
+        );
+        assert_eq!(
+            initialize.signature(&[]).types[1],
+            metadata::Type::PtrMut(Box::new(metadata::Type::U64), 1)
+        );
+        for param in method(&index, "Directions").params() {
+            let expected = match param.name() {
+                "input" | "nested" | "condition_only" | "plain" => metadata::ParamAttributes::In,
+                "output" => metadata::ParamAttributes::Out,
+                _ => metadata::ParamAttributes::In | metadata::ParamAttributes::Out,
+            };
+            assert_eq!(param.flags(), expected, "{}", param.name());
+            assert!(param.buffer_relationship().is_none());
+            assert_eq!(param.attributes().count(), 0);
+        }
+    }
+}
+
+#[test]
+fn conditional_sal_does_not_invent_other_contracts() {
+    let (_, index) = compile(
+        "conditional_other_contracts",
+        r#"
+        #define _When_(condition, annotations)
+        #define _In_
+        #define _Out_
+        #define _In_reads_(n)
+        #define _In_reads_bytes_opt_(n)
+        #define _Out_writes_bytes_opt_(n)
+        #define _In_opt_z_
+        #define _Out_range_(low, high)
+        #define _Reserved_
+        #define _Pre_null_
+        #define _Outref_
+        #define _Inexpressible_(expr)
+        #define _Analysis_assume_(expr)
+        #define _Other_(annotations)
+        void Conditional(
+            _When_(mode, _In_reads_bytes_opt_(count)) void *input,
+            _When_(mode, _Out_writes_bytes_opt_(count)) void *output,
+            _When_(mode, _In_reads_(count))
+            _When_(!mode, _In_reads_(other)) void *different_counts,
+            _In_reads_(count) _When_(mode, _Out_writes_bytes_opt_(other)) void *sized,
+            _When_(mode, _In_opt_z_) char *text,
+            _When_(mode, _Reserved_ _Pre_null_) void *reserved,
+            _When_(mode, _Outref_ _Inexpressible_(_In_)) void *unrelated,
+            _When_(mode, _Analysis_assume_(_In_)) void *expression,
+            _When_(mode, _Out_range_(_In_, count)) void *argument,
+            _Other_(_In_) void *other_wrapper,
+            void (*callback)(_When_(mode, _In_) void *nested),
+            void *plain,
+            unsigned long count,
+            unsigned long other);
+        "#,
+    );
+    let function = method(&index, "Conditional");
+    for param in function.params() {
+        let expected = match param.name() {
+            "input" | "different_counts" | "text" | "count" | "other" => {
+                metadata::ParamAttributes::In
+            }
+            "sized" => metadata::ParamAttributes::In | metadata::ParamAttributes::Out,
+            _ => metadata::ParamAttributes::Out,
+        };
+        assert_eq!(param.flags(), expected, "{}", param.name());
+        let relationship = (param.name() == "sized")
+            .then_some(metadata::reader::BufferRelationship::ElementsParam(12));
+        assert_eq!(
+            param.buffer_relationship(),
+            relationship,
+            "{}",
+            param.name()
+        );
+        assert_eq!(
+            param.attributes().count(),
+            usize::from(param.name() == "sized"),
+            "{}",
+            param.name()
+        );
+    }
+    assert!(matches!(
+        function.signature(&[]).types[4],
+        metadata::Type::PtrMut(_, 1)
+    ));
+}
+
+#[test]
 fn associated_enum_targets_parameter_and_return_rows() {
     let (rdl, index) = compile(
         "associated_enum",

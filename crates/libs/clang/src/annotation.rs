@@ -987,7 +987,8 @@ pub fn resolve_param_array_info(params: &mut [Param]) {
 }
 
 /// Maps source SAL and MIDL comments by parameter position, including macros that expand to
-/// nothing when SDK analysis is disabled. Nested callback parameters and SAL arguments are skipped.
+/// nothing when SDK analysis is disabled. Only direction facts are recovered from `_When_` bodies;
+/// other nested SAL arguments and callback parameters are skipped.
 pub fn scan_method_param_annotations(
     tokens: &[(CXTokenKind, String)],
     method_name: &str,
@@ -1060,6 +1061,9 @@ pub fn scan_method_param_annotations(
             {
                 current.sal.optional = true;
             }
+            (CXToken_Identifier, "_When_") if in_params && paren_depth == 1 => {
+                apply_when_directions(&tokens[index + 1..], &mut current.sal);
+            }
             (CXToken_Identifier, s) if in_params && paren_depth == 1 && is_sal_name(s) => {
                 apply_sal_string(s, &mut current.sal);
                 if current.sal.size.is_none() {
@@ -1076,6 +1080,34 @@ pub fn scan_method_param_annotations(
     }
 
     result
+}
+
+fn apply_when_directions(tokens: &[(CXTokenKind, String)], annotation: &mut ParamAnnotation) {
+    if tokens.first().is_none_or(|token| token.1 != "(") {
+        return;
+    }
+    let mut depth = 0;
+    let mut in_annotations = false;
+    for (index, (kind, spelling)) in tokens.iter().enumerate() {
+        match (*kind, spelling.as_str()) {
+            (CXToken_Punctuation, "(") => depth += 1,
+            (CXToken_Punctuation, ")") => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            (CXToken_Punctuation, ",") if depth == 1 => in_annotations = true,
+            (CXToken_Identifier, name) if depth == 1 && in_annotations => {
+                if name == "_When_" {
+                    apply_when_directions(&tokens[index + 1..], annotation);
+                } else {
+                    apply_sal_direction(name, annotation);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 pub(crate) fn is_sal_name(name: &str) -> bool {
@@ -1109,17 +1141,7 @@ pub fn apply_midl_param_comment(comment: &str, annotation: &mut ParamAnnotation)
 
 /// Handles known Win32 SAL names and ignores unrelated annotations.
 fn apply_sal_string(sal: &str, annotation: &mut ParamAnnotation) {
-    // Exact directional prefixes; near-namesakes (`_Outref_`, `_Inexpressible_`) carry no meaning.
-    if sal.starts_with("_In_") || sal.starts_with("_Inout_") {
-        annotation.in_param = true;
-    }
-    if sal.starts_with("_Out_")
-        || sal.starts_with("_Outptr_")
-        || sal.starts_with("_COM_Outptr_")
-        || sal.starts_with("_Inout_")
-    {
-        annotation.out_param = true;
-    }
+    apply_sal_direction(sal, annotation);
     // `_opt_`, or a plain (non-`_COM_`) `_Outptr_..._result_maybenull_`, marks optional.
     if sal == "_Pre_null_"
         || sal.contains("_opt_")
@@ -1141,6 +1163,20 @@ fn apply_sal_string(sal: &str, annotation: &mut ParamAnnotation) {
     }
     if sal.starts_with("_COM_Outptr_") {
         annotation.com_out_ptr = true;
+    }
+}
+
+fn apply_sal_direction(sal: &str, annotation: &mut ParamAnnotation) {
+    // Exact directional prefixes; near-namesakes (`_Outref_`, `_Inexpressible_`) carry no meaning.
+    if sal.starts_with("_In_") || sal.starts_with("_Inout_") {
+        annotation.in_param = true;
+    }
+    if sal.starts_with("_Out_")
+        || sal.starts_with("_Outptr_")
+        || sal.starts_with("_COM_Outptr_")
+        || sal.starts_with("_Inout_")
+    {
+        annotation.out_param = true;
     }
 }
 

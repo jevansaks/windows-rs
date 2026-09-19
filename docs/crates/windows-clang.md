@@ -107,6 +107,11 @@ Fixed SAL byte counts become `NativeArrayInfo.CountConst` only when the native p
 exactly one byte. Literal counts and object-macro aliases to integer literals are supported. Wider
 elements, `void`, function pointees, and unresolved expressions do not acquire an element count.
 
+Source `_When_(condition, annotations)` contributes the union of its SAL input/output direction bits,
+including nested `_When_` bodies. These are aggregate directions, not a representation of the
+predicates or branch relationships. The source scan does not promote conditional counts, optionality,
+string termination, or other non-direction facts to unconditional metadata.
+
 - The parser sees the preprocessed declaration selected by your arguments. Wrong defines or target
   settings can change layouts, aliases, and exported names without a parser error.
 - The winmd format cannot express every C type detail. Mixed pointer constness and bit fields are
