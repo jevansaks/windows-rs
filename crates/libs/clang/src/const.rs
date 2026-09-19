@@ -34,9 +34,16 @@ impl Const {
             ),
         };
         let mut text = prefix;
+        text.push_str(
+            "#ifdef _WIN64\n\
+             typedef __int64 __rdl_invalid_handle_intptr;\n\
+             #else\n\
+             typedef __int32 __rdl_invalid_handle_intptr;\n\
+             #endif\n",
+        );
         for name in names {
             text.push_str(&format!(
-                "__int64 __rdl_invalid_handle_{name} = (__int64)({name});\n"
+                "__int64 __rdl_invalid_handle_{name} = (__int64)(__rdl_invalid_handle_intptr)({name});\n"
             ));
         }
         let eval_args = with_unlimited_errors(args);

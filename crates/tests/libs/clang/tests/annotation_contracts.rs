@@ -10,6 +10,10 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn compile(name: &str, source: &str) -> (String, metadata::reader::Index) {
+    compile_for_target(name, source, "x86_64-pc-windows-msvc")
+}
+
+fn compile_for_target(name: &str, source: &str, target: &str) -> (String, metadata::reader::Index) {
     let dir = scratch(name);
     let header = dir.join("input.h");
     let rdl = dir.join("input.rdl");
@@ -21,7 +25,7 @@ fn compile(name: &str, source: &str) -> (String, metadata::reader::Index) {
             .args([
                 "-x",
                 "c++",
-                "--target=x86_64-pc-windows-msvc",
+                &format!("--target={target}"),
                 "-fms-extensions",
             ])
             .input(&header)
@@ -75,10 +79,20 @@ fn raii_free_resolves_symbolic_invalid_handle() {
         RAII_FREE(CloseHandle, INVALID_HANDLE_VALUE)
         HANDLE OpenResource(void);
     "#;
-    let (rdl, _) = compile("raii_free_symbolic_invalid_handle", source);
-    assert!(rdl.contains(
-        "extern fn OpenResource() -> #[raii_free(\"CloseHandle\")] #[invalid_handle(-1)]"
-    ));
+    for (arch, target) in [
+        ("x64", "x86_64-pc-windows-msvc"),
+        ("x86", "i686-pc-windows-msvc"),
+        ("arm64", "aarch64-pc-windows-msvc"),
+    ] {
+        let (rdl, _) = compile_for_target(
+            &format!("raii_free_symbolic_invalid_handle_{arch}"),
+            source,
+            target,
+        );
+        assert!(rdl.contains(
+            "extern fn OpenResource() -> #[raii_free(\"CloseHandle\")] #[invalid_handle(-1)]"
+        ));
+    }
 }
 
 #[test]
