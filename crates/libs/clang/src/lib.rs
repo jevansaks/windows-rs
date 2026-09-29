@@ -4,6 +4,26 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 
+fn timings_enabled() -> bool {
+    ["WINDOWS_CLANG_TIMINGS", "WINDOWS_CLANG_TIMING"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .any(|value| value != "0")
+}
+
+fn timing_target(args: &[&str]) -> String {
+    args.iter()
+        .find_map(|arg| arg.strip_prefix("--target="))
+        .unwrap_or("default")
+        .to_string()
+}
+
+fn elapsed_ms(start: Option<std::time::Instant>) -> f64 {
+    start
+        .map(|start| start.elapsed().as_secs_f64() * 1_000.0)
+        .unwrap_or_default()
+}
+
 mod extract;
 pub use extract::extract;
 
@@ -392,11 +412,20 @@ pub struct Constant {
     pub value: Value,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Snapshot {
     facts: Vec<Fact>,
     constants: Vec<Constant>,
+    timing_target: Option<String>,
 }
+
+impl PartialEq for Snapshot {
+    fn eq(&self, other: &Self) -> bool {
+        self.facts == other.facts && self.constants == other.constants
+    }
+}
+
+impl Eq for Snapshot {}
 
 impl Snapshot {
     pub fn facts(&self) -> &[Fact] {
@@ -467,23 +496,36 @@ impl Snapshot {
     }
 
     pub fn emit_with_options(&self, options: &EmitOptions<'_>) -> Result<String, Error> {
+        let timing = self.timing_target.is_some();
         let items = self.emit_items(options)?;
-        write_rdl(
+        let format_time = timing.then(std::time::Instant::now);
+        let result = write_rdl(
             options.namespace,
             items.values().map(|(_, item)| item.as_str()),
-        )
+        )?;
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=rdl-format target={} mode=single headers=1 bytes={} elapsed_ms={:.3}",
+                self.timing_target.as_deref().unwrap(),
+                result.len(),
+                elapsed_ms(format_time)
+            );
+        }
+        Ok(result)
     }
 
     pub fn emit_by_header_with_options(
         &self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<String, String>, Error> {
+        let timing = self.timing_target.is_some();
         let items = self.emit_items(options)?;
+        let format_time = timing.then(std::time::Instant::now);
         let mut partitions: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (_, (header, item)) in items {
             partitions.entry(header).or_default().push(item);
         }
-        partitions
+        let result: BTreeMap<String, String> = partitions
             .into_iter()
             .map(|(header, items)| {
                 Ok((
@@ -491,26 +533,47 @@ impl Snapshot {
                     write_rdl(options.namespace, items.iter().map(String::as_str))?,
                 ))
             })
-            .collect()
+            .collect::<Result<_, Error>>()?;
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=rdl-format target={} mode=by-header headers={} bytes={} elapsed_ms={:.3}",
+                self.timing_target.as_deref().unwrap(),
+                result.len(),
+                result.values().map(String::len).sum::<usize>(),
+                elapsed_ms(format_time)
+            );
+        }
+        Ok(result)
     }
 
     fn emit_items(
         &self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<(String, OutputKind), (String, String)>, Error> {
-        let timing = std::env::var_os("WINDOWS_CLANG_TIMING").is_some();
-        let plan_time = std::time::Instant::now();
+        let timing = self.timing_target.is_some();
+        let target = self.timing_target.as_deref().unwrap_or("default");
+        let plan_time = timing.then(std::time::Instant::now);
         let plan = self.plan(
             options.references,
             options.excluded_types.or(options.excluded),
             options.excluded_functions.or(options.excluded),
             options.excluded_constants.or(options.excluded),
             options.functions,
+            timing,
         )?;
         if timing {
-            eprintln!("clang planning: {:.2}s", plan_time.elapsed().as_secs_f32());
+            eprintln!(
+                "windows-clang timing phase=planning target={target} facts={} constants={} types={} values={} functions={} output_constants={} elapsed_ms={:.3}",
+                self.facts.len(),
+                self.constants.len(),
+                plan.types.len(),
+                plan.values.len(),
+                plan.functions.len(),
+                plan.constants.len(),
+                elapsed_ms(plan_time)
+            );
         }
-        let emission_time = std::time::Instant::now();
+        let emission_time = timing.then(std::time::Instant::now);
         let mut items = BTreeMap::new();
         let planned = plan
             .values
@@ -762,9 +825,16 @@ impl Snapshot {
             }
         }
         if timing {
+            let headers = items
+                .values()
+                .map(|(header, _)| header.as_str())
+                .collect::<BTreeSet<_>>()
+                .len();
             eprintln!(
-                "clang emission: {:.2}s",
-                emission_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=rdl-items target={target} items={} headers={headers} bytes={} elapsed_ms={:.3}",
+                items.len(),
+                items.values().map(|(_, item)| item.len()).sum::<usize>(),
+                elapsed_ms(emission_time)
             );
         }
         Ok(items)
@@ -777,9 +847,10 @@ impl Snapshot {
         excluded_functions: Option<&BTreeSet<String>>,
         excluded_constants: Option<&BTreeSet<String>>,
         selected_functions: Option<&BTreeSet<String>>,
+        timing: bool,
     ) -> Result<Plan<'_>, Error> {
-        let timing = std::env::var_os("WINDOWS_CLANG_TIMING").is_some();
-        let mut phase_time = std::time::Instant::now();
+        let target = self.timing_target.as_deref().unwrap_or("default");
+        let mut phase_time = timing.then(std::time::Instant::now);
         #[derive(Default)]
         struct Roots<'a> {
             types: Vec<&'a Fact>,
@@ -1061,10 +1132,10 @@ impl Snapshot {
         }
         if timing {
             eprintln!(
-                "clang plan roots: {:.2}s",
-                phase_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-roots target={target} elapsed_ms={:.3}",
+                elapsed_ms(phase_time)
             );
-            phase_time = std::time::Instant::now();
+            phase_time = Some(std::time::Instant::now());
         }
 
         let facts_by_name = loop {
@@ -1261,7 +1332,7 @@ impl Snapshot {
             facts_index: &facts_index,
             planned_types: &facts_by_name,
         };
-        let validation_time = std::time::Instant::now();
+        let validation_time = timing.then(std::time::Instant::now);
         for fact in facts_by_name.values() {
             validate_fact_layouts(fact, &layout, &mut safe_layouts, &mut validated_layouts)?;
         }
@@ -1270,21 +1341,21 @@ impl Snapshot {
         }
         if timing {
             eprintln!(
-                "clang validate types and values: {:.2}s",
-                validation_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-validate-types target={target} elapsed_ms={:.3}",
+                elapsed_ms(validation_time)
             );
         }
-        let validation_time = std::time::Instant::now();
+        let validation_time = timing.then(std::time::Instant::now);
         for function in &functions {
             validate_fact_layouts(function, &layout, &mut safe_layouts, &mut validated_layouts)?;
         }
         if timing {
             eprintln!(
-                "clang validate functions: {:.2}s",
-                validation_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-validate-functions target={target} elapsed_ms={:.3}",
+                elapsed_ms(validation_time)
             );
         }
-        let validation_time = std::time::Instant::now();
+        let validation_time = timing.then(std::time::Instant::now);
         for constant in &constants {
             validate_complete_layout(
                 &constant.ty,
@@ -1297,16 +1368,16 @@ impl Snapshot {
         }
         if timing {
             eprintln!(
-                "clang validate constants: {:.2}s",
-                validation_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-validate-constants target={target} elapsed_ms={:.3}",
+                elapsed_ms(validation_time)
             );
         }
         if timing {
             eprintln!(
-                "clang plan closure: {:.2}s",
-                phase_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-closure target={target} elapsed_ms={:.3}",
+                elapsed_ms(phase_time)
             );
-            phase_time = std::time::Instant::now();
+            phase_time = Some(std::time::Instant::now());
         }
 
         let local_roots = root_names.clone();
@@ -1316,10 +1387,10 @@ impl Snapshot {
             .collect();
         if timing {
             eprintln!(
-                "clang plan required: {:.2}s",
-                phase_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-required target={target} elapsed_ms={:.3}",
+                elapsed_ms(phase_time)
             );
-            phase_time = std::time::Instant::now();
+            phase_time = Some(std::time::Instant::now());
         }
 
         let mut enum_alias_candidates: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -1468,10 +1539,10 @@ impl Snapshot {
         }
         if timing {
             eprintln!(
-                "clang plan aliases: {:.2}s",
-                phase_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-aliases target={target} elapsed_ms={:.3}",
+                elapsed_ms(phase_time)
             );
-            phase_time = std::time::Instant::now();
+            phase_time = Some(std::time::Instant::now());
         }
         for (name, reference) in references {
             let excluded = excluded_types.is_some_and(|excluded| excluded.contains(name))
@@ -1663,10 +1734,10 @@ impl Snapshot {
             .collect();
         if timing {
             eprintln!(
-                "clang plan interfaces: {:.2}s",
-                phase_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-interfaces target={target} elapsed_ms={:.3}",
+                elapsed_ms(phase_time)
             );
-            phase_time = std::time::Instant::now();
+            phase_time = Some(std::time::Instant::now());
         }
         let flag_enums = self
             .facts
@@ -1710,8 +1781,8 @@ impl Snapshot {
         functions.sort_by(|left, right| left.name.cmp(&right.name));
         if timing {
             eprintln!(
-                "clang plan finalize: {:.2}s",
-                phase_time.elapsed().as_secs_f32()
+                "windows-clang timing phase=plan-finalize target={target} elapsed_ms={:.3}",
+                elapsed_ms(phase_time)
             );
         }
         Ok(Plan {

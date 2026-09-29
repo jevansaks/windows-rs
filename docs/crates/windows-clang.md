@@ -74,6 +74,12 @@ let snapshot = windows_clang::extract(
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
 
+Set `WINDOWS_CLANG_TIMINGS=1` before extraction to write phase timings and counts to stderr. The
+structured lines cover initial parsing, cursor traversal and fact extraction, macro and constant
+probe batches and worker bounds, planning, item construction, and RDL formatting. Timing is
+disabled by default and does not change the generated RDL. The legacy `WINDOWS_CLANG_TIMING`
+spelling is also accepted.
+
 ## Emission
 
 Use `Snapshot::emit(namespace)` for one namespace, `emit_with_library` to attach one DLL to all

@@ -33,6 +33,9 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
+to stderr without changing the generated RDL.
+
 The caller owns libclang installation, compiler arguments, package versions, import-library
 discovery, architecture merging, output promotion, and RDL-to-WinMD compilation. See the [crate
 documentation][docs] for both APIs and the extraction model.

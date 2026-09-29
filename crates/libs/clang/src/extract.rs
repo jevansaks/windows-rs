@@ -15,79 +15,168 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
 
     let _library = Library::new()?;
     let index = Index::new()?;
-    let timing = std::env::var_os("WINDOWS_CLANG_TIMING").is_some();
-    let parse_time = std::time::Instant::now();
+    let timing = timings_enabled();
+    let target = timing.then(|| timing_target(args));
+    let total_time = timing.then(std::time::Instant::now);
+    let parse_time = timing.then(std::time::Instant::now);
     let mut translation_units = Vec::with_capacity(inputs.len());
     for input in &inputs {
-        translation_units.push((
-            input.name.clone(),
-            TranslationUnit::parse(&index, input, args)?,
-        ));
+        let tu_time = timing.then(std::time::Instant::now);
+        match TranslationUnit::parse(&index, input, args) {
+            Ok(translation_unit) => {
+                if timing {
+                    eprintln!(
+                        "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} elapsed_ms={:.3}",
+                        target.as_deref().unwrap(),
+                        input.name,
+                        input.source.len(),
+                        elapsed_ms(tu_time)
+                    );
+                }
+                translation_units.push((input.name.clone(), translation_unit));
+            }
+            Err(error) => {
+                if timing {
+                    eprintln!(
+                        "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} status=error elapsed_ms={:.3}",
+                        target.as_deref().unwrap(),
+                        input.name,
+                        input.source.len(),
+                        elapsed_ms(tu_time)
+                    );
+                }
+                return Err(error);
+            }
+        }
     }
     if timing {
-        eprintln!("clang parse: {:.2}s", parse_time.elapsed().as_secs_f32());
+        eprintln!(
+            "windows-clang timing phase=parse-total target={} input_tus={} elapsed_ms={:.3}",
+            target.as_deref().unwrap(),
+            inputs.len(),
+            elapsed_ms(parse_time)
+        );
     }
 
-    let traversal_time = std::time::Instant::now();
+    let traversal_time = timing.then(std::time::Instant::now);
     let mut facts = vec![];
     let mut constants = vec![];
     let mut extracted = vec![];
+    let mut traversal_cursors = 0;
+    let mut traversal_facts = 0;
+    let mut traversal_constants = 0;
     for (name, translation_unit) in &translation_units {
         let input = inputs.iter().find(|input| input.name == *name).unwrap();
-        extracted.push(translation_unit.extract(input, &mut facts, &mut constants));
+        let (result, metrics) = translation_unit.extract(input, &mut facts, &mut constants, timing);
+        if let Some(metrics) = metrics {
+            traversal_cursors += metrics.cursors;
+            traversal_facts += metrics.facts;
+            traversal_constants += metrics.constants;
+            eprintln!(
+                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} macro_index_ms={:.3} traversal_ms={:.3} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                input.name,
+                metrics.macro_definitions,
+                metrics.macro_expansion_files,
+                metrics.cursors,
+                metrics.facts,
+                metrics.constants,
+                metrics.macro_index_ms,
+                metrics.traversal_ms,
+                metrics.elapsed_ms
+            );
+        }
+        extracted.push(result);
     }
     decode_root_macro_definitions(&mut facts, &extracted);
     if timing {
         eprintln!(
-            "clang traversal: {:.2}s",
-            traversal_time.elapsed().as_secs_f32()
+            "windows-clang timing phase=extract-total target={} input_tus={} cursors={} facts={} constants={} elapsed_ms={:.3}",
+            target.as_deref().unwrap(),
+            inputs.len(),
+            traversal_cursors,
+            traversal_facts,
+            traversal_constants,
+            elapsed_ms(traversal_time)
         );
     }
-    let constant_time = std::time::Instant::now();
-    let phase_time = std::time::Instant::now();
+    let constant_time = timing.then(std::time::Instant::now);
+    let mut probe_candidates = 0;
+    let mut synthetic_tus = 0;
+    let mut retry_tus = 0;
     for (input, extracted) in inputs.iter().zip(&extracted) {
-        constants.extend(evaluate_constants(
-            &index,
-            input,
-            args,
-            &facts,
-            &extracted.macros,
-        )?);
+        let (new_constants, metrics) =
+            evaluate_constants(&index, input, args, &facts, &extracted.macros, timing)?;
+        if let Some(metrics) = metrics {
+            probe_candidates += metrics.candidates;
+            synthetic_tus += metrics.synthetic_tus;
+            retry_tus += metrics.retry_tus;
+            eprintln!(
+                "windows-clang timing phase=constant-probes target={} tu={:?} candidates={} string_constants={} evaluated={} constants={} initial_chunk={} initial_batches={} recovery_chunk={} recovery_batches={} isolation_chunk={} isolation_batches={} defined_check_tus={} singleton_probes={} synthetic_tus={} retry_tus={} available_parallelism={} configured_workers={} initial_workers={} recovery_workers={} isolation_workers={} singleton_workers={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                input.name,
+                metrics.candidates,
+                metrics.string_constants,
+                metrics.evaluated,
+                metrics.constants,
+                metrics.initial_chunk,
+                metrics.initial_batches,
+                metrics.recovery_chunk,
+                metrics.recovery_batches,
+                metrics.isolation_chunk,
+                metrics.isolation_batches,
+                metrics.defined_check_tus,
+                metrics.singleton_probes,
+                metrics.synthetic_tus,
+                metrics.retry_tus,
+                metrics.available_parallelism,
+                metrics.configured_workers,
+                metrics.initial_workers,
+                metrics.recovery_workers,
+                metrics.isolation_workers,
+                metrics.singleton_workers,
+                metrics.elapsed_ms
+            );
+        }
+        constants.extend(new_constants);
     }
     if timing {
         eprintln!(
-            "clang constant evaluation: {:.2}s",
-            phase_time.elapsed().as_secs_f32()
+            "windows-clang timing phase=constant-probes-total target={} input_tus={} candidates={} synthetic_tus={} retry_tus={} constants={} elapsed_ms={:.3}",
+            target.as_deref().unwrap(),
+            inputs.len(),
+            probe_candidates,
+            synthetic_tus,
+            retry_tus,
+            constants.len(),
+            elapsed_ms(constant_time)
         );
     }
-    let phase_time = std::time::Instant::now();
+    let phase_time = timing.then(std::time::Instant::now);
     decode_reachable_structs(&mut facts, &constants, &extracted);
     if timing {
         eprintln!(
-            "clang deferred records: {:.2}s",
-            phase_time.elapsed().as_secs_f32()
+            "windows-clang timing phase=deferred-records target={} elapsed_ms={:.3}",
+            target.as_deref().unwrap(),
+            elapsed_ms(phase_time)
         );
     }
-    let phase_time = std::time::Instant::now();
+    let phase_time = timing.then(std::time::Instant::now);
     apply_macro_enum_overrides(&mut facts, &mut constants);
     if timing {
         eprintln!(
-            "clang macro overrides: {:.2}s",
-            phase_time.elapsed().as_secs_f32()
+            "windows-clang timing phase=macro-overrides target={} elapsed_ms={:.3}",
+            target.as_deref().unwrap(),
+            elapsed_ms(phase_time)
         );
     }
-    let phase_time = std::time::Instant::now();
+    let phase_time = timing.then(std::time::Instant::now);
     recover_midl_artifacts(&inputs, &mut facts, &mut constants);
     if timing {
         eprintln!(
-            "clang MIDL recovery: {:.2}s",
-            phase_time.elapsed().as_secs_f32()
-        );
-    }
-    if timing {
-        eprintln!(
-            "clang constants: {:.2}s",
-            constant_time.elapsed().as_secs_f32()
+            "windows-clang timing phase=midl-recovery target={} elapsed_ms={:.3}",
+            target.as_deref().unwrap(),
+            elapsed_ms(phase_time)
         );
     }
     facts.sort();
@@ -100,7 +189,28 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
         }
     }
     constants.sort();
-    Ok(Snapshot { facts, constants })
+    if timing {
+        let headers = facts
+            .iter()
+            .filter(|fact| fact.root)
+            .map(|fact| fact.spelling.file.as_str())
+            .collect::<BTreeSet<_>>()
+            .len();
+        eprintln!(
+            "windows-clang timing phase=extract-summary target={} input_tus={} root_headers={} facts={} constants={} elapsed_ms={:.3}",
+            target.as_deref().unwrap(),
+            inputs.len(),
+            headers,
+            facts.len(),
+            constants.len(),
+            elapsed_ms(total_time)
+        );
+    }
+    Ok(Snapshot {
+        facts,
+        constants,
+        timing_target: target,
+    })
 }
 
 fn apply_macro_enum_overrides(facts: &mut [Fact], constants: &mut Vec<Constant>) {
@@ -592,6 +702,41 @@ struct Evaluated {
     value: Value,
 }
 
+struct ExtractionMetrics {
+    macro_definitions: usize,
+    macro_expansion_files: usize,
+    cursors: u32,
+    facts: usize,
+    constants: usize,
+    macro_index_ms: f64,
+    traversal_ms: f64,
+    elapsed_ms: f64,
+}
+
+struct ProbeMetrics {
+    candidates: usize,
+    string_constants: usize,
+    evaluated: usize,
+    constants: usize,
+    initial_chunk: usize,
+    initial_batches: usize,
+    recovery_chunk: usize,
+    recovery_batches: usize,
+    isolation_chunk: usize,
+    isolation_batches: usize,
+    defined_check_tus: usize,
+    singleton_probes: usize,
+    synthetic_tus: usize,
+    retry_tus: usize,
+    available_parallelism: usize,
+    configured_workers: usize,
+    initial_workers: usize,
+    recovery_workers: usize,
+    isolation_workers: usize,
+    singleton_workers: usize,
+    elapsed_ms: f64,
+}
+
 impl TranslationUnit {
     fn parse(index: &Index, input: &Input, args: &[&str]) -> Result<Self, Error> {
         let name = CString::new(input.name.as_str())
@@ -694,20 +839,15 @@ impl TranslationUnit {
         input: &Input,
         facts: &mut Vec<Fact>,
         constants: &mut Vec<Constant>,
-    ) -> Extracted<'tu> {
-        let timing = std::env::var_os("WINDOWS_CLANG_TIMING").is_some();
-        let phase_time = std::time::Instant::now();
+        timing: bool,
+    ) -> (Extracted<'tu>, Option<ExtractionMetrics>) {
+        let total_time = timing.then(std::time::Instant::now);
+        let phase_time = timing.then(std::time::Instant::now);
         let macros = macro_definitions(self, unsafe { clang_getTranslationUnitCursor(self.0) });
-        if timing {
-            eprintln!(
-                "clang macro index: {} definitions, {} expansion files, {:.2}s",
-                macros.definitions.len(),
-                macros.expansion_orders.len(),
-                phase_time.elapsed().as_secs_f32()
-            );
-        }
-        let phase_time = std::time::Instant::now();
+        let macro_index_ms = elapsed_ms(phase_time);
+        let phase_time = timing.then(std::time::Instant::now);
         let initial_facts = facts.len();
+        let initial_constants = constants.len();
         let mut traversal = Traversal {
             tu: &input.name,
             roots: &input.roots,
@@ -727,22 +867,28 @@ impl TranslationUnit {
             None,
             &mut traversal,
         );
-        if timing {
-            eprintln!(
-                "clang declarations: {} cursors, {} facts, {:.2}s",
-                traversal.next,
-                traversal.facts.len() - initial_facts,
-                phase_time.elapsed().as_secs_f32()
-            );
-        }
+        let traversal_ms = elapsed_ms(phase_time);
+        let metrics = timing.then(|| ExtractionMetrics {
+            macro_definitions: macros.definitions.len(),
+            macro_expansion_files: macros.expansion_orders.len(),
+            cursors: traversal.next,
+            facts: traversal.facts.len() - initial_facts,
+            constants: traversal.constants.len() - initial_constants,
+            macro_index_ms,
+            traversal_ms,
+            elapsed_ms: elapsed_ms(total_time),
+        });
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         drop(traversal);
-        Extracted {
-            macros,
-            pending_structs,
-            pending_macros,
-        }
+        (
+            Extracted {
+                macros,
+                pending_structs,
+                pending_macros,
+            },
+            metrics,
+        )
     }
 }
 
@@ -1355,7 +1501,13 @@ fn evaluate_constants(
     args: &[&str],
     facts: &[Fact],
     macros: &MacroDefinitions,
-) -> Result<Vec<Constant>, Error> {
+    timing: bool,
+) -> Result<(Vec<Constant>, Option<ProbeMetrics>), Error> {
+    const INITIAL_CHUNK: usize = 16384;
+    const RECOVERY_CHUNK: usize = 512;
+    const ISOLATION_CHUNK: usize = 16;
+
+    let probe_time = timing.then(std::time::Instant::now);
     let mut strings = BTreeMap::new();
     let mut roots = BTreeMap::new();
     for fact in facts
@@ -1420,16 +1572,38 @@ fn evaluate_constants(
             .is_some_and(|(_, function_like)| !function_like)
     });
     let names: Vec<_> = candidates.keys().cloned().collect();
+    let available_parallelism = std::thread::available_parallelism().map_or(1, usize::from);
+    let workers = available_parallelism.min(4);
     if names.is_empty() {
-        return Ok(vec![]);
+        let metrics = timing.then(|| ProbeMetrics {
+            candidates: 0,
+            string_constants: strings.len(),
+            evaluated: 0,
+            constants: strings.len(),
+            initial_chunk: INITIAL_CHUNK,
+            initial_batches: 0,
+            recovery_chunk: RECOVERY_CHUNK,
+            recovery_batches: 0,
+            isolation_chunk: ISOLATION_CHUNK,
+            isolation_batches: 0,
+            defined_check_tus: 0,
+            singleton_probes: 0,
+            synthetic_tus: 0,
+            retry_tus: 0,
+            available_parallelism,
+            configured_workers: workers,
+            initial_workers: 0,
+            recovery_workers: 0,
+            isolation_workers: 0,
+            singleton_workers: 0,
+            elapsed_ms: elapsed_ms(probe_time),
+        });
+        return Ok((strings.into_values().collect(), metrics));
     }
-    let probe_time = std::time::Instant::now();
     let mut evaluated = vec![];
     let mut reached = HashSet::new();
-    let workers = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .min(4);
-    let batches: Vec<_> = names.chunks(16384).collect();
+    let batches: Vec<_> = names.chunks(INITIAL_CHUNK).collect();
+    let initial_workers = workers.min(batches.len());
     let batch_results =
         run_probe_workers(workers, batches.len(), |index, worker, worker_count| {
             let mut evaluated = vec![];
@@ -1450,8 +1624,9 @@ fn evaluate_constants(
         .filter(|name| !reached.contains(name.as_str()))
         .cloned()
         .collect();
-    let recovery_batches: Vec<_> = missing.chunks(512).collect();
+    let recovery_batches: Vec<_> = missing.chunks(RECOVERY_CHUNK).collect();
     let recovery_batch_count = recovery_batches.len();
+    let recovery_workers = workers.min(recovery_batch_count);
     let recovery_results = run_probe_workers(
         workers,
         recovery_batches.len(),
@@ -1474,8 +1649,9 @@ fn evaluate_constants(
         .into_iter()
         .filter(|name| !reached.contains(name.as_str()))
         .collect();
-    let isolation_batches: Vec<_> = unresolved.chunks(16).collect();
+    let isolation_batches: Vec<_> = unresolved.chunks(ISOLATION_CHUNK).collect();
     let isolation_batch_count = isolation_batches.len();
+    let isolation_workers = workers.min(isolation_batch_count);
     let isolation_results = run_probe_workers(
         workers,
         isolation_batches.len(),
@@ -1494,6 +1670,7 @@ fn evaluate_constants(
         evaluated.extend(isolation_evaluated);
         reached.extend(isolation_reached);
     }
+    let defined_check_tus = usize::from(!unresolved.is_empty());
     let defined = defined_macros(index, input, args, &unresolved)?;
     let fallback: Vec<_> = unresolved
         .iter()
@@ -1503,6 +1680,7 @@ fn evaluate_constants(
     let fallback_count = fallback.len();
     let fallback_size = fallback.len().div_ceil(workers).max(1);
     let fallback_batches: Vec<_> = fallback.chunks(fallback_size).collect();
+    let singleton_workers = workers.min(fallback_batches.len());
     let fallback_results =
         run_probe_workers(workers, fallback_batches.len(), |index, worker, _| {
             evaluate_singleton_probes(index, input, args, fallback_batches[worker], &reached)
@@ -1510,18 +1688,9 @@ fn evaluate_constants(
     for fallback in fallback_results {
         evaluated.extend(fallback);
     }
-    if std::env::var_os("WINDOWS_CLANG_TIMING").is_some() {
-        eprintln!(
-            "clang macro probes: {} candidates, {} bulk batches, {} recovery batches, {} isolation batches, {} singleton probes, {:.2}s",
-            names.len(),
-            batches.len(),
-            recovery_batch_count,
-            isolation_batch_count,
-            fallback_count,
-            probe_time.elapsed().as_secs_f32()
-        );
-    }
 
+    let string_constants = strings.len();
+    let evaluated_count = evaluated.len();
     let mut constants: Vec<_> = strings.into_values().collect();
     for evaluated in evaluated {
         let Some((root, definition, spelling)) = candidates.get(&evaluated.name) else {
@@ -1536,7 +1705,37 @@ fn evaluate_constants(
             value: evaluated.value,
         });
     }
-    Ok(constants)
+    let synthetic_tus = batches.len()
+        + recovery_batch_count
+        + isolation_batch_count
+        + defined_check_tus
+        + fallback_count;
+    let retry_tus =
+        recovery_batch_count + isolation_batch_count + defined_check_tus + fallback_count;
+    let metrics = timing.then(|| ProbeMetrics {
+        candidates: names.len(),
+        string_constants,
+        evaluated: evaluated_count,
+        constants: constants.len(),
+        initial_chunk: INITIAL_CHUNK,
+        initial_batches: batches.len(),
+        recovery_chunk: RECOVERY_CHUNK,
+        recovery_batches: recovery_batch_count,
+        isolation_chunk: ISOLATION_CHUNK,
+        isolation_batches: isolation_batch_count,
+        defined_check_tus,
+        singleton_probes: fallback_count,
+        synthetic_tus,
+        retry_tus,
+        available_parallelism,
+        configured_workers: workers,
+        initial_workers,
+        recovery_workers,
+        isolation_workers,
+        singleton_workers,
+        elapsed_ms: elapsed_ms(probe_time),
+    });
+    Ok((constants, metrics))
 }
 
 fn run_probe_workers<T, F>(workers: usize, batch_count: usize, work: F) -> Result<Vec<T>, Error>
