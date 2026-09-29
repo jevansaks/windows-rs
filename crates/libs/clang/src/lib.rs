@@ -563,6 +563,8 @@ pub struct Clang {
     libraries: HashMap<String, String>,
     filter: Vec<String>,
     target: Option<String>,
+    /// Maximum translation-unit parsing workers. Zero and one both select serial parsing.
+    parallelism: usize,
     /// Header directory segments treated as roots for the reachability sweep.
     scope: Vec<String>,
     /// Header stems treated as roots even outside the scoped SDK directories.
@@ -814,6 +816,14 @@ impl Clang {
         self
     }
 
+    /// Sets the maximum number of translation units parsed concurrently.
+    ///
+    /// The default is one. Zero also selects serial parsing.
+    pub fn parallelism(&mut self, parallelism: usize) -> &mut Self {
+        self.parallelism = parallelism;
+        self
+    }
+
     /// Adds a header directory segment that acts as a root for the reachability sweep.
     pub fn scope(&mut self, scope: &str) -> &mut Self {
         self.scope.push(scope.to_string());
@@ -978,29 +988,46 @@ impl Clang {
             .collect();
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
-        let mut h_tus = vec![];
-        for input in &h_paths {
-            let source = input.to_str().ok_or_else(|| {
-                Error::new(
-                    "input path is not valid UTF-8",
-                    &input.to_string_lossy(),
-                    0,
-                    0,
-                )
-            })?;
-            h_tus.push((source.replace('\\', "/"), index.parse(source, &arg_refs)?));
-        }
-        let mut str_tus = vec![];
-        for content in &self.input_text {
-            str_tus.push((
-                content.clone(),
-                index.parse_unsaved(
-                    ".h",
-                    content,
-                    &arg_refs,
-                    CXTranslationUnit_DetailedPreprocessingRecord,
-                )?,
-            ));
+        let inputs: Vec<_> = h_paths
+            .iter()
+            .map(|path| ParseInput::File(path.as_path()))
+            .chain(self.input_text.iter().map(|text| ParseInput::Text(text)))
+            .collect();
+
+        let parsed = if self.parallelism <= 1 || inputs.len() <= 1 {
+            inputs
+                .iter()
+                .map(|input| {
+                    let (kind, source, tu) = parse_input(*input, &index, &arg_refs)?;
+                    Ok(ParsedTranslationUnit::new(kind, source, tu, None))
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            let shared_library = library.shared();
+            try_map_ordered_bounded(
+                &inputs,
+                self.parallelism,
+                || Library::from_shared(shared_library.clone()),
+                |_, input| {
+                    let input_index = Index::new()?;
+                    let (kind, source, tu) = parse_input(*input, &input_index, &arg_refs)?;
+                    Ok(ParsedTranslationUnit::new(
+                        kind,
+                        source,
+                        tu,
+                        Some(input_index),
+                    ))
+                },
+            )?
+        };
+
+        let mut h_tus = Vec::with_capacity(h_paths.len());
+        let mut str_tus = Vec::with_capacity(self.input_text.len());
+        for parsed in parsed {
+            match parsed.kind {
+                ParseInputKind::File => h_tus.push((parsed.source, parsed.tu)),
+                ParseInputKind::Text => str_tus.push((parsed.source, parsed.tu)),
+            }
         }
 
         Ok(ParsedInputs {
@@ -1812,14 +1839,163 @@ impl Clang {
     }
 }
 
+#[derive(Clone, Copy)]
+enum ParseInput<'a> {
+    File(&'a Path),
+    Text(&'a str),
+}
+
+enum ParseInputKind {
+    File,
+    Text,
+}
+
+struct ParsedTranslationUnit {
+    kind: ParseInputKind,
+    source: String,
+    tu: OwnedTranslationUnit,
+}
+
+impl ParsedTranslationUnit {
+    fn new(
+        kind: ParseInputKind,
+        source: String,
+        tu: TranslationUnit,
+        index: Option<Index>,
+    ) -> Self {
+        Self {
+            kind,
+            source,
+            tu: OwnedTranslationUnit { tu, _index: index },
+        }
+    }
+}
+
+fn parse_input(
+    input: ParseInput<'_>,
+    index: &Index,
+    args: &[&str],
+) -> Result<(ParseInputKind, String, TranslationUnit), Error> {
+    match input {
+        ParseInput::File(input) => {
+            let source = input.to_str().ok_or_else(|| {
+                Error::new(
+                    "input path is not valid UTF-8",
+                    &input.to_string_lossy(),
+                    0,
+                    0,
+                )
+            })?;
+            Ok((
+                ParseInputKind::File,
+                source.replace('\\', "/"),
+                index.parse(source, args)?,
+            ))
+        }
+        ParseInput::Text(content) => Ok((
+            ParseInputKind::Text,
+            content.to_string(),
+            index.parse_unsaved(
+                ".h",
+                content,
+                args,
+                CXTranslationUnit_DetailedPreprocessingRecord,
+            )?,
+        )),
+    }
+}
+
+fn try_map_ordered_bounded<T, S, R, E>(
+    inputs: &[T],
+    parallelism: usize,
+    init: impl std::ops::Fn() -> S + Sync,
+    map: impl std::ops::Fn(&mut S, &T) -> Result<R, E> + Sync,
+) -> Result<Vec<R>, E>
+where
+    T: Sync,
+    R: Send,
+    E: Send,
+{
+    if inputs.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let workers = parallelism.max(1).min(inputs.len());
+    if workers == 1 {
+        let mut state = init();
+        return inputs.iter().map(|input| map(&mut state, input)).collect();
+    }
+
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        use std::sync::atomic::Ordering;
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut handles = Vec::with_capacity(workers);
+        for _ in 0..workers {
+            let init = &init;
+            let map = &map;
+            let sender = sender.clone();
+            let next = &next;
+            handles.push(scope.spawn(move || {
+                let mut state = init();
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    if index >= inputs.len() {
+                        break;
+                    }
+                    if sender
+                        .send((index, map(&mut state, &inputs[index])))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }));
+        }
+        drop(sender);
+
+        let mut output: Vec<Option<Result<R, E>>> = (0..inputs.len()).map(|_| None).collect();
+        for (index, result) in receiver {
+            output[index] = Some(result);
+        }
+        for handle in handles {
+            if let Err(payload) = handle.join() {
+                std::panic::resume_unwind(payload);
+            }
+        }
+        output.into_iter().map(|result| result.unwrap()).collect()
+    })
+}
+
 /// Owns libclang state; field order ensures TUs drop before the library unloads.
 struct ParsedInputs {
     args: Vec<String>,
-    h_tus: Vec<(String, TranslationUnit)>,
-    str_tus: Vec<(String, TranslationUnit)>,
+    h_tus: Vec<(String, OwnedTranslationUnit)>,
+    str_tus: Vec<(String, OwnedTranslationUnit)>,
     index: Index,
     _library: Library,
 }
+
+/// Owns one translation unit and any per-worker index that created it.
+struct OwnedTranslationUnit {
+    tu: TranslationUnit,
+    _index: Option<Index>,
+}
+
+impl std::ops::Deref for OwnedTranslationUnit {
+    type Target = TranslationUnit;
+
+    fn deref(&self) -> &Self::Target {
+        &self.tu
+    }
+}
+
+// SAFETY: this private bundle uniquely owns both libclang handles and is only moved after parsing
+// finishes. It is never accessed from two threads at once. Field order drops the translation unit
+// before its index, as required by clang_disposeIndex, and ParsedInputs keeps libclang loaded until
+// every bundle has been dropped.
+unsafe impl Send for OwnedTranslationUnit {}
 
 fn collect_function_names(parsed: &ParsedInputs) -> HashSet<String> {
     fn visit(cursor: Cursor, names: &mut HashSet<String>) {
@@ -2185,6 +2361,63 @@ fn enum_variant_value(repr: &str, value: i64) -> metadata::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ordered_workers_are_bounded_and_preserve_input_order() {
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let inputs: Vec<_> = (0..10).collect();
+        let initialized = AtomicUsize::new(0);
+        let start = Barrier::new(3);
+        let output = try_map_ordered_bounded(
+            &inputs,
+            3,
+            || {
+                let worker = initialized.fetch_add(1, Ordering::Relaxed);
+                start.wait();
+                worker
+            },
+            |worker, input| Ok::<_, ()>((*input, *worker)),
+        )
+        .unwrap();
+
+        assert_eq!(
+            output.iter().map(|(input, _)| *input).collect::<Vec<_>>(),
+            inputs
+        );
+        assert_eq!(initialized.load(Ordering::Relaxed), 3);
+        assert!(output.iter().all(|(_, worker)| *worker < 3));
+    }
+
+    #[test]
+    fn ordered_workers_return_the_first_input_error() {
+        use std::sync::{Arc, Barrier, Condvar, Mutex};
+
+        let second_finished = Arc::new((Mutex::new(false), Condvar::new()));
+        let start = Barrier::new(2);
+        let result = try_map_ordered_bounded(
+            &[0, 1],
+            2,
+            || start.wait(),
+            |_, input| {
+                let (lock, signal) = &*second_finished;
+                if *input == 0 {
+                    let mut finished = lock.lock().unwrap();
+                    while !*finished {
+                        finished = signal.wait(finished).unwrap();
+                    }
+                    Err::<(), _>("first")
+                } else {
+                    *lock.lock().unwrap() = true;
+                    signal.notify_one();
+                    Err::<(), _>("second")
+                }
+            },
+        );
+
+        assert_eq!(result.unwrap_err(), "first");
+    }
 
     #[test]
     fn field_refs_descend_into_anonymous_nested_records() {

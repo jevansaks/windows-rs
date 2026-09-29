@@ -51,6 +51,7 @@ emitted as declarations owned by the input header. List each owning header expli
 | --- | --- |
 | `input`, `inputs` | `.h`, `.hpp`, `.hxx`, or `.hh` files, or directories containing them. |
 | `arg`, `args`, `target` | libclang language, include, define, extension, and target options. |
+| `parallelism` | Maximum concurrent translation-unit parsing workers; defaults to one. |
 | `reference*` | Existing metadata used for type resolution and duplicate suppression. |
 | `resolution*` | Metadata used only to classify `ABI::Windows::*` projection declarations. |
 | `import_library` | COFF `.lib` symbols used to recover function -> DLL mappings. |
@@ -167,8 +168,11 @@ their consuming tools.
 - `macros` evaluates object-like macros.
 - `provision` locates the pinned libclang and NuGet packages.
 
-Both output paths share one translation-unit parse. The parsed input owns the libclang library,
-index, and translation units for the duration of emission.
+Both output paths share one translation-unit parse. With the default parallelism of one, all
+translation units share one libclang index. With higher parallelism, a fixed number of scoped
+workers parse ordered input batches. Each returned translation unit owns the index that created it,
+and the parsed input keeps libclang loaded until all translation units and indexes are dropped.
+Collection, ownership, reachability, constant resolution, and emission remain serial.
 
 ### Source model
 

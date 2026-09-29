@@ -1,13 +1,32 @@
 use super::*;
 pub use clang_sys::*;
 use std::ffi::{CStr, CString};
+use std::sync::Arc;
 
-pub struct Library;
+pub struct Library {
+    current: Arc<SharedLibrary>,
+    previous: Option<Arc<SharedLibrary>>,
+}
 
 impl Library {
     pub fn new() -> Result<Self, Error> {
-        load().map_err(|e| Error::new(&format!("failed to load libclang: {e}"), "", 0, 0))?;
-        Ok(Self)
+        let current = match get_library() {
+            Some(library) => library,
+            None => Arc::new(
+                load_manually()
+                    .map_err(|e| Error::new(&format!("failed to load libclang: {e}"), "", 0, 0))?,
+            ),
+        };
+        Ok(Self::from_shared(current))
+    }
+
+    pub fn from_shared(current: Arc<SharedLibrary>) -> Self {
+        let previous = set_library(Some(current.clone()));
+        Self { current, previous }
+    }
+
+    pub fn shared(&self) -> Arc<SharedLibrary> {
+        self.current.clone()
     }
 
     pub fn version(&self) -> String {
@@ -17,7 +36,7 @@ impl Library {
 
 impl Drop for Library {
     fn drop(&mut self) {
-        _ = unload();
+        set_library(self.previous.take());
     }
 }
 

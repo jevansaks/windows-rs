@@ -41,14 +41,17 @@ pub(crate) fn evaluate_macros_parallel(
             .map_or(1, |p| p.get())
             .min(union.len());
         let chunk_size = union.len().div_ceil(workers);
+        let shared_library = Library::new()?.shared();
 
         std::thread::scope(|scope| -> Result<Vec<Const>, Error> {
             let handles: Vec<_> = union
                 .chunks(chunk_size)
                 .map(|chunk| {
+                    let shared_library = shared_library.clone();
                     scope.spawn(move || -> Result<Vec<Const>, Error> {
-                        // clang-sys stores libclang in TLS, so each worker loads it itself.
-                        let _library = Library::new()?;
+                        // clang-sys stores libclang in TLS, so each worker attaches the caller's
+                        // shared library handle for the duration of its libclang calls.
+                        let _library = Library::from_shared(shared_library);
                         let index = Index::new()?;
                         match source {
                             MacroSource::File(input) => {

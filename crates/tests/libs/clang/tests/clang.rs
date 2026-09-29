@@ -38,6 +38,7 @@ fn accepts_c_and_cpp_header_extensions() {
     windows_clang::clang()
         .inputs(&paths)
         .args(["-x", "c++"])
+        .parallelism(4)
         .output(&explicit_output)
         .namespace("Test")
         .write()
@@ -523,25 +524,33 @@ fn preserves_alias_export_across_header_partition_translation_units() {
         "#,
     )
     .unwrap();
-    let output = scratch.join("rdl");
 
-    windows_clang::clang()
-        .args([
-            "-x",
-            "c++",
-            "--target=x86_64-pc-windows-msvc",
-            &format!("-I{}", scratch.display()),
-        ])
-        .input_text("#define API_VERSION 1\n#include <api.h>")
-        .input_text("#define API_VERSION 2\n#include <api.h>")
-        .libraries([("Api", "PSAPI.dll"), ("K32Api", "KERNEL32.dll")])
-        .scope_header("api")
-        .output(&output)
-        .namespace("Test")
-        .write_by_header()
-        .unwrap();
+    let scrape = |name, parallelism| {
+        let output = scratch.join(name);
+        let mut clang = windows_clang::clang();
+        clang
+            .args([
+                "-x",
+                "c++",
+                "--target=x86_64-pc-windows-msvc",
+                &format!("-I{}", scratch.display()),
+            ])
+            .input_text("#define API_VERSION 1\n#include <api.h>")
+            .input_text("#define API_VERSION 2\n#include <api.h>")
+            .libraries([("Api", "PSAPI.dll"), ("K32Api", "KERNEL32.dll")])
+            .scope_header("api")
+            .output(&output)
+            .namespace("Test");
+        if let Some(parallelism) = parallelism {
+            clang.parallelism(parallelism);
+        }
+        clang.write_by_header().unwrap();
+        std::fs::read_to_string(output.join("api.rdl")).unwrap()
+    };
 
-    let rdl = std::fs::read_to_string(output.join("api.rdl")).unwrap();
+    let serial = scrape("serial", None);
+    let rdl = scrape("parallel", Some(2));
+    assert_eq!(serial, rdl);
     assert_eq!(rdl.matches("fn Api(").count(), 1, "{rdl}");
     assert_eq!(rdl.matches("fn K32Api(").count(), 1, "{rdl}");
     assert_eq!(rdl.matches(r#"extern "system" fn"#).count(), 2, "{rdl}");

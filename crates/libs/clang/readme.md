@@ -26,3 +26,6 @@ windows_clang::clang()
     .write_by_header()
     .unwrap();
 ```
+
+Independent input translation units are parsed serially by default. Use `.parallelism(n)` to allow
+at most `n` parsing workers while preserving input and output ordering.
