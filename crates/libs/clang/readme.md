@@ -33,6 +33,10 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
+`win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
+planning into RDL and WinMD attributes. Unknown, malformed, or misplaced annotations are errors.
+
 Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
 to stderr without changing the generated RDL.
 

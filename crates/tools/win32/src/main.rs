@@ -857,6 +857,9 @@ fn main() {
     }
 
     scrape_um("all");
+    if std::env::var_os("WIN32METADATA_USER_MODE_ONLY").is_some() {
+        return;
+    }
     let output = std::path::Path::new("target/win32-clang");
     km::scrape(&output.join("Windows.Win32.winmd"));
     replace_rdl(&output.join("rdl"), std::path::Path::new(RDL_DIR));
@@ -992,6 +995,15 @@ fn scrape_um(headers: &str) {
         .collect();
     let archs = canonical_archs();
     let resource_dir = (archs.len() > 1).then(clang_resource_dir);
+    let annotation_header = std::env::var_os("WIN32METADATA_ANNOTATION_HEADER").map(|path| {
+        let path = std::path::PathBuf::from(path);
+        assert!(
+            path.is_file(),
+            "WIN32METADATA_ANNOTATION_HEADER `{}` is not a file",
+            path.display()
+        );
+        path.to_string_lossy().replace('\\', "/")
+    });
     let output_dir = std::path::Path::new("target/win32-clang");
     std::fs::create_dir_all(output_dir).unwrap();
     let references = windows_clang::MetadataReferences::new([windows_metadata::reader::File::new(
@@ -1008,15 +1020,19 @@ fn scrape_um(headers: &str) {
                 let import_libs = &import_libs;
                 let references = &references;
                 let resource_dir = resource_dir.as_deref();
+                let annotation_header = annotation_header.as_deref();
                 scope.spawn(move || {
                     scrape_um_arch(
                         arch,
                         inputs,
-                        include_args,
-                        import_libs,
-                        references,
-                        resource_dir,
-                        output_dir,
+                        ScrapeUmContext {
+                            include_args,
+                            import_libs,
+                            references,
+                            resource_dir,
+                            annotation_header,
+                            output_dir,
+                        },
                     )
                 })
             })
@@ -1066,6 +1082,22 @@ fn scrape_um(headers: &str) {
         "Compiled merged winmd in {:.2}s",
         metadata_time.elapsed().as_secs_f32()
     );
+    if std::env::var_os("WINDOWS_CLANG_TIMINGS").is_some() {
+        let index = windows_metadata::reader::Index::read(&final_winmd).unwrap();
+        let mut types = 0;
+        let mut functions = 0;
+        let mut constants = 0;
+        for item in index.items() {
+            match item {
+                windows_metadata::reader::Item::Type(_) => types += 1,
+                windows_metadata::reader::Item::Fn(_) => functions += 1,
+                windows_metadata::reader::Item::Const(_) => constants += 1,
+            }
+        }
+        println!(
+            "Merged metadata counts: types={types} functions={functions} constants={constants}"
+        );
+    }
 
     let canonical = &outputs[0];
     std::fs::write(
@@ -1161,14 +1193,20 @@ struct ArchOutput {
     unsupported: Vec<String>,
 }
 
+#[derive(Clone, Copy)]
+struct ScrapeUmContext<'a> {
+    include_args: &'a [String],
+    import_libs: &'a [String],
+    references: &'a windows_clang::MetadataReferences,
+    resource_dir: Option<&'a str>,
+    annotation_header: Option<&'a str>,
+    output_dir: &'a std::path::Path,
+}
+
 fn scrape_um_arch(
     arch: &Arch,
     inputs: Vec<windows_clang::Input>,
-    include_args: &[String],
-    import_libs: &[String],
-    references: &windows_clang::MetadataReferences,
-    resource_dir: Option<&str>,
-    output_dir: &std::path::Path,
+    context: ScrapeUmContext<'_>,
 ) -> ArchOutput {
     let mut owned_args: Vec<String> = CLANG_ARGS.iter().map(|arg| arg.to_string()).collect();
     owned_args.extend([
@@ -1177,13 +1215,14 @@ fn scrape_um_arch(
         "-include".to_string(),
         SAL_SHIM.to_string(),
     ]);
+    owned_args.extend(annotation_args(context.annotation_header));
     if arch.name != "x64"
-        && let Some(resource_dir) = resource_dir
+        && let Some(resource_dir) = context.resource_dir
     {
         owned_args.extend(["-resource-dir".to_string(), resource_dir.to_string()]);
     }
     owned_args.extend(arch.defines.iter().cloned());
-    owned_args.extend(include_args.iter().cloned());
+    owned_args.extend(context.include_args.iter().cloned());
     let args: Vec<&str> = owned_args.iter().map(String::as_str).collect();
     let time = std::time::Instant::now();
     println!(
@@ -1204,7 +1243,7 @@ fn scrape_um_arch(
         .collect::<Vec<_>>();
 
     let mut clang = LibraryMap::default();
-    for lib in import_libs {
+    for lib in context.import_libs {
         clang
             .import_library(lib)
             .unwrap_or_else(|e| panic!("failed to read import library `{lib}`: {e}"));
@@ -1260,7 +1299,7 @@ fn scrape_um_arch(
         })
         .collect();
     let functions = libraries.keys().cloned().collect();
-    let mut options = windows_clang::EmitOptions::new(ROOT, references.types());
+    let mut options = windows_clang::EmitOptions::new(ROOT, context.references.types());
     options.libraries = Some(&libraries);
     options.functions = Some(&functions);
     let emit_time = std::time::Instant::now();
@@ -1271,7 +1310,7 @@ fn scrape_um_arch(
         emit_time.elapsed().as_secs_f32()
     );
 
-    let arch_dir = output_dir.join(&arch.name);
+    let arch_dir = context.output_dir.join(&arch.name);
     let rdl_dir = arch_dir.join("rdl");
     if rdl_dir.exists() {
         std::fs::remove_dir_all(&rdl_dir).unwrap();
@@ -1394,14 +1433,37 @@ fn rdl_partition_stem(header: &str) -> String {
 
 /// The pinned SDK include directories, in a fixed order so the parse is deterministic.
 fn sdk_include_dirs() -> Vec<String> {
-    let base = nuget_package("microsoft.windows.sdk.cpp", SDK_VERSION)
+    let pinned = nuget_package("microsoft.windows.sdk.cpp", SDK_VERSION)
         .join("c")
         .join("Include")
         .join(marketing_dir(SDK_VERSION));
+    let base = std::env::var_os("WIN32METADATA_SDK_INCLUDE")
+        .map_or_else(|| pinned.clone(), std::path::PathBuf::from);
     ["ucrt", "um", "shared", "winrt", "cppwinrt"]
         .iter()
-        .map(|seg| base.join(seg).to_string_lossy().replace('\\', "/"))
+        .map(|seg| {
+            let candidate = base.join(seg);
+            if candidate.is_dir() {
+                candidate
+            } else {
+                pinned.join(seg)
+            }
+            .to_string_lossy()
+            .replace('\\', "/")
+        })
         .collect()
+}
+
+fn annotation_args(header: Option<&str>) -> Vec<String> {
+    header
+        .map(|header| {
+            vec![
+                "-DWIN32METADATA=1".to_string(),
+                "-include".to_string(),
+                header.to_string(),
+            ]
+        })
+        .unwrap_or_default()
 }
 
 /// The pinned SDK x64 import-library directories. The function -> DLL mapping recorded by
@@ -1461,6 +1523,15 @@ mod tests {
         assert_eq!(
             rdl_partition_stem(r"C:\sdk\winrt\windows.devices.display.core.interop.h"),
             "windowsdevicesdisplaycoreinterop"
+        );
+    }
+
+    #[test]
+    fn annotation_header_args_are_opt_in() {
+        assert!(annotation_args(None).is_empty());
+        assert_eq!(
+            annotation_args(Some("annotations.h")),
+            ["-DWIN32METADATA=1", "-include", "annotations.h"]
         );
     }
 

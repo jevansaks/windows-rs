@@ -26,6 +26,14 @@ impl<'a> Attribute<'a> {
     }
 
     pub fn value(&self) -> Vec<(String, Value)> {
+        self.value_with_named_arg_kinds().0
+    }
+
+    pub fn named_arg_kinds(&self) -> Vec<u8> {
+        self.value_with_named_arg_kinds().1
+    }
+
+    pub fn value_with_named_arg_kinds(&self) -> (Vec<(String, Value)>, Vec<u8>) {
         let signature = self.ctor().signature(&[]);
         debug_assert_eq!(signature.flags, MethodCallAttributes::HASTHIS);
         debug_assert_eq!(signature.return_type, Type::Void);
@@ -42,9 +50,10 @@ impl<'a> Attribute<'a> {
 
         let named_arg_count = blob.read_u16();
         values.reserve(named_arg_count as usize);
+        let mut kinds = Vec::with_capacity(named_arg_count as usize);
 
         for _ in 0..named_arg_count {
-            let _id = blob.read_u8();
+            kinds.push(blob.read_u8());
             // Per ECMA-335 II.23.3, this byte is 0x53 (FIELD) or 0x54 (PROPERTY),
             // indicating whether the named argument targets a field or a property.
             let ty = blob.read_type_code(&[]);
@@ -54,7 +63,7 @@ impl<'a> Attribute<'a> {
         }
 
         debug_assert_eq!(blob.len(), 0);
-        values
+        (values, kinds)
     }
 }
 

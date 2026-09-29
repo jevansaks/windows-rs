@@ -345,7 +345,44 @@ impl File {
         ty: AttributeType,
         value: &[(String, Value)],
     ) {
-        let value = self.AttributeValue(value);
+        let value = self.AttributeValue(value, 0x53, None);
+
+        self.Attribute
+            .entry(parent)
+            .or_default()
+            .push(rec::Attribute {
+                Parent: parent,
+                Type: ty,
+                Value: value,
+            });
+    }
+
+    pub fn AttributeWithNamedProperties(
+        &mut self,
+        parent: HasAttribute,
+        ty: AttributeType,
+        value: &[(String, Value)],
+    ) {
+        let value = self.AttributeValue(value, 0x54, None);
+
+        self.Attribute
+            .entry(parent)
+            .or_default()
+            .push(rec::Attribute {
+                Parent: parent,
+                Type: ty,
+                Value: value,
+            });
+    }
+
+    pub fn AttributeWithNamedArgKinds(
+        &mut self,
+        parent: HasAttribute,
+        ty: AttributeType,
+        value: &[(String, Value)],
+        named_arg_kinds: &[u8],
+    ) {
+        let value = self.AttributeValue(value, 0x53, Some(named_arg_kinds));
 
         self.Attribute
             .entry(parent)
@@ -585,7 +622,12 @@ impl File {
         self.blobs.insert(&buffer)
     }
 
-    fn AttributeValue(&mut self, values: &[(String, Value)]) -> BlobId {
+    fn AttributeValue(
+        &mut self,
+        values: &[(String, Value)],
+        named_arg_kind: u8,
+        named_arg_kinds: Option<&[u8]>,
+    ) -> BlobId {
         let mut buffer = vec![];
         buffer.write_u16(1); // prolog
 
@@ -601,9 +643,13 @@ impl File {
         }
 
         buffer.write_u16((values.len() - count).try_into().unwrap());
+        if let Some(kinds) = named_arg_kinds {
+            assert_eq!(kinds.len(), values.len() - count);
+            assert!(kinds.iter().all(|kind| matches!(kind, 0x53 | 0x54)));
+        }
 
-        for (name, value) in &values[count..] {
-            buffer.push(0x53); // field=0x53 property=0x54
+        for (index, (name, value)) in values[count..].iter().enumerate() {
+            buffer.push(named_arg_kinds.map_or(named_arg_kind, |kinds| kinds[index]));
 
             if let Value::EnumValue(tn, _) = value {
                 // SERIALIZATION_TYPE_ENUM (ECMA-335 II.23.1.16): 0x55 followed by

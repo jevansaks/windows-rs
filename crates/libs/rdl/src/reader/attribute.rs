@@ -70,6 +70,10 @@ impl Encoder<'_> {
             &[],
         )?;
 
+        if self.namespace == METADATA_NAMESPACE && item.name == "SupportedOSPlatformAttribute" {
+            self.encode_supported_os_attribute_usage(attr_type);
+        }
+
         let flags = metadata::MethodAttributes::Public
             | metadata::MethodAttributes::HideBySig
             | metadata::MethodAttributes::SpecialName
@@ -125,5 +129,42 @@ impl Encoder<'_> {
         }
 
         Ok(())
+    }
+
+    fn encode_supported_os_attribute_usage(&mut self, attr_type: metadata::writer::TypeDef) {
+        const STRUCT: i32 = 8;
+        const ENUM: i32 = 16;
+        const METHOD: i32 = 64;
+        const INTERFACE: i32 = 1024;
+        const DELEGATE: i32 = 4096;
+        const SUPPORTED_OS_TARGETS: i32 = STRUCT | ENUM | METHOD | INTERFACE | DELEGATE;
+
+        let targets = metadata::TypeName::named("System", "AttributeTargets");
+        let usage = self.output.TypeRef("System", "AttributeUsageAttribute");
+        let signature = metadata::Signature {
+            flags: metadata::MethodCallAttributes::HASTHIS,
+            return_type: metadata::Type::Void,
+            types: vec![metadata::Type::ValueName(targets.clone())],
+        };
+        let ctor = self.output.MemberRef(
+            ".ctor",
+            &signature,
+            metadata::writer::MemberRefParent::TypeRef(usage),
+        );
+        let values = [
+            (
+                String::new(),
+                metadata::Value::EnumValue(
+                    targets,
+                    Box::new(metadata::Value::I32(SUPPORTED_OS_TARGETS)),
+                ),
+            ),
+            ("AllowMultiple".to_string(), metadata::Value::Bool(true)),
+        ];
+        self.output.AttributeWithNamedProperties(
+            metadata::writer::HasAttribute::TypeDef(attr_type),
+            metadata::writer::AttributeType::MemberRef(ctor),
+            &values,
+        );
     }
 }

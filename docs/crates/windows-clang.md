@@ -124,6 +124,38 @@ optionality, size relationships, return-value markers, and interface-selection m
 not rewrite the declared C type. Explicit string and pointer typedefs therefore survive parameter
 annotations.
 
+### Win32 metadata annotations
+
+Headers can add metadata policy with Clang `annotate` attributes whose payload begins with
+`win32metadata:`. Annotation values are stored in the `Snapshot` sidecar by declaration origin and
+member slot, merged across compatible redeclarations, and emitted with the selected owning
+declaration. Annotation collection does not change defining-header ownership.
+
+The primary vocabulary controls:
+
+| Contract | Annotation |
+| --- | --- |
+| Function import policy | `set_last_error`, `import_library`, `static_library` |
+| HRESULT projection | `preserve_result` |
+| Handle lifetime | `raii_free`, `invalid_handle`, `free_with`, `do_not_release` |
+| Relationships | `retained`, `also_usable_for`, `associated_enum`, `associated_constant` |
+| Parameter projection | `in`, `out`, `optional`, `reserved`, `retval`, `com_out_ptr` |
+| Parameter buffer sizes | `array_count_param`, `array_count_const`, `memory_size_param` |
+| Field buffer sizes | `array_count_field` |
+| String and value metadata | `ansi`, `unicode`, `native_encoding`, `const` |
+| Type and result policy | `agile`, `native_inheritance`, `struct_size_field`, `supported_os` |
+
+`raii_free` may list one cleanup provider followed by numeric or object-like macro invalid-handle
+sentinels. Symbolic sentinels are resolved in the source macro environment. `associated_constant`
+adds only the named provider constant to the dependency closure. `supported_os` is repeatable.
+Compatible redeclarations union repeatable annotations. Singleton conflicts are errors except for
+`import_library`, which uses deterministic source-order first-wins behavior.
+
+Unknown keys, missing or unexpected values, invalid declaration targets, unresolved symbolic
+sentinels, and missing associated-constant providers are extraction errors. A consumer that
+activates annotations through a forced include should also pass `-DWIN32METADATA=1`; direct
+`Input::source` text containing `win32metadata:` enables the same strict validation.
+
 ### RDL type identity policy
 
 RDL is the authoritative description produced from the headers. It preserves the type named by a
@@ -139,7 +171,7 @@ have the same meaning.
 | String aliases (`LPCWSTR`, `LPWSTR`) | Use the canonical RDL string vocabulary. |
 | GUID aliases (`IID`, `CLSID`, `UUID`) | Use `GUID`. |
 | Generic void pointers (`PVOID`, `LPVOID`) | Use the corresponding raw pointer. |
-| Interface pointer typedefs | Project to the RDL interface type; RDL/WinMD encodes its pointer semantics. |
+| Interface pointer typedefs | Project to the RDL interface type with encoded pointer semantics. |
 | Other typedefs, including pointer typedefs | Preserve the name and emit its definition. |
 
 Lowercase `boolean` is part of MIDL's predefined type vocabulary and has an unsigned 8-bit
@@ -243,7 +275,7 @@ The repository's generator tools share these facilities through `crates/tools/he
 - Coverage is limited to declarations reachable from configured roots.
 - The flat Win32 namespace cannot preserve distinct declarations that differ only by curated
   namespace placement.
-- Header extraction cannot infer curated handle cleanup, last-error, or documentation policy.
+- Header extraction cannot infer policy that is absent from SAL or `win32metadata:` annotations.
 - Stable Rust has no function-pointer ABI corresponding to every native calling convention.
 
 ## Testing

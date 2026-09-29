@@ -187,9 +187,18 @@ fn write_method(
     } else {
         quote! {}
     };
+    let preserve_sig = if item
+        .impl_flags()
+        .contains(metadata::MethodImplAttributes::PreserveSig)
+    {
+        quote! { #[preserve_sig] }
+    } else {
+        quote! {}
+    };
 
     Ok(quote! {
         #special_attr
+        #preserve_sig
         #(#method_attrs)*
         fn #name(#(#params),*) #return_type;
     })

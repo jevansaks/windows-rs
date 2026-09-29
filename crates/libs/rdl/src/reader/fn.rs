@@ -70,9 +70,16 @@ impl Encoder<'_> {
 
         let name = item.sig.ident.unraw_to_string();
 
-        let method_def = self
-            .output
-            .MethodDef(&name, &signature, flags, Default::default());
+        let impl_flags = if item
+            .attrs
+            .iter()
+            .any(|attribute| attribute.path().is_ident("preserve_sig"))
+        {
+            metadata::MethodImplAttributes::PreserveSig
+        } else {
+            Default::default()
+        };
+        let method_def = self.output.MethodDef(&name, &signature, flags, impl_flags);
 
         self.encode_return_attrs(&item.return_attrs)?;
         self.encode_params(&params)?;
@@ -85,23 +92,30 @@ impl Encoder<'_> {
             return self.err(&item.sig, "`library` attribute not found");
         };
 
-        let (library, import) = attribute
+        let (library, import, set_last_error) = attribute
             .parse_args_with(
-                |input: syn::parse::ParseStream| -> syn::Result<(syn::LitStr, Option<String>)> {
+                |input: syn::parse::ParseStream| -> syn::Result<(
+                    syn::LitStr,
+                    Option<String>,
+                    bool,
+                )> {
                     let library: syn::LitStr = input.parse()?;
                     let mut import = None;
+                    let mut set_last_error = false;
                     while input.peek(syn::Token![,]) {
                         input.parse::<syn::Token![,]>()?;
                         let ident: syn::Ident = input.parse()?;
-                        input.parse::<syn::Token![=]>()?;
                         if ident == "import" {
+                            input.parse::<syn::Token![=]>()?;
                             let value: syn::LitStr = input.parse()?;
                             import = Some(value.value());
+                        } else if ident == "set_last_error" {
+                            set_last_error = true;
                         } else {
                             return Err(syn::Error::new(ident.span(), "unknown library option"));
                         }
                     }
-                    Ok((library, import))
+                    Ok((library, import, set_last_error))
                 },
             )
             .or_else(|_| self.err(attribute.span(), "`library` name missing"))?;
@@ -118,6 +132,9 @@ impl Encoder<'_> {
         } else {
             flags |= metadata::PInvokeAttributes::CallConvPlatformapi;
         }
+        if set_last_error {
+            flags |= metadata::PInvokeAttributes::SupportsLastError;
+        }
 
         let import_name = import.as_deref().unwrap_or(&name);
         self.output
@@ -133,7 +150,7 @@ impl Encoder<'_> {
         self.encode_attrs(
             metadata::writer::HasAttribute::MethodDef(method_def),
             &item.attrs,
-            &["library"],
+            &["library", "preserve_sig"],
         )?;
 
         Ok(())

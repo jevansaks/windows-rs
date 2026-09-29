@@ -316,7 +316,8 @@ struct __declspec(uuid(\"12345678-1234-abcd-9876-0123456789ab\")) IGuid {
     assert!(rdl.contains("single: f32"));
     assert!(rdl.contains("pair: f64"));
     assert!(rdl.contains("wide: u16"));
-    assert!(rdl.contains("struct FUNCTION_FIELD {\n        callback: *mut u8,"));
+    assert!(rdl.contains("struct FUNCTION_FIELD {\n        callback: FUNCTION_FIELD_callback,"));
+    assert!(rdl.contains("extern \"C\" fn FUNCTION_FIELD_callback(arg0: i32) -> i32;"));
     assert!(rdl.contains("type MIXED_POINTER = *const *const i8"));
     assert!(rdl.contains("_bitfield1: u32"));
     assert!(rdl.contains("struct CANONICAL_BITS {\n        _bitfield: u32"));

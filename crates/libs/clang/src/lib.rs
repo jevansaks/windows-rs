@@ -171,6 +171,80 @@ pub struct Location {
     pub offset: u32,
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Annotation {
+    SetLastError,
+    ImportLibrary(String),
+    PreserveResult,
+    RaiiFree(String),
+    InvalidHandle(String),
+    FreeWith(String),
+    DoNotRelease,
+    NotNullTerminated,
+    NullNullTerminated,
+    ArrayCountParam(String),
+    ArrayCountConst(String),
+    ArrayCountField(String),
+    MemorySizeParam(String),
+    CanReturnErrorsAsSuccess,
+    CanReturnMultipleSuccessValues,
+    Retained,
+    IgnoreIfReturn(String),
+    AlsoUsableFor(String),
+    AssociatedEnum(String),
+    AssociatedConstant(String),
+    NativeInheritance(String),
+    StructSizeField(String),
+    NativeEncoding(String),
+    Ansi,
+    Unicode,
+    Agile,
+    Const,
+    StaticLibrary(String),
+    SupportedOs(String),
+    In,
+    Out,
+    Optional,
+    Reserved,
+    ComOutPtr,
+    Retval,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum AnnotationTarget {
+    Declaration(Origin),
+    Return(Origin),
+    Parameter {
+        declaration: Origin,
+        index: usize,
+    },
+    Field {
+        declaration: Origin,
+        index: usize,
+    },
+    NestedField {
+        declaration: Origin,
+        path: Vec<usize>,
+    },
+    Variant {
+        declaration: Origin,
+        index: usize,
+    },
+    Method {
+        declaration: Origin,
+        index: usize,
+    },
+    MethodReturn {
+        declaration: Origin,
+        index: usize,
+    },
+    MethodParameter {
+        declaration: Origin,
+        method: usize,
+        parameter: usize,
+    },
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Scalar {
     Bool,
@@ -416,12 +490,15 @@ pub struct Constant {
 pub struct Snapshot {
     facts: Vec<Fact>,
     constants: Vec<Constant>,
+    annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     timing_target: Option<String>,
 }
 
 impl PartialEq for Snapshot {
     fn eq(&self, other: &Self) -> bool {
-        self.facts == other.facts && self.constants == other.constants
+        self.facts == other.facts
+            && self.constants == other.constants
+            && self.annotations == other.annotations
     }
 }
 
@@ -434,6 +511,10 @@ impl Snapshot {
 
     pub fn constants(&self) -> &[Constant] {
         &self.constants
+    }
+
+    pub fn annotations(&self) -> &BTreeMap<AnnotationTarget, Vec<Annotation>> {
+        &self.annotations
     }
 
     pub fn unsupported(&self) -> impl Iterator<Item = (&Fact, &str)> {
@@ -597,7 +678,15 @@ impl Snapshot {
                         &plan.interface_names,
                         &fact.origin.tu,
                     );
-                    write_callback(&planned.name, *convention, params, result, &projection)?
+                    write_callback(
+                        &planned.name,
+                        *convention,
+                        params,
+                        result,
+                        &projection,
+                        &self.annotations,
+                        &fact.origin,
+                    )?
                 }
                 FactData::Class { guid } => {
                     format!(
@@ -629,18 +718,36 @@ impl Snapshot {
                         &plan.interface_names,
                         &fact.origin.tu,
                     );
-                    write_named_record(
+                    let item = write_named_record(
                         &rdl_ident(&planned.name),
                         &record.fields,
                         record.packing,
                         record.alignment,
                         record.union,
                         &projection,
-                    )?
+                        Some((&self.annotations, &fact.origin)),
+                    )?;
+                    format!(
+                        "{}{item}",
+                        annotation_lines(
+                            annotations_for(
+                                &self.annotations,
+                                &AnnotationTarget::Declaration(fact.origin.clone()),
+                            ),
+                            "    ",
+                        )?
+                    )
                 }
                 FactData::Typedef { target } => {
                     format!(
-                        "    type {} = {};\n",
+                        "{}    type {} = {};\n",
+                        annotation_lines(
+                            annotations_for(
+                                &self.annotations,
+                                &AnnotationTarget::Declaration(fact.origin.clone()),
+                            ),
+                            "    ",
+                        )?,
                         rdl_ident(&planned.name),
                         planned_emitted_type_name(
                             target,
@@ -661,15 +768,29 @@ impl Snapshot {
                         .contains(&(fact.origin.tu.clone(), planned.name.clone()));
                     let repr = if flags { unsigned_scalar(*repr) } else { *repr };
                     let mut item = format!(
-                        "    #[repr({})]\n{}{}    enum {} {{\n",
+                        "{}    #[repr({})]\n{}{}    enum {} {{\n",
+                        annotation_lines(
+                            annotations_for(
+                                &self.annotations,
+                                &AnnotationTarget::Declaration(fact.origin.clone()),
+                            ),
+                            "    ",
+                        )?,
                         scalar_name(repr),
                         if flags { "    #[flags]\n" } else { "" },
                         if *scoped { "    #[scoped]\n" } else { "" },
                         rdl_ident(&planned.name)
                     );
-                    for variant in variants {
+                    for (index, variant) in variants.iter().enumerate() {
                         item.push_str(&format!(
-                            "        {} = {},\n",
+                            "        {}{} = {},\n",
+                            annotation_inline(annotations_for(
+                                &self.annotations,
+                                &AnnotationTarget::Variant {
+                                    declaration: fact.origin.clone(),
+                                    index,
+                                },
+                            ))?,
                             rdl_ident(&variant.name),
                             enum_value(variant.value, repr)
                         ));
@@ -689,14 +810,25 @@ impl Snapshot {
                         &plan.interface_names,
                         &fact.origin.tu,
                     );
-                    write_named_record(
+                    let item = write_named_record(
                         &rdl_ident(&planned.name),
                         fields,
                         *packing,
                         *alignment,
                         *union,
                         &projection,
-                    )?
+                        Some((&self.annotations, &fact.origin)),
+                    )?;
+                    format!(
+                        "{}{item}",
+                        annotation_lines(
+                            annotations_for(
+                                &self.annotations,
+                                &AnnotationTarget::Declaration(fact.origin.clone()),
+                            ),
+                            "    ",
+                        )?
+                    )
                 }
                 FactData::Interface {
                     base,
@@ -716,6 +848,8 @@ impl Snapshot {
                         }),
                         methods,
                         &projection,
+                        &self.annotations,
+                        &fact.origin,
                     )?
                 }
                 _ => {
@@ -752,7 +886,8 @@ impl Snapshot {
             };
             let projection =
                 TypeProjection::new(&plan.type_names, &plan.interface_names, &function.origin.tu);
-            let mut params = write_params(params, &projection)?;
+            let callable = CallableTarget::Function(&function.origin);
+            let mut params = write_params(params, &projection, &self.annotations, callable)?;
             if *variadic {
                 params.push("...".to_string());
             }
@@ -761,7 +896,11 @@ impl Snapshot {
                 String::new()
             } else {
                 format!(
-                    " -> {}",
+                    " -> {}{}",
+                    annotation_inline(annotations_for(
+                        &self.annotations,
+                        &AnnotationTarget::Return(function.origin.clone()),
+                    ),)?,
                     planned_emitted_type_name(
                         result,
                         &plan.type_names,
@@ -770,9 +909,21 @@ impl Snapshot {
                     )
                 )
             };
-            let library = options
-                .libraries
-                .and_then(|libraries| libraries.get(link_name).map(String::as_str))
+            let declaration_annotations = annotations_for(
+                &self.annotations,
+                &AnnotationTarget::Declaration(function.origin.clone()),
+            );
+            let library = declaration_annotations
+                .iter()
+                .find_map(|annotation| match annotation {
+                    Annotation::ImportLibrary(library) => Some(library.as_str()),
+                    _ => None,
+                })
+                .or_else(|| {
+                    options
+                        .libraries
+                        .and_then(|libraries| libraries.get(link_name).map(String::as_str))
+                })
                 .or(options.library)
                 .ok_or_else(|| {
                     Error(format!(
@@ -781,13 +932,29 @@ impl Snapshot {
                     ))
                 })?;
             let abi = calling_convention(*convention);
+            let set_last_error = declaration_annotations.contains(&Annotation::SetLastError);
             let library = if function.name == *link_name {
-                format!("#[library({library:?})]")
+                format!(
+                    "#[library({library:?}{})]",
+                    if set_last_error {
+                        ", set_last_error"
+                    } else {
+                        ""
+                    }
+                )
             } else {
-                format!("#[library({library:?}, import = {link_name:?})]")
+                format!(
+                    "#[library({library:?}, import = {link_name:?}{})]",
+                    if set_last_error {
+                        ", set_last_error"
+                    } else {
+                        ""
+                    }
+                )
             };
             let item = format!(
-                "{}    {library}\n    extern{abi} fn {}({params}){result};\n",
+                "{}{}    {library}\n    extern{abi} fn {}({params}){result};\n",
+                annotation_lines(declaration_annotations, "    ")?,
                 if *noreturn { "    #[noreturn]\n" } else { "" },
                 rdl_ident(&function.name),
             );
@@ -809,7 +976,14 @@ impl Snapshot {
                 _ => "",
             };
             let item = format!(
-                "{encoding}    const {}: {} = {};\n",
+                "{}{encoding}    const {}: {} = {};\n",
+                annotation_lines(
+                    annotations_for(
+                        &self.annotations,
+                        &AnnotationTarget::Declaration(constant.root.clone()),
+                    ),
+                    "    ",
+                )?,
                 rdl_ident(&constant.name),
                 planned.ty,
                 value_name(&constant.value)
@@ -915,6 +1089,15 @@ impl Snapshot {
         }
 
         let mut roots: BTreeMap<&str, Roots<'_>> = BTreeMap::new();
+        let associated_constants: BTreeSet<_> = self
+            .annotations
+            .values()
+            .flatten()
+            .filter_map(|annotation| match annotation {
+                Annotation::AssociatedConstant(name) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
         for fact in self
             .facts
             .iter()
@@ -966,7 +1149,9 @@ impl Snapshot {
             roots.entry(&fact.name).or_default().functions.push(fact);
         }
         for constant in &self.constants {
-            if excluded_constants.is_some_and(|excluded| excluded.contains(&constant.name)) {
+            if excluded_constants.is_some_and(|excluded| excluded.contains(&constant.name))
+                && !associated_constants.contains(constant.name.as_str())
+            {
                 continue;
             }
             roots
@@ -3243,39 +3428,175 @@ fn bitfield_groups(fields: &[Field]) -> Result<Vec<BitfieldGroup>, Error> {
     Ok(groups)
 }
 
+fn annotations_for<'a>(
+    annotations: &'a BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    target: &AnnotationTarget,
+) -> &'a [Annotation] {
+    annotations.get(target).map_or(&[], Vec::as_slice)
+}
+
+fn annotation_lines(annotations: &[Annotation], indent: &str) -> Result<String, Error> {
+    let mut result = String::new();
+    for annotation in annotations {
+        if let Some(value) = annotation_rdl(annotation)? {
+            result.push_str(indent);
+            result.push_str(&value);
+            result.push('\n');
+        }
+    }
+    Ok(result)
+}
+
+fn annotation_inline(annotations: &[Annotation]) -> Result<String, Error> {
+    let mut result = String::new();
+    for annotation in annotations {
+        if let Some(value) = annotation_rdl(annotation)? {
+            result.push_str(&value);
+            result.push(' ');
+        }
+    }
+    Ok(result)
+}
+
+fn annotation_rdl(annotation: &Annotation) -> Result<Option<String>, Error> {
+    Ok(Some(match annotation {
+        Annotation::SetLastError | Annotation::ImportLibrary(_) => return Ok(None),
+        Annotation::PreserveResult => "#[preserve_sig]".to_string(),
+        Annotation::RaiiFree(name) => format!("#[raii_free({name:?})]"),
+        Annotation::InvalidHandle(value) => {
+            let value = value
+                .parse::<i64>()
+                .map_err(|_| Error(format!("invalid handle value `{value}` was not resolved")))?;
+            format!("#[invalid_handle({value})]")
+        }
+        Annotation::FreeWith(name) => format!("#[free_with({name:?})]"),
+        Annotation::DoNotRelease => "#[do_not_release]".to_string(),
+        Annotation::NotNullTerminated => "#[not_null_terminated]".to_string(),
+        Annotation::NullNullTerminated => "#[null_null_terminated]".to_string(),
+        Annotation::ArrayCountParam(value) => {
+            let value = value.parse::<i16>().map_err(|_| {
+                Error(format!(
+                    "array-count parameter index `{value}` is not an i16"
+                ))
+            })?;
+            format!("#[len_param({value})]")
+        }
+        Annotation::ArrayCountConst(value) => {
+            let value = value
+                .parse::<i32>()
+                .map_err(|_| Error(format!("array count `{value}` is not an i32")))?;
+            format!("#[len_const({value})]")
+        }
+        Annotation::ArrayCountField(name) => format!("#[len_field({name:?})]"),
+        Annotation::MemorySizeParam(value) => {
+            let value = value.parse::<i16>().map_err(|_| {
+                Error(format!(
+                    "memory-size parameter index `{value}` is not an i16"
+                ))
+            })?;
+            format!("#[size_param({value})]")
+        }
+        Annotation::CanReturnErrorsAsSuccess => "#[errors_as_success]".to_string(),
+        Annotation::CanReturnMultipleSuccessValues => "#[multiple_success_values]".to_string(),
+        Annotation::Retained => "#[retained]".to_string(),
+        Annotation::IgnoreIfReturn(value) => format!("#[ignore_if_return({value:?})]"),
+        Annotation::AlsoUsableFor(name) => format!("#[also_usable_for({name:?})]"),
+        Annotation::AssociatedEnum(name) => format!("#[associated_enum({name:?})]"),
+        Annotation::AssociatedConstant(name) => format!("#[associated_constant({name:?})]"),
+        Annotation::NativeInheritance(name) => format!("#[native_inheritance({name:?})]"),
+        Annotation::StructSizeField(name) => format!("#[struct_size_field({name:?})]"),
+        Annotation::NativeEncoding(name) => format!("#[encoding({name:?})]"),
+        Annotation::Ansi => "#[ansi]".to_string(),
+        Annotation::Unicode => "#[unicode]".to_string(),
+        Annotation::Agile => "#[agile]".to_string(),
+        Annotation::Const => "#[native_const]".to_string(),
+        Annotation::StaticLibrary(name) => format!("#[static_library({name:?})]"),
+        Annotation::SupportedOs(platform) => format!("#[supported_os({platform:?})]"),
+        Annotation::In => "#[in]".to_string(),
+        Annotation::Out => "#[out]".to_string(),
+        Annotation::Optional => "#[opt]".to_string(),
+        Annotation::Reserved => "#[reserved]".to_string(),
+        Annotation::ComOutPtr => "#[iid_is]".to_string(),
+        Annotation::Retval => "#[retval]".to_string(),
+    }))
+}
+
 fn write_callback(
     name: &str,
     convention: CallingConvention,
     params: &[Parameter],
     result: &TypeRef,
     projection: &TypeProjection,
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    origin: &Origin,
 ) -> Result<String, Error> {
-    let params = write_params(params, projection)?.join(", ");
+    let params = write_params(
+        params,
+        projection,
+        annotations,
+        CallableTarget::Callback(origin),
+    )?
+    .join(", ");
     let result = if *result == TypeRef::Void {
         String::new()
     } else {
-        format!(" -> {}", projection.name(result))
+        format!(
+            " -> {}{}",
+            annotation_inline(annotations_for(
+                annotations,
+                &AnnotationTarget::Return(origin.clone()),
+            ))?,
+            projection.name(result)
+        )
     };
     Ok(format!(
-        "    extern{} fn {}({params}){result};\n",
+        "{}    extern{} fn {}({params}){result};\n",
+        annotation_lines(
+            annotations_for(annotations, &AnnotationTarget::Declaration(origin.clone()),),
+            "    ",
+        )?,
         calling_convention(convention),
         rdl_ident(name)
     ))
 }
 
+#[derive(Clone, Copy)]
+enum CallableTarget<'a> {
+    Function(&'a Origin),
+    Callback(&'a Origin),
+    Method(&'a Origin, usize),
+}
+
 fn write_params(
     params: &[Parameter],
     projection: &TypeProjection<'_>,
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    target: CallableTarget<'_>,
 ) -> Result<Vec<String>, Error> {
     params
         .iter()
-        .map(|param| {
+        .enumerate()
+        .map(|(index, param)| {
+            let target = match target {
+                CallableTarget::Function(origin) | CallableTarget::Callback(origin) => {
+                    AnnotationTarget::Parameter {
+                        declaration: origin.clone(),
+                        index,
+                    }
+                }
+                CallableTarget::Method(origin, method) => AnnotationTarget::MethodParameter {
+                    declaration: origin.clone(),
+                    method,
+                    parameter: index,
+                },
+            };
             Ok(format!(
                 "{}{}: {}",
                 param_attributes(
                     param,
                     params,
                     emitted_pointer_is_mutable(param, projection.interface_names, projection.tu),
+                    annotations_for(annotations, &target),
                 )?,
                 rdl_ident(&param.name),
                 planned_param_type_name(
@@ -3293,6 +3614,7 @@ fn param_attributes(
     param: &Parameter,
     params: &[Parameter],
     emitted_mutable: bool,
+    metadata_annotations: &[Annotation],
 ) -> Result<String, Error> {
     let annotation = &param.annotation;
     if let Some(reason) = &annotation.unsupported {
@@ -3324,24 +3646,31 @@ fn param_attributes(
             SalSizeValue::Expression(_) => {}
         }
     }
-    if annotation.reserved {
+    if annotation.reserved && !metadata_annotations.contains(&Annotation::Reserved) {
         result.push_str("#[reserved] ");
     }
-    if annotation.com_out_ptr {
+    if annotation.com_out_ptr && !metadata_annotations.contains(&Annotation::ComOutPtr) {
         result.push_str("#[iid_is] ");
     }
-    if annotation.input && (annotation.output || emitted_mutable) {
+    if annotation.input
+        && (annotation.output || emitted_mutable)
+        && !metadata_annotations.contains(&Annotation::In)
+    {
         result.push_str("#[in] ");
     }
-    if annotation.output && (annotation.input || !emitted_mutable) {
+    if annotation.output
+        && (annotation.input || !emitted_mutable)
+        && !metadata_annotations.contains(&Annotation::Out)
+    {
         result.push_str("#[out] ");
     }
-    if annotation.optional {
+    if annotation.optional && !metadata_annotations.contains(&Annotation::Optional) {
         result.push_str("#[opt] ");
     }
     if annotation.retval {
         result.push_str("#[retval] ");
     }
+    result.push_str(&annotation_inline(metadata_annotations)?);
     Ok(result)
 }
 
@@ -3351,28 +3680,63 @@ fn write_interface(
     guid: Option<&str>,
     methods: &[Method],
     projection: &TypeProjection,
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    origin: &Origin,
 ) -> Result<String, Error> {
     let base = base.map_or_else(String::new, |base| format!(": {}", projection.name(base)));
     let attribute = guid.map_or_else(
         || "#[no_guid]".to_string(),
         |guid| format!("#[guid({})]", rdl_uuid(guid)),
     );
-    let mut result = format!("    {attribute}\n    interface {name}{base} {{\n");
+    let mut result = format!(
+        "{}    {attribute}\n    interface {name}{base} {{\n",
+        annotation_lines(
+            annotations_for(annotations, &AnnotationTarget::Declaration(origin.clone()),),
+            "    ",
+        )?
+    );
     let mut start = 0;
     while start < methods.len() {
         let mut end = start + 1;
         while end < methods.len() && methods[end].name == methods[start].name {
             end += 1;
         }
-        for method in methods[start..end].iter().rev() {
-            let params = write_params(&method.params, projection)?.join(", ");
+        for method_index in (start..end).rev() {
+            let method = &methods[method_index];
+            let params = write_params(
+                &method.params,
+                projection,
+                annotations,
+                CallableTarget::Method(origin, method_index),
+            )?
+            .join(", ");
             let return_type = if method.result == TypeRef::Void {
                 String::new()
             } else {
-                format!(" -> {}", projection.name(&method.result))
+                format!(
+                    " -> {}{}",
+                    annotation_inline(annotations_for(
+                        annotations,
+                        &AnnotationTarget::MethodReturn {
+                            declaration: origin.clone(),
+                            index: method_index,
+                        },
+                    ))?,
+                    projection.name(&method.result)
+                )
             };
             result.push_str(&format!(
-                "        {}fn {}(&self{}{}){return_type};\n",
+                "{}        {}fn {}(&self{}{}){return_type};\n",
+                annotation_lines(
+                    annotations_for(
+                        annotations,
+                        &AnnotationTarget::Method {
+                            declaration: origin.clone(),
+                            index: method_index,
+                        },
+                    ),
+                    "        ",
+                )?,
                 if method.special { "#[special] " } else { "" },
                 rdl_ident(&method.name),
                 if params.is_empty() { "" } else { ", " },
@@ -3602,6 +3966,7 @@ fn write_named_record(
     alignment: Option<i64>,
     union: bool,
     projection: &TypeProjection<'_>,
+    field_annotations: Option<(&BTreeMap<AnnotationTarget, Vec<Annotation>>, &Origin)>,
 ) -> Result<String, Error> {
     let keyword = if union { "union" } else { "struct" };
     let mut result = String::new();
@@ -3612,7 +3977,12 @@ fn write_named_record(
         result.push_str(&format!("    #[align({alignment})]\n"));
     }
     result.push_str(&format!("    {keyword} {name} {{\n"));
-    result.push_str(&write_record_fields(fields, projection, 8)?);
+    result.push_str(&write_record_fields(
+        fields,
+        projection,
+        8,
+        field_annotations.map(|(annotations, origin)| (annotations, origin, Vec::new())),
+    )?);
     result.push_str("    }\n");
     result.push_str(&write_nested_records(fields, projection)?);
     Ok(result)
@@ -3643,6 +4013,7 @@ fn write_nested_type(ty: &TypeRef, projection: &TypeProjection<'_>) -> Result<St
                     record.alignment,
                     record.union,
                     projection,
+                    None,
                 )
             } else {
                 write_nested_records(&record.fields, projection)
@@ -3656,6 +4027,11 @@ fn write_record_fields(
     fields: &[Field],
     projection: &TypeProjection<'_>,
     indent: usize,
+    field_annotations: Option<(
+        &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+        &Origin,
+        Vec<usize>,
+    )>,
 ) -> Result<String, Error> {
     let mut result = String::new();
     let spaces = " ".repeat(indent);
@@ -3664,13 +4040,31 @@ fn write_record_fields(
     let mut index = 0;
     while index < fields.len() {
         let field = &fields[index];
+        let attributes = if let Some((annotations, origin, path)) = &field_annotations {
+            let target = if path.is_empty() {
+                AnnotationTarget::Field {
+                    declaration: (*origin).clone(),
+                    index,
+                }
+            } else {
+                let mut path = path.clone();
+                path.push(index);
+                AnnotationTarget::NestedField {
+                    declaration: (*origin).clone(),
+                    path,
+                }
+            };
+            annotation_inline(annotations_for(annotations, &target))?
+        } else {
+            String::new()
+        };
         if field.bit_width == Some(0) {
             index += 1;
             continue;
         }
         if let TypeRef::InlineRecord(record) = &field.ty {
             let keyword = if record.union { "union" } else { "struct" };
-            result.push_str(&format!("{spaces}{}: ", rdl_ident(&field.name)));
+            result.push_str(&format!("{spaces}{attributes}{}: ", rdl_ident(&field.name)));
             if let Some(packing) = record.packing {
                 result.push_str(&format!("#[packed({packing})] "));
             }
@@ -3682,6 +4076,13 @@ fn write_record_fields(
                 &record.fields,
                 projection,
                 indent + 4,
+                field_annotations
+                    .as_ref()
+                    .map(|(annotations, origin, path)| {
+                        let mut path = path.clone();
+                        path.push(index);
+                        (*annotations, *origin, path)
+                    }),
             )?);
             result.push_str(&format!("{spaces}}},\n"));
             index += 1;
@@ -3689,7 +4090,7 @@ fn write_record_fields(
         }
         if field.bit_width.is_none() {
             result.push_str(&format!(
-                "{spaces}{}: {},\n",
+                "{spaces}{attributes}{}: {},\n",
                 rdl_ident(&field.name),
                 projection.name(&field.ty)
             ));
@@ -3704,7 +4105,7 @@ fn write_record_fields(
             format!("_bitfield{group_index}")
         };
         result.push_str(&format!(
-            "{spaces}{backing}: {} {{\n",
+            "{spaces}{attributes}{backing}: {} {{\n",
             projection.name(&field.ty)
         ));
         let mut cursor = group.offset;

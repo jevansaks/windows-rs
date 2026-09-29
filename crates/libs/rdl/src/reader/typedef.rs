@@ -45,6 +45,12 @@ impl Encoder<'_> {
             self.emit_arch_attribute(metadata::writer::HasAttribute::TypeDef(type_def), arch_bits);
         }
 
+        self.encode_attrs(
+            metadata::writer::HasAttribute::TypeDef(type_def),
+            &item.attrs,
+            &["arch"],
+        )?;
+
         Ok(())
     }
 }

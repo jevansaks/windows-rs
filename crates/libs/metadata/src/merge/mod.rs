@@ -401,9 +401,7 @@ fn write_field(file: &mut writer::File, field: reader::Field, arch_override: Opt
 /// Returns the `SupportedArchitectureAttribute` bits on a type, or 0 (arch-neutral) if absent.
 fn type_arch_bits(def: reader::TypeDef) -> i32 {
     for attribute in def.attributes() {
-        let ty = attribute.ctor().parent();
-        if ty.namespace() == "Windows.Win32.Metadata"
-            && ty.name() == "SupportedArchitectureAttribute"
+        if is_architecture_attribute(attribute)
             && let Some((_, Value::I32(bits))) = attribute.value().first()
         {
             return *bits;
@@ -764,15 +762,13 @@ fn callback_attributes<'a, R: HasAttributes<'a>>(
     row.attributes()
         .filter_map(|attribute| {
             let ty = attribute.ctor().parent();
-            (!(ty.namespace() == "Windows.Win32.Metadata"
-                && ty.name() == "SupportedArchitectureAttribute"))
-                .then(|| {
-                    (
-                        ty.namespace().to_string(),
-                        ty.name().to_string(),
-                        attribute.value(),
-                    )
-                })
+            (!is_architecture_attribute(attribute)).then(|| {
+                (
+                    ty.namespace().to_string(),
+                    ty.name().to_string(),
+                    attribute.value(),
+                )
+            })
         })
         .collect()
 }
@@ -952,6 +948,13 @@ fn write_attributes<'a, R: HasAttributes<'a>>(
     write_attributes_with_arch(file, parent, row, None);
 }
 
+fn is_architecture_attribute(attribute: reader::Attribute) -> bool {
+    matches!(
+        attribute.namespace(),
+        "Windows.Win32.Metadata" | "Windows.Win32.Foundation.Metadata"
+    ) && attribute.name() == "SupportedArchitectureAttribute"
+}
+
 /// Copies attributes, optionally replacing `SupportedArchitectureAttribute`.
 fn write_attributes_with_arch<'a, R: HasAttributes<'a>>(
     file: &mut writer::File,
@@ -963,10 +966,7 @@ fn write_attributes_with_arch<'a, R: HasAttributes<'a>>(
         let ctor = attribute.ctor();
         let ty = ctor.parent();
 
-        if arch_override.is_some()
-            && ty.namespace() == "Windows.Win32.Metadata"
-            && ty.name() == "SupportedArchitectureAttribute"
-        {
+        if arch_override.is_some() && is_architecture_attribute(attribute) {
             continue;
         }
 
@@ -975,11 +975,24 @@ fn write_attributes_with_arch<'a, R: HasAttributes<'a>>(
 
         let ctor_ref = file.MemberRef(".ctor", &ctor.signature(&[]), attribute_ref);
 
-        file.Attribute(
-            parent,
-            writer::AttributeType::MemberRef(ctor_ref),
-            &attribute.value(),
-        );
+        let (values, named_arg_kinds) = attribute.value_with_named_arg_kinds();
+        if values.iter().all(|(name, _)| name.is_empty()) {
+            file.Attribute(parent, writer::AttributeType::MemberRef(ctor_ref), &values);
+        } else {
+            assert_eq!(
+                named_arg_kinds.len(),
+                values.iter().filter(|(name, _)| !name.is_empty()).count(),
+                "named argument kind mismatch for {}.{}: {values:?}",
+                attribute.namespace(),
+                attribute.name()
+            );
+            file.AttributeWithNamedArgKinds(
+                parent,
+                writer::AttributeType::MemberRef(ctor_ref),
+                &values,
+                &named_arg_kinds,
+            );
+        }
     }
 
     if let Some(arch_bits) = arch_override
@@ -994,7 +1007,7 @@ fn write_supported_architecture_attr(
     parent: writer::HasAttribute,
     arch_bits: i32,
 ) {
-    let ns = "Windows.Win32.Metadata";
+    let ns = "Windows.Win32.Foundation.Metadata";
     let name = "SupportedArchitectureAttribute";
 
     let type_ref = writer::MemberRefParent::TypeRef(file.TypeRef(ns, name));

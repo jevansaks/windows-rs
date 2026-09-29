@@ -52,6 +52,42 @@ fn explicit_assembly_name() {
 }
 
 #[test]
+fn merge_preserves_named_property_kinds() {
+    let dir = std::env::temp_dir().join("win_merge_named_property_kind");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let input = winmd(
+        &dir,
+        "input",
+        r#"
+            #[win32]
+            mod Windows {
+                mod Win32 {
+                    mod Foundation {
+                        mod Metadata {
+                            attribute SupportedOSPlatformAttribute {
+                                fn(platform: String);
+                            }
+                        }
+                    }
+                }
+            }
+        "#,
+    );
+    let output = dir.join("merged.winmd");
+    merge().input(input).output(&output).merge().unwrap();
+
+    let index = reader::Index::read(output).unwrap();
+    let attribute = index.expect(
+        "Windows.Win32.Foundation.Metadata",
+        "SupportedOSPlatformAttribute",
+    );
+    let usage = attribute.attributes().next().unwrap();
+    assert_eq!(usage.name(), "AttributeUsageAttribute");
+    assert_eq!(usage.named_arg_kinds(), [0x54]);
+}
+
+#[test]
 fn arch_merge_constants() {
     let dir = std::env::temp_dir().join("win_merge_test");
     std::fs::create_dir_all(&dir).unwrap();

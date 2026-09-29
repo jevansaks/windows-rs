@@ -24,7 +24,7 @@ pub use reader::Reader;
 pub use writer::Writer;
 
 /// The metadata namespace that owns the Win32 attribute vocabulary.
-pub(crate) const METADATA_NAMESPACE: &str = "Windows.Win32.Metadata";
+pub(crate) const METADATA_NAMESPACE: &str = "Windows.Win32.Foundation.Metadata";
 
 /// Short RDL attribute spelling and the metadata attribute it maps to.
 pub(crate) struct PseudoAttr {
@@ -79,6 +79,116 @@ pub(crate) const PSEUDO_ATTRS: &[PseudoAttr] = &[
     PseudoAttr {
         short: "encoding",
         metadata: "NativeEncodingAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "raii_free",
+        metadata: "RAIIFreeAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "invalid_handle",
+        metadata: "InvalidHandleValueAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "free_with",
+        metadata: "FreeWithAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "do_not_release",
+        metadata: "DoNotReleaseAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "not_null_terminated",
+        metadata: "NotNullTerminatedAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "null_null_terminated",
+        metadata: "NullNullTerminatedAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "len_field",
+        metadata: "NativeArrayInfoAttribute",
+        prop: Some("CountFieldName"),
+    },
+    PseudoAttr {
+        short: "errors_as_success",
+        metadata: "CanReturnErrorsAsSuccessAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "multiple_success_values",
+        metadata: "CanReturnMultipleSuccessValuesAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "retained",
+        metadata: "RetainedAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "ignore_if_return",
+        metadata: "IgnoreIfReturnAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "also_usable_for",
+        metadata: "AlsoUsableForAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "associated_enum",
+        metadata: "AssociatedEnumAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "associated_constant",
+        metadata: "AssociatedConstantAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "native_inheritance",
+        metadata: "NativeInheritanceAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "struct_size_field",
+        metadata: "StructSizeFieldAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "ansi",
+        metadata: "AnsiAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "unicode",
+        metadata: "UnicodeAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "agile",
+        metadata: "AgileAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "native_const",
+        metadata: "ConstAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "static_library",
+        metadata: "StaticLibraryAttribute",
+        prop: None,
+    },
+    PseudoAttr {
+        short: "supported_os",
+        metadata: "SupportedOSPlatformAttribute",
         prop: None,
     },
 ];

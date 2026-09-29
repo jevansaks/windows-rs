@@ -264,17 +264,26 @@ impl Encoder<'_> {
                         flags |= metadata::MethodAttributes::SpecialName;
                     }
 
+                    let impl_flags = if method
+                        .attrs
+                        .iter()
+                        .any(|attribute| attribute.path().is_ident("preserve_sig"))
+                    {
+                        metadata::MethodImplAttributes::PreserveSig
+                    } else {
+                        Default::default()
+                    };
                     let method_def = self.output.MethodDef(
                         &method.sig.ident.to_string(),
                         &signature,
                         flags,
-                        Default::default(),
+                        impl_flags,
                     );
 
                     self.encode_attrs(
                         metadata::writer::HasAttribute::MethodDef(method_def),
                         &method.attrs,
-                        &["special"],
+                        &["special", "preserve_sig"],
                     )?;
 
                     self.encode_return_attrs(&method.return_attrs)?;

@@ -16,6 +16,10 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
     let _library = Library::new()?;
     let index = Index::new()?;
     let timing = timings_enabled();
+    let validate_annotations = args.contains(&"-DWIN32METADATA=1")
+        || inputs
+            .iter()
+            .any(|input| input.source.contains("win32metadata:"));
     let target = timing.then(|| timing_target(args));
     let total_time = timing.then(std::time::Instant::now);
     let parse_time = timing.then(std::time::Instant::now);
@@ -61,13 +65,21 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
     let traversal_time = timing.then(std::time::Instant::now);
     let mut facts = vec![];
     let mut constants = vec![];
+    let mut annotations = BTreeMap::new();
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
     for (name, translation_unit) in &translation_units {
         let input = inputs.iter().find(|input| input.name == *name).unwrap();
-        let (result, metrics) = translation_unit.extract(input, &mut facts, &mut constants, timing);
+        let (result, metrics) = translation_unit.extract(
+            input,
+            &mut facts,
+            &mut constants,
+            &mut annotations,
+            timing,
+            validate_annotations,
+        )?;
         if let Some(metrics) = metrics {
             traversal_cursors += metrics.cursors;
             traversal_facts += metrics.facts;
@@ -88,7 +100,10 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
         }
         extracted.push(result);
     }
-    decode_root_macro_definitions(&mut facts, &extracted);
+    merge_redeclaration_annotations(&facts, &mut annotations)?;
+    let annotation_macros = annotation_macro_names(&annotations);
+    let associated_constants = associated_constant_names(&facts, &annotations);
+    decode_selected_macro_definitions(&mut facts, &extracted, &annotation_macros);
     if timing {
         eprintln!(
             "windows-clang timing phase=extract-total target={} input_tus={} cursors={} facts={} constants={} elapsed_ms={:.3}",
@@ -105,8 +120,15 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
     let mut synthetic_tus = 0;
     let mut retry_tus = 0;
     for (input, extracted) in inputs.iter().zip(&extracted) {
-        let (new_constants, metrics) =
-            evaluate_constants(&index, input, args, &facts, &extracted.macros, timing)?;
+        let (new_constants, metrics) = evaluate_constants(
+            &index,
+            input,
+            args,
+            &facts,
+            &extracted.macros,
+            &associated_constants,
+            timing,
+        )?;
         if let Some(metrics) = metrics {
             probe_candidates += metrics.candidates;
             synthetic_tus += metrics.synthetic_tus;
@@ -140,6 +162,7 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
         }
         constants.extend(new_constants);
     }
+    validate_associated_constants(&associated_constants, &constants)?;
     if timing {
         eprintln!(
             "windows-clang timing phase=constant-probes-total target={} input_tus={} candidates={} synthetic_tus={} retry_tus={} constants={} elapsed_ms={:.3}",
@@ -179,6 +202,7 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
             elapsed_ms(phase_time)
         );
     }
+    materialize_anonymous_callbacks(&mut facts);
     facts.sort();
     for pair in facts.windows(2) {
         if pair[0].origin == pair[1].origin {
@@ -209,6 +233,7 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
     Ok(Snapshot {
         facts,
         constants,
+        annotations,
         timing_target: target,
     })
 }
@@ -839,8 +864,10 @@ impl TranslationUnit {
         input: &Input,
         facts: &mut Vec<Fact>,
         constants: &mut Vec<Constant>,
+        annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
         timing: bool,
-    ) -> (Extracted<'tu>, Option<ExtractionMetrics>) {
+        validate_annotations: bool,
+    ) -> Result<(Extracted<'tu>, Option<ExtractionMetrics>), Error> {
         let total_time = timing.then(std::time::Instant::now);
         let phase_time = timing.then(std::time::Instant::now);
         let macros = macro_definitions(self, unsafe { clang_getTranslationUnitCursor(self.0) });
@@ -861,6 +888,9 @@ impl TranslationUnit {
             pending_macros: vec![],
             facts,
             constants,
+            annotations,
+            error: None,
+            validate_annotations,
         };
         extract_children(
             unsafe { clang_getTranslationUnitCursor(self.0) },
@@ -868,6 +898,9 @@ impl TranslationUnit {
             &mut traversal,
         );
         let traversal_ms = elapsed_ms(phase_time);
+        if let Some(error) = traversal.error.take() {
+            return Err(error);
+        }
         let metrics = timing.then(|| ExtractionMetrics {
             macro_definitions: macros.definitions.len(),
             macro_expansion_files: macros.expansion_orders.len(),
@@ -881,14 +914,14 @@ impl TranslationUnit {
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         drop(traversal);
-        (
+        Ok((
             Extracted {
                 macros,
                 pending_structs,
                 pending_macros,
             },
             metrics,
-        )
+        ))
     }
 }
 
@@ -911,6 +944,9 @@ struct Traversal<'a> {
     pending_macros: Vec<(usize, CXCursor)>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
+    annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    error: Option<Error>,
+    validate_annotations: bool,
 }
 
 struct Extracted<'tu> {
@@ -942,14 +978,15 @@ fn extract_children(cursor: CXCursor, parent: Option<&Origin>, traversal: &mut T
 
     extern "C" fn visit(
         cursor: CXCursor,
-        _parent: CXCursor,
+        parent_cursor: CXCursor,
         data: CXClientData,
     ) -> CXChildVisitResult {
         let visit = unsafe { &mut *(data as *mut Visit<'_, '_, '_>) };
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            extract_child(cursor, visit.parent, visit.traversal);
+            extract_child(cursor, parent_cursor, visit.parent, visit.traversal);
         })) {
-            Ok(()) => CXChildVisit_Continue,
+            Ok(()) if visit.traversal.error.is_none() => CXChildVisit_Continue,
+            Ok(()) => CXChildVisit_Break,
             Err(panic) => {
                 visit.panic = Some(panic);
                 CXChildVisit_Break
@@ -970,10 +1007,27 @@ fn extract_children(cursor: CXCursor, parent: Option<&Origin>, traversal: &mut T
     }
 }
 
-fn extract_child(child: CXCursor, parent: Option<&Origin>, traversal: &mut Traversal<'_>) {
+fn extract_child(
+    child: CXCursor,
+    cursor_parent: CXCursor,
+    parent: Option<&Origin>,
+    traversal: &mut Traversal<'_>,
+) {
     let local = traversal.next;
     traversal.next += 1;
     let kind = unsafe { clang_getCursorKind(child) };
+    if kind == CXCursor_AnnotateAttr {
+        if !traversal.validate_annotations {
+            return;
+        }
+        let spelling = cx_string(unsafe { clang_getCursorSpelling(child) });
+        if spelling.starts_with("win32metadata:")
+            && let Err(error) = validate_win32metadata_annotation(cursor_parent, child, &spelling)
+        {
+            traversal.error = Some(error);
+        }
+        return;
+    }
     let mut child_parent = None;
     let mut repeated = false;
 
@@ -1013,14 +1067,26 @@ fn extract_child(child: CXCursor, parent: Option<&Origin>, traversal: &mut Trave
                 tu: traversal.tu.to_string(),
                 local,
             };
+            let annotations = match annotation_values(child, traversal.macros) {
+                Ok(annotations) => annotations,
+                Err(error) => {
+                    traversal.error = Some(error);
+                    return;
+                }
+            };
             traversal.constants.push(Constant {
                 root: origin.clone(),
-                definition: origin,
+                definition: origin.clone(),
                 spelling,
                 name: name.clone(),
                 ty: TypeRef::Scalar(scalar),
                 value,
             });
+            insert_annotations(
+                traversal.annotations,
+                AnnotationTarget::Declaration(origin),
+                annotations,
+            );
         }
     }
     let anonymous_enum =
@@ -1113,7 +1179,12 @@ fn extract_child(child: CXCursor, parent: Option<&Origin>, traversal: &mut Trave
                 };
                 seen.push((child, origin.clone()));
                 child_parent = Some(origin.clone());
-                if root || !matches!(fact_kind, FactKind::Function | FactKind::Guid) {
+                let annotated_function =
+                    fact_kind == FactKind::Function && has_win32metadata_annotation(child);
+                if root
+                    || !matches!(fact_kind, FactKind::Function | FactKind::Guid)
+                    || annotated_function
+                {
                     if fact_kind == FactKind::Macro
                         && unsafe { clang_Cursor_isMacroFunctionLike(child) } != 0
                     {
@@ -1128,7 +1199,7 @@ fn extract_child(child: CXCursor, parent: Option<&Origin>, traversal: &mut Trave
                     };
                     let index = traversal.facts.len();
                     traversal.facts.push(Fact {
-                        origin,
+                        origin: origin.clone(),
                         parent: parent.cloned(),
                         kind: fact_kind,
                         name,
@@ -1140,6 +1211,16 @@ fn extract_child(child: CXCursor, parent: Option<&Origin>, traversal: &mut Trave
                         system,
                         data,
                     });
+                    if let Err(error) = collect_fact_annotations(
+                        child,
+                        fact_kind,
+                        &origin,
+                        traversal.macros,
+                        traversal.annotations,
+                    ) {
+                        traversal.error = Some(error);
+                        return;
+                    }
                     if deferred_struct {
                         traversal.pending_structs.push((index, child));
                     }
@@ -1154,6 +1235,157 @@ fn extract_child(child: CXCursor, parent: Option<&Origin>, traversal: &mut Trave
     if !repeated {
         extract_children(child, child_parent.as_ref().or(parent), traversal);
     }
+}
+
+fn has_win32metadata_annotation(cursor: CXCursor) -> bool {
+    cursor_children(cursor).into_iter().any(|child| {
+        (unsafe { clang_getCursorKind(child) }) == CXCursor_AnnotateAttr
+            && cx_string(unsafe { clang_getCursorSpelling(child) }).starts_with("win32metadata:")
+    })
+}
+
+fn materialize_anonymous_callbacks(facts: &mut Vec<Fact>) {
+    let mut used: BTreeSet<_> = facts.iter().map(|fact| fact.name.clone()).collect();
+    let mut next_local: HashMap<_, u32> = HashMap::new();
+    for fact in facts.iter() {
+        next_local
+            .entry(fact.origin.tu.clone())
+            .and_modify(|local| *local = (*local).max(fact.origin.local + 1))
+            .or_insert(fact.origin.local + 1);
+    }
+
+    let mut callbacks = vec![];
+    for fact in facts.iter_mut() {
+        let owner = SyntheticOwner {
+            origin: fact.origin.clone(),
+            name: fact.name.clone(),
+            spelling: fact.spelling.clone(),
+            expansion: fact.expansion.clone(),
+            main_file: fact.main_file,
+            root: fact.root,
+            system: fact.system,
+        };
+        let fields = match &mut fact.data {
+            FactData::Record { fields, .. } => fields,
+            FactData::Typedef {
+                target: TypeRef::InlineRecord(record),
+            } => &mut record.fields,
+            _ => continue,
+        };
+        materialize_field_callbacks(fields, &owner, &mut used, &mut next_local, &mut callbacks);
+    }
+    facts.extend(callbacks);
+}
+
+struct SyntheticOwner {
+    origin: Origin,
+    name: String,
+    spelling: Location,
+    expansion: Location,
+    main_file: bool,
+    root: bool,
+    system: bool,
+}
+
+fn materialize_field_callbacks(
+    fields: &mut [Field],
+    owner: &SyntheticOwner,
+    used: &mut BTreeSet<String>,
+    next_local: &mut HashMap<String, u32>,
+    callbacks: &mut Vec<Fact>,
+) {
+    for field in fields {
+        let stem = format!(
+            "{}_{}",
+            owner.name.trim_start_matches('_'),
+            field.name.trim_start_matches('_')
+        );
+        materialize_type_callbacks(&mut field.ty, &stem, owner, used, next_local, callbacks);
+    }
+}
+
+fn materialize_type_callbacks(
+    ty: &mut TypeRef,
+    stem: &str,
+    owner: &SyntheticOwner,
+    used: &mut BTreeSet<String>,
+    next_local: &mut HashMap<String, u32>,
+    callbacks: &mut Vec<Fact>,
+) {
+    match ty {
+        TypeRef::FunctionPointer {
+            convention,
+            params,
+            result,
+        } => {
+            let name = unique_synthetic_name(stem, used);
+            let local = next_local.entry(owner.origin.tu.clone()).or_default();
+            let origin = Origin {
+                tu: owner.origin.tu.clone(),
+                local: *local,
+            };
+            *local += 1;
+            let callback = Fact {
+                origin,
+                parent: None,
+                kind: FactKind::Typedef,
+                name: name.clone(),
+                spelling: owner.spelling.clone(),
+                expansion: owner.expansion.clone(),
+                definition: true,
+                main_file: owner.main_file,
+                root: owner.root,
+                system: owner.system,
+                data: FactData::Callback {
+                    convention: *convention,
+                    params: params
+                        .iter()
+                        .enumerate()
+                        .map(|(index, ty)| Parameter {
+                            name: format!("arg{index}"),
+                            ty: ty.clone(),
+                            annotation: ParamAnnotation::default(),
+                        })
+                        .collect(),
+                    result: result.as_ref().clone(),
+                },
+            };
+            callbacks.push(callback);
+            *ty = TypeRef::Named {
+                name,
+                declaration: owner.spelling.clone(),
+            };
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => {
+            materialize_type_callbacks(target, stem, owner, used, next_local, callbacks);
+        }
+        TypeRef::InlineRecord(record) => {
+            for field in &mut record.fields {
+                let nested = format!("{stem}_{}", field.name.trim_start_matches('_'));
+                materialize_type_callbacks(
+                    &mut field.ty,
+                    &nested,
+                    owner,
+                    used,
+                    next_local,
+                    callbacks,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+fn unique_synthetic_name(stem: &str, used: &mut BTreeSet<String>) -> String {
+    let mut name = stem.to_string();
+    let mut suffix = 2;
+    while !used.insert(name.clone()) {
+        name = format!("{stem}_{suffix}");
+        suffix += 1;
+    }
+    name
 }
 
 fn decode_reachable_structs(
@@ -1204,12 +1436,17 @@ fn decode_reachable_structs(
     }
 }
 
-fn decode_root_macro_definitions(facts: &mut [Fact], extracted: &[Extracted<'_>]) {
-    let roots: HashSet<_> = facts
+fn decode_selected_macro_definitions(
+    facts: &mut [Fact],
+    extracted: &[Extracted<'_>],
+    selected: &BTreeSet<String>,
+) {
+    let mut roots: HashSet<_> = facts
         .iter()
         .filter(|fact| fact.root && fact.kind == FactKind::Macro)
         .map(|fact| fact.name.clone())
         .collect();
+    roots.extend(selected.iter().cloned());
     for extraction in extracted {
         for &(index, cursor) in &extraction.pending_macros {
             if roots.contains(facts[index].name.as_str()) {
@@ -1330,12 +1567,14 @@ fn cursor_children(cursor: CXCursor) -> Vec<CXCursor> {
 struct MacroDefinitions<'tu> {
     definitions: HashMap<String, Vec<MacroDefinition>>,
     expansion_orders: HashMap<String, Vec<(u32, usize)>>,
+    cursor_orders: HashMap<String, Vec<(u32, u32, usize)>>,
     translation_unit: PhantomData<&'tu TranslationUnit>,
 }
 
 struct MacroDefinition {
     order: usize,
     cursor: CXCursor,
+    spelling: Option<Location>,
     function_like: bool,
     tokens: OnceCell<Vec<String>>,
 }
@@ -1382,6 +1621,38 @@ impl MacroDefinitions<'_> {
             .map(MacroDefinition::tokens)
     }
 
+    fn definition_before(
+        &self,
+        name: &str,
+        order: usize,
+        location: Option<&Location>,
+    ) -> Option<(&[String], bool)> {
+        let definitions = self.definitions.get(name)?;
+        let definition = location
+            .and_then(|location| {
+                definitions
+                    .iter()
+                    .filter(|definition| {
+                        definition.spelling.as_ref().is_some_and(|spelling| {
+                            spelling.file == location.file && spelling.offset <= location.offset
+                        })
+                    })
+                    .max_by_key(|definition| {
+                        definition
+                            .spelling
+                            .as_ref()
+                            .map_or(0, |spelling| spelling.offset)
+                    })
+            })
+            .or_else(|| {
+                definitions
+                    .iter()
+                    .filter(|definition| definition.order < order)
+                    .max_by_key(|definition| definition.order)
+            })?;
+        Some((definition.tokens(), definition.function_like))
+    }
+
     fn expansion_order(&self, cursor: CXCursor) -> Option<usize> {
         let (file, start, end) = cursor_expansion_extent(cursor)?;
         let expansions = self.expansion_orders.get(&file)?;
@@ -1390,6 +1661,20 @@ impl MacroDefinitions<'_> {
             .get(index)
             .filter(|(offset, _)| *offset <= end)
             .map(|(_, order)| *order)
+    }
+
+    fn cursor_order(&self, cursor: CXCursor) -> Option<usize> {
+        self.expansion_order(cursor).or_else(|| {
+            let (file, start, end) = cursor_expansion_extent(cursor)?;
+            self.cursor_orders
+                .get(&file)?
+                .iter()
+                .filter(|(candidate_start, candidate_end, _)| {
+                    *candidate_start <= start && *candidate_end >= end
+                })
+                .min_by_key(|(candidate_start, candidate_end, _)| candidate_end - candidate_start)
+                .map(|(_, _, order)| *order)
+        })
     }
 
     fn final_definition(&self, name: &str) -> Option<(&[String], bool)> {
@@ -1405,6 +1690,13 @@ fn macro_definitions<'tu>(
     let mut result = MacroDefinitions::default();
     for (order, child) in cursor_children(cursor).into_iter().enumerate() {
         let kind = unsafe { clang_getCursorKind(child) };
+        if let Some((file, start, end)) = cursor_expansion_extent(child) {
+            result
+                .cursor_orders
+                .entry(file)
+                .or_default()
+                .push((start, end, order));
+        }
         if kind == CXCursor_MacroDefinition {
             let name = cx_string(unsafe { clang_getCursorSpelling(child) });
             let function_like = unsafe { clang_Cursor_isMacroFunctionLike(child) } != 0;
@@ -1415,6 +1707,7 @@ fn macro_definitions<'tu>(
                 .push(MacroDefinition {
                     order,
                     cursor: child,
+                    spelling: cursor_locations(child).map(|(spelling, _, _, _)| spelling),
                     function_like,
                     tokens: OnceCell::new(),
                 });
@@ -1501,6 +1794,7 @@ fn evaluate_constants(
     args: &[&str],
     facts: &[Fact],
     macros: &MacroDefinitions,
+    selected: &BTreeSet<String>,
     timing: bool,
 ) -> Result<(Vec<Constant>, Option<ProbeMetrics>), Error> {
     const INITIAL_CHUNK: usize = 16384;
@@ -1512,7 +1806,7 @@ fn evaluate_constants(
     let mut roots = BTreeMap::new();
     for fact in facts
         .iter()
-        .filter(|fact| fact.origin.tu == input.name && fact.root)
+        .filter(|fact| fact.origin.tu == input.name && (fact.root || selected.contains(&fact.name)))
     {
         if let FactData::Macro {
             function_like: false,
@@ -2348,7 +2642,7 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
             let union = kind == FactKind::Union;
             let definition = unsafe { clang_isCursorDefinition(cursor) } != 0;
             let mut record = if definition {
-                match inline_record(cursor, union) {
+                match inline_record(cursor, union, Some(macros)) {
                     Ok(record) => record,
                     Err(reason) => return FactData::Unsupported { reason },
                 }
@@ -3035,6 +3329,1349 @@ fn apply_source_annotations(cursor: CXCursor, macros: &MacroDefinitions, params:
     }
 }
 
+#[derive(Clone)]
+struct RawAnnotation {
+    key: String,
+    value: Option<String>,
+}
+
+fn validate_win32metadata_annotation(
+    target: CXCursor,
+    attribute: CXCursor,
+    spelling: &str,
+) -> Result<(), Error> {
+    let raw = parse_raw_annotation(spelling).unwrap();
+    let requires_value = matches!(
+        raw.key.as_str(),
+        "import_library"
+            | "static_library"
+            | "raii_free"
+            | "invalid_handle"
+            | "free_with"
+            | "array_count_param"
+            | "array_count_const"
+            | "array_count_field"
+            | "memory_size_param"
+            | "ignore_if_return"
+            | "also_usable_for"
+            | "associated_enum"
+            | "associated_constant"
+            | "native_inheritance"
+            | "struct_size_field"
+            | "native_encoding"
+            | "supported_os"
+    );
+    let valueless = matches!(
+        raw.key.as_str(),
+        "set_last_error"
+            | "preserve_result"
+            | "can_return_errors_as_success"
+            | "can_return_multiple_success_values"
+            | "agile"
+            | "do_not_release"
+            | "not_null_terminated"
+            | "null_null_terminated"
+            | "retained"
+            | "in"
+            | "out"
+            | "optional"
+            | "reserved"
+            | "retval"
+            | "com_out_ptr"
+            | "const"
+            | "ansi"
+            | "unicode"
+    );
+    let target_kind = unsafe { clang_getCursorKind(target) };
+    let message = if !requires_value && !valueless {
+        Some(format!("unknown win32metadata annotation `{}`", raw.key))
+    } else if requires_value
+        && raw
+            .value
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+    {
+        Some(format!(
+            "win32metadata annotation `{}` requires a value",
+            raw.key
+        ))
+    } else if valueless && raw.value.is_some() {
+        Some(format!(
+            "win32metadata annotation `{}` does not accept a value",
+            raw.key
+        ))
+    } else if !annotation_target_allowed(&raw.key, target_kind)
+        || (raw.key == "associated_enum"
+            && target_kind == CXCursor_TypedefDecl
+            && !typedef_is_callback(target))
+        || (matches!(target_kind, CXCursor_StructDecl | CXCursor_UnionDecl)
+            && unsafe { clang_Cursor_isAnonymousRecordDecl(target) } != 0)
+    {
+        Some(format!(
+            "win32metadata annotation `{}` is not valid on this declaration",
+            raw.key
+        ))
+    } else if raw.key == "associated_enum"
+        && matches!(
+            target_kind,
+            CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_TypedefDecl
+        )
+        && annotation_result_type(target).is_some_and(|ty| ty.kind == CXType_Void)
+    {
+        Some("win32metadata annotation `associated_enum` requires a non-void return".to_string())
+    } else if raw.key == "invalid_handle"
+        && raw.value.as_deref().is_some_and(|value| {
+            parse_annotation_integer(value).is_none() && !is_c_identifier(value.trim())
+        })
+    {
+        Some(format!(
+            "invalid-handle sentinel `{}` must be an integer literal or object-like macro",
+            raw.value.unwrap()
+        ))
+    } else {
+        None
+    };
+    if let Some(message) = message {
+        return Err(annotation_error(attribute, &message));
+    }
+    Ok(())
+}
+
+fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
+    match key {
+        "set_last_error" | "import_library" | "static_library" => target == CXCursor_FunctionDecl,
+        "preserve_result"
+        | "can_return_errors_as_success"
+        | "can_return_multiple_success_values" => {
+            matches!(target, CXCursor_FunctionDecl | CXCursor_CXXMethod)
+        }
+        "agile" => matches!(
+            target,
+            CXCursor_ClassDecl | CXCursor_StructDecl | CXCursor_ClassTemplate
+        ),
+        "raii_free" | "invalid_handle" => matches!(
+            target,
+            CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_ParmDecl | CXCursor_TypedefDecl
+        ),
+        "free_with" | "do_not_release" | "not_null_terminated" | "null_null_terminated" => {
+            matches!(
+                target,
+                CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_ParmDecl | CXCursor_FieldDecl
+            )
+        }
+        "retained" | "ignore_if_return" | "array_count_param" | "array_count_const"
+        | "memory_size_param" | "in" | "out" | "optional" | "reserved" | "retval"
+        | "com_out_ptr" => target == CXCursor_ParmDecl,
+        "array_count_field" => target == CXCursor_FieldDecl,
+        "also_usable_for" => target == CXCursor_TypedefDecl,
+        "associated_enum" => matches!(
+            target,
+            CXCursor_FunctionDecl
+                | CXCursor_CXXMethod
+                | CXCursor_ParmDecl
+                | CXCursor_FieldDecl
+                | CXCursor_VarDecl
+                | CXCursor_EnumConstantDecl
+                | CXCursor_TypedefDecl
+        ),
+        "associated_constant" => target == CXCursor_EnumDecl,
+        "native_inheritance" | "struct_size_field" => {
+            matches!(target, CXCursor_ClassDecl | CXCursor_StructDecl)
+        }
+        "native_encoding" => matches!(target, CXCursor_FieldDecl | CXCursor_VarDecl),
+        "const" => matches!(target, CXCursor_ParmDecl | CXCursor_FieldDecl),
+        "ansi" | "unicode" => matches!(
+            target,
+            CXCursor_FunctionDecl | CXCursor_CXXMethod | CXCursor_FieldDecl | CXCursor_VarDecl
+        ),
+        "supported_os" => matches!(
+            target,
+            CXCursor_FunctionDecl
+                | CXCursor_CXXMethod
+                | CXCursor_ClassDecl
+                | CXCursor_StructDecl
+                | CXCursor_UnionDecl
+                | CXCursor_EnumDecl
+                | CXCursor_TypedefDecl
+        ),
+        _ => false,
+    }
+}
+
+fn annotation_result_type(cursor: CXCursor) -> Option<CXType> {
+    let kind = unsafe { clang_getCursorKind(cursor) };
+    if matches!(kind, CXCursor_FunctionDecl | CXCursor_CXXMethod) {
+        return Some(unsafe { clang_getCursorResultType(cursor) });
+    }
+    if kind != CXCursor_TypedefDecl {
+        return None;
+    }
+    let mut ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+    if ty.kind == CXType_Pointer {
+        ty = unsafe { clang_getPointeeType(ty) };
+    }
+    matches!(ty.kind, CXType_FunctionProto | CXType_FunctionNoProto)
+        .then(|| unsafe { clang_getResultType(ty) })
+}
+
+fn typedef_is_callback(cursor: CXCursor) -> bool {
+    annotation_result_type(cursor).is_some()
+}
+
+fn annotation_error(cursor: CXCursor, message: &str) -> Error {
+    cursor_locations(cursor).map_or_else(
+        || Error(message.to_string()),
+        |(spelling, _, _, _)| Error(format!("{}:{}: {message}", spelling.file, spelling.offset)),
+    )
+}
+
+fn parse_raw_annotation(spelling: &str) -> Option<RawAnnotation> {
+    let payload = spelling.strip_prefix("win32metadata:")?;
+    let (key, value) = payload
+        .split_once('=')
+        .map_or((payload, None), |(key, value)| {
+            (key, Some(value.to_string()))
+        });
+    Some(RawAnnotation {
+        key: key.to_string(),
+        value,
+    })
+}
+
+fn expanded_raw_annotations(cursor: CXCursor) -> Vec<RawAnnotation> {
+    let mut result = vec![];
+    for child in cursor_children(cursor) {
+        if unsafe { clang_getCursorKind(child) } != CXCursor_AnnotateAttr {
+            continue;
+        }
+        let spelling = cx_string(unsafe { clang_getCursorSpelling(child) });
+        let Some(annotation) = parse_raw_annotation(&spelling) else {
+            continue;
+        };
+        if annotation.key != "raii_free" {
+            result.push(annotation);
+            continue;
+        }
+        let mut values = annotation
+            .value
+            .as_deref()
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim);
+        if let Some(cleanup) = values.next() {
+            result.push(RawAnnotation {
+                key: "raii_free".to_string(),
+                value: Some(cleanup.to_string()),
+            });
+        }
+        result.extend(
+            values
+                .filter(|value| !value.is_empty())
+                .map(|value| RawAnnotation {
+                    key: "invalid_handle".to_string(),
+                    value: Some(value.to_string()),
+                }),
+        );
+    }
+    result
+}
+
+fn annotation_values(
+    cursor: CXCursor,
+    macros: &MacroDefinitions,
+) -> Result<Vec<Annotation>, Error> {
+    let before = macros.cursor_order(cursor).unwrap_or(usize::MAX);
+    let location = cursor_locations(cursor).map(|(spelling, _, _, _)| spelling);
+    expanded_raw_annotations(cursor)
+        .into_iter()
+        .filter_map(|mut raw| {
+            if raw.key == "invalid_handle"
+                && let Some(value) = raw.value.as_deref()
+                && parse_annotation_integer(value).is_none()
+            {
+                let name = value.trim();
+                let Some(value) = resolve_annotation_macro_integer(
+                    name,
+                    macros,
+                    before,
+                    location.as_ref(),
+                    &mut BTreeSet::new(),
+                ) else {
+                    return Some(Err(Error(format!(
+                        "could not evaluate invalid-handle sentinel `{name}`"
+                    ))));
+                };
+                raw.value = Some(value.to_string());
+            }
+            annotation_value(raw).map(Ok)
+        })
+        .collect()
+}
+
+fn annotation_value(raw: RawAnnotation) -> Option<Annotation> {
+    let value = raw.value;
+    Some(match raw.key.as_str() {
+        "set_last_error" => Annotation::SetLastError,
+        "import_library" => Annotation::ImportLibrary(value?),
+        "preserve_result" => Annotation::PreserveResult,
+        "raii_free" => Annotation::RaiiFree(value?),
+        "invalid_handle" => Annotation::InvalidHandle(value?),
+        "free_with" => Annotation::FreeWith(value?),
+        "do_not_release" => Annotation::DoNotRelease,
+        "not_null_terminated" => Annotation::NotNullTerminated,
+        "null_null_terminated" => Annotation::NullNullTerminated,
+        "array_count_param" => Annotation::ArrayCountParam(value?),
+        "array_count_const" => Annotation::ArrayCountConst(value?),
+        "array_count_field" => Annotation::ArrayCountField(value?),
+        "memory_size_param" => Annotation::MemorySizeParam(value?),
+        "can_return_errors_as_success" => Annotation::CanReturnErrorsAsSuccess,
+        "can_return_multiple_success_values" => Annotation::CanReturnMultipleSuccessValues,
+        "retained" => Annotation::Retained,
+        "ignore_if_return" => Annotation::IgnoreIfReturn(value?),
+        "also_usable_for" => Annotation::AlsoUsableFor(value?),
+        "associated_enum" => Annotation::AssociatedEnum(value?),
+        "associated_constant" => Annotation::AssociatedConstant(value?),
+        "native_inheritance" => Annotation::NativeInheritance(value?),
+        "struct_size_field" => Annotation::StructSizeField(value?),
+        "native_encoding" => Annotation::NativeEncoding(value?),
+        "ansi" => Annotation::Ansi,
+        "unicode" => Annotation::Unicode,
+        "agile" => Annotation::Agile,
+        "const" => Annotation::Const,
+        "static_library" => Annotation::StaticLibrary(value?),
+        "supported_os" => Annotation::SupportedOs(value?),
+        "in" => Annotation::In,
+        "out" => Annotation::Out,
+        "optional" => Annotation::Optional,
+        "reserved" => Annotation::Reserved,
+        "com_out_ptr" => Annotation::ComOutPtr,
+        "retval" => Annotation::Retval,
+        _ => return None,
+    })
+}
+
+fn collect_fact_annotations(
+    cursor: CXCursor,
+    kind: FactKind,
+    origin: &Origin,
+    macros: &MacroDefinitions,
+    annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+) -> Result<(), Error> {
+    let direct = annotation_values(cursor, macros)?;
+    let callback = kind == FactKind::Typedef && typedef_is_callback(cursor);
+    let (declaration, result): (Vec<_>, Vec<_>) = direct.into_iter().partition(|annotation| {
+        !matches!(
+            annotation,
+            Annotation::RaiiFree(_)
+                | Annotation::InvalidHandle(_)
+                | Annotation::FreeWith(_)
+                | Annotation::DoNotRelease
+                | Annotation::NotNullTerminated
+                | Annotation::NullNullTerminated
+                | Annotation::AssociatedEnum(_)
+        ) || !matches!(kind, FactKind::Function) && !callback
+    });
+    insert_annotations(
+        annotations,
+        AnnotationTarget::Declaration(origin.clone()),
+        declaration,
+    );
+    insert_annotations(
+        annotations,
+        AnnotationTarget::Return(origin.clone()),
+        result,
+    );
+
+    if matches!(kind, FactKind::Function | FactKind::Typedef) {
+        for (index, parameter) in cursor_children(cursor)
+            .into_iter()
+            .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_ParmDecl)
+            .enumerate()
+        {
+            insert_annotations(
+                annotations,
+                AnnotationTarget::Parameter {
+                    declaration: origin.clone(),
+                    index,
+                },
+                annotation_values(parameter, macros)?,
+            );
+        }
+    }
+
+    if matches!(kind, FactKind::Class | FactKind::Struct | FactKind::Union) {
+        collect_record_field_annotations(cursor, origin, macros, annotations, &[])?;
+    }
+
+    if kind == FactKind::Enum {
+        for (index, variant) in cursor_children(cursor)
+            .into_iter()
+            .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_EnumConstantDecl)
+            .enumerate()
+        {
+            insert_annotations(
+                annotations,
+                AnnotationTarget::Variant {
+                    declaration: origin.clone(),
+                    index,
+                },
+                annotation_values(variant, macros)?,
+            );
+        }
+    }
+
+    if matches!(kind, FactKind::Class | FactKind::Struct) && is_interface(cursor) {
+        for (method_index, method) in cursor_children(cursor)
+            .into_iter()
+            .filter(|child| {
+                (unsafe {
+                    clang_getCursorKind(*child) == CXCursor_CXXMethod
+                        && clang_CXXMethod_isVirtual(*child) != 0
+                }) && !method_overrides_base(*child)
+            })
+            .enumerate()
+        {
+            let (declaration, result): (Vec<_>, Vec<_>) = annotation_values(method, macros)?
+                .into_iter()
+                .partition(|annotation| {
+                    !matches!(
+                        annotation,
+                        Annotation::RaiiFree(_)
+                            | Annotation::InvalidHandle(_)
+                            | Annotation::FreeWith(_)
+                            | Annotation::DoNotRelease
+                            | Annotation::NotNullTerminated
+                            | Annotation::NullNullTerminated
+                            | Annotation::AssociatedEnum(_)
+                    )
+                });
+            insert_annotations(
+                annotations,
+                AnnotationTarget::Method {
+                    declaration: origin.clone(),
+                    index: method_index,
+                },
+                declaration,
+            );
+            insert_annotations(
+                annotations,
+                AnnotationTarget::MethodReturn {
+                    declaration: origin.clone(),
+                    index: method_index,
+                },
+                result,
+            );
+            for (parameter_index, parameter) in cursor_children(method)
+                .into_iter()
+                .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_ParmDecl)
+                .enumerate()
+            {
+                insert_annotations(
+                    annotations,
+                    AnnotationTarget::MethodParameter {
+                        declaration: origin.clone(),
+                        method: method_index,
+                        parameter: parameter_index,
+                    },
+                    annotation_values(parameter, macros)?,
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collect_record_field_annotations(
+    cursor: CXCursor,
+    origin: &Origin,
+    macros: &MacroDefinitions,
+    annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    prefix: &[usize],
+) -> Result<(), Error> {
+    let mut index = 0;
+    for child in cursor_children(cursor) {
+        match unsafe { clang_getCursorKind(child) } {
+            CXCursor_CXXBaseSpecifier => index += 1,
+            CXCursor_FieldDecl => {
+                let target = if prefix.is_empty() {
+                    AnnotationTarget::Field {
+                        declaration: origin.clone(),
+                        index,
+                    }
+                } else {
+                    let mut path = prefix.to_vec();
+                    path.push(index);
+                    AnnotationTarget::NestedField {
+                        declaration: origin.clone(),
+                        path,
+                    }
+                };
+                insert_annotations(annotations, target, annotation_values(child, macros)?);
+                index += 1;
+            }
+            CXCursor_StructDecl | CXCursor_UnionDecl
+                if unsafe { clang_Cursor_isAnonymousRecordDecl(child) } != 0 =>
+            {
+                let mut path = prefix.to_vec();
+                path.push(index);
+                collect_record_field_annotations(child, origin, macros, annotations, &path)?;
+                index += 1;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn insert_annotations(
+    annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    target: AnnotationTarget,
+    values: Vec<Annotation>,
+) {
+    if values.is_empty() {
+        return;
+    }
+    annotations.entry(target).or_default().extend(values);
+}
+
+fn merge_redeclaration_annotations(
+    facts: &[Fact],
+    annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+) -> Result<(), Error> {
+    let facts_by_origin: HashMap<_, _> = facts.iter().map(|fact| (&fact.origin, fact)).collect();
+    let annotated_keys: BTreeSet<_> = annotations
+        .keys()
+        .filter_map(|target| facts_by_origin.get(annotation_target_origin(target)))
+        .map(|fact| (fact.kind, fact.name.as_str()))
+        .collect();
+    let mut candidates: BTreeMap<(FactKind, &str), Vec<&Fact>> = BTreeMap::new();
+    for fact in facts {
+        let key = (fact.kind, fact.name.as_str());
+        if annotated_keys.contains(&key) {
+            candidates.entry(key).or_default().push(fact);
+        }
+    }
+
+    for ((_, name), candidates) in candidates {
+        let mut groups: Vec<Vec<&Fact>> = vec![];
+        for candidate in candidates {
+            if let Some(group) = groups.iter_mut().find(|group| {
+                group.iter().all(|fact| {
+                    annotation_declarations_compatible(fact, candidate, &facts_by_origin)
+                })
+            }) {
+                group.push(candidate);
+            } else {
+                groups.push(vec![candidate]);
+            }
+        }
+
+        for group in groups {
+            if !group.iter().any(|fact| fact.root) {
+                continue;
+            }
+            let origins: BTreeSet<_> = group.iter().map(|fact| fact.origin.clone()).collect();
+            let mut slots: BTreeMap<AnnotationSlot, Vec<Annotation>> = BTreeMap::new();
+            for (target, values) in annotations.iter() {
+                if origins.contains(annotation_target_origin(target)) {
+                    slots
+                        .entry(annotation_target_slot(target))
+                        .or_default()
+                        .extend(values.iter().cloned());
+                }
+            }
+            for (slot, values) in slots {
+                let values = merge_annotation_values(values, name)?;
+                for origin in &origins {
+                    annotations.insert(
+                        annotation_slot_target(origin.clone(), slot.clone()),
+                        values.clone(),
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn annotation_declarations_compatible(
+    left: &Fact,
+    right: &Fact,
+    facts: &HashMap<&Origin, &Fact>,
+) -> bool {
+    if left.kind != right.kind
+        || left.name != right.name
+        || annotation_parent_path(left, facts) != annotation_parent_path(right, facts)
+    {
+        return false;
+    }
+    match (&left.data, &right.data) {
+        (
+            FactData::Function {
+                link_name: left_link,
+                convention: left_convention,
+                params: left_params,
+                result: left_result,
+                variadic: left_variadic,
+                noreturn: left_noreturn,
+            },
+            FactData::Function {
+                link_name: right_link,
+                convention: right_convention,
+                params: right_params,
+                result: right_result,
+                variadic: right_variadic,
+                noreturn: right_noreturn,
+            },
+        ) => {
+            left_link == right_link
+                && left_convention == right_convention
+                && left_variadic == right_variadic
+                && left_noreturn == right_noreturn
+                && annotation_params_compatible(left_params, right_params)
+                && annotation_types_compatible(left_result, right_result)
+        }
+        (
+            FactData::Callback {
+                convention: left_convention,
+                params: left_params,
+                result: left_result,
+            },
+            FactData::Callback {
+                convention: right_convention,
+                params: right_params,
+                result: right_result,
+            },
+        ) => {
+            left_convention == right_convention
+                && annotation_params_compatible(left_params, right_params)
+                && annotation_types_compatible(left_result, right_result)
+        }
+        (
+            FactData::Typedef {
+                target: left_target,
+            },
+            FactData::Typedef {
+                target: right_target,
+            },
+        ) => annotation_types_compatible(left_target, right_target),
+        (
+            FactData::Enum {
+                repr: left_repr,
+                variants: left_variants,
+                fixed: left_fixed,
+                scoped: left_scoped,
+            },
+            FactData::Enum {
+                repr: right_repr,
+                variants: right_variants,
+                fixed: right_fixed,
+                scoped: right_scoped,
+            },
+        ) => {
+            left_repr == right_repr
+                && left_fixed == right_fixed
+                && left_scoped == right_scoped
+                && (!left.definition || !right.definition || left_variants == right_variants)
+        }
+        (
+            FactData::Record {
+                base: left_base,
+                fields: left_fields,
+                size: left_size,
+                align: left_align,
+                packing: left_packing,
+                alignment: left_alignment,
+                union: left_union,
+            },
+            FactData::Record {
+                base: right_base,
+                fields: right_fields,
+                size: right_size,
+                align: right_align,
+                packing: right_packing,
+                alignment: right_alignment,
+                union: right_union,
+            },
+        ) => {
+            left_union == right_union
+                && (!left.definition
+                    || !right.definition
+                    || (left_size == right_size
+                        && left_align == right_align
+                        && left_packing == right_packing
+                        && left_alignment == right_alignment
+                        && annotation_optional_types_compatible(left_base, right_base)
+                        && annotation_fields_compatible(left_fields, right_fields)))
+        }
+        (
+            FactData::Interface {
+                base: left_base,
+                guid: left_guid,
+                methods: left_methods,
+            },
+            FactData::Interface {
+                base: right_base,
+                guid: right_guid,
+                methods: right_methods,
+            },
+        ) => {
+            (!left.definition || !right.definition)
+                || (left_guid == right_guid
+                    && annotation_optional_types_compatible(left_base, right_base)
+                    && annotation_methods_compatible(left_methods, right_methods))
+        }
+        (FactData::None, FactData::Record { .. } | FactData::Interface { .. })
+        | (FactData::Record { .. } | FactData::Interface { .. }, FactData::None)
+            if !left.root || !right.root =>
+        {
+            true
+        }
+        _ => left.data == right.data,
+    }
+}
+
+fn annotation_parent_path(fact: &Fact, facts: &HashMap<&Origin, &Fact>) -> Vec<(FactKind, String)> {
+    let mut result = vec![];
+    let mut parent = fact.parent.as_ref();
+    while let Some(origin) = parent {
+        let Some(fact) = facts.get(origin) else {
+            break;
+        };
+        result.push((fact.kind, fact.name.clone()));
+        parent = fact.parent.as_ref();
+    }
+    result.reverse();
+    result
+}
+
+fn annotation_params_compatible(left: &[Parameter], right: &[Parameter]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left, right)| annotation_types_compatible(&left.ty, &right.ty))
+}
+
+fn annotation_fields_compatible(left: &[Field], right: &[Field]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.name == right.name
+                && left.offset == right.offset
+                && left.align == right.align
+                && left.size == right.size
+                && left.bit_width == right.bit_width
+                && annotation_types_compatible(&left.ty, &right.ty)
+        })
+}
+
+fn annotation_methods_compatible(left: &[Method], right: &[Method]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.name == right.name
+                && left.special == right.special
+                && annotation_params_compatible(&left.params, &right.params)
+                && annotation_types_compatible(&left.result, &right.result)
+        })
+}
+
+fn annotation_optional_types_compatible(left: &Option<TypeRef>, right: &Option<TypeRef>) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => annotation_types_compatible(left, right),
+        _ => false,
+    }
+}
+
+fn annotation_types_compatible(left: &TypeRef, right: &TypeRef) -> bool {
+    match (left, right) {
+        (TypeRef::Void, TypeRef::Void)
+        | (TypeRef::String, TypeRef::String)
+        | (TypeRef::Object, TypeRef::Object) => true,
+        (TypeRef::Scalar(left), TypeRef::Scalar(right)) => left == right,
+        (
+            TypeRef::Named {
+                name: left_name, ..
+            },
+            TypeRef::Named {
+                name: right_name, ..
+            },
+        ) => left_name == right_name,
+        (
+            TypeRef::Pointer {
+                mutable: left_mutable,
+                target: left_target,
+            },
+            TypeRef::Pointer {
+                mutable: right_mutable,
+                target: right_target,
+            },
+        )
+        | (
+            TypeRef::Reference {
+                mutable: left_mutable,
+                target: left_target,
+            },
+            TypeRef::Reference {
+                mutable: right_mutable,
+                target: right_target,
+            },
+        ) => {
+            left_mutable == right_mutable && annotation_types_compatible(left_target, right_target)
+        }
+        (
+            TypeRef::FunctionPointer {
+                convention: left_convention,
+                params: left_params,
+                result: left_result,
+            },
+            TypeRef::FunctionPointer {
+                convention: right_convention,
+                params: right_params,
+                result: right_result,
+            },
+        ) => {
+            left_convention == right_convention
+                && left_params.len() == right_params.len()
+                && left_params
+                    .iter()
+                    .zip(right_params)
+                    .all(|(left, right)| annotation_types_compatible(left, right))
+                && annotation_types_compatible(left_result, right_result)
+        }
+        (
+            TypeRef::OpaquePointer {
+                mutable: left_mutable,
+                tag: left_tag,
+            },
+            TypeRef::OpaquePointer {
+                mutable: right_mutable,
+                tag: right_tag,
+            },
+        ) => left_mutable == right_mutable && left_tag == right_tag,
+        (
+            TypeRef::Array {
+                target: left_target,
+                len: left_len,
+            },
+            TypeRef::Array {
+                target: right_target,
+                len: right_len,
+            },
+        ) => left_len == right_len && annotation_types_compatible(left_target, right_target),
+        (
+            TypeRef::Generic {
+                name: left_name,
+                args: left_args,
+                ..
+            },
+            TypeRef::Generic {
+                name: right_name,
+                args: right_args,
+                ..
+            },
+        ) => {
+            left_name == right_name
+                && left_args.len() == right_args.len()
+                && left_args
+                    .iter()
+                    .zip(right_args)
+                    .all(|(left, right)| annotation_types_compatible(left, right))
+        }
+        (TypeRef::InlineRecord(left), TypeRef::InlineRecord(right)) => {
+            left.name == right.name
+                && left.size == right.size
+                && left.align == right.align
+                && left.packing == right.packing
+                && left.alignment == right.alignment
+                && left.union == right.union
+                && annotation_optional_types_compatible(&left.base, &right.base)
+                && annotation_fields_compatible(&left.fields, &right.fields)
+        }
+        _ => false,
+    }
+}
+
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+enum AnnotationSlot {
+    Declaration,
+    Return,
+    Parameter(usize),
+    Field(usize),
+    NestedField(Vec<usize>),
+    Variant(usize),
+    Method(usize),
+    MethodReturn(usize),
+    MethodParameter(usize, usize),
+}
+
+fn annotation_target_origin(target: &AnnotationTarget) -> &Origin {
+    match target {
+        AnnotationTarget::Declaration(origin) | AnnotationTarget::Return(origin) => origin,
+        AnnotationTarget::Parameter { declaration, .. }
+        | AnnotationTarget::Field { declaration, .. }
+        | AnnotationTarget::NestedField { declaration, .. }
+        | AnnotationTarget::Variant { declaration, .. }
+        | AnnotationTarget::Method { declaration, .. }
+        | AnnotationTarget::MethodReturn { declaration, .. }
+        | AnnotationTarget::MethodParameter { declaration, .. } => declaration,
+    }
+}
+
+fn annotation_target_slot(target: &AnnotationTarget) -> AnnotationSlot {
+    match target {
+        AnnotationTarget::Declaration(_) => AnnotationSlot::Declaration,
+        AnnotationTarget::Return(_) => AnnotationSlot::Return,
+        AnnotationTarget::Parameter { index, .. } => AnnotationSlot::Parameter(*index),
+        AnnotationTarget::Field { index, .. } => AnnotationSlot::Field(*index),
+        AnnotationTarget::NestedField { path, .. } => AnnotationSlot::NestedField(path.clone()),
+        AnnotationTarget::Variant { index, .. } => AnnotationSlot::Variant(*index),
+        AnnotationTarget::Method { index, .. } => AnnotationSlot::Method(*index),
+        AnnotationTarget::MethodReturn { index, .. } => AnnotationSlot::MethodReturn(*index),
+        AnnotationTarget::MethodParameter {
+            method, parameter, ..
+        } => AnnotationSlot::MethodParameter(*method, *parameter),
+    }
+}
+
+fn annotation_slot_target(origin: Origin, slot: AnnotationSlot) -> AnnotationTarget {
+    match slot {
+        AnnotationSlot::Declaration => AnnotationTarget::Declaration(origin),
+        AnnotationSlot::Return => AnnotationTarget::Return(origin),
+        AnnotationSlot::Parameter(index) => AnnotationTarget::Parameter {
+            declaration: origin,
+            index,
+        },
+        AnnotationSlot::Field(index) => AnnotationTarget::Field {
+            declaration: origin,
+            index,
+        },
+        AnnotationSlot::NestedField(path) => AnnotationTarget::NestedField {
+            declaration: origin,
+            path,
+        },
+        AnnotationSlot::Variant(index) => AnnotationTarget::Variant {
+            declaration: origin,
+            index,
+        },
+        AnnotationSlot::Method(index) => AnnotationTarget::Method {
+            declaration: origin,
+            index,
+        },
+        AnnotationSlot::MethodReturn(index) => AnnotationTarget::MethodReturn {
+            declaration: origin,
+            index,
+        },
+        AnnotationSlot::MethodParameter(method, parameter) => AnnotationTarget::MethodParameter {
+            declaration: origin,
+            method,
+            parameter,
+        },
+    }
+}
+
+fn merge_annotation_values(
+    mut values: Vec<Annotation>,
+    declaration: &str,
+) -> Result<Vec<Annotation>, Error> {
+    let import_library = values
+        .iter()
+        .find(|value| matches!(value, Annotation::ImportLibrary(_)))
+        .cloned();
+    values.retain(|value| !matches!(value, Annotation::ImportLibrary(_)));
+    if let Some(import_library) = import_library {
+        values.push(import_library);
+    }
+    values.sort();
+    values.dedup();
+    let mut keys = BTreeMap::<&'static str, &Annotation>::new();
+    for value in &values {
+        let key = annotation_key(value);
+        if annotation_is_repeatable(value) {
+            continue;
+        }
+        if let Some(previous) = keys.insert(key, value)
+            && previous != value
+        {
+            return Err(Error(format!(
+                "conflicting redeclaration annotation `{key}` on `{declaration}`: \
+                 {previous:?} vs {value:?}"
+            )));
+        }
+    }
+    Ok(values)
+}
+
+fn annotation_key(annotation: &Annotation) -> &'static str {
+    match annotation {
+        Annotation::SetLastError => "set_last_error",
+        Annotation::ImportLibrary(_) => "import_library",
+        Annotation::PreserveResult => "preserve_result",
+        Annotation::RaiiFree(_) => "raii_free",
+        Annotation::InvalidHandle(_) => "invalid_handle",
+        Annotation::FreeWith(_) => "free_with",
+        Annotation::DoNotRelease => "do_not_release",
+        Annotation::NotNullTerminated => "not_null_terminated",
+        Annotation::NullNullTerminated => "null_null_terminated",
+        Annotation::ArrayCountParam(_) => "array_count_param",
+        Annotation::ArrayCountConst(_) => "array_count_const",
+        Annotation::ArrayCountField(_) => "array_count_field",
+        Annotation::MemorySizeParam(_) => "memory_size_param",
+        Annotation::CanReturnErrorsAsSuccess => "can_return_errors_as_success",
+        Annotation::CanReturnMultipleSuccessValues => "can_return_multiple_success_values",
+        Annotation::Retained => "retained",
+        Annotation::IgnoreIfReturn(_) => "ignore_if_return",
+        Annotation::AlsoUsableFor(_) => "also_usable_for",
+        Annotation::AssociatedEnum(_) => "associated_enum",
+        Annotation::AssociatedConstant(_) => "associated_constant",
+        Annotation::NativeInheritance(_) => "native_inheritance",
+        Annotation::StructSizeField(_) => "struct_size_field",
+        Annotation::NativeEncoding(_) => "native_encoding",
+        Annotation::Ansi => "ansi",
+        Annotation::Unicode => "unicode",
+        Annotation::Agile => "agile",
+        Annotation::Const => "const",
+        Annotation::StaticLibrary(_) => "static_library",
+        Annotation::SupportedOs(_) => "supported_os",
+        Annotation::In => "in",
+        Annotation::Out => "out",
+        Annotation::Optional => "optional",
+        Annotation::Reserved => "reserved",
+        Annotation::ComOutPtr => "com_out_ptr",
+        Annotation::Retval => "retval",
+    }
+}
+
+fn annotation_is_repeatable(annotation: &Annotation) -> bool {
+    matches!(
+        annotation,
+        Annotation::InvalidHandle(_)
+            | Annotation::AssociatedConstant(_)
+            | Annotation::SupportedOs(_)
+    )
+}
+
+fn annotation_macro_names(
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+) -> BTreeSet<String> {
+    annotations
+        .values()
+        .flatten()
+        .filter_map(|annotation| match annotation {
+            Annotation::AssociatedConstant(name) => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn associated_constant_names(
+    facts: &[Fact],
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+) -> BTreeSet<String> {
+    let roots: HashSet<_> = facts
+        .iter()
+        .filter(|fact| fact.root && fact.kind == FactKind::Enum)
+        .map(|fact| &fact.origin)
+        .collect();
+    annotations
+        .iter()
+        .filter(|(target, _)| {
+            matches!(target, AnnotationTarget::Declaration(origin) if roots.contains(origin))
+        })
+        .flat_map(|(_, values)| values)
+        .filter_map(|annotation| match annotation {
+            Annotation::AssociatedConstant(name) => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn validate_associated_constants(
+    names: &BTreeSet<String>,
+    constants: &[Constant],
+) -> Result<(), Error> {
+    for name in names {
+        let providers: BTreeSet<_> = constants
+            .iter()
+            .filter(|constant| constant.name == *name)
+            .map(|constant| constant.spelling.file.as_str())
+            .collect();
+        if providers.is_empty() {
+            return Err(Error(format!(
+                "associated constant `{name}` has no source provider"
+            )));
+        }
+        if providers.len() != 1 {
+            return Err(Error(format!(
+                "associated constant `{name}` has multiple source providers"
+            )));
+        }
+        if constants
+            .iter()
+            .filter(|constant| constant.name == *name)
+            .any(|constant| matches!(constant.value, Value::Utf8(_) | Value::Utf16(_)))
+        {
+            return Err(Error(format!(
+                "associated constant `{name}` is not a native integer constant"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn resolve_annotation_macro_integer(
+    name: &str,
+    macros: &MacroDefinitions,
+    before: usize,
+    location: Option<&Location>,
+    seen: &mut BTreeSet<String>,
+) -> Option<i64> {
+    if !seen.insert(name.to_string()) {
+        return None;
+    }
+    let result = (|| {
+        let (tokens, function_like) = macros.definition_before(name, before, location)?;
+        if function_like {
+            return None;
+        }
+        AnnotationExpression::new(tokens, macros, before, location, seen).parse()
+    })();
+    seen.remove(name);
+    result
+}
+
+struct AnnotationExpression<'a, 'tu> {
+    tokens: &'a [String],
+    index: usize,
+    macros: &'a MacroDefinitions<'tu>,
+    before: usize,
+    location: Option<&'a Location>,
+    seen: &'a mut BTreeSet<String>,
+}
+
+impl<'a, 'tu> AnnotationExpression<'a, 'tu> {
+    fn new(
+        tokens: &'a [String],
+        macros: &'a MacroDefinitions<'tu>,
+        before: usize,
+        location: Option<&'a Location>,
+        seen: &'a mut BTreeSet<String>,
+    ) -> Self {
+        Self {
+            tokens,
+            index: 0,
+            macros,
+            before,
+            location,
+            seen,
+        }
+    }
+
+    fn parse(mut self) -> Option<i64> {
+        let value = self.conditional()?;
+        (self.index == self.tokens.len()).then_some(value)
+    }
+
+    fn conditional(&mut self) -> Option<i64> {
+        let condition = self.binary(1)?;
+        if !self.consume("?") {
+            return Some(condition);
+        }
+        let when_true = self.conditional()?;
+        self.expect(":")?;
+        let when_false = self.conditional()?;
+        Some(if condition != 0 {
+            when_true
+        } else {
+            when_false
+        })
+    }
+
+    fn binary(&mut self, minimum_precedence: u8) -> Option<i64> {
+        let mut left = self.unary()?;
+        while let Some((precedence, operator)) = self.peek().and_then(annotation_binary_precedence)
+        {
+            if precedence < minimum_precedence {
+                break;
+            }
+            self.index += 1;
+            let right = self.binary(precedence + 1)?;
+            left = annotation_binary(operator, left, right)?;
+        }
+        Some(left)
+    }
+
+    fn unary(&mut self) -> Option<i64> {
+        if self.consume("+") {
+            return self.unary();
+        }
+        if self.consume("-") {
+            return Some(self.unary()?.wrapping_neg());
+        }
+        if self.consume("~") {
+            return Some(!self.unary()?);
+        }
+        if self.consume("!") {
+            return Some(i64::from(self.unary()? == 0));
+        }
+        if self.peek() == Some("(")
+            && let Some(close) = self.matching_close(self.index)
+            && self.is_cast(self.index + 1, close)
+        {
+            self.index = close + 1;
+            return self.unary();
+        }
+        if self.consume("(") {
+            let value = self.conditional()?;
+            self.expect(")")?;
+            return Some(value);
+        }
+        let token = self.peek()?.to_string();
+        self.index += 1;
+        parse_annotation_integer(&token).or_else(|| {
+            is_c_identifier(&token).then(|| {
+                resolve_annotation_macro_integer(
+                    &token,
+                    self.macros,
+                    self.before,
+                    self.location,
+                    self.seen,
+                )
+            })?
+        })
+    }
+
+    fn is_cast(&mut self, start: usize, end: usize) -> bool {
+        if start == end {
+            return false;
+        }
+        let tokens = &self.tokens[start..end];
+        if tokens.len() == 1
+            && is_c_identifier(&tokens[0])
+            && resolve_annotation_macro_integer(
+                &tokens[0],
+                self.macros,
+                self.before,
+                self.location,
+                self.seen,
+            )
+            .is_some()
+        {
+            return false;
+        }
+        tokens.iter().all(|token| {
+            is_c_identifier(token)
+                || matches!(
+                    token.as_str(),
+                    "*" | "const" | "volatile" | "signed" | "unsigned" | "long" | "short"
+                )
+        })
+    }
+
+    fn matching_close(&self, open: usize) -> Option<usize> {
+        let mut depth = 0;
+        for (index, token) in self.tokens.iter().enumerate().skip(open) {
+            match token.as_str() {
+                "(" => depth += 1,
+                ")" => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(index);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    fn peek(&self) -> Option<&str> {
+        self.tokens.get(self.index).map(String::as_str)
+    }
+
+    fn consume(&mut self, token: &str) -> bool {
+        if self.peek() == Some(token) {
+            self.index += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn expect(&mut self, token: &str) -> Option<()> {
+        self.consume(token).then_some(())
+    }
+}
+
+fn annotation_binary_precedence(operator: &str) -> Option<(u8, &'static str)> {
+    Some(match operator {
+        "||" => (1, "||"),
+        "&&" => (2, "&&"),
+        "|" => (3, "|"),
+        "^" => (4, "^"),
+        "&" => (5, "&"),
+        "==" => (6, "=="),
+        "!=" => (6, "!="),
+        "<" => (7, "<"),
+        "<=" => (7, "<="),
+        ">" => (7, ">"),
+        ">=" => (7, ">="),
+        "<<" => (8, "<<"),
+        ">>" => (8, ">>"),
+        "+" => (9, "+"),
+        "-" => (9, "-"),
+        "*" => (10, "*"),
+        "/" => (10, "/"),
+        "%" => (10, "%"),
+        _ => return None,
+    })
+}
+
+fn annotation_binary(operator: &str, left: i64, right: i64) -> Option<i64> {
+    Some(match operator {
+        "||" => i64::from(left != 0 || right != 0),
+        "&&" => i64::from(left != 0 && right != 0),
+        "|" => left | right,
+        "^" => left ^ right,
+        "&" => left & right,
+        "==" => i64::from(left == right),
+        "!=" => i64::from(left != right),
+        "<" => i64::from(left < right),
+        "<=" => i64::from(left <= right),
+        ">" => i64::from(left > right),
+        ">=" => i64::from(left >= right),
+        "<<" => left.wrapping_shl(right.try_into().ok()?),
+        ">>" => left.wrapping_shr(right.try_into().ok()?),
+        "+" => left.wrapping_add(right),
+        "-" => left.wrapping_sub(right),
+        "*" => left.wrapping_mul(right),
+        "/" => left.checked_div(right)?,
+        "%" => left.checked_rem(right)?,
+        _ => return None,
+    })
+}
+
+fn parse_annotation_integer(value: &str) -> Option<i64> {
+    let value = value.trim();
+    let (negative, value) = if let Some(value) = value.strip_prefix('-') {
+        (true, value)
+    } else if let Some(value) = value.strip_prefix('+') {
+        (false, value)
+    } else {
+        (false, value)
+    };
+    let value = value.trim_end_matches(['u', 'U', 'l', 'L']);
+    let magnitude = if let Some(value) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        i64::from_str_radix(value, 16).ok()?
+    } else {
+        value.parse().ok()?
+    };
+    Some(if negative { -magnitude } else { magnitude })
+}
+
 fn parameter_annotation(cursor: CXCursor) -> ParamAnnotation {
     let mut result = ParamAnnotation::default();
     for child in cursor_children(cursor) {
@@ -3043,6 +4680,21 @@ fn parameter_annotation(cursor: CXCursor) -> ParamAnnotation {
         }
 
         let annotation = cx_string(unsafe { clang_getCursorSpelling(child) });
+        if annotation == "win32metadata:in" {
+            result.input = true;
+        }
+        if annotation == "win32metadata:out" {
+            result.output = true;
+        }
+        if annotation == "win32metadata:optional" {
+            result.optional = true;
+        }
+        if annotation == "win32metadata:reserved" {
+            result.reserved = true;
+        }
+        if annotation == "win32metadata:com_out_ptr" {
+            result.com_out_ptr = is_void_double_pointer(unsafe { clang_getCursorType(cursor) });
+        }
         if annotation.starts_with("_In_") || annotation.starts_with("_Inout_") {
             result.input = true;
         }
@@ -3306,7 +4958,11 @@ fn source_calling_convention(
         })
 }
 
-fn inline_record(cursor: CXCursor, union: bool) -> Result<InlineRecord, String> {
+fn inline_record(
+    cursor: CXCursor,
+    union: bool,
+    macros: Option<&MacroDefinitions>,
+) -> Result<InlineRecord, String> {
     let mut base = None;
     let mut base_count = 0;
     let mut fields: Vec<Field> = vec![];
@@ -3354,6 +5010,12 @@ fn inline_record(cursor: CXCursor, union: bool) -> Result<InlineRecord, String> 
                 )
             })?;
             preserve_named_function_type(child, &mut ty);
+            if let TypeRef::FunctionPointer { convention, .. } = &mut ty
+                && let Some(source) =
+                    macros.and_then(|macros| source_calling_convention(child, macros))
+            {
+                *convention = source;
+            }
             let bit_width = if unsafe { clang_Cursor_isBitField(child) } != 0 {
                 let width = unsafe { clang_getFieldDeclBitWidth(child) };
                 if width < 0 {
@@ -3386,7 +5048,7 @@ fn inline_record(cursor: CXCursor, union: bool) -> Result<InlineRecord, String> 
         } else if matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
             && unsafe { clang_Cursor_isAnonymousRecordDecl(child) } != 0
         {
-            let nested = inline_record(child, kind == CXCursor_UnionDecl)?;
+            let nested = inline_record(child, kind == CXCursor_UnionDecl, macros)?;
             let (promoted, relative) = promoted_members(&nested)
                 .into_iter()
                 .find_map(|(member, relative)| {
@@ -3509,7 +5171,7 @@ fn type_ref(ty: CXType) -> Option<TypeRef> {
             if matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
                 && cx_string(unsafe { clang_getTypeSpelling(ty) }).contains("(unnamed at ")
             {
-                return inline_record(declaration, kind == CXCursor_UnionDecl)
+                return inline_record(declaration, kind == CXCursor_UnionDecl, None)
                     .ok()
                     .map(|record| TypeRef::InlineRecord(Box::new(record)));
             }
@@ -3603,7 +5265,7 @@ fn type_ref(ty: CXType) -> Option<TypeRef> {
                 || cx_string(unsafe { clang_getCursorSpelling(declaration) }).is_empty()
                 || spelling.contains("(unnamed at "))
         {
-            return inline_record(declaration, kind == CXCursor_UnionDecl)
+            return inline_record(declaration, kind == CXCursor_UnionDecl, None)
                 .ok()
                 .map(|record| TypeRef::InlineRecord(Box::new(record)));
         }
@@ -3631,7 +5293,7 @@ fn type_ref(ty: CXType) -> Option<TypeRef> {
         if matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
             && cx_string(unsafe { clang_getCursorSpelling(declaration) }).ends_with("__")
         {
-            return inline_record(declaration, kind == CXCursor_UnionDecl)
+            return inline_record(declaration, kind == CXCursor_UnionDecl, None)
                 .ok()
                 .map(|record| TypeRef::InlineRecord(Box::new(record)));
         }
