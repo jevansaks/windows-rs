@@ -554,6 +554,8 @@ fn evaluate_invalid_handle_values(
 pub struct Clang {
     input: Vec<PathBuf>,
     input_text: Vec<String>,
+    input_ast: Vec<(PathBuf, PathBuf)>,
+    input_text_ast: Vec<(String, PathBuf)>,
     reference: Vec<PathBuf>,
     output: PathBuf,
     namespace: String,
@@ -635,6 +637,20 @@ impl Clang {
         for input in inputs {
             self.input_text(input.as_ref());
         }
+        self
+    }
+
+    /// Adds a serialized translation unit with its original source file path.
+    pub fn input_ast(&mut self, source: impl AsRef<Path>, ast: impl AsRef<Path>) -> &mut Self {
+        self.input_ast
+            .push((source.as_ref().to_path_buf(), ast.as_ref().to_path_buf()));
+        self
+    }
+
+    /// Adds a serialized translation unit with its original inline source text.
+    pub fn input_text_ast(&mut self, source: &str, ast: impl AsRef<Path>) -> &mut Self {
+        self.input_text_ast
+            .push((source.to_string(), ast.as_ref().to_path_buf()));
         self
     }
 
@@ -933,6 +949,41 @@ impl Clang {
         Ok(lib.version())
     }
 
+    /// Parses exactly one source input and saves its serialized translation unit.
+    pub fn save_translation_unit(&self, output: impl AsRef<Path>) -> Result<(), Error> {
+        if !self.input_ast.is_empty() || !self.input_text_ast.is_empty() {
+            return Err(Error::new(
+                "save_translation_unit accepts source inputs only",
+                "",
+                0,
+                0,
+            ));
+        }
+
+        let h_paths = expand_header_inputs(&self.input)?;
+        if h_paths.len() + self.input_text.len() != 1 {
+            return Err(Error::new(
+                "save_translation_unit requires exactly one source input",
+                "",
+                0,
+                0,
+            ));
+        }
+
+        let _library = Library::new()?;
+        let index = Index::new()?;
+        let args = self.clang_args();
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let input = match (h_paths.first(), self.input_text.first()) {
+            (Some(path), None) => ParseInput::File(path),
+            (None, Some(text)) => ParseInput::Text(text),
+            _ => unreachable!(),
+        };
+        let (_, _, tu) = parse_input(input, &index, &arg_refs)?;
+        tu.save(output.as_ref())?;
+        Ok(())
+    }
+
     /// Generates the RDL and writes it to the configured output.
     pub fn write(&self) -> Result<(), Error> {
         self.validate_output()?;
@@ -972,6 +1023,15 @@ impl Clang {
         }
     }
 
+    fn clang_args(&self) -> Vec<String> {
+        self.target
+            .as_ref()
+            .map(|t| format!("--target={t}"))
+            .into_iter()
+            .chain(self.args.iter().cloned())
+            .collect()
+    }
+
     /// Parses inputs once and returns the libclang state that keeps the TUs valid.
     fn parse_inputs(&self) -> Result<ParsedInputs, Error> {
         let h_paths = expand_header_inputs(&self.input)?;
@@ -979,13 +1039,7 @@ impl Clang {
         let index = Index::new()?;
 
         // Put `--target=` before user args.
-        let args: Vec<String> = self
-            .target
-            .as_ref()
-            .map(|t| format!("--target={t}"))
-            .into_iter()
-            .chain(self.args.iter().cloned())
-            .collect();
+        let args = self.clang_args();
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
         let inputs: Vec<_> = h_paths
@@ -1028,6 +1082,32 @@ impl Clang {
                 ParseInputKind::File => h_tus.push((parsed.source, parsed.tu)),
                 ParseInputKind::Text => str_tus.push((parsed.source, parsed.tu)),
             }
+        }
+        for (source, ast) in &self.input_ast {
+            let source = source.to_str().ok_or_else(|| {
+                Error::new(
+                    "input path is not valid UTF-8",
+                    &source.to_string_lossy(),
+                    0,
+                    0,
+                )
+            })?;
+            h_tus.push((
+                source.replace('\\', "/"),
+                OwnedTranslationUnit {
+                    tu: index.load(ast)?,
+                    _index: None,
+                },
+            ));
+        }
+        for (source, ast) in &self.input_text_ast {
+            str_tus.push((
+                source.clone(),
+                OwnedTranslationUnit {
+                    tu: index.load(ast)?,
+                    _index: None,
+                },
+            ));
         }
 
         Ok(ParsedInputs {

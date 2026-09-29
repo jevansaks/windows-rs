@@ -50,6 +50,7 @@ emitted as declarations owned by the input header. List each owning header expli
 | Builder input | Purpose |
 | --- | --- |
 | `input`, `inputs` | `.h`, `.hpp`, `.hxx`, or `.hh` files, or directories containing them. |
+| `input_ast`, `input_text_ast` | Serialized TUs plus their original source identity. |
 | `arg`, `args`, `target` | libclang language, include, define, extension, and target options. |
 | `parallelism` | Maximum concurrent translation-unit parsing workers; defaults to one. |
 | `reference*` | Existing metadata used for type resolution and duplicate suppression. |
@@ -173,6 +174,14 @@ translation units share one libclang index. With higher parallelism, a fixed num
 workers parse ordered input batches. Each returned translation unit owns the index that created it,
 and the parsed input keeps libclang loaded until all translation units and indexes are dropped.
 Collection, ownership, reachability, constant resolution, and emission remain serial.
+
+`save_translation_unit` parses exactly one file or inline source and writes a libclang AST file.
+Another process can load ASTs with `input_ast` or `input_text_ast`. The caller also supplies the
+original source path or text because macro and invalid-handle evaluation can reparse that source.
+The coordinator must use matching compiler arguments and access to the same included headers.
+Loaded translation units enter the same ordered collection and emission passes as directly parsed
+inputs; RDL files from separate processes must not be merged as a substitute. Clang AST files are
+version-specific, so producers and the coordinator must use the same pinned libclang build.
 
 ### Source model
 

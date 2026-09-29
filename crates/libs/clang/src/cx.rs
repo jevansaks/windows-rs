@@ -131,6 +131,39 @@ impl Index {
 
         Ok(TranslationUnit(tu))
     }
+
+    pub fn load(&self, input: &Path) -> Result<TranslationUnit, Error> {
+        let display = input.to_string_lossy();
+        if !input.is_file() {
+            return Err(Error::new(
+                "serialized translation unit does not exist",
+                &display,
+                0,
+                0,
+            ));
+        }
+        let source = input
+            .to_str()
+            .ok_or_else(|| Error::new("AST path is not valid UTF-8", &display, 0, 0))?;
+        let cinput =
+            CString::new(source).map_err(|_| Error::new("invalid AST path", source, 0, 0))?;
+        let mut tu = std::ptr::null_mut();
+        let result = unsafe { clang_createTranslationUnit2(self.0, cinput.as_ptr(), &mut tu) };
+
+        if result != CXError_Success || tu.is_null() {
+            let message = match result {
+                CXError_Failure | CXError_ASTReadError => {
+                    "failed to read serialized translation unit"
+                }
+                CXError_Crashed => "failed to load AST: libclang crashed",
+                CXError_InvalidArguments => "failed to load AST: invalid arguments",
+                _ => "failed to load AST",
+            };
+            return Err(Error::new(message, source, 0, 0));
+        }
+
+        Ok(TranslationUnit(tu))
+    }
 }
 
 impl Drop for Index {
@@ -142,6 +175,37 @@ impl Drop for Index {
 pub struct TranslationUnit(CXTranslationUnit);
 
 impl TranslationUnit {
+    pub fn save(&self, output: &Path) -> Result<(), Error> {
+        let display = output.to_string_lossy();
+        if let Some(parent) = output
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            std::fs::create_dir_all(parent)
+                .map_err(|_| Error::new("failed to create AST directory", &display, 0, 0))?;
+        }
+        let source = output
+            .to_str()
+            .ok_or_else(|| Error::new("AST path is not valid UTF-8", &display, 0, 0))?;
+        let coutput =
+            CString::new(source).map_err(|_| Error::new("invalid AST path", source, 0, 0))?;
+        let result = unsafe {
+            clang_saveTranslationUnit(self.0, coutput.as_ptr(), clang_defaultSaveOptions(self.0))
+        };
+
+        if result != CXSaveError_None {
+            let message = match result {
+                CXSaveError_Unknown => "failed to save AST: unknown error",
+                CXSaveError_TranslationErrors => "failed to save AST: translation unit has errors",
+                CXSaveError_InvalidTU => "failed to save AST: invalid translation unit",
+                _ => "failed to save AST",
+            };
+            return Err(Error::new(message, source, 0, 0));
+        }
+
+        Ok(())
+    }
+
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let mut diagnostics = vec![];
 

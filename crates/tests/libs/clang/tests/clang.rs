@@ -100,6 +100,146 @@ fn malformed_metadata_reports_its_role() {
 }
 
 #[test]
+fn serialized_translation_unit_loads_with_fresh_index() {
+    let _guard = test_clang::libclang_guard();
+    let scratch = std::path::Path::new(env!("OUT_DIR")).join("serialized_tu_round_trip");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let header = scratch.join("input.h");
+    let ast = scratch.join("input.ast");
+    let rdl = scratch.join("output.rdl");
+    std::fs::write(&header, "typedef int SavedType;").unwrap();
+
+    windows_clang::clang()
+        .input(&header)
+        .args(["-x", "c++"])
+        .save_translation_unit(&ast)
+        .unwrap();
+
+    windows_clang::clang()
+        .input_ast(&header, &ast)
+        .output(&rdl)
+        .namespace("Test")
+        .write()
+        .unwrap();
+
+    let rdl = std::fs::read_to_string(rdl).unwrap();
+    assert!(rdl.contains("type SavedType = i32"), "{rdl}");
+}
+
+#[test]
+fn independently_saved_translation_units_match_direct_parse() {
+    let _guard = test_clang::libclang_guard();
+    let scratch = std::path::Path::new(env!("OUT_DIR")).join("serialized_tu_global_passes");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let header = scratch.join("api.h");
+    let open_ast = scratch.join("open.ast");
+    let close_ast = scratch.join("close.ast");
+    let direct_rdl = scratch.join("direct");
+    let loaded_rdl = scratch.join("loaded");
+    std::fs::write(
+        &header,
+        r#"
+        typedef __int64 LONG_PTR;
+        typedef void *HANDLE;
+        #if PARTITION == 1
+        #define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
+        #define RAII_FREE(cleanup, invalid) \
+            __attribute__((annotate("win32metadata:raii_free=" #cleanup ", " #invalid)))
+        RAII_FREE(CloseResource, INVALID_HANDLE_VALUE)
+        HANDLE OpenResource(void);
+        #elif PARTITION == 2
+        int CloseResource(HANDLE resource);
+        #endif
+        "#,
+    )
+    .unwrap();
+    let open = "#define PARTITION 1\n#include <api.h>";
+    let close = "#define PARTITION 2\n#include <api.h>";
+    let include = format!("-I{}", scratch.display());
+    let args = [
+        "-x",
+        "c++",
+        "--target=x86_64-pc-windows-msvc",
+        "-fms-extensions",
+        &include,
+    ];
+
+    windows_clang::clang()
+        .input_text(open)
+        .args(args)
+        .save_translation_unit(&open_ast)
+        .unwrap();
+    windows_clang::clang()
+        .input_text(close)
+        .args(args)
+        .save_translation_unit(&close_ast)
+        .unwrap();
+
+    windows_clang::clang()
+        .input_text(open)
+        .input_text(close)
+        .args(args)
+        .namespace("Test")
+        .library("test.dll")
+        .output(&direct_rdl)
+        .scope_header("api")
+        .write_by_header()
+        .unwrap();
+    windows_clang::clang()
+        .input_text_ast(open, &open_ast)
+        .input_text_ast(close, &close_ast)
+        .args(args)
+        .namespace("Test")
+        .library("test.dll")
+        .output(&loaded_rdl)
+        .scope_header("api")
+        .write_by_header()
+        .unwrap();
+
+    let direct = std::fs::read_to_string(direct_rdl.join("api.rdl")).unwrap();
+    let loaded = std::fs::read_to_string(loaded_rdl.join("api.rdl")).unwrap();
+    assert_eq!(direct, loaded);
+    assert!(
+        loaded.contains(
+            "extern fn OpenResource() -> #[raii_free(\"CloseResource\")] #[invalid_handle(-1)]"
+        ),
+        "{loaded}"
+    );
+    assert!(loaded.contains("fn CloseResource("), "{loaded}");
+}
+
+#[test]
+fn serialized_translation_unit_errors_follow_input_order() {
+    let _guard = test_clang::libclang_guard();
+    let scratch = std::path::Path::new(env!("OUT_DIR")).join("serialized_tu_errors");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let first = scratch.join("first.ast");
+    let second = scratch.join("second.ast");
+    _ = std::fs::remove_file(&first);
+    std::fs::write(&second, "not an AST").unwrap();
+
+    let error = windows_clang::clang()
+        .input_ast("first.h", &first)
+        .input_ast("second.h", &second)
+        .output(scratch.join("output.rdl"))
+        .namespace("Test")
+        .write()
+        .unwrap_err();
+
+    assert_eq!(error.message, "serialized translation unit does not exist");
+    assert_eq!(error.file_name, first.to_string_lossy());
+
+    let error = windows_clang::clang()
+        .input_ast("second.h", &second)
+        .output(scratch.join("corrupt.rdl"))
+        .namespace("Test")
+        .write()
+        .unwrap_err();
+    assert_eq!(error.message, "failed to read serialized translation unit");
+    assert_eq!(error.file_name, second.to_string_lossy());
+}
+
+#[test]
 fn namespaced_hresult_survives_the_binding_round_trip() {
     let scratch = std::path::Path::new(env!("OUT_DIR")).join("namespaced_hresult");
     std::fs::create_dir_all(&scratch).unwrap();

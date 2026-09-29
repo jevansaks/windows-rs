@@ -29,3 +29,7 @@ windows_clang::clang()
 
 Independent input translation units are parsed serially by default. Use `.parallelism(n)` to allow
 at most `n` parsing workers while preserving input and output ordering.
+
+Distributed parsing can save one configured source input with `save_translation_unit`. A later
+coordinator supplies the original source identity with `input_ast` or `input_text_ast`, loads any
+number of saved translation units, and runs the normal global collection and emission passes.
