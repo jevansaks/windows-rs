@@ -17,8 +17,17 @@ pub(crate) fn evaluate_macros_parallel(
     source: MacroSource<'_>,
     args: &[&str],
 ) -> Result<Vec<Vec<Const>>, Error> {
+    let timer = timings::Timer::start();
     let n = all_consts.len();
     if n == 0 {
+        timer.report(
+            "evaluate_macros_parallel",
+            format_args!(
+                "input_kind={} requests=0 union_macros=0 workers=0 chunks=0 \
+                 synthetic_tus=0 retry_batches=0 constants=0",
+                macro_source_kind(source)
+            ),
+        );
         return Ok(vec![]);
     }
 
@@ -33,49 +42,56 @@ pub(crate) fn evaluate_macros_parallel(
         }
     }
 
-    // Each chunk is one synthetic TU, so the full closure is parsed once per worker.
-    let evaluated_union: Vec<Const> = if union.is_empty() {
-        vec![]
+    // Each initial chunk is one synthetic TU. Poison-macro retries can add more TUs.
+    let (evaluated_union, workers, chunks, synthetic_tus, retry_batches) = if union.is_empty() {
+        (vec![], 0, 0, 0, 0)
     } else {
         let workers = std::thread::available_parallelism()
             .map_or(1, |p| p.get())
             .min(union.len());
         let chunk_size = union.len().div_ceil(workers);
+        let chunks = union.len().div_ceil(chunk_size);
         let shared_library = Library::new()?.shared();
 
-        std::thread::scope(|scope| -> Result<Vec<Const>, Error> {
-            let handles: Vec<_> = union
-                .chunks(chunk_size)
-                .map(|chunk| {
-                    let shared_library = shared_library.clone();
-                    scope.spawn(move || -> Result<Vec<Const>, Error> {
-                        // clang-sys stores libclang in TLS, so each worker attaches the caller's
-                        // shared library handle for the duration of its libclang calls.
-                        let _library = Library::from_shared(shared_library);
-                        let index = Index::new()?;
-                        match source {
-                            MacroSource::File(input) => {
-                                Const::evaluate_macros(input, chunk, &index, args)
+        let (constants, synthetic_tus, retry_batches) =
+            std::thread::scope(|scope| -> Result<_, Error> {
+                let handles: Vec<_> = union
+                    .chunks(chunk_size)
+                    .map(|chunk| {
+                        let shared_library = shared_library.clone();
+                        scope.spawn(move || -> Result<MacroEvaluation, Error> {
+                            // clang-sys stores libclang in TLS, so each worker attaches the caller's
+                            // shared library handle for the duration of its libclang calls.
+                            let _library = Library::from_shared(shared_library);
+                            let index = Index::new()?;
+                            match source {
+                                MacroSource::File(input) => {
+                                    Const::evaluate_macros_counted(input, chunk, &index, args)
+                                }
+                                MacroSource::Str(content) => {
+                                    Const::evaluate_macros_str_counted(content, chunk, &index, args)
+                                }
                             }
-                            MacroSource::Str(content) => {
-                                Const::evaluate_macros_str(content, chunk, &index, args)
-                            }
-                        }
+                        })
                     })
-                })
-                .collect();
+                    .collect();
 
-            let mut all = vec![];
-            for handle in handles {
-                all.extend(
-                    handle
+                let mut all = vec![];
+                let mut synthetic_tus = 0;
+                let mut retry_batches = 0;
+                for handle in handles {
+                    let evaluation = handle
                         .join()
-                        .map_err(|_| Error::new("macro evaluation worker panicked", "", 0, 0))??,
-                );
-            }
-            Ok(all)
-        })?
+                        .map_err(|_| Error::new("macro evaluation worker panicked", "", 0, 0))??;
+                    synthetic_tus += evaluation.synthetic_tus;
+                    retry_batches += evaluation.retry_batches;
+                    all.extend(evaluation.constants);
+                }
+                Ok((all, synthetic_tus, retry_batches))
+            })?;
+        (constants, workers, chunks, synthetic_tus, retry_batches)
     };
+    let evaluated_count = evaluated_union.len();
 
     // `remove` gives a value only to the first partition that requested it.
     let mut map: HashMap<String, Const> = evaluated_union
@@ -92,6 +108,16 @@ pub(crate) fn evaluate_macros_parallel(
         }
         out.push(consts);
     }
+    timer.report(
+        "evaluate_macros_parallel",
+        format_args!(
+            "input_kind={} requests={n} union_macros={} workers={workers} chunks={chunks} \
+             synthetic_tus={synthetic_tus} retry_batches={retry_batches} \
+             constants={evaluated_count}",
+            macro_source_kind(source),
+            union.len()
+        ),
+    );
     Ok(out)
 }
 

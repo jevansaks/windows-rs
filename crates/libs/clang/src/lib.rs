@@ -50,6 +50,7 @@ mod naming;
 use naming::*;
 mod macros;
 use macros::*;
+mod timings;
 
 fn write_type(namespace: &str, ty: &metadata::Type) -> TokenStream {
     windows_rdl::emit::write_type(namespace, &normalize_rdl_type(ty))
@@ -538,6 +539,7 @@ fn evaluate_invalid_handle_values(
     cursors: impl IntoIterator<Item = Cursor>,
     eval: MacroEval<'_>,
 ) -> Result<HashMap<String, i64>, Error> {
+    let timer = timings::Timer::start();
     let mut sites = HashMap::new();
     for cursor in cursors {
         for (name, site) in symbolic_invalid_handle_sentinels(&cursor)? {
@@ -545,8 +547,35 @@ fn evaluate_invalid_handle_values(
         }
     }
     let names: Vec<String> = sites.keys().cloned().collect();
+    if names.is_empty() {
+        timer.report(
+            "symbolic_invalid_handle_evaluation",
+            format_args!(
+                "input_kind={} names=0 values=0 synthetic_tus=0",
+                macro_source_kind(eval.source)
+            ),
+        );
+        return Ok(HashMap::new());
+    }
     let index = Index::new()?;
-    Const::evaluate_invalid_handle_sentinels(eval.source, &names, &index, eval.args)
+    let values = Const::evaluate_invalid_handle_sentinels(eval.source, &names, &index, eval.args)?;
+    timer.report(
+        "symbolic_invalid_handle_evaluation",
+        format_args!(
+            "input_kind={} names={} values={} synthetic_tus=1",
+            macro_source_kind(eval.source),
+            names.len(),
+            values.len()
+        ),
+    );
+    Ok(values)
+}
+
+fn macro_source_kind(source: MacroSource<'_>) -> &'static str {
+    match source {
+        MacroSource::File(_) => "file",
+        MacroSource::Str(_) => "text",
+    }
 }
 
 #[derive(Default, Clone)]
@@ -986,6 +1015,7 @@ impl Clang {
 
     /// Generates the RDL and writes it to the configured output.
     pub fn write(&self) -> Result<(), Error> {
+        let total_timer = timings::Timer::start();
         self.validate_output()?;
         let reference = self.load_reference()?;
         let spec = NamespaceSpec {
@@ -996,22 +1026,63 @@ impl Clang {
             symbols: &self.symbols,
         };
         let rdl = self.parse_and_emit(&reference, std::slice::from_ref(&spec))?;
-        write_to_file(&self.output, formatter::format(&rdl[0]))?;
+        let format_timer = timings::Timer::start();
+        let formatted = formatter::format(&rdl[0]);
+        format_timer.report(
+            "format",
+            format_args!(
+                "mode=namespaced input_bytes={} output_bytes={}",
+                rdl[0].len(),
+                formatted.len()
+            ),
+        );
+        let formatted_len = formatted.len();
+        let write_timer = timings::Timer::start();
+        write_to_file(&self.output, formatted)?;
+        write_timer.report(
+            "write",
+            format_args!("mode=namespaced bytes={formatted_len}"),
+        );
+        total_timer.report(
+            "write_total",
+            format_args!("mode=namespaced bytes={formatted_len}"),
+        );
         Ok(())
     }
 
     /// Writes one flat-root RDL file per defining header.
     pub fn write_by_header(&self) -> Result<(), Error> {
+        let total_timer = timings::Timer::start();
         self.validate_output()?;
         let outputs = self.parse_and_emit_by_header(&self.namespace)?;
+        let header_count = outputs.len();
+        let mut bytes = 0;
         for (stem, rdl) in outputs {
             // File names are lowercased defining-header stems.
             let leaf = stem.to_lowercase();
-            write_to_file(
-                self.output.join(format!("{leaf}.rdl")),
-                formatter::format(&rdl),
-            )?;
+            let format_timer = timings::Timer::start();
+            let formatted = formatter::format(&rdl);
+            format_timer.report(
+                "format",
+                format_args!(
+                    "mode=by_header header={leaf} input_bytes={} output_bytes={}",
+                    rdl.len(),
+                    formatted.len()
+                ),
+            );
+            let formatted_len = formatted.len();
+            let write_timer = timings::Timer::start();
+            write_to_file(self.output.join(format!("{leaf}.rdl")), formatted)?;
+            write_timer.report(
+                "write",
+                format_args!("mode=by_header header={leaf} bytes={formatted_len}"),
+            );
+            bytes += formatted_len;
         }
+        total_timer.report(
+            "write_total",
+            format_args!("mode=by_header headers={header_count} bytes={bytes}"),
+        );
         Ok(())
     }
 
@@ -1034,6 +1105,7 @@ impl Clang {
 
     /// Parses inputs once and returns the libclang state that keeps the TUs valid.
     fn parse_inputs(&self) -> Result<ParsedInputs, Error> {
+        let timer = timings::Timer::start();
         let h_paths = expand_header_inputs(&self.input)?;
         let library = Library::new()?;
         let index = Index::new()?;
@@ -1047,6 +1119,13 @@ impl Clang {
             .map(|path| ParseInput::File(path.as_path()))
             .chain(self.input_text.iter().map(|text| ParseInput::Text(text)))
             .collect();
+        let parsing_workers = if inputs.is_empty() {
+            0
+        } else if self.parallelism <= 1 {
+            1
+        } else {
+            self.parallelism.min(inputs.len())
+        };
 
         let parsed = if self.parallelism <= 1 || inputs.len() <= 1 {
             inputs
@@ -1110,6 +1189,19 @@ impl Clang {
             ));
         }
 
+        timer.report(
+            "parse_inputs",
+            format_args!(
+                "translation_units={} file_inputs={} text_inputs={} file_asts={} text_asts={} \
+                 workers={}",
+                h_tus.len() + str_tus.len(),
+                h_paths.len(),
+                self.input_text.len(),
+                self.input_ast.len(),
+                self.input_text_ast.len(),
+                parsing_workers
+            ),
+        );
         Ok(ParsedInputs {
             args,
             h_tus,
@@ -1121,6 +1213,7 @@ impl Clang {
 
     /// Emits one flat-root RDL string per defining-header stem.
     fn parse_and_emit_by_header(&self, root: &str) -> Result<BTreeMap<String, String>, Error> {
+        let total_timer = timings::Timer::start();
         if !self.symbols.is_empty() && !self.constants.is_empty() {
             return Err(Error::new(
                 "exact function and constant selections cannot be combined",
@@ -1164,7 +1257,17 @@ impl Clang {
 
         let parsed = self.parse_inputs()?;
         let arg_refs: Vec<&str> = parsed.args.iter().map(String::as_str).collect();
-        let export_names = collect_function_names(&parsed);
+        let function_names_timer = timings::Timer::start();
+        let (export_names, traversed_cursors) = collect_function_names(&parsed);
+        function_names_timer.report(
+            "collect_function_names",
+            format_args!(
+                "translation_units={} cursors={} functions={}",
+                parsed.h_tus.len() + parsed.str_tus.len(),
+                traversed_cursors,
+                export_names.len()
+            ),
+        );
 
         // Backtick-stripped resolution names classify `ABI::Windows::*` declarations.
         let winrt_types = self.load_winrt_types()?;
@@ -1178,9 +1281,12 @@ impl Clang {
             winrt_types: &winrt_types,
         };
 
-        for (input, tu) in &parsed.h_tus {
+        let collection_timer = timings::Timer::start();
+        for (tu_index, (input, tu)) in parsed.h_tus.iter().enumerate() {
             self.process_tu_by_header(
                 tu,
+                tu_index,
+                "file",
                 &pass,
                 &mut collectors,
                 &mut scope_in,
@@ -1191,9 +1297,12 @@ impl Clang {
                 },
             )?;
         }
-        for (content, tu) in &parsed.str_tus {
+        let text_offset = parsed.h_tus.len();
+        for (offset, (content, tu)) in parsed.str_tus.iter().enumerate() {
             self.process_tu_by_header(
                 tu,
+                text_offset + offset,
+                "text",
                 &pass,
                 &mut collectors,
                 &mut scope_in,
@@ -1204,7 +1313,19 @@ impl Clang {
                 },
             )?;
         }
+        if timings::enabled() {
+            collection_timer.report(
+                "declaration_collection",
+                format_args!(
+                    "mode=by_header translation_units={} headers={} items={}",
+                    parsed.h_tus.len() + parsed.str_tus.len(),
+                    collectors.len(),
+                    collector_item_count(&collectors)
+                ),
+            );
+        }
 
+        let selection_timer = timings::Timer::start();
         remove_shadowed_opaque(&mut collectors);
 
         if !self.constants.is_empty() {
@@ -1275,12 +1396,35 @@ impl Clang {
                 return Err(Error::new(&message, "", 0, 0));
             }
         }
+        if timings::enabled() {
+            selection_timer.report(
+                "selection_filtering",
+                format_args!(
+                    "headers={} items={}",
+                    collectors.len(),
+                    collector_item_count(&collectors)
+                ),
+            );
+        }
 
         // Exact symbols replace header roots without adding the rest of their owning header.
+        let reachability_timer = timings::Timer::start();
         if !self.scope.is_empty() || !self.symbols.is_empty() {
             sweep_unreferenced(&mut collectors, &scope_in, &self.symbols);
         }
+        if timings::enabled() {
+            reachability_timer.report(
+                "global_reachability",
+                format_args!(
+                    "headers={} items={} exact_symbols={}",
+                    collectors.len(),
+                    collector_item_count(&collectors),
+                    self.symbols.len()
+                ),
+            );
+        }
 
+        let filtering_timer = timings::Timer::start();
         // Un-exclude a reference enum the scrape carries with members the reference lacks: emit
         // the complete enum so the winmd merge can union it with the truncated reference copy
         // into a single enum. An enum the scrape does not extend stays excluded (the reference
@@ -1383,12 +1527,47 @@ impl Clang {
                 });
             }
         }
+        if timings::enabled() {
+            filtering_timer.report(
+                "duplicate_type_value_filtering",
+                format_args!(
+                    "headers={} items={} excluded_types={} excluded_values={}",
+                    collectors.len(),
+                    collector_item_count(&collectors),
+                    exclude_types.len(),
+                    exclude_values.len()
+                ),
+            );
+        }
 
         // Choose duplicate typedef owners only after every partition and item filter has run.
+        let typedef_timer = timings::Timer::start();
         dedup_typedefs(&mut collectors);
         drop_dangling_typed_constants(&mut collectors, root, &reference_types);
+        if timings::enabled() {
+            typedef_timer.report(
+                "typedef_deduplication",
+                format_args!(
+                    "headers={} items={}",
+                    collectors.len(),
+                    collector_item_count(&collectors)
+                ),
+            );
+        }
+        let associated_timer = timings::Timer::start();
         self.resolve_associated_constants(&parsed, root, &reference, &mut collectors)?;
+        if timings::enabled() {
+            associated_timer.report(
+                "associated_constant_resolution",
+                format_args!(
+                    "headers={} items={}",
+                    collectors.len(),
+                    collector_item_count(&collectors)
+                ),
+            );
+        }
 
+        let construction_timer = timings::Timer::start();
         let mut outputs = BTreeMap::new();
         for (stem, collector) in &collectors {
             // Empty partitions are not written.
@@ -1396,8 +1575,31 @@ impl Clang {
                 continue;
             }
             // Every file emits the same flat root; the stem only names the file.
-            outputs.insert(stem.clone(), emit_module(root, collector)?);
+            let header_timer = timings::Timer::start();
+            let rdl = emit_module(root, collector)?;
+            header_timer.report(
+                "rdl_construction",
+                format_args!(
+                    "mode=by_header header={} items={} bytes={}",
+                    stem,
+                    collector.values().count(),
+                    rdl.len()
+                ),
+            );
+            outputs.insert(stem.clone(), rdl);
         }
+        construction_timer.report(
+            "rdl_construction_total",
+            format_args!("mode=by_header headers={}", outputs.len()),
+        );
+        total_timer.report(
+            "global_pipeline_total",
+            format_args!(
+                "mode=by_header translation_units={} headers={}",
+                parsed.h_tus.len() + parsed.str_tus.len(),
+                outputs.len()
+            ),
+        );
         Ok(outputs)
     }
 
@@ -1405,12 +1607,20 @@ impl Clang {
     fn process_tu_by_header(
         &self,
         tu: &TranslationUnit,
+        tu_index: usize,
+        input_kind: &str,
         pass: &HeaderPass<'_>,
         collectors: &mut BTreeMap<String, Collector>,
         scope_in: &mut BTreeMap<String, bool>,
         export_names: &HashSet<String>,
         eval: MacroEval<'_>,
     ) -> Result<(), Error> {
+        let total_timer = timings::Timer::start();
+        let initial_items = if timings::enabled() {
+            collector_item_count(collectors)
+        } else {
+            0
+        };
         let HeaderPass { root, winrt_types } = *pass;
         // Abort on diagnostics in emitted headers; tolerate transitive-only include errors
         // so interop headers can survive broken C++/WinRT projection includes.
@@ -1441,20 +1651,44 @@ impl Clang {
             }
         }
 
+        let setup_timer = timings::Timer::start();
         let mut tag_rename = build_tag_rename_map(tu);
         assign_nested_names(tu, &mut tag_rename);
         let enum_merge = merge_enum_typedef_idiom(tu, &mut tag_rename);
+        setup_timer.report(
+            "tu_cursor_setup",
+            format_args!(
+                "tu={tu_index} input_kind={input_kind} renamed_tags={} merged_enums={}",
+                tag_rename.len(),
+                enum_merge.len()
+            ),
+        );
         // Share TU-wide macro definitions across per-header parsers.
+        let macro_timer = timings::Timer::start();
         let macro_defs = collect_macro_defs(tu);
+        macro_timer.report(
+            "macro_discovery",
+            format_args!(
+                "tu={tu_index} input_kind={input_kind} macros={}",
+                macro_defs.len()
+            ),
+        );
 
         // Flatten linkage blocks and deduplicate by clang identity across repeated SDK
         // declarations; the defining header only selects the output file.
+        let flatten_timer = timings::Timer::start();
         let mut decls = Vec::new();
         // A resolution winmd lets the ABI namespace walker separate WinRT types from COM interop.
         let abi = (!winrt_types.is_empty()).then_some(winrt_types);
         flatten_decls(tu.cursor(), false, false, None, abi, &mut decls);
+        let flattened_count = decls.len();
+        flatten_timer.report(
+            "tu_cursor_flatten",
+            format_args!("tu={tu_index} input_kind={input_kind} cursors={flattened_count}"),
+        );
 
         // Prefer definitions over forward declarations so records route to defining headers.
+        let routing_timer = timings::Timer::start();
         let mut chosen: BTreeMap<String, (Cursor, bool)> = BTreeMap::new();
         let mut redeclarations: BTreeMap<String, Vec<(Cursor, bool)>> = BTreeMap::new();
         let in_scope = |cursor: &Cursor| {
@@ -1552,18 +1786,37 @@ impl Clang {
             }
             buckets.entry(stem).or_default().push((child, extern_c));
         }
+        let bucket_count = buckets.len();
+        let routed_count = buckets.values().map(Vec::len).sum::<usize>();
+        routing_timer.report(
+            "tu_cursor_routing",
+            format_args!(
+                "tu={tu_index} input_kind={input_kind} flattened={flattened_count} \
+                 routed={routed_count} headers={bucket_count} redeclarations={}",
+                redeclarations.len()
+            ),
+        );
 
         let empty_ref: HashMap<String, String> = HashMap::new();
         let mut all_opaque: Vec<(String, String)> = vec![];
         // Macro constants are per-bucket values but are deduplicated globally.
         let mut all_consts: Vec<(String, Vec<String>)> = vec![];
+        let invalid_timer = timings::Timer::start();
         let invalid_handle_values = evaluate_invalid_handle_values(
             buckets
                 .values()
                 .flat_map(|cursors| cursors.iter().map(|(cursor, _)| *cursor)),
             eval,
         )?;
+        invalid_timer.report(
+            "symbolic_invalid_handle_total",
+            format_args!(
+                "tu={tu_index} input_kind={input_kind} values={}",
+                invalid_handle_values.len()
+            ),
+        );
 
+        let declaration_timer = timings::Timer::start();
         for (stem, cursors) in buckets {
             let collector = collectors.entry(stem.clone()).or_default();
             let mut parser = Parser::new(
@@ -1588,7 +1841,15 @@ impl Clang {
                 parser.process_cursor(child, collector, extern_c)?;
             }
 
+            let iid_timer = timings::Timer::start();
+            let iid_count = parser.iid_vars.len();
             collector.apply_iid_vars(&parser.iid_vars);
+            iid_timer.report(
+                "iid_application",
+                format_args!(
+                    "tu={tu_index} input_kind={input_kind} header={stem} iid_variables={iid_count}"
+                ),
+            );
 
             let pending = std::mem::take(&mut parser.pending_macros);
             if !pending.is_empty() {
@@ -1597,6 +1858,20 @@ impl Clang {
             for (_ns, name) in std::mem::take(&mut parser.pending_opaque) {
                 all_opaque.push((stem.clone(), name));
             }
+        }
+        let pending_macro_count = all_consts
+            .iter()
+            .map(|(_, pending)| pending.len())
+            .sum::<usize>();
+        if timings::enabled() {
+            declaration_timer.report(
+                "tu_declaration_collection",
+                format_args!(
+                    "tu={tu_index} input_kind={input_kind} headers={bucket_count} \
+                     cursors={routed_count} items={} pending_macros={pending_macro_count}",
+                    collector_item_count(collectors).saturating_sub(initial_items)
+                ),
+            );
         }
 
         // Flat enums contribute member names too, since those emit as top-level constants.
@@ -1642,6 +1917,16 @@ impl Clang {
             }
         }
 
+        if timings::enabled() {
+            total_timer.report(
+                "tu_collection_total",
+                format_args!(
+                    "tu={tu_index} input_kind={input_kind} cursors={flattened_count} \
+                     headers={bucket_count} items={}",
+                    collector_item_count(collectors).saturating_sub(initial_items)
+                ),
+            );
+        }
         Ok(())
     }
 
@@ -1711,7 +1996,17 @@ impl Clang {
         // Reuse translation units across all specs.
         let parsed = self.parse_inputs()?;
         let arg_refs: Vec<&str> = parsed.args.iter().map(String::as_str).collect();
-        let export_names = collect_function_names(&parsed);
+        let function_names_timer = timings::Timer::start();
+        let (export_names, traversed_cursors) = collect_function_names(&parsed);
+        function_names_timer.report(
+            "collect_function_names",
+            format_args!(
+                "translation_units={} cursors={} functions={}",
+                parsed.h_tus.len() + parsed.str_tus.len(),
+                traversed_cursors,
+                export_names.len()
+            ),
+        );
 
         // Pass 1: learn unique type-name owners across specs. Shared typedef artifacts stay
         // local by being dropped from the owner table.
@@ -2077,21 +2372,23 @@ impl std::ops::Deref for OwnedTranslationUnit {
 // every bundle has been dropped.
 unsafe impl Send for OwnedTranslationUnit {}
 
-fn collect_function_names(parsed: &ParsedInputs) -> HashSet<String> {
-    fn visit(cursor: Cursor, names: &mut HashSet<String>) {
+fn collect_function_names(parsed: &ParsedInputs) -> (HashSet<String>, usize) {
+    fn visit(cursor: Cursor, names: &mut HashSet<String>, cursors: &mut usize) {
+        *cursors += 1;
         if cursor.kind() == CXCursor_FunctionDecl {
             names.insert(cursor.name());
         }
         for child in cursor.children() {
-            visit(child, names);
+            visit(child, names, cursors);
         }
     }
 
     let mut names = HashSet::new();
+    let mut cursors = 0;
     for (_, tu) in parsed.h_tus.iter().chain(&parsed.str_tus) {
-        visit(tu.cursor(), &mut names);
+        visit(tu.cursor(), &mut names, &mut cursors);
     }
-    names
+    (names, cursors)
 }
 
 const HEADER_EXTENSIONS: [&str; 4] = ["h", "hpp", "hxx", "hh"];
@@ -2422,6 +2719,13 @@ fn emit_module(namespace: &str, collector: &Collector) -> Result<String, Error> 
     }
 
     Ok(output)
+}
+
+fn collector_item_count(collectors: &BTreeMap<String, Collector>) -> usize {
+    collectors
+        .values()
+        .map(|collector| collector.values().count())
+        .sum()
 }
 
 /// Converts an enum value to the metadata value matching its repr.

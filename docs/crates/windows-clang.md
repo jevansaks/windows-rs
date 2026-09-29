@@ -175,6 +175,26 @@ workers parse ordered input batches. Each returned translation unit owns the ind
 and the parsed input keeps libclang loaded until all translation units and indexes are dropped.
 Collection, ownership, reachability, constant resolution, and emission remain serial.
 
+### Phase profiling
+
+Set `WINDOWS_CLANG_TIMINGS=1` to write one line per measured phase to stderr:
+
+```text
+WINDOWS_CLANG_TIMING phase=parse_inputs elapsed_ms=123.456 translation_units=10 ...
+```
+
+The environment check is cached. Disabled runs do not create timers or scan collectors for timing
+counts. The records cover initial parsing, the recursive function-name traversal, per-TU setup,
+macro discovery, cursor flattening and ownership routing, declaration collection, invalid-handle
+evaluation, macro evaluation, IID application, reachability, filtering, typedef cleanup,
+associated constants, RDL construction, formatting, and writing.
+
+Macro-evaluation records include the union macro count, worker and chunk counts, total synthetic
+translation units, retry batches created for swallowed probes, and evaluated constants.
+Invalid-handle records include the number of synthetic translation units. Per-TU records use the
+original input order, so their `tu` values are stable across runs. Elapsed times and worker
+completion order are profiling data and are not deterministic; generated RDL remains unchanged.
+
 `save_translation_unit` parses exactly one file or inline source and writes a libclang AST file.
 Another process can load ASTs with `input_ast` or `input_text_ast`. The caller also supplies the
 original source path or text because macro and invalid-handle evaluation can reparse that source.

@@ -256,6 +256,13 @@ impl PropertyKeyConst {
     }
 }
 
+#[derive(Default)]
+pub(crate) struct MacroEvaluation {
+    pub(crate) constants: Vec<Const>,
+    pub(crate) synthetic_tus: usize,
+    pub(crate) retry_batches: usize,
+}
+
 impl Const {
     /// Evaluate macro expressions by injecting per-name enum probes into a synthetic TU.
     /// Independent probes and `CXTranslationUnit_KeepGoing` let one bad macro fail without
@@ -266,8 +273,17 @@ impl Const {
         index: &Index,
         args: &[&str],
     ) -> Result<Vec<Self>, Error> {
+        Ok(Self::evaluate_macros_counted(input, names, index, args)?.constants)
+    }
+
+    pub(crate) fn evaluate_macros_counted(
+        input: &str,
+        names: &[String],
+        index: &Index,
+        args: &[&str],
+    ) -> Result<MacroEvaluation, Error> {
         if names.is_empty() {
-            return Ok(vec![]);
+            return Ok(MacroEvaluation::default());
         }
 
         // Put the synthetic file beside the header; include by basename so relative includes work.
@@ -289,8 +305,17 @@ impl Const {
         index: &Index,
         args: &[&str],
     ) -> Result<Vec<Self>, Error> {
+        Ok(Self::evaluate_macros_str_counted(content, names, index, args)?.constants)
+    }
+
+    pub(crate) fn evaluate_macros_str_counted(
+        content: &str,
+        names: &[String],
+        index: &Index,
+        args: &[&str],
+    ) -> Result<MacroEvaluation, Error> {
         if names.is_empty() {
-            return Ok(vec![]);
+            return Ok(MacroEvaluation::default());
         }
 
         // There is no on-disk directory context, so relative includes may not resolve.
@@ -300,14 +325,14 @@ impl Const {
         Self::evaluate_names(&prefix, SYNTHETIC, names, index, args, false)
     }
 
-    pub(crate) fn evaluate_dependencies(
+    pub(crate) fn evaluate_dependencies_counted(
         source: MacroSource<'_>,
         names: &[String],
         index: &Index,
         args: &[&str],
-    ) -> Result<Vec<Self>, Error> {
+    ) -> Result<MacroEvaluation, Error> {
         if names.is_empty() {
-            return Ok(vec![]);
+            return Ok(MacroEvaluation::default());
         }
         let (prefix, synthetic) = match source {
             MacroSource::File(path) => {
@@ -338,12 +363,18 @@ impl Const {
         index: &Index,
         args: &[&str],
         exact_type: bool,
-    ) -> Result<Vec<Self>, Error> {
+    ) -> Result<MacroEvaluation, Error> {
         let eval_args = with_unlimited_errors(args);
         let mut results = vec![];
+        let mut synthetic_tus = 0;
+        let mut retry_batches = 0;
         // Swallowed probes are split until a singleton poison macro can be dropped.
         let mut queue: Vec<Vec<String>> = vec![names.to_vec()];
         while let Some(batch) = queue.pop() {
+            if synthetic_tus != 0 {
+                retry_batches += 1;
+            }
+            synthetic_tus += 1;
             let mut source = String::from(prefix);
             for name in &batch {
                 // The name came from libclang, but validate before writing generated C++.
@@ -376,7 +407,11 @@ impl Const {
                 }
             }
         }
-        Ok(results)
+        Ok(MacroEvaluation {
+            constants: results,
+            synthetic_tus,
+            retry_batches,
+        })
     }
 }
 

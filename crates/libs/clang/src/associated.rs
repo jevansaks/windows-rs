@@ -16,6 +16,7 @@ impl Clang {
         reference: &metadata::reader::Index,
         collectors: &mut BTreeMap<String, Collector>,
     ) -> Result<(), Error> {
+        let timer = timings::Timer::start();
         let mut required = BTreeMap::<String, String>::new();
         let mut enums = HashSet::new();
         for collector in collectors.values() {
@@ -42,6 +43,13 @@ impl Clang {
             }
         }
         if required.is_empty() {
+            timer.report(
+                "associated_constant_resolution_detail",
+                format_args!(
+                    "required=0 enums=0 providers=0 traversed_cursors=0 synthetic_tus=0 \
+                     retry_batches=0"
+                ),
+            );
             return Ok(());
         }
         if root.is_empty() {
@@ -71,6 +79,9 @@ impl Clang {
         let args: Vec<_> = parsed.args.iter().map(String::as_str).collect();
         let mut providers = BTreeMap::<String, Provider>::new();
         let mut enum_owners = BTreeMap::<String, (SourceLocation, Enum)>::new();
+        let mut traversed_cursors = 0;
+        let mut synthetic_tus = 0;
+        let mut retry_batches = 0;
         for (source, tu) in parsed
             .h_tus
             .iter()
@@ -84,6 +95,7 @@ impl Clang {
         {
             let mut declarations = vec![];
             flatten_decls(tu.cursor(), false, false, None, None, &mut declarations);
+            traversed_cursors += declarations.len();
             let tag_rename = build_tag_rename_map(tu);
             let mut candidates = BTreeMap::<String, (SourceLocation, String)>::new();
             for (cursor, _) in declarations {
@@ -148,8 +160,12 @@ impl Clang {
                 candidates.insert(name, (location, stem));
             }
             let names: Vec<_> = candidates.keys().cloned().collect();
-            let evaluated = Const::evaluate_dependencies(source, &names, &parsed.index, &args)?;
+            let evaluated =
+                Const::evaluate_dependencies_counted(source, &names, &parsed.index, &args)?;
+            synthetic_tus += evaluated.synthetic_tus;
+            retry_batches += evaluated.retry_batches;
             let mut evaluated: BTreeMap<_, _> = evaluated
+                .constants
                 .into_iter()
                 .map(|constant| (constant.name.clone(), constant))
                 .collect();
@@ -211,6 +227,7 @@ impl Clang {
                 ));
             }
         }
+        let provider_count = providers.len();
         // Resolve after the ordinary sweep so dependency-only headers contribute no other roots.
         for collector in collectors.values_mut() {
             collector.retain_items(|_, item| {
@@ -223,6 +240,16 @@ impl Clang {
                 .or_default()
                 .insert(Item::Const(provider.constant));
         }
+        timer.report(
+            "associated_constant_resolution_detail",
+            format_args!(
+                "required={} enums={} providers={provider_count} \
+                 traversed_cursors={traversed_cursors} synthetic_tus={synthetic_tus} \
+                 retry_batches={retry_batches}",
+                required.len(),
+                enums.len()
+            ),
+        );
         Ok(())
     }
 }

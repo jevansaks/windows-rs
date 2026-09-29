@@ -30,6 +30,9 @@ windows_clang::clang()
 Independent input translation units are parsed serially by default. Use `.parallelism(n)` to allow
 at most `n` parsing workers while preserving input and output ordering.
 
+Set `WINDOWS_CLANG_TIMINGS=1` to emit phase timings and work counts to stderr. Timing is disabled by
+default and does not change generated RDL.
+
 Distributed parsing can save one configured source input with `save_translation_unit`. A later
 coordinator supplies the original source identity with `input_ast` or `input_text_ast`, loads any
 number of saved translation units, and runs the normal global collection and emission passes.
