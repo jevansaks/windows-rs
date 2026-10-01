@@ -460,3 +460,167 @@ fn owner_remap_applies_before_namespace_collision_planning() {
     assert!(!first.contains("_PIN_INFO"), "{first}");
     assert!(second.contains("struct PIN_INFO"), "{second}");
 }
+
+#[test]
+fn owner_exclusions_apply_before_remaps_and_only_to_the_selected_partition() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                "first.h",
+                "typedef struct _PIN_INFO { int first; } _PIN_INFO;\n\
+                 extern \"C\" void ExcludedFunction(void);\n\
+                 #define EXCLUDED_CONSTANT 1\n",
+            )
+            .partitioned("first-input")
+            .with_root_partition(
+                "first.h",
+                RootPartition::new("first", "Example.First")
+                    .with_remap("_PIN_INFO", "PIN_INFO")
+                    .with_exclusion("_PIN_INFO")
+                    .with_exclusion("ExcludedFunction")
+                    .with_exclusion("EXCLUDED_CONSTANT"),
+            ),
+            Input::new(
+                "second.h",
+                "typedef struct PIN_INFO { long long second; } PIN_INFO;\n",
+            )
+            .partitioned("second-input")
+            .with_root("second.h", "second", "Example.Second"),
+        ],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+
+    assert_eq!(partitions.len(), 1);
+    let second = partitions.values().next().unwrap();
+    assert!(second.contains("struct PIN_INFO"), "{second}");
+    assert!(!second.contains("ExcludedFunction"), "{second}");
+    assert!(!second.contains("EXCLUDED_CONSTANT"), "{second}");
+}
+
+#[test]
+fn owner_exclusion_does_not_suppress_same_short_name_in_another_partition() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                "first.h",
+                "typedef struct PIN_INFO { int first; } PIN_INFO;\n",
+            )
+            .partitioned("first-input")
+            .with_root_partition(
+                "first.h",
+                RootPartition::new("first", "Example.First").with_exclusion("PIN_INFO"),
+            ),
+            Input::new(
+                "second.h",
+                "typedef struct PIN_INFO { long long second; } PIN_INFO;\n",
+            )
+            .partitioned("second-input")
+            .with_root("second.h", "second", "Example.Second"),
+        ],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+
+    assert_eq!(partitions.len(), 1);
+    let (partition, rdl) = partitions.first_key_value().unwrap();
+    assert_eq!(partition.namespace, "Example.Second");
+    assert!(rdl.contains("struct PIN_INFO"), "{rdl}");
+    assert!(rdl.contains("second: i64"), "{rdl}");
+}
+
+#[test]
+fn required_owner_excluded_type_reports_reference_and_owner_diagnostics() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "hidden.h",
+            "typedef struct HIDDEN { int value; } HIDDEN;\n\
+             extern \"C\" HIDDEN UseHidden(HIDDEN value);\n",
+        )
+        .partitioned("hidden-input")
+        .with_root_partition(
+            "hidden.h",
+            RootPartition::new("hidden", "Example.Hidden").with_exclusion("HIDDEN"),
+        )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let error = snapshot
+        .emit_partitioned_with_options(&options)
+        .unwrap_err();
+    let error = error.to_string();
+
+    assert!(error.contains("unresolved local type `HIDDEN`"), "{error}");
+    assert!(error.contains("hidden.h:"), "{error}");
+    assert!(
+        error.contains("normalized declaration path `hidden.h`"),
+        "{error}"
+    );
+    assert!(error.contains("partition=\"hidden\""), "{error}");
+    assert!(error.contains("namespace=\"Example.Hidden\""), "{error}");
+    assert!(error.contains("excluded by owner setting"), "{error}");
+}
+
+#[test]
+fn owner_libraries_distinguish_same_function_name_between_partitions() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [
+            Input::new("audio.h", "extern \"C\" int GetDeviceID(int device);\n")
+                .partitioned("audio-input")
+                .with_root_partition(
+                    "audio.h",
+                    RootPartition::new("audio", "Example.Audio")
+                        .with_library("GetDeviceID", "DSOUND.dll"),
+                ),
+            Input::new(
+                "tbs.h",
+                "extern \"C\" long long GetDeviceID(long long device);\n",
+            )
+            .partitioned("tbs-input")
+            .with_root_partition(
+                "tbs.h",
+                RootPartition::new("tbs", "Example.Tbs").with_library("GetDeviceID", "tbs.dll"),
+            ),
+        ],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let audio = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Audio")
+        .unwrap()
+        .1;
+    let tbs = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Tbs")
+        .unwrap()
+        .1;
+
+    assert!(audio.contains("#[library(\"DSOUND.dll\""), "{audio}");
+    assert!(audio.contains("fn GetDeviceID"), "{audio}");
+    assert!(tbs.contains("#[library(\"tbs.dll\""), "{tbs}");
+    assert!(tbs.contains("fn GetDeviceID"), "{tbs}");
+}

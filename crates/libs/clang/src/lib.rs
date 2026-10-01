@@ -79,6 +79,8 @@ pub struct RootPartition {
     pub partition: String,
     pub namespace: String,
     pub remaps: BTreeMap<String, String>,
+    pub exclusions: BTreeSet<String>,
+    pub libraries: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -88,6 +90,8 @@ pub struct RootOwner {
     pub partition: String,
     pub namespace: String,
     pub remaps: BTreeMap<String, String>,
+    pub exclusions: BTreeSet<String>,
+    pub libraries: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -249,11 +253,23 @@ impl RootPartition {
             partition: partition.into(),
             namespace: namespace.into(),
             remaps: BTreeMap::new(),
+            exclusions: BTreeSet::new(),
+            libraries: BTreeMap::new(),
         }
     }
 
     pub fn with_remap(mut self, source: impl Into<String>, target: impl Into<String>) -> Self {
         self.remaps.insert(source.into(), target.into());
+        self
+    }
+
+    pub fn with_exclusion(mut self, name: impl Into<String>) -> Self {
+        self.exclusions.insert(name.into());
+        self
+    }
+
+    pub fn with_library(mut self, function: impl Into<String>, library: impl Into<String>) -> Self {
+        self.libraries.insert(function.into(), library.into());
         self
     }
 }
@@ -592,7 +608,21 @@ pub struct Snapshot {
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     root_owners: BTreeMap<Origin, RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
+    partition_exclusions: Vec<ExcludedPartitionDeclaration>,
     timing_target: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ExcludedPartitionDeclaration {
+    name: String,
+    origin: Origin,
+    spelling: Location,
+    kind: FactKind,
+    data_kind: &'static str,
+    uuid: Option<String>,
+    definition: bool,
+    root: bool,
+    owner: RootOwner,
 }
 
 impl PartialEq for Snapshot {
@@ -602,6 +632,7 @@ impl PartialEq for Snapshot {
             && self.annotations == other.annotations
             && self.root_owners == other.root_owners
             && self.root_partitions == other.root_partitions
+            && self.partition_exclusions == other.partition_exclusions
     }
 }
 
@@ -1153,11 +1184,16 @@ impl Snapshot {
                 &self.annotations,
                 &AnnotationTarget::Declaration(function.origin.clone()),
             );
+            let route =
+                routes.and_then(|routes| routes.get(&(function.name.clone(), OutputKind::Value)));
             let library = declaration_annotations
                 .iter()
                 .find_map(|annotation| match annotation {
                     Annotation::ImportLibrary(library) => Some(library.as_str()),
                     _ => None,
+                })
+                .or_else(|| {
+                    route.and_then(|owner| owner.libraries.get(link_name).map(String::as_str))
                 })
                 .or_else(|| {
                     options
@@ -1277,6 +1313,7 @@ impl Snapshot {
     }
 
     fn into_partitioned_planning_snapshot(mut self) -> (Self, BTreeMap<String, String>) {
+        self.apply_partition_exclusions();
         self.apply_partition_remaps();
         let mut variants: BTreeMap<&str, BTreeMap<&str, BTreeSet<&FactData>>> = BTreeMap::new();
         for fact in self.facts.iter().filter(|fact| fact.root) {
@@ -1476,6 +1513,134 @@ impl Snapshot {
                 constant.name = target.clone();
             }
         }
+    }
+
+    fn apply_partition_exclusions(&mut self) {
+        self.facts.retain(|fact| {
+            let Some(owner) = self.root_owners.get(&fact.origin).or_else(|| {
+                self.root_partitions
+                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+            }) else {
+                return true;
+            };
+            if !owner.exclusions.contains(&fact.name) {
+                return true;
+            }
+            self.partition_exclusions
+                .push(ExcludedPartitionDeclaration {
+                    name: fact.name.clone(),
+                    origin: fact.origin.clone(),
+                    spelling: fact.spelling.clone(),
+                    kind: fact.kind,
+                    data_kind: fact_data_kind(&fact.data),
+                    uuid: fact_uuid(fact).map(str::to_string),
+                    definition: fact.definition,
+                    root: fact.root,
+                    owner: owner.clone(),
+                });
+            false
+        });
+        self.constants.retain(|constant| {
+            self.root_owners
+                .get(&constant.root)
+                .or_else(|| {
+                    self.root_partitions
+                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
+                })
+                .is_none_or(|owner| !owner.exclusions.contains(&constant.name))
+        });
+    }
+
+    fn unresolved_local_type_error(&self, name: &str, tu: &str, declaration: &Location) -> Error {
+        let normalized_declaration = normalize_name(&declaration.file);
+        let declaration_owners: Vec<_> = self
+            .root_partitions
+            .iter()
+            .filter(|((candidate_tu, root), _)| {
+                candidate_tu == tu && normalize_name(root) == normalized_declaration
+            })
+            .map(|((_, root), owner)| format_owner(root, owner))
+            .collect();
+        let declaration_owners = if declaration_owners.is_empty() {
+            "none".to_string()
+        } else {
+            declaration_owners.join("; ")
+        };
+        let mut candidates = Vec::new();
+        for fact in self.facts.iter().filter(|fact| fact.name == name) {
+            let owner = self.root_owners.get(&fact.origin).or_else(|| {
+                self.root_partitions
+                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+            });
+            let rejection = if !is_type_fact(fact) {
+                "not a type fact".to_string()
+            } else if fact.origin.tu == tu && fact.spelling == *declaration {
+                "exact declaration match was unexpectedly rejected".to_string()
+            } else if fact.origin.tu == tu && fact.spelling.file == declaration.file {
+                "same-header declaration was unexpectedly rejected".to_string()
+            } else if let Some(owner) = owner {
+                let matches_owner =
+                    self.root_partitions
+                        .iter()
+                        .any(|((candidate_tu, root), declaration_owner)| {
+                            candidate_tu == tu
+                                && normalize_name(root) == normalized_declaration
+                                && declaration_owner.partition == owner.partition
+                                && declaration_owner.namespace == owner.namespace
+                        });
+                if matches_owner {
+                    "same tagged partition/namespace was unexpectedly rejected".to_string()
+                } else {
+                    "tagged owner differs from declaration-path owner".to_string()
+                }
+            } else {
+                "candidate has no tagged owner".to_string()
+            };
+            candidates.push(format!(
+                "tu={:?} source={}:{} root={} owner={} uuid={} kind={:?}/{} definition={} rejection={}",
+                fact.origin.tu,
+                fact.spelling.file,
+                fact.spelling.offset,
+                fact.root,
+                owner.map_or_else(|| "none".to_string(), |owner| {
+                    format_owner(&owner.root, owner)
+                }),
+                fact_uuid(fact).unwrap_or("none"),
+                fact.kind,
+                fact_data_kind(&fact.data),
+                fact.definition,
+                rejection,
+            ));
+        }
+        for excluded in self
+            .partition_exclusions
+            .iter()
+            .filter(|excluded| excluded.name == name)
+        {
+            candidates.push(format!(
+                "tu={:?} source={}:{} root={} owner={} uuid={} kind={:?}/{} definition={} rejection=excluded by owner setting",
+                excluded.origin.tu,
+                excluded.spelling.file,
+                excluded.spelling.offset,
+                excluded.root,
+                format_owner(&excluded.owner.root, &excluded.owner),
+                excluded.uuid.as_deref().unwrap_or("none"),
+                excluded.kind,
+                excluded.data_kind,
+                excluded.definition,
+            ));
+        }
+        if candidates.is_empty() {
+            candidates.push("none".to_string());
+        }
+        Error(format!(
+            "unresolved local type `{name}` in translation unit `{tu}` at {}:{} \
+             (normalized declaration path `{normalized_declaration}`); tagged declaration-path \
+             owners: {declaration_owners}; same-name candidates:\n  {}",
+            declaration.file,
+            declaration.offset,
+            candidates.join("\n  "),
+        ))
     }
 
     fn partition_routes(
@@ -2000,9 +2165,7 @@ impl Snapshot {
                 let fact = match matches.as_slice() {
                     [fact] => *fact,
                     [] => {
-                        return Err(Error(format!(
-                            "unresolved local type `{name}` in translation unit `{tu}`"
-                        )));
+                        return Err(self.unresolved_local_type_error(name, tu, declaration));
                     }
                     choices => {
                         choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)?
@@ -2014,9 +2177,7 @@ impl Snapshot {
                     )));
                 }
                 if !is_type_fact(fact) {
-                    return Err(Error(format!(
-                        "unresolved local type `{name}` in translation unit `{tu}`"
-                    )));
+                    return Err(self.unresolved_local_type_error(name, tu, declaration));
                 };
                 if canonical_named_type(name).is_some()
                     && matches!(fact.data, FactData::Typedef { .. })
@@ -5358,6 +5519,27 @@ fn rdl_ident(name: &str) -> String {
 
 fn normalize_name(name: &str) -> String {
     name.replace('\\', "/")
+}
+
+fn format_owner(root: &str, owner: &RootOwner) -> String {
+    format!(
+        "input={:?}, root={:?}, normalized_root={:?}, partition={:?}, namespace={:?}",
+        owner.input,
+        root,
+        normalize_name(root),
+        owner.partition,
+        owner.namespace,
+    )
+}
+
+fn fact_uuid(fact: &Fact) -> Option<&str> {
+    match &fact.data {
+        FactData::Class { guid } => Some(guid),
+        FactData::Interface {
+            guid: Some(guid), ..
+        } => Some(guid),
+        _ => None,
+    }
 }
 
 fn origin(origin: &Origin) -> String {

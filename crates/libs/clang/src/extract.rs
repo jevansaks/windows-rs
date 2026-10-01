@@ -34,6 +34,8 @@ pub fn extract_partitioned(
                     partition: partition.partition.clone(),
                     namespace: partition.namespace.clone(),
                     remaps: partition.remaps.clone(),
+                    exclusions: partition.exclusions.clone(),
+                    libraries: partition.libraries.clone(),
                 },
             );
         }
@@ -289,6 +291,7 @@ fn extract_impl(
         annotations,
         root_owners,
         root_partitions: owners,
+        partition_exclusions: vec![],
         timing_target: target,
     })
 }
