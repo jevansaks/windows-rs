@@ -760,6 +760,71 @@ fn owner_u32_type_override_does_not_change_common_emission() {
 }
 
 #[test]
+fn owner_u32_type_override_updates_unowned_same_source_copies() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-u32-shared-source-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let types = scratch.join("d3d9types.h");
+    let direct3d = scratch.join("direct3d.cpp");
+    let media = scratch.join("media.cpp");
+    std::fs::write(&types, "typedef int D3DFORMAT;\n").unwrap();
+    std::fs::write(&direct3d, "#include \"d3d9types.h\"\n").unwrap();
+    std::fs::write(
+        &media,
+        "#include \"d3d9types.h\"\nextern \"C\" void UseFormat(D3DFORMAT value);\n",
+    )
+    .unwrap();
+    let include = format!("-I{}", scratch.display());
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                direct3d.to_string_lossy(),
+                std::fs::read_to_string(&direct3d).unwrap(),
+            )
+            .partitioned("direct3d-input")
+            .with_root_partition(
+                types.to_string_lossy(),
+                RootPartition::new("direct3d", "Example.Direct3D9").with_u32_type("D3DFORMAT"),
+            ),
+            Input::new(
+                media.to_string_lossy(),
+                std::fs::read_to_string(&media).unwrap(),
+            )
+            .partitioned("media-input")
+            .with_root(media.to_string_lossy(), "media", "Example.Media"),
+        ],
+        &["-x", "c++", &include],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let direct3d = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Direct3D9")
+        .unwrap()
+        .1;
+    let media = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Media")
+        .unwrap()
+        .1;
+
+    assert!(direct3d.contains("type D3DFORMAT = u32"), "{direct3d}");
+    assert!(
+        media.contains("fn UseFormat(value: Example::Direct3D9::D3DFORMAT)"),
+        "{media}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn owner_flags_force_unsigned_flag_enum_projection() {
     helpers::ensure_libclang();
 

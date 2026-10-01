@@ -1654,20 +1654,35 @@ impl Snapshot {
     }
 
     fn apply_partition_type_settings(&mut self) {
+        let u32_sources: BTreeSet<_> = self
+            .facts
+            .iter()
+            .filter(|fact| {
+                self.root_owners
+                    .get(&fact.origin)
+                    .or_else(|| {
+                        self.root_partitions
+                            .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+                    })
+                    .is_some_and(|owner| owner.u32_types.contains(&fact.name))
+            })
+            .map(|fact| (fact.spelling.clone(), fact.name.clone()))
+            .collect();
         for fact in &mut self.facts {
-            let Some(owner) = self.root_owners.get(&fact.origin).or_else(|| {
+            let owner = self.root_owners.get(&fact.origin).or_else(|| {
                 self.root_partitions
                     .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
-            }) else {
-                continue;
-            };
-            if owner.u32_types.contains(&fact.name) {
+            });
+            let force_u32 = owner.is_some_and(|owner| owner.u32_types.contains(&fact.name))
+                || (owner.is_none()
+                    && u32_sources.contains(&(fact.spelling.clone(), fact.name.clone())));
+            if force_u32 {
                 fact.kind = FactKind::Typedef;
                 fact.definition = true;
                 fact.data = FactData::Typedef {
                     target: TypeRef::Scalar(Scalar::U32),
                 };
-            } else {
+            } else if let Some(owner) = owner {
                 if owner.flags.contains(&fact.name) {
                     self.forced_flags.insert(fact.origin.clone());
                 }
