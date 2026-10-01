@@ -87,6 +87,7 @@ pub struct PartitionedInput {
     pub input: Input,
     pub identity: String,
     pub roots: BTreeMap<String, RootPartition>,
+    pub arguments: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -244,11 +245,23 @@ impl Input {
             input: self,
             identity: identity.into(),
             roots: BTreeMap::new(),
+            arguments: Vec::new(),
         }
     }
 }
 
 impl PartitionedInput {
+    pub fn with_cpp20(mut self) -> Self {
+        self.arguments.push("-std=c++20".to_string());
+        self
+    }
+
+    pub fn with_include_directory(mut self, path: impl Into<String>) -> Self {
+        self.arguments
+            .push(format!("-I{}", normalize_name(&path.into())));
+        self
+    }
+
     pub fn with_root(
         self,
         root: impl Into<String>,

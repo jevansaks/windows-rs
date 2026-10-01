@@ -5,7 +5,12 @@ use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 
 pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
-    extract_impl(inputs.into_iter().collect(), BTreeMap::new(), args)
+    extract_impl(
+        inputs.into_iter().collect(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        args,
+    )
 }
 
 pub fn extract_partitioned(
@@ -15,6 +20,7 @@ pub fn extract_partitioned(
     let inputs: Vec<_> = inputs.into_iter().collect();
     let mut identities = BTreeSet::new();
     let mut owners = BTreeMap::new();
+    let mut input_arguments = BTreeMap::new();
     for input in &inputs {
         if input.identity.trim().is_empty() {
             return Err(Error("partitioned input identity is empty".to_string()));
@@ -45,10 +51,12 @@ pub fn extract_partitioned(
                 },
             );
         }
+        input_arguments.insert(input.input.name.clone(), input.arguments.clone());
     }
     extract_impl(
         inputs.into_iter().map(|input| input.input).collect(),
         owners,
+        input_arguments,
         args,
     )
 }
@@ -56,6 +64,7 @@ pub fn extract_partitioned(
 fn extract_impl(
     inputs: Vec<Input>,
     owners: BTreeMap<(String, String), RootOwner>,
+    input_arguments: BTreeMap<String, Vec<String>>,
     args: &[&str],
 ) -> Result<Snapshot, Error> {
     let mut names = HashSet::new();
@@ -78,7 +87,13 @@ fn extract_impl(
     let mut translation_units = Vec::with_capacity(inputs.len());
     for input in &inputs {
         let tu_time = timing.then(std::time::Instant::now);
-        match TranslationUnit::parse(&index, input, args) {
+        let local_arguments = input_arguments.get(&input.name);
+        let parse_arguments: Vec<_> = args
+            .iter()
+            .copied()
+            .chain(local_arguments.into_iter().flatten().map(String::as_str))
+            .collect();
+        match TranslationUnit::parse(&index, input, &parse_arguments) {
             Ok(translation_unit) => {
                 if timing {
                     eprintln!(
@@ -172,10 +187,16 @@ fn extract_impl(
     let mut synthetic_tus = 0;
     let mut retry_tus = 0;
     for (input, extracted) in inputs.iter().zip(&extracted) {
+        let local_arguments = input_arguments.get(&input.name);
+        let probe_arguments: Vec<_> = args
+            .iter()
+            .copied()
+            .chain(local_arguments.into_iter().flatten().map(String::as_str))
+            .collect();
         let (new_constants, metrics) = evaluate_constants(
             &index,
             input,
-            args,
+            &probe_arguments,
             &facts,
             &extracted.macros,
             &associated_constants,

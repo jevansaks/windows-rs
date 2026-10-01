@@ -849,3 +849,77 @@ fn owner_excludes_empty_records_only_in_partitioned_emission() {
     assert!(!partition.contains("struct EMPTY_RECORD"), "{partition}");
     assert!(partition.contains("struct FULL_RECORD"), "{partition}");
 }
+
+#[test]
+fn partitioned_input_can_enable_cpp20() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "cpp20.h",
+            "#if __cplusplus < 202002L\n#error C++20 required\n#endif\n\
+             typedef unsigned CPP20_VALUE;\n",
+        )
+        .partitioned("cpp20-input")
+        .with_cpp20()
+        .with_root("cpp20.h", "cpp20", "Example.Cpp20")],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+
+    assert!(
+        partitions
+            .values()
+            .next()
+            .unwrap()
+            .contains("type CPP20_VALUE = u32")
+    );
+}
+
+#[test]
+fn partitioned_input_can_add_include_directory() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-partition-include-{}",
+        std::process::id()
+    ));
+    let include = scratch.join("dxcore");
+    std::fs::create_dir_all(&include).unwrap();
+    let header = include.join("dxcore.h");
+    std::fs::write(
+        &header,
+        "typedef struct DXCORE_VALUE { unsigned value; } DXCORE_VALUE;\n",
+    )
+    .unwrap();
+    let snapshot = extract_partitioned(
+        [Input::new("dxcore-main.cpp", "#include <dxcore.h>\n")
+            .partitioned("dxcore-input")
+            .with_include_directory(include.to_string_lossy())
+            .with_root(
+                header.to_string_lossy(),
+                "dxcore",
+                "Example.Graphics.Dxcore",
+            )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+
+    assert!(
+        partitions
+            .values()
+            .next()
+            .unwrap()
+            .contains("struct DXCORE_VALUE")
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
