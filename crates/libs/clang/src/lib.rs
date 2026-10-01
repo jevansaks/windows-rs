@@ -795,6 +795,7 @@ pub struct Snapshot {
     root_owners: BTreeMap<Origin, RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
     partition_inputs: BTreeMap<String, String>,
+    input_order: BTreeMap<String, usize>,
     partition_exclusions: Vec<ExcludedPartitionDeclaration>,
     forced_flags: BTreeSet<Origin>,
     suppressed_type_origins: BTreeSet<Origin>,
@@ -2109,15 +2110,6 @@ impl Snapshot {
                     .insert(owner.clone());
             }
         }
-        let mut constant_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-        for constant in &self.constants {
-            if let Some(owner) = self.root_owners.get(&constant.root) {
-                constant_owners
-                    .entry((&constant.name, &constant.ty, &constant.value))
-                    .or_default()
-                    .insert(owner.clone());
-            }
-        }
         let mut result = BTreeMap::new();
         for planned in &plan.types {
             let mut owners = fact_owners
@@ -2189,10 +2181,12 @@ impl Snapshot {
         }
         for planned in &plan.constants {
             let constant = planned.constant;
-            let mut owners = constant_owners
-                .get(&(&constant.name, &constant.ty, &constant.value))
+            let mut owners = self
+                .root_owners
+                .get(&constant.root)
                 .cloned()
-                .unwrap_or_default();
+                .into_iter()
+                .collect();
             let namespace = self
                 .constant_namespace_authorities
                 .get(&constant.definition)
@@ -2242,28 +2236,78 @@ impl Snapshot {
         constant: &Constant,
         namespace: Option<&str>,
     ) -> Result<(), Error> {
-        if !owners.is_empty() || namespace.is_none() {
+        if !owners.is_empty() {
             return Ok(());
         }
-        let Some(input) = self.partition_inputs.get(&constant.root.tu) else {
-            return Ok(());
+        let mut input_owners = self
+            .root_partitions
+            .iter()
+            .filter(|((tu, _), _)| tu == &constant.root.tu)
+            .map(|(_, owner)| owner.clone())
+            .collect::<BTreeSet<_>>();
+        let owner = if namespace.is_none() {
+            let Some(mut owner) = input_owners.pop_first() else {
+                return Ok(());
+            };
+            if input_owners.iter().any(|candidate| {
+                candidate.partition != owner.partition || candidate.namespace != owner.namespace
+            }) {
+                return Ok(());
+            }
+            owner.root = constant.spelling.file.clone();
+            owner
+        } else {
+            let Some(input) = self.partition_inputs.get(&constant.root.tu) else {
+                return Ok(());
+            };
+            let namespace = namespace.unwrap();
+            validate_namespace(namespace)?;
+            RootOwner {
+                input: input.clone(),
+                root: constant.spelling.file.clone(),
+                partition: input.clone(),
+                namespace: namespace.to_string(),
+                remaps: BTreeMap::new(),
+                exclusions: BTreeSet::new(),
+                libraries: BTreeMap::new(),
+                u32_types: BTreeSet::new(),
+                flags: BTreeSet::new(),
+                preserved_auto_function_pointer_levels: BTreeSet::new(),
+                exclude_empty_records: false,
+            }
         };
-        let namespace = namespace.unwrap();
-        validate_namespace(namespace)?;
-        owners.insert(RootOwner {
-            input: input.clone(),
-            root: constant.spelling.file.clone(),
-            partition: input.clone(),
-            namespace: namespace.to_string(),
-            remaps: BTreeMap::new(),
-            exclusions: BTreeSet::new(),
-            libraries: BTreeMap::new(),
-            u32_types: BTreeSet::new(),
-            flags: BTreeSet::new(),
-            preserved_auto_function_pointer_levels: BTreeSet::new(),
-            exclude_empty_records: false,
-        });
+        owners.insert(owner);
         Ok(())
+    }
+
+    fn input_rank(&self, tu: &str) -> usize {
+        self.input_order.get(tu).copied().unwrap_or(usize::MAX)
+    }
+
+    fn choose_constant_root<'a>(
+        &self,
+        name: &str,
+        roots: &[&'a Constant],
+    ) -> Result<&'a Constant, Error> {
+        let Some(first) = roots.first() else {
+            return Err(Error(format!("missing constant root `{name}`")));
+        };
+        if !roots.iter().all(|constant| {
+            constant_types_match(&constant.ty, &first.ty) && constant.value == first.value
+        }) {
+            return Err(Error(format!("ambiguous constant root `{name}`")));
+        }
+        roots
+            .iter()
+            .min_by_key(|constant| {
+                (
+                    self.input_rank(&constant.root.tu),
+                    &constant.spelling,
+                    &constant.definition,
+                )
+            })
+            .copied()
+            .ok_or_else(|| Error(format!("missing constant root `{name}`")))
     }
 
     fn authoritative_owner(
@@ -2552,7 +2596,7 @@ impl Snapshot {
             let constant = if roots.constants.is_empty() {
                 None
             } else {
-                Some(choose_constant_root(name, &roots.constants)?)
+                Some(self.choose_constant_root(name, &roots.constants)?)
             };
             let types_alias_value_class =
                 types_alias_value_class(name, &roots.types, &roots.values);
@@ -4849,37 +4893,106 @@ fn choose_type_root_cached<'a>(
     Err(Error(format!("ambiguous type root `{name}`: {choices}")))
 }
 
-fn choose_constant_root<'a>(name: &str, roots: &[&'a Constant]) -> Result<&'a Constant, Error> {
-    let Some(first) = roots.first() else {
-        return Err(Error(format!("missing constant root `{name}`")));
-    };
-    if roots.iter().all(|constant| {
-        constant_types_match(&constant.ty, &first.ty) && constant.value == first.value
-    }) {
-        Ok(roots
-            .iter()
-            .min_by_key(|constant| &constant.spelling)
-            .copied()
-            .unwrap())
-    } else {
-        Err(Error(format!("ambiguous constant root `{name}`")))
-    }
-}
-
 fn constant_types_match(left: &TypeRef, right: &TypeRef) -> bool {
-    left == right
-        || matches!(
-            (left, right),
-            (
-                TypeRef::Named {
-                    name: left_name, ..
-                },
-                TypeRef::Named {
-                    name: right_name, ..
-                },
-            ) if named_type_shape(left_name) == named_type_shape(right_name)
-                && named_type_shape(left_name).is_some()
+    match (left, right) {
+        (TypeRef::Void, TypeRef::Void)
+        | (TypeRef::String, TypeRef::String)
+        | (TypeRef::Object, TypeRef::Object) => true,
+        (TypeRef::Scalar(left), TypeRef::Scalar(right)) => left == right,
+        (
+            TypeRef::Named {
+                name: left_name, ..
+            },
+            TypeRef::Named {
+                name: right_name, ..
+            },
+        ) => {
+            left_name == right_name
+                || (named_type_shape(left_name) == named_type_shape(right_name)
+                    && named_type_shape(left_name).is_some())
+        }
+        (
+            TypeRef::Pointer {
+                mutable: left_mutable,
+                target: left,
+            },
+            TypeRef::Pointer {
+                mutable: right_mutable,
+                target: right,
+            },
         )
+        | (
+            TypeRef::Reference {
+                mutable: left_mutable,
+                target: left,
+            },
+            TypeRef::Reference {
+                mutable: right_mutable,
+                target: right,
+            },
+        ) => left_mutable == right_mutable && constant_types_match(left, right),
+        (
+            TypeRef::FunctionPointer {
+                convention: left_convention,
+                params: left_params,
+                result: left_result,
+            },
+            TypeRef::FunctionPointer {
+                convention: right_convention,
+                params: right_params,
+                result: right_result,
+            },
+        ) => {
+            left_convention == right_convention
+                && left_params.len() == right_params.len()
+                && left_params
+                    .iter()
+                    .zip(right_params)
+                    .all(|(left, right)| constant_types_match(left, right))
+                && constant_types_match(left_result, right_result)
+        }
+        (
+            TypeRef::OpaquePointer {
+                mutable: left_mutable,
+                tag: left_tag,
+            },
+            TypeRef::OpaquePointer {
+                mutable: right_mutable,
+                tag: right_tag,
+            },
+        ) => left_mutable == right_mutable && left_tag == right_tag,
+        (
+            TypeRef::Array {
+                target: left,
+                len: left_len,
+            },
+            TypeRef::Array {
+                target: right,
+                len: right_len,
+            },
+        ) => left_len == right_len && constant_types_match(left, right),
+        (
+            TypeRef::Generic {
+                name: left_name,
+                args: left_args,
+                ..
+            },
+            TypeRef::Generic {
+                name: right_name,
+                args: right_args,
+                ..
+            },
+        ) => {
+            left_name == right_name
+                && left_args.len() == right_args.len()
+                && left_args
+                    .iter()
+                    .zip(right_args)
+                    .all(|(left, right)| constant_types_match(left, right))
+        }
+        (TypeRef::InlineRecord(left), TypeRef::InlineRecord(right)) => left == right,
+        _ => false,
+    }
 }
 
 fn choose_function_root<'a>(name: &str, roots: &[&'a Fact]) -> Result<&'a Fact, Error> {
@@ -6468,6 +6581,30 @@ mod tests {
         let different_targets = vec![&first_record, &different_record];
         let different_index = HashMap::from([("_DCIENUMINPUT", different_targets)]);
         assert!(choose_type_root("DCIENUMINPUT", &[&first, &different], &different_index).is_err());
+    }
+
+    #[test]
+    fn constant_type_identity_ignores_named_declaration_location() {
+        let first = TypeRef::Named {
+            name: "LCID".to_string(),
+            declaration: Location {
+                file: "ntdef.h".to_string(),
+                offset: 3202,
+            },
+        };
+        let second = TypeRef::Named {
+            name: "LCID".to_string(),
+            declaration: Location {
+                file: "winnt.h".to_string(),
+                offset: 2381,
+            },
+        };
+
+        assert!(constant_types_match(&first, &second));
+        assert!(!constant_types_match(
+            &TypeRef::Scalar(Scalar::U32),
+            &TypeRef::Scalar(Scalar::U64)
+        ));
     }
 
     #[test]

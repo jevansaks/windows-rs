@@ -72,6 +72,11 @@ fn extract_impl(
     input_arguments: BTreeMap<String, Vec<String>>,
     args: &[&str],
 ) -> Result<Snapshot, Error> {
+    let input_order = inputs
+        .iter()
+        .enumerate()
+        .map(|(index, input)| (input.name.clone(), index))
+        .collect();
     let mut names = HashSet::new();
     for input in &inputs {
         if !names.insert(input.name.as_str()) {
@@ -348,6 +353,7 @@ fn extract_impl(
         root_owners,
         root_partitions: owners,
         partition_inputs,
+        input_order,
         partition_exclusions: vec![],
         forced_flags: BTreeSet::new(),
         suppressed_type_origins: BTreeSet::new(),

@@ -1617,6 +1617,98 @@ fn macro_aliased_functions_preserve_distinct_link_names() {
 }
 
 #[test]
+fn duplicate_macro_constants_prefer_extraction_order() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-locale-constant-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let ntdef = scratch.join("a-ntdef.h");
+    let winnt = scratch.join("z-winnt.h");
+    let source = "#define LOCALE_CUSTOM_DEFAULT 0x0c00\n";
+    std::fs::write(&ntdef, source).unwrap();
+    std::fs::write(&winnt, source).unwrap();
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                "intl.cpp",
+                format!("#include \"{}\"\n", winnt.to_string_lossy()),
+            )
+            .partitioned("intl-input")
+            .with_root(winnt.to_string_lossy(), "intl", "Example.Globalization"),
+            Input::new(
+                "kernel.cpp",
+                format!("#include \"{}\"\n", ntdef.to_string_lossy()),
+            )
+            .partitioned("kernel-input")
+            .with_root(ntdef.to_string_lossy(), "kernel", "Example.System.Kernel"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let output = partitions.values().cloned().collect::<Vec<_>>().join("\n");
+
+    assert_eq!(
+        output.matches("const LOCALE_CUSTOM_DEFAULT").count(),
+        1,
+        "{output}"
+    );
+    assert!(
+        partitions
+            .keys()
+            .any(|partition| partition.namespace == "Example.Globalization"),
+        "{partitions:#?}"
+    );
+
+    let different = windows_clang::extract(
+        [
+            Input::new("first.h", "#define LOCALE_CUSTOM_DEFAULT 0x0c00\n"),
+            Input::new("second.h", "#define LOCALE_CUSTOM_DEFAULT 0x1000\n"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap()
+    .emit("Example")
+    .unwrap_err();
+
+    assert!(
+        different
+            .to_string()
+            .contains("ambiguous constant root `LOCALE_CUSTOM_DEFAULT`"),
+        "{different}"
+    );
+
+    let different_type = windows_clang::extract(
+        [
+            Input::new("first.h", "#define DIFFERENT_TYPE ((unsigned long)1)\n"),
+            Input::new(
+                "second.h",
+                "#define DIFFERENT_TYPE ((unsigned long long)1)\n",
+            ),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap()
+    .emit("Example")
+    .unwrap_err();
+
+    assert!(
+        different_type
+            .to_string()
+            .contains("ambiguous constant root `DIFFERENT_TYPE`"),
+        "{different_type}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn namespace_authorities_reject_duplicate_and_conflicting_routes() {
     helpers::ensure_libclang();
 
