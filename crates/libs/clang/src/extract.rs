@@ -5,7 +5,50 @@ use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 
 pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
+    extract_impl(inputs.into_iter().collect(), BTreeMap::new(), args)
+}
+
+pub fn extract_partitioned(
+    inputs: impl IntoIterator<Item = PartitionedInput>,
+    args: &[&str],
+) -> Result<Snapshot, Error> {
     let inputs: Vec<_> = inputs.into_iter().collect();
+    let mut identities = BTreeSet::new();
+    let mut owners = BTreeMap::new();
+    for input in &inputs {
+        if input.identity.trim().is_empty() {
+            return Err(Error("partitioned input identity is empty".to_string()));
+        }
+        if !identities.insert(input.identity.as_str()) {
+            return Err(Error(format!(
+                "duplicate partitioned input identity `{}`",
+                input.identity
+            )));
+        }
+        for (root, partition) in &input.roots {
+            owners.insert(
+                (input.input.name.clone(), root.clone()),
+                RootOwner {
+                    input: input.identity.clone(),
+                    root: root.clone(),
+                    partition: partition.partition.clone(),
+                    namespace: partition.namespace.clone(),
+                },
+            );
+        }
+    }
+    extract_impl(
+        inputs.into_iter().map(|input| input.input).collect(),
+        owners,
+        args,
+    )
+}
+
+fn extract_impl(
+    inputs: Vec<Input>,
+    owners: BTreeMap<(String, String), RootOwner>,
+    args: &[&str],
+) -> Result<Snapshot, Error> {
     let mut names = HashSet::new();
     for input in &inputs {
         if !names.insert(input.name.as_str()) {
@@ -230,10 +273,20 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
             elapsed_ms(total_time)
         );
     }
+    let root_owners = facts
+        .iter()
+        .filter_map(|fact| {
+            owners
+                .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+                .cloned()
+                .map(|owner| (fact.origin.clone(), owner))
+        })
+        .collect();
     Ok(Snapshot {
         facts,
         constants,
         annotations,
+        root_owners,
         timing_target: target,
     })
 }

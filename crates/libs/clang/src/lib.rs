@@ -11,6 +11,30 @@ fn timings_enabled() -> bool {
         .any(|value| value != "0")
 }
 
+fn write_rdl_strict<'a>(
+    namespace: &str,
+    items: impl IntoIterator<Item = &'a str>,
+) -> Result<String, Error> {
+    validate_namespace(namespace)?;
+    write_rdl(namespace, items)
+}
+
+fn validate_namespace(namespace: &str) -> Result<(), Error> {
+    if namespace.is_empty()
+        || namespace.split('.').any(|part| {
+            part.is_empty()
+                || !part.chars().enumerate().all(|(index, value)| {
+                    value == '_'
+                        || value.is_ascii_alphanumeric() && (index > 0 || !value.is_ascii_digit())
+                })
+        })
+    {
+        Err(Error(format!("invalid namespace `{namespace}`")))
+    } else {
+        Ok(())
+    }
+}
+
 fn timing_target(args: &[&str]) -> String {
     args.iter()
         .find_map(|arg| arg.strip_prefix("--target="))
@@ -25,7 +49,7 @@ fn elapsed_ms(start: Option<std::time::Instant>) -> f64 {
 }
 
 mod extract;
-pub use extract::extract;
+pub use extract::{extract, extract_partitioned};
 
 mod builder;
 pub use builder::{Clang, clang};
@@ -41,6 +65,34 @@ pub struct Input {
     pub root_dirs: BTreeSet<String>,
     pub root_suffixes: BTreeSet<String>,
     pub excluded_roots: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PartitionedInput {
+    pub input: Input,
+    pub identity: String,
+    pub roots: BTreeMap<String, RootPartition>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RootPartition {
+    pub partition: String,
+    pub namespace: String,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RootOwner {
+    pub input: String,
+    pub root: String,
+    pub partition: String,
+    pub namespace: String,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RdlPartition {
+    pub partition: String,
+    pub namespace: String,
+    pub header: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -155,6 +207,34 @@ impl Input {
     ) -> Self {
         self.excluded_roots
             .extend(roots.into_iter().map(|root| normalize_name(&root.into())));
+        self
+    }
+
+    pub fn partitioned(self, identity: impl Into<String>) -> PartitionedInput {
+        PartitionedInput {
+            input: self,
+            identity: identity.into(),
+            roots: BTreeMap::new(),
+        }
+    }
+}
+
+impl PartitionedInput {
+    pub fn with_root(
+        mut self,
+        root: impl Into<String>,
+        partition: impl Into<String>,
+        namespace: impl Into<String>,
+    ) -> Self {
+        let root = normalize_name(&root.into());
+        self.input.roots.insert(root.clone());
+        self.roots.insert(
+            root,
+            RootPartition {
+                partition: partition.into(),
+                namespace: namespace.into(),
+            },
+        );
         self
     }
 }
@@ -491,6 +571,7 @@ pub struct Snapshot {
     facts: Vec<Fact>,
     constants: Vec<Constant>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    root_owners: BTreeMap<Origin, RootOwner>,
     timing_target: Option<String>,
 }
 
@@ -499,6 +580,7 @@ impl PartialEq for Snapshot {
         self.facts == other.facts
             && self.constants == other.constants
             && self.annotations == other.annotations
+            && self.root_owners == other.root_owners
     }
 }
 
@@ -627,6 +709,55 @@ impl Snapshot {
         Ok(result)
     }
 
+    pub fn emit_partitioned_with_options(
+        &self,
+        options: &EmitOptions<'_>,
+    ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        let timing = self.timing_target.is_some();
+        let plan = self.plan(
+            options.references,
+            options.excluded_types.or(options.excluded),
+            options.excluded_functions.or(options.excluded),
+            options.excluded_constants.or(options.excluded),
+            options.functions,
+            timing,
+        )?;
+        let routes = self.partition_routes(&plan)?;
+        let format_time = timing.then(std::time::Instant::now);
+        let items = self.format_items(plan, options, Some(&routes))?;
+        let mut partitions: BTreeMap<RdlPartition, Vec<String>> = BTreeMap::new();
+        for (key, (_, item)) in items {
+            let route = routes.get(&key).unwrap();
+            partitions
+                .entry(RdlPartition {
+                    partition: route.partition.clone(),
+                    namespace: route.namespace.clone(),
+                    header: route.root.clone(),
+                })
+                .or_default()
+                .push(item);
+        }
+        let result: BTreeMap<RdlPartition, String> = partitions
+            .into_iter()
+            .map(|(partition, items)| {
+                Ok((
+                    partition.clone(),
+                    write_rdl_strict(&partition.namespace, items.iter().map(String::as_str))?,
+                ))
+            })
+            .collect::<Result<_, Error>>()?;
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=rdl-format target={} mode=partitioned partitions={} bytes={} elapsed_ms={:.3}",
+                self.timing_target.as_deref().unwrap(),
+                result.len(),
+                result.values().map(String::len).sum::<usize>(),
+                elapsed_ms(format_time)
+            );
+        }
+        Ok(result)
+    }
+
     fn emit_items(
         &self,
         options: &EmitOptions<'_>,
@@ -654,7 +785,51 @@ impl Snapshot {
                 elapsed_ms(plan_time)
             );
         }
+        self.format_items(plan, options, None)
+    }
+
+    fn format_items(
+        &self,
+        plan: Plan<'_>,
+        options: &EmitOptions<'_>,
+        routes: Option<&BTreeMap<(String, OutputKind), RootOwner>>,
+    ) -> Result<BTreeMap<(String, OutputKind), (String, String)>, Error> {
+        let timing = self.timing_target.is_some();
+        let target = self.timing_target.as_deref().unwrap_or("default");
         let emission_time = timing.then(std::time::Instant::now);
+        let mut local_types = BTreeMap::new();
+        if let Some(routes) = routes {
+            let type_namespaces: BTreeMap<_, _> = plan
+                .types
+                .iter()
+                .map(|planned| {
+                    (
+                        planned.name.as_str(),
+                        routes[&(planned.name.clone(), OutputKind::Type)]
+                            .namespace
+                            .as_str(),
+                    )
+                })
+                .collect();
+            for fact in self.facts.iter().filter(|fact| is_type_fact(fact)) {
+                let emitted_name = plan
+                    .type_names
+                    .get(&fact.name)
+                    .map_or(fact.name.as_str(), String::as_str);
+                let Some(namespace) = type_namespaces.get(emitted_name) else {
+                    continue;
+                };
+                if let Some(previous) =
+                    local_types.insert(fact.spelling.clone(), (*namespace).to_string())
+                    && previous != *namespace
+                {
+                    return Err(Error(format!(
+                        "local declaration `{}` has conflicting namespaces `{previous}` and `{namespace}`",
+                        fact.name
+                    )));
+                }
+            }
+        }
         let mut items = BTreeMap::new();
         let planned = plan
             .values
@@ -667,6 +842,9 @@ impl Snapshot {
             );
         for (planned, kind) in planned {
             let fact = planned.fact;
+            let namespace = routes
+                .and_then(|routes| routes.get(&(planned.name.clone(), kind)))
+                .map(|owner| owner.namespace.as_str());
             let item = match &fact.data {
                 FactData::Callback {
                     convention,
@@ -677,6 +855,8 @@ impl Snapshot {
                         &plan.type_names,
                         &plan.interface_names,
                         &fact.origin.tu,
+                        &local_types,
+                        namespace,
                     );
                     write_callback(
                         &planned.name,
@@ -717,6 +897,8 @@ impl Snapshot {
                         &plan.type_names,
                         &plan.interface_names,
                         &fact.origin.tu,
+                        &local_types,
+                        namespace,
                     );
                     let item = write_named_record(
                         &rdl_ident(&planned.name),
@@ -754,6 +936,8 @@ impl Snapshot {
                             &plan.type_names,
                             &plan.interface_names,
                             &fact.origin.tu,
+                            &local_types,
+                            namespace,
                         )
                     )
                 }
@@ -809,6 +993,8 @@ impl Snapshot {
                         &plan.type_names,
                         &plan.interface_names,
                         &fact.origin.tu,
+                        &local_types,
+                        namespace,
                     );
                     let item = write_named_record(
                         &rdl_ident(&planned.name),
@@ -839,6 +1025,8 @@ impl Snapshot {
                         &plan.type_names,
                         &plan.interface_names,
                         &fact.origin.tu,
+                        &local_types,
+                        namespace,
                     );
                     write_interface(
                         &rdl_ident(&planned.name),
@@ -884,8 +1072,16 @@ impl Snapshot {
                     function.name
                 )));
             };
-            let projection =
-                TypeProjection::new(&plan.type_names, &plan.interface_names, &function.origin.tu);
+            let namespace = routes
+                .and_then(|routes| routes.get(&(function.name.clone(), OutputKind::Value)))
+                .map(|owner| owner.namespace.as_str());
+            let projection = TypeProjection::new(
+                &plan.type_names,
+                &plan.interface_names,
+                &function.origin.tu,
+                &local_types,
+                namespace,
+            );
             let callable = CallableTarget::Function(&function.origin);
             let mut params = write_params(params, &projection, &self.annotations, callable)?;
             if *variadic {
@@ -906,6 +1102,8 @@ impl Snapshot {
                         &plan.type_names,
                         &plan.interface_names,
                         &function.origin.tu,
+                        &local_types,
+                        namespace,
                     )
                 )
             };
@@ -970,6 +1168,25 @@ impl Snapshot {
         }
         for planned in plan.constants {
             let constant = planned.constant;
+            let namespace = routes
+                .and_then(|routes| routes.get(&(constant.name.clone(), OutputKind::Value)))
+                .map(|owner| owner.namespace.as_str());
+            let ty = if routes.is_some()
+                && !matches!(constant.value, Value::Utf8(_) | Value::Utf16(_))
+            {
+                constant_type_name(
+                    &constant.ty,
+                    &plan.type_names,
+                    &plan.interface_names,
+                    &plan.pointer_interface_aliases,
+                    &constant.root.tu,
+                    &local_types,
+                    namespace,
+                )
+                .unwrap_or_else(|| planned.ty.clone())
+            } else {
+                planned.ty.clone()
+            };
             let encoding = match &constant.value {
                 Value::Utf8(_) => "    #[encoding(\"ansi\")]\n",
                 Value::Utf16(_) => "    #[encoding(\"utf-16\")]\n",
@@ -985,7 +1202,7 @@ impl Snapshot {
                     "    ",
                 )?,
                 rdl_ident(&constant.name),
-                planned.ty,
+                ty,
                 value_name(&constant.value)
             );
             if items
@@ -1012,6 +1229,100 @@ impl Snapshot {
             );
         }
         Ok(items)
+    }
+
+    fn partition_routes(
+        &self,
+        plan: &Plan<'_>,
+    ) -> Result<BTreeMap<(String, OutputKind), RootOwner>, Error> {
+        let mut fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+        for fact in &self.facts {
+            if let Some(owner) = self.root_owners.get(&fact.origin) {
+                fact_owners
+                    .entry((&fact.name, fact.kind, fact.definition, &fact.data))
+                    .or_default()
+                    .insert(owner.clone());
+            }
+        }
+        let mut constant_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+        for constant in &self.constants {
+            if let Some(owner) = self.root_owners.get(&constant.root) {
+                constant_owners
+                    .entry((&constant.name, &constant.ty, &constant.value))
+                    .or_default()
+                    .insert(owner.clone());
+            }
+        }
+        let mut result = BTreeMap::new();
+        for planned in &plan.types {
+            result.insert(
+                (planned.name.clone(), OutputKind::Type),
+                unique_owner(
+                    &planned.name,
+                    OutputKind::Type,
+                    fact_owners
+                        .get(&(
+                            &planned.fact.name,
+                            planned.fact.kind,
+                            planned.fact.definition,
+                            &planned.fact.data,
+                        ))
+                        .cloned()
+                        .unwrap_or_default(),
+                )?,
+            );
+        }
+        for planned in &plan.values {
+            result.insert(
+                (planned.name.clone(), OutputKind::Value),
+                unique_owner(
+                    &planned.name,
+                    OutputKind::Value,
+                    fact_owners
+                        .get(&(
+                            &planned.fact.name,
+                            planned.fact.kind,
+                            planned.fact.definition,
+                            &planned.fact.data,
+                        ))
+                        .cloned()
+                        .unwrap_or_default(),
+                )?,
+            );
+        }
+        for function in &plan.functions {
+            result.insert(
+                (function.name.clone(), OutputKind::Value),
+                unique_owner(
+                    &function.name,
+                    OutputKind::Value,
+                    fact_owners
+                        .get(&(
+                            &function.name,
+                            function.kind,
+                            function.definition,
+                            &function.data,
+                        ))
+                        .cloned()
+                        .unwrap_or_default(),
+                )?,
+            );
+        }
+        for planned in &plan.constants {
+            let constant = planned.constant;
+            result.insert(
+                (constant.name.clone(), OutputKind::Value),
+                unique_owner(
+                    &constant.name,
+                    OutputKind::Value,
+                    constant_owners
+                        .get(&(&constant.name, &constant.ty, &constant.value))
+                        .cloned()
+                        .unwrap_or_default(),
+                )?,
+            );
+        }
+        Ok(result)
     }
 
     fn plan(
@@ -1912,6 +2223,8 @@ impl Snapshot {
                         &interface_names,
                         &pointer_interface_aliases,
                         &constant.root.tu,
+                        &BTreeMap::new(),
+                        None,
                     ),
                 }?;
                 Some(PlannedConstant { constant, ty })
@@ -1977,6 +2290,7 @@ impl Snapshot {
             constants,
             type_names,
             interface_names,
+            pointer_interface_aliases,
             interface_guids,
             flag_enums,
         })
@@ -2039,6 +2353,7 @@ struct Plan<'a> {
     constants: Vec<PlannedConstant<'a>>,
     type_names: BTreeMap<String, String>,
     interface_names: BTreeSet<(String, String)>,
+    pointer_interface_aliases: BTreeMap<String, String>,
     interface_guids: BTreeMap<String, String>,
     flag_enums: BTreeSet<(String, String)>,
 }
@@ -2047,6 +2362,8 @@ struct TypeProjection<'a> {
     type_names: &'a BTreeMap<String, String>,
     interface_names: &'a BTreeSet<(String, String)>,
     tu: &'a str,
+    local_types: &'a BTreeMap<Location, String>,
+    namespace: Option<&'a str>,
 }
 
 impl<'a> TypeProjection<'a> {
@@ -2054,16 +2371,64 @@ impl<'a> TypeProjection<'a> {
         type_names: &'a BTreeMap<String, String>,
         interface_names: &'a BTreeSet<(String, String)>,
         tu: &'a str,
+        local_types: &'a BTreeMap<Location, String>,
+        namespace: Option<&'a str>,
     ) -> Self {
         Self {
             type_names,
             interface_names,
             tu,
+            local_types,
+            namespace,
         }
     }
 
     fn name(&self, ty: &TypeRef) -> String {
-        planned_emitted_type_name(ty, self.type_names, self.interface_names, self.tu)
+        planned_emitted_type_name(
+            ty,
+            self.type_names,
+            self.interface_names,
+            self.tu,
+            self.local_types,
+            self.namespace,
+        )
+    }
+}
+
+fn unique_owner(
+    name: &str,
+    kind: OutputKind,
+    owners: BTreeSet<RootOwner>,
+) -> Result<RootOwner, Error> {
+    let kind = match kind {
+        OutputKind::Type => "type",
+        OutputKind::Value => "value",
+    };
+    let owners: Vec<_> = owners.into_iter().collect();
+    let Some(owner) = owners.first() else {
+        return Err(Error(format!(
+            "selected {kind} `{name}` has no tagged root owner"
+        )));
+    };
+    if owners.iter().any(|candidate| {
+        candidate.partition != owner.partition || candidate.namespace != owner.namespace
+    }) {
+        return Err(Error(format!(
+            "selected {kind} `{name}` has ambiguous tagged root owners: {}",
+            owners
+                .iter()
+                .map(|owner| format!("{}:{} -> {}", owner.input, owner.root, owner.namespace))
+                .collect::<Vec<_>>()
+                .join("; ")
+        )));
+    }
+    validate_namespace(&owner.namespace)?;
+    if owner.partition.trim().is_empty() {
+        Err(Error(format!(
+            "selected {kind} `{name}` has an empty partition identity"
+        )))
+    } else {
+        Ok(owner.clone())
     }
 }
 
@@ -3604,6 +3969,8 @@ fn write_params(
                     projection.type_names,
                     projection.interface_names,
                     projection.tu,
+                    projection.local_types,
+                    projection.namespace,
                 )
             ))
         })
@@ -3766,6 +4133,8 @@ fn planned_param_type_name(
     type_names: &BTreeMap<String, String>,
     interface_names: &BTreeSet<(String, String)>,
     tu: &str,
+    local_types: &BTreeMap<Location, String>,
+    namespace: Option<&str>,
 ) -> String {
     if param.annotation.com_out_ptr {
         return "*mut *mut void".to_string();
@@ -3776,7 +4145,14 @@ fn planned_param_type_name(
             .cloned()
             .unwrap_or_else(|| name.to_string());
     }
-    planned_emitted_type_name(&param.ty, type_names, interface_names, tu)
+    planned_emitted_type_name(
+        &param.ty,
+        type_names,
+        interface_names,
+        tu,
+        local_types,
+        namespace,
+    )
 }
 
 fn emitted_pointer_is_mutable(
@@ -3849,6 +4225,8 @@ fn planned_emitted_type_name(
     type_names: &BTreeMap<String, String>,
     interface_names: &BTreeSet<(String, String)>,
     tu: &str,
+    local_types: &BTreeMap<Location, String>,
+    namespace: Option<&str>,
 ) -> String {
     if matches!(ty, TypeRef::FunctionPointer { .. }) {
         return "*mut u8".to_string();
@@ -3856,10 +4234,10 @@ fn planned_emitted_type_name(
     if let TypeRef::OpaquePointer { mutable, .. } = ty {
         return format!("*{} void", if *mutable { "mut" } else { "const" });
     }
-    if let TypeRef::Named { name, .. } = ty
+    if let TypeRef::Named { name, declaration } = ty
         && let Some(name) = type_names.get(name)
     {
-        return rdl_ident(name);
+        return qualify_local_type(declaration, name, local_types, namespace);
     }
     if let TypeRef::Named { name, .. } = ty
         && let Some(name) = canonical_named_type(name)
@@ -3873,18 +4251,32 @@ fn planned_emitted_type_name(
         if let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target.as_ref()
             && interface_names.contains(&(tu.to_string(), name.clone()))
         {
-            return planned_type_name(target, type_names);
+            return planned_type_name(target, type_names, local_types, namespace);
         }
         return format!(
             "*{} {}",
             if *mutable { "mut" } else { "const" },
-            planned_emitted_type_name(target, type_names, interface_names, tu)
+            planned_emitted_type_name(
+                target,
+                type_names,
+                interface_names,
+                tu,
+                local_types,
+                namespace,
+            )
         );
     }
     if let TypeRef::Array { target, len } = ty {
         return format!(
             "[{}; {len}]",
-            planned_emitted_type_name(target, type_names, interface_names, tu)
+            planned_emitted_type_name(
+                target,
+                type_names,
+                interface_names,
+                tu,
+                local_types,
+                namespace,
+            )
         );
     }
     let (mutable, depth, target) = pointer_run(ty);
@@ -3895,17 +4287,31 @@ fn planned_emitted_type_name(
         return format!(
             "{}{}",
             format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth - 1),
-            planned_emitted_type_name(target, type_names, interface_names, tu)
+            planned_emitted_type_name(
+                target,
+                type_names,
+                interface_names,
+                tu,
+                local_types,
+                namespace,
+            )
         );
     }
     if depth != 0 {
         return format!(
             "{}{}",
             format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth),
-            planned_emitted_type_name(target, type_names, interface_names, tu)
+            planned_emitted_type_name(
+                target,
+                type_names,
+                interface_names,
+                tu,
+                local_types,
+                namespace,
+            )
         );
     }
-    planned_type_name(ty, type_names)
+    planned_type_name(ty, type_names, local_types, namespace)
 }
 
 fn canonical_named_type(name: &str) -> Option<&'static str> {
@@ -4269,18 +4675,37 @@ fn enum_value(value: i64, repr: Scalar) -> String {
     }
 }
 
-fn planned_type_name(ty: &TypeRef, type_names: &BTreeMap<String, String>) -> String {
+fn planned_type_name(
+    ty: &TypeRef,
+    type_names: &BTreeMap<String, String>,
+    local_types: &BTreeMap<Location, String>,
+    namespace: Option<&str>,
+) -> String {
     match ty {
         TypeRef::Void => "void".to_string(),
         TypeRef::String => "String".to_string(),
         TypeRef::Object => "Object".to_string(),
         TypeRef::Scalar(scalar) => scalar_name(*scalar).to_string(),
-        TypeRef::Named { name, .. } => rdl_ident(type_names.get(name).unwrap_or(name)),
-        TypeRef::Generic { name, args, .. } => format!(
+        TypeRef::Named { name, declaration } => qualify_local_type(
+            declaration,
+            type_names.get(name).unwrap_or(name),
+            local_types,
+            namespace,
+        ),
+        TypeRef::Generic {
+            name,
+            declaration,
+            args,
+        } => format!(
             "{}<{}>",
-            rdl_ident(type_names.get(name).unwrap_or(name)),
+            qualify_local_type(
+                declaration,
+                type_names.get(name).unwrap_or(name),
+                local_types,
+                namespace,
+            ),
             args.iter()
-                .map(|arg| planned_type_name(arg, type_names))
+                .map(|arg| planned_type_name(arg, type_names, local_types, namespace))
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
@@ -4289,25 +4714,49 @@ fn planned_type_name(ty: &TypeRef, type_names: &BTreeMap<String, String>) -> Str
             format!(
                 "{}{}",
                 format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth),
-                planned_type_name(target, type_names)
+                planned_type_name(target, type_names, local_types, namespace)
             )
         }
         TypeRef::Reference { mutable, target } => format!(
             "*{} {}",
             if *mutable { "mut" } else { "const" },
-            planned_type_name(target, type_names)
+            planned_type_name(target, type_names, local_types, namespace)
         ),
         TypeRef::FunctionPointer { .. } => "*mut u8".to_string(),
         TypeRef::OpaquePointer { mutable, .. } => {
             format!("*{} void", if *mutable { "mut" } else { "const" })
         }
         TypeRef::Array { target, len } => {
-            format!("[{}; {len}]", planned_type_name(target, type_names))
+            format!(
+                "[{}; {len}]",
+                planned_type_name(target, type_names, local_types, namespace)
+            )
         }
+
         TypeRef::InlineRecord(record) => record
             .name
             .clone()
             .unwrap_or_else(|| "<inline record>".to_string()),
+    }
+}
+
+fn qualify_local_type(
+    declaration: &Location,
+    fallback_name: &str,
+    local_types: &BTreeMap<Location, String>,
+    namespace: Option<&str>,
+) -> String {
+    let Some(target_namespace) = local_types.get(declaration) else {
+        return rdl_ident(fallback_name);
+    };
+    if namespace == Some(target_namespace.as_str()) {
+        rdl_ident(fallback_name)
+    } else {
+        format!(
+            "{}::{}",
+            target_namespace.replace('.', "::"),
+            rdl_ident(fallback_name)
+        )
     }
 }
 
@@ -4332,6 +4781,8 @@ fn constant_type_name(
     interface_names: &BTreeSet<(String, String)>,
     pointer_interface_aliases: &BTreeMap<String, String>,
     tu: &str,
+    local_types: &BTreeMap<Location, String>,
+    namespace: Option<&str>,
 ) -> Option<String> {
     let name = match ty {
         TypeRef::Scalar(Scalar::Bool) => "u32".to_string(),
@@ -4344,16 +4795,18 @@ fn constant_type_name(
             return None;
         }
         TypeRef::Named { name, .. } if type_names.contains_key(name) => {
-            planned_type_name(ty, type_names)
+            planned_type_name(ty, type_names, local_types, namespace)
         }
-        TypeRef::Named { name, .. } => canonical_named_type(name)
-            .map_or_else(|| planned_type_name(ty, type_names), str::to_string),
+        TypeRef::Named { name, .. } => canonical_named_type(name).map_or_else(
+            || planned_type_name(ty, type_names, local_types, namespace),
+            str::to_string,
+        ),
         TypeRef::Void
         | TypeRef::Object
         | TypeRef::Generic { .. }
         | TypeRef::Array { .. }
         | TypeRef::InlineRecord(_) => return None,
-        _ => planned_type_name(ty, type_names),
+        _ => planned_type_name(ty, type_names, local_types, namespace),
     };
     Some(name)
 }
