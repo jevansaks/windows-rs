@@ -311,3 +311,82 @@ fn same_namespace_interface_uuid_conflict_is_still_an_error() {
         "interface `IResourceManager` has conflicting UUID attributes"
     );
 }
+
+#[test]
+fn collision_planning_preserves_unrelated_shared_type_references() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-shared-collision-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let shared_header = scratch.join("shared.h");
+    let media_header = scratch.join("media.h");
+    let dtc_header = scratch.join("dtc.h");
+    std::fs::write(
+        &shared_header,
+        "struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
+         IDirect3DSurface9 { virtual void Surface() = 0; };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &media_header,
+        "typedef unsigned IDirect3DSurface9;\n\
+         struct __declspec(uuid(\"56a868ac-0ad4-11ce-b03a-0020af0ba770\")) \
+         IResourceManager { virtual void Media() = 0; };\n\
+         extern \"C\" void UseSurface(IDirect3DSurface9 value);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &dtc_header,
+        "struct __declspec(uuid(\"13741d21-87eb-11ce-8081-0080c758527e\")) \
+         IResourceManager { virtual void Dtc() = 0; };\n",
+    )
+    .unwrap();
+    let include = format!("-I{}", scratch.display());
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                shared_header.to_string_lossy(),
+                std::fs::read_to_string(&shared_header).unwrap(),
+            )
+            .partitioned("shared-input")
+            .with_root(
+                shared_header.to_string_lossy(),
+                "shared",
+                "Example.Direct3D9",
+            ),
+            Input::new(
+                media_header.to_string_lossy(),
+                std::fs::read_to_string(&media_header).unwrap(),
+            )
+            .partitioned("media-input")
+            .with_root(media_header.to_string_lossy(), "media", "Example.Media"),
+            Input::new(
+                dtc_header.to_string_lossy(),
+                std::fs::read_to_string(&dtc_header).unwrap(),
+            )
+            .partitioned("dtc-input")
+            .with_root(dtc_header.to_string_lossy(), "dtc", "Example.Dtc"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc", &include],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let media = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Media")
+        .unwrap()
+        .1;
+    assert!(
+        media.contains("fn UseSurface(value: IDirect3DSurface9)"),
+        "{media}"
+    );
+    assert!(media.contains("type IDirect3DSurface9 = u32"), "{media}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
