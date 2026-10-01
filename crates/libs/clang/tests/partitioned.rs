@@ -55,6 +55,9 @@ fn partitioned_emission_routes_owners_and_qualifies_types() {
     let references = BTreeMap::new();
     let mut options = EmitOptions::new("Example.Common", &references);
     options.library = Some("example.dll");
+    let common = snapshot.emit_with_options(&options).unwrap();
+    assert!(common.contains("mod Common"));
+    assert!(common.contains("fn UseItem(value: ITEM) -> ITEM"));
     let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
     let types_rdl = &partitions[&RdlPartition {
         partition: "types".to_string(),
@@ -85,10 +88,6 @@ fn partitioned_emission_routes_owners_and_qualifies_types() {
         ),
         "{functions_rdl}"
     );
-
-    let common = snapshot.emit_with_options(&options).unwrap();
-    assert!(common.contains("mod Common"));
-    assert!(common.contains("fn UseItem(value: ITEM) -> ITEM"));
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -184,5 +183,131 @@ fn partitioned_emission_rejects_untagged_selected_root() {
     assert_eq!(
         error.to_string(),
         "selected type `VALUE` has no tagged root owner"
+    );
+}
+
+#[test]
+fn same_interface_name_can_emit_in_distinct_namespaces() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-same-interface-name-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let media_header = scratch.join("media.h");
+    let dtc_header = scratch.join("dtc.h");
+    let api_header = scratch.join("api.h");
+    std::fs::write(
+        &media_header,
+        "struct __declspec(uuid(\"56a868ac-0ad4-11ce-b03a-0020af0ba770\")) \
+         IResourceManager { virtual void Media() = 0; };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &dtc_header,
+        "struct __declspec(uuid(\"13741d21-87eb-11ce-8081-0080c758527e\")) \
+         IResourceManager { virtual void Dtc() = 0; };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &api_header,
+        "#include \"media.h\"\nextern \"C\" void UseMedia(IResourceManager* value);\n",
+    )
+    .unwrap();
+    let include = format!("-I{}", scratch.display());
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                media_header.to_string_lossy(),
+                std::fs::read_to_string(&media_header).unwrap(),
+            )
+            .partitioned("media-input")
+            .with_root(media_header.to_string_lossy(), "media", "Example.Media"),
+            Input::new(
+                dtc_header.to_string_lossy(),
+                std::fs::read_to_string(&dtc_header).unwrap(),
+            )
+            .partitioned("dtc-input")
+            .with_root(dtc_header.to_string_lossy(), "dtc", "Example.Dtc"),
+            Input::new(
+                api_header.to_string_lossy(),
+                std::fs::read_to_string(&api_header).unwrap(),
+            )
+            .partitioned("api-input")
+            .with_root(api_header.to_string_lossy(), "api", "Example.Api"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc", &include],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let common_error = snapshot.emit_with_options(&options).unwrap_err();
+    assert_eq!(
+        common_error.to_string(),
+        "interface `IResourceManager` has conflicting UUID attributes"
+    );
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+
+    assert_eq!(partitions.len(), 3);
+    let media = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Media")
+        .unwrap()
+        .1;
+    let dtc = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Dtc")
+        .unwrap()
+        .1;
+    let api = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Api")
+        .unwrap()
+        .1;
+    assert!(media.contains("interface IResourceManager"));
+    assert!(media.contains("0x56a868ac_0ad4_11ce_b03a_0020af0ba770"));
+    assert!(dtc.contains("interface IResourceManager"));
+    assert!(dtc.contains("0x13741d21_87eb_11ce_8081_0080c758527e"));
+    assert!(
+        api.contains("fn UseMedia(value: Example::Media::IResourceManager)"),
+        "{api}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn same_namespace_interface_uuid_conflict_is_still_an_error() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                "first.h",
+                "struct __declspec(uuid(\"56a868ac-0ad4-11ce-b03a-0020af0ba770\")) \
+                 IResourceManager { virtual void First() = 0; };\n",
+            )
+            .partitioned("first-input")
+            .with_root("first.h", "first", "Example.Shared"),
+            Input::new(
+                "second.h",
+                "struct __declspec(uuid(\"13741d21-87eb-11ce-8081-0080c758527e\")) \
+                 IResourceManager { virtual void Second() = 0; };\n",
+            )
+            .partitioned("second-input")
+            .with_root("second.h", "second", "Example.Shared"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let error = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "interface `IResourceManager` has conflicting UUID attributes"
     );
 }

@@ -710,11 +710,13 @@ impl Snapshot {
     }
 
     pub fn emit_partitioned_with_options(
-        &self,
+        self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let timing = self.timing_target.is_some();
-        let plan = self.plan(
+        let target = self.timing_target.clone();
+        let (snapshot, display_names) = self.into_partitioned_planning_snapshot();
+        let plan = snapshot.plan(
             options.references,
             options.excluded_types.or(options.excluded),
             options.excluded_functions.or(options.excluded),
@@ -722,9 +724,9 @@ impl Snapshot {
             options.functions,
             timing,
         )?;
-        let routes = self.partition_routes(&plan)?;
+        let routes = snapshot.partition_routes(&plan)?;
         let format_time = timing.then(std::time::Instant::now);
-        let items = self.format_items(plan, options, Some(&routes))?;
+        let items = snapshot.format_items(plan, options, Some(&routes), Some(&display_names))?;
         let mut partitions: BTreeMap<RdlPartition, Vec<String>> = BTreeMap::new();
         for (key, (_, item)) in items {
             let route = routes.get(&key).unwrap();
@@ -749,7 +751,7 @@ impl Snapshot {
         if timing {
             eprintln!(
                 "windows-clang timing phase=rdl-format target={} mode=partitioned partitions={} bytes={} elapsed_ms={:.3}",
-                self.timing_target.as_deref().unwrap(),
+                target.as_deref().unwrap(),
                 result.len(),
                 result.values().map(String::len).sum::<usize>(),
                 elapsed_ms(format_time)
@@ -785,14 +787,15 @@ impl Snapshot {
                 elapsed_ms(plan_time)
             );
         }
-        self.format_items(plan, options, None)
+        self.format_items(plan, options, None, None)
     }
 
     fn format_items(
         &self,
-        plan: Plan<'_>,
+        mut plan: Plan<'_>,
         options: &EmitOptions<'_>,
         routes: Option<&BTreeMap<(String, OutputKind), RootOwner>>,
+        display_names: Option<&BTreeMap<String, String>>,
     ) -> Result<BTreeMap<(String, OutputKind), (String, String)>, Error> {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
@@ -830,6 +833,18 @@ impl Snapshot {
                 }
             }
         }
+        if let Some(display_names) = display_names {
+            for name in plan.type_names.values_mut() {
+                if let Some(display) = display_names.get(name) {
+                    *name = display.clone();
+                }
+            }
+            for (internal, display) in display_names {
+                plan.type_names
+                    .entry(internal.clone())
+                    .or_insert_with(|| display.clone());
+            }
+        }
         let mut items = BTreeMap::new();
         let planned = plan
             .values
@@ -842,6 +857,9 @@ impl Snapshot {
             );
         for (planned, kind) in planned {
             let fact = planned.fact;
+            let output_name = display_names
+                .and_then(|names| names.get(&planned.name))
+                .unwrap_or(&planned.name);
             let namespace = routes
                 .and_then(|routes| routes.get(&(planned.name.clone(), kind)))
                 .map(|owner| owner.namespace.as_str());
@@ -859,7 +877,7 @@ impl Snapshot {
                         namespace,
                     );
                     write_callback(
-                        &planned.name,
+                        output_name,
                         *convention,
                         params,
                         result,
@@ -871,14 +889,14 @@ impl Snapshot {
                 FactData::Class { guid } => {
                     format!(
                         "    const {}: GUID = {};\n",
-                        rdl_ident(&planned.name),
+                        rdl_ident(output_name),
                         rdl_uuid(guid)
                     )
                 }
                 FactData::Guid { value } => {
                     format!(
                         "    const {}: GUID = {};\n",
-                        rdl_ident(&planned.name),
+                        rdl_ident(output_name),
                         rdl_uuid(value)
                     )
                 }
@@ -886,7 +904,7 @@ impl Snapshot {
                     format!(
                         "    #[guid({})]\n    const {}: {} = {pid};\n",
                         rdl_uuid(guid),
-                        rdl_ident(&planned.name),
+                        rdl_ident(output_name),
                         rdl_ident(ty)
                     )
                 }
@@ -901,7 +919,7 @@ impl Snapshot {
                         namespace,
                     );
                     let item = write_named_record(
-                        &rdl_ident(&planned.name),
+                        &rdl_ident(output_name),
                         &record.fields,
                         record.packing,
                         record.alignment,
@@ -930,7 +948,7 @@ impl Snapshot {
                             ),
                             "    ",
                         )?,
-                        rdl_ident(&planned.name),
+                        rdl_ident(output_name),
                         planned_emitted_type_name(
                             target,
                             &plan.type_names,
@@ -963,7 +981,7 @@ impl Snapshot {
                         scalar_name(repr),
                         if flags { "    #[flags]\n" } else { "" },
                         if *scoped { "    #[scoped]\n" } else { "" },
-                        rdl_ident(&planned.name)
+                        rdl_ident(output_name)
                     );
                     for (index, variant) in variants.iter().enumerate() {
                         item.push_str(&format!(
@@ -997,7 +1015,7 @@ impl Snapshot {
                         namespace,
                     );
                     let item = write_named_record(
-                        &rdl_ident(&planned.name),
+                        &rdl_ident(output_name),
                         fields,
                         *packing,
                         *alignment,
@@ -1029,7 +1047,7 @@ impl Snapshot {
                         namespace,
                     );
                     write_interface(
-                        &rdl_ident(&planned.name),
+                        &rdl_ident(output_name),
                         base.as_ref(),
                         guid.as_deref().or_else(|| {
                             plan.interface_guids.get(&planned.name).map(String::as_str)
@@ -1058,6 +1076,9 @@ impl Snapshot {
             }
         }
         for function in plan.functions {
+            let output_name = display_names
+                .and_then(|names| names.get(&function.name))
+                .unwrap_or(&function.name);
             let FactData::Function {
                 link_name,
                 convention,
@@ -1154,7 +1175,7 @@ impl Snapshot {
                 "{}{}    {library}\n    extern{abi} fn {}({params}){result};\n",
                 annotation_lines(declaration_annotations, "    ")?,
                 if *noreturn { "    #[noreturn]\n" } else { "" },
-                rdl_ident(&function.name),
+                rdl_ident(output_name),
             );
             if items
                 .insert(
@@ -1168,6 +1189,9 @@ impl Snapshot {
         }
         for planned in plan.constants {
             let constant = planned.constant;
+            let output_name = display_names
+                .and_then(|names| names.get(&constant.name))
+                .unwrap_or(&constant.name);
             let namespace = routes
                 .and_then(|routes| routes.get(&(constant.name.clone(), OutputKind::Value)))
                 .map(|owner| owner.namespace.as_str());
@@ -1201,7 +1225,7 @@ impl Snapshot {
                     ),
                     "    ",
                 )?,
-                rdl_ident(&constant.name),
+                rdl_ident(output_name),
                 ty,
                 value_name(&constant.value)
             );
@@ -1229,6 +1253,124 @@ impl Snapshot {
             );
         }
         Ok(items)
+    }
+
+    fn into_partitioned_planning_snapshot(mut self) -> (Self, BTreeMap<String, String>) {
+        let mut variants: BTreeMap<&str, BTreeMap<&str, BTreeSet<&FactData>>> = BTreeMap::new();
+        for fact in self.facts.iter().filter(|fact| fact.root) {
+            let Some(owner) = self.root_owners.get(&fact.origin) else {
+                continue;
+            };
+            variants
+                .entry(&fact.name)
+                .or_default()
+                .entry(&owner.namespace)
+                .or_default()
+                .insert(&fact.data);
+        }
+        let collisions: BTreeSet<_> = variants
+            .into_iter()
+            .filter_map(|(name, namespaces)| {
+                let distinct: BTreeSet<_> = namespaces.values().flatten().copied().collect();
+                (namespaces.len() > 1 && distinct.len() > 1).then_some(name.to_string())
+            })
+            .collect();
+        if collisions.is_empty() {
+            return (self, BTreeMap::new());
+        }
+
+        let mut source_namespaces: BTreeMap<(Location, String), BTreeSet<String>> = BTreeMap::new();
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| collisions.contains(&fact.name))
+        {
+            if let Some(owner) = self.root_owners.get(&fact.origin) {
+                source_namespaces
+                    .entry((fact.spelling.clone(), fact.name.clone()))
+                    .or_default()
+                    .insert(owner.namespace.clone());
+            }
+        }
+        let fact_namespaces: BTreeMap<_, _> = self
+            .facts
+            .iter()
+            .filter(|fact| collisions.contains(&fact.name))
+            .filter_map(|fact| {
+                let namespace = self
+                    .root_owners
+                    .get(&fact.origin)
+                    .map(|owner| owner.namespace.clone())
+                    .or_else(|| {
+                        let namespaces =
+                            source_namespaces.get(&(fact.spelling.clone(), fact.name.clone()))?;
+                        (namespaces.len() == 1).then(|| namespaces.first().unwrap().clone())
+                    })?;
+                Some((fact.origin.clone(), namespace))
+            })
+            .collect();
+        let mut scoped_names = BTreeMap::new();
+        let mut display_names = BTreeMap::new();
+        for (index, (name, namespace)) in self
+            .facts
+            .iter()
+            .filter(|fact| collisions.contains(&fact.name))
+            .filter_map(|fact| {
+                fact_namespaces
+                    .get(&fact.origin)
+                    .map(|namespace| (fact.name.clone(), namespace.clone()))
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .enumerate()
+        {
+            let scoped = format!("__partition_{index}_{name}");
+            display_names.insert(scoped.clone(), name.clone());
+            scoped_names.insert((name, namespace), scoped);
+        }
+
+        let mut declarations = BTreeMap::new();
+        for fact in &self.facts {
+            let Some(namespace) = fact_namespaces.get(&fact.origin) else {
+                continue;
+            };
+            let Some(scoped) = scoped_names.get(&(fact.name.clone(), namespace.clone())) else {
+                continue;
+            };
+            declarations.insert(
+                (
+                    fact.origin.tu.clone(),
+                    fact.spelling.clone(),
+                    fact.name.clone(),
+                ),
+                scoped.clone(),
+            );
+        }
+
+        for fact in &mut self.facts {
+            let original = fact.name.clone();
+            if let Some(namespace) = fact_namespaces.get(&fact.origin)
+                && let Some(scoped) = scoped_names.get(&(original.clone(), namespace.clone()))
+            {
+                fact.name = scoped.clone();
+            }
+            rename_fact_types(&mut fact.data, &fact.origin.tu, &declarations, &collisions);
+        }
+        for constant in &mut self.constants {
+            let original = constant.name.clone();
+            if let Some(owner) = self.root_owners.get(&constant.root)
+                && let Some(scoped) = scoped_names.get(&(original, owner.namespace.clone()))
+            {
+                constant.name = scoped.clone();
+            }
+            rename_type_ref(
+                &mut constant.ty,
+                &constant.root.tu,
+                &declarations,
+                &collisions,
+            );
+        }
+        (self, display_names)
     }
 
     fn partition_routes(
@@ -2392,6 +2534,97 @@ impl<'a> TypeProjection<'a> {
             self.local_types,
             self.namespace,
         )
+    }
+}
+
+fn rename_fact_types(
+    data: &mut FactData,
+    tu: &str,
+    declarations: &BTreeMap<(String, Location, String), String>,
+    collisions: &BTreeSet<String>,
+) {
+    match data {
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            for param in params {
+                rename_type_ref(&mut param.ty, tu, declarations, collisions);
+            }
+            rename_type_ref(result, tu, declarations, collisions);
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                rename_type_ref(base, tu, declarations, collisions);
+            }
+            for method in methods {
+                for param in &mut method.params {
+                    rename_type_ref(&mut param.ty, tu, declarations, collisions);
+                }
+                rename_type_ref(&mut method.result, tu, declarations, collisions);
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                rename_type_ref(base, tu, declarations, collisions);
+            }
+            for field in fields {
+                rename_type_ref(&mut field.ty, tu, declarations, collisions);
+            }
+        }
+        FactData::Typedef { target } => rename_type_ref(target, tu, declarations, collisions),
+        _ => {}
+    }
+}
+
+fn rename_type_ref(
+    ty: &mut TypeRef,
+    tu: &str,
+    declarations: &BTreeMap<(String, Location, String), String>,
+    collisions: &BTreeSet<String>,
+) {
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            if !collisions.contains(name) {
+                return;
+            }
+            if let Some(scoped) =
+                declarations.get(&(tu.to_string(), declaration.clone(), name.clone()))
+            {
+                *name = scoped.clone();
+            }
+        }
+        TypeRef::Generic {
+            name,
+            declaration,
+            args,
+        } => {
+            if collisions.contains(name) {
+                if let Some(scoped) =
+                    declarations.get(&(tu.to_string(), declaration.clone(), name.clone()))
+                {
+                    *name = scoped.clone();
+                }
+            }
+            for arg in args {
+                rename_type_ref(arg, tu, declarations, collisions);
+            }
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => rename_type_ref(target, tu, declarations, collisions),
+        TypeRef::FunctionPointer { params, result, .. } => {
+            for param in params {
+                rename_type_ref(param, tu, declarations, collisions);
+            }
+            rename_type_ref(result, tu, declarations, collisions);
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &mut record.base {
+                rename_type_ref(base, tu, declarations, collisions);
+            }
+            for field in &mut record.fields {
+                rename_type_ref(&mut field.ty, tu, declarations, collisions);
+            }
+        }
+        _ => {}
     }
 }
 
