@@ -322,19 +322,32 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
     ));
     std::fs::create_dir_all(&scratch).unwrap();
     let shared_header = scratch.join("shared.h");
+    let alias_header = scratch.join("alias.h");
+    let direct3d_main = scratch.join("direct3d-main.cpp");
     let media_header = scratch.join("media.h");
     let dtc_header = scratch.join("dtc.h");
     std::fs::write(
         &shared_header,
-        "struct IDirect3DSurface9;\n\
-         struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
-         IDirect3DSurface9 { virtual void Surface() = 0; };\n\
-         typedef struct IDirect3DSurface9 IDirect3DSurface9;\n",
+        "#ifndef SHARED_H\n#define SHARED_H\n\
+         struct IDirect3DSurface9 { int value; };\n\
+         typedef struct IDirect3DSurface9 IDirect3DSurface9;\n\
+         #endif\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &alias_header,
+        "#ifndef DIRECT3D_FULL\nstruct IDirect3DSurface9;\n#endif\n\
+         #include \"shared.h\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &direct3d_main,
+        "#define DIRECT3D_FULL\n#include \"shared.h\"\n#include \"alias.h\"\n",
     )
     .unwrap();
     std::fs::write(
         &media_header,
-        "#include \"shared.h\"\n\
+        "#include \"alias.h\"\n\
          struct __declspec(uuid(\"56a868ac-0ad4-11ce-b03a-0020af0ba770\")) \
          IResourceManager { virtual void Media() = 0; };\n\
          extern \"C\" void UseSurface(IDirect3DSurface9* value);\n",
@@ -350,12 +363,17 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
     let snapshot = extract_partitioned(
         [
             Input::new(
-                shared_header.to_string_lossy(),
-                std::fs::read_to_string(&shared_header).unwrap(),
+                direct3d_main.to_string_lossy(),
+                std::fs::read_to_string(&direct3d_main).unwrap(),
             )
             .partitioned("shared-input")
             .with_root(
                 shared_header.to_string_lossy(),
+                "shared",
+                "Example.Direct3D9",
+            )
+            .with_root(
+                alias_header.to_string_lossy(),
                 "shared",
                 "Example.Direct3D9",
             ),
@@ -364,7 +382,12 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
                 std::fs::read_to_string(&media_header).unwrap(),
             )
             .partitioned("media-input")
-            .with_root(media_header.to_string_lossy(), "media", "Example.Media"),
+            .with_root(media_header.to_string_lossy(), "media", "Example.Media")
+            .with_root(
+                alias_header.to_string_lossy(),
+                "shared",
+                "Example.Direct3D9",
+            ),
             Input::new(
                 dtc_header.to_string_lossy(),
                 std::fs::read_to_string(&dtc_header).unwrap(),
@@ -385,7 +408,7 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
         .unwrap()
         .1;
     assert!(
-        media.contains("fn UseSurface(value: Example::Direct3D9::IDirect3DSurface9)"),
+        media.contains("fn UseSurface(value: *mut Example::Direct3D9::IDirect3DSurface9)"),
         "{media}"
     );
 

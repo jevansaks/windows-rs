@@ -572,6 +572,7 @@ pub struct Snapshot {
     constants: Vec<Constant>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     root_owners: BTreeMap<Origin, RootOwner>,
+    root_partitions: BTreeMap<(String, String), RootOwner>,
     timing_target: Option<String>,
 }
 
@@ -581,6 +582,7 @@ impl PartialEq for Snapshot {
             && self.constants == other.constants
             && self.annotations == other.annotations
             && self.root_owners == other.root_owners
+            && self.root_partitions == other.root_partitions
     }
 }
 
@@ -1875,6 +1877,32 @@ impl Snapshot {
                                 fact.origin.tu == tu
                                     && fact.spelling.file == declaration.file
                                     && is_type_fact(fact)
+                            }),
+                    );
+                }
+                if matches.is_empty()
+                    && let Some(owner) = self
+                        .root_partitions
+                        .get(&(tu.to_string(), declaration.file.clone()))
+                {
+                    matches.extend(
+                        facts_index
+                            .get(name.as_str())
+                            .into_iter()
+                            .flatten()
+                            .copied()
+                            .filter(|fact| is_type_fact(fact))
+                            .filter(|fact| {
+                                self.root_owners.get(&fact.origin).is_some_and(|candidate| {
+                                    candidate.partition == owner.partition
+                                        && candidate.namespace == owner.namespace
+                                }) || self
+                                    .root_partitions
+                                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+                                    .is_some_and(|candidate| {
+                                        candidate.partition == owner.partition
+                                            && candidate.namespace == owner.namespace
+                                    })
                             }),
                     );
                 }

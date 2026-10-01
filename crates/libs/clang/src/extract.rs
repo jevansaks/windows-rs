@@ -287,6 +287,7 @@ fn extract_impl(
         constants,
         annotations,
         root_owners,
+        root_partitions: owners,
         timing_target: target,
     })
 }
