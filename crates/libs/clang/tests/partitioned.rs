@@ -495,6 +495,94 @@ fn exact_non_type_class_fact_falls_back_to_same_header_typedef() {
 }
 
 #[test]
+fn canonical_interface_root_reconciles_header_and_helper_typedefs() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-interface-root-aliases-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let helper = scratch.join("d3d9helper.h");
+    let shared = scratch.join("d3d9.h");
+    let direct3d = scratch.join("direct3d.cpp");
+    let media = scratch.join("media.cpp");
+    std::fs::write(
+        &helper,
+        "#ifndef D3D9HELPER_H\n#define D3D9HELPER_H\n\
+         struct __declspec(uuid(\"d0223b96-bf7a-43fd-92bd-a43b0d82b9eb\")) \
+         IDirect3DDevice9;\n\
+         typedef struct IDirect3DDevice9 IDirect3DDevice9;\n\
+         #endif\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &shared,
+        "#ifndef D3D9_H\n#define D3D9_H\n\
+         struct __declspec(uuid(\"d0223b96-bf7a-43fd-92bd-a43b0d82b9eb\")) \
+         IDirect3DDevice9;\n\
+         typedef struct IDirect3DDevice9 IDirect3DDevice9;\n\
+         struct __declspec(uuid(\"d0223b96-bf7a-43fd-92bd-a43b0d82b9eb\")) \
+         IDirect3DDevice9 { virtual void Present() = 0; };\n\
+         #endif\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &direct3d,
+        "#include \"d3d9helper.h\"\n#include \"d3d9.h\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &media,
+        "#include \"d3d9helper.h\"\n\
+         extern \"C\" void UseDevice(IDirect3DDevice9* value);\n",
+    )
+    .unwrap();
+    let include = format!("-I{}", scratch.display());
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                direct3d.to_string_lossy(),
+                std::fs::read_to_string(&direct3d).unwrap(),
+            )
+            .partitioned("direct3d-input")
+            .with_root(shared.to_string_lossy(), "direct3d", "Example.Direct3D9")
+            .with_root(helper.to_string_lossy(), "direct3d", "Example.Direct3D9"),
+            Input::new(
+                media.to_string_lossy(),
+                std::fs::read_to_string(&media).unwrap(),
+            )
+            .partitioned("media-input")
+            .with_root(media.to_string_lossy(), "media", "Example.Media"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc", &include],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let direct3d = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Direct3D9")
+        .unwrap()
+        .1;
+    let media = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Media")
+        .unwrap()
+        .1;
+
+    assert_eq!(direct3d.matches("interface IDirect3DDevice9").count(), 1);
+    assert!(
+        media.contains("fn UseDevice(value: *mut Example::Direct3D9::IDirect3DDevice9)"),
+        "{media}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn owner_remap_applies_before_namespace_collision_planning() {
     helpers::ensure_libclang();
 

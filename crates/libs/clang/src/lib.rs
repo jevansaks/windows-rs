@@ -4223,6 +4223,41 @@ fn choose_type_root_cached<'a>(
             ) && fact.definition
         })
         .collect();
+    if let [root] = definitions.as_slice()
+        && let FactData::Interface {
+            guid: Some(guid), ..
+        } = &root.data
+        && distinct.iter().all(|fact| {
+            if fact.origin == root.origin {
+                return true;
+            }
+            if fact_uuid(fact) == Some(guid) {
+                return matches!(fact.data, FactData::Interface { .. });
+            }
+            let FactData::Typedef {
+                target: TypeRef::Named { name, declaration },
+            } = &fact.data
+            else {
+                return false;
+            };
+            facts_index
+                .get(name.as_str())
+                .into_iter()
+                .flatten()
+                .any(|target| {
+                    target.origin.tu == fact.origin.tu
+                        && target.spelling == *declaration
+                        && fact_uuid(target) == Some(guid)
+                        && target.kind == root.kind
+                        && matches!(
+                            target.data,
+                            FactData::Class { .. } | FactData::Interface { .. }
+                        )
+                })
+        })
+    {
+        return Ok(root);
+    }
     if definitions.len() > 1 {
         let root = preferred_fact(&definitions);
         let equivalent_definitions = definitions.iter().all(|fact| {
