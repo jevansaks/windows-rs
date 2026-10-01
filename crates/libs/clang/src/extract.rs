@@ -33,6 +33,7 @@ pub fn extract_partitioned(
                     root: root.clone(),
                     partition: partition.partition.clone(),
                     namespace: partition.namespace.clone(),
+                    remaps: partition.remaps.clone(),
                 },
             );
         }

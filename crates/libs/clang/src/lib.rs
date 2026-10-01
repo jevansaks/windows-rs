@@ -78,6 +78,7 @@ pub struct PartitionedInput {
 pub struct RootPartition {
     pub partition: String,
     pub namespace: String,
+    pub remaps: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -86,6 +87,7 @@ pub struct RootOwner {
     pub root: String,
     pub partition: String,
     pub namespace: String,
+    pub remaps: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -221,20 +223,37 @@ impl Input {
 
 impl PartitionedInput {
     pub fn with_root(
-        mut self,
+        self,
         root: impl Into<String>,
         partition: impl Into<String>,
         namespace: impl Into<String>,
     ) -> Self {
+        self.with_root_partition(root, RootPartition::new(partition, namespace))
+    }
+
+    pub fn with_root_partition(
+        mut self,
+        root: impl Into<String>,
+        partition: RootPartition,
+    ) -> Self {
         let root = normalize_name(&root.into());
         self.input.roots.insert(root.clone());
-        self.roots.insert(
-            root,
-            RootPartition {
-                partition: partition.into(),
-                namespace: namespace.into(),
-            },
-        );
+        self.roots.insert(root, partition);
+        self
+    }
+}
+
+impl RootPartition {
+    pub fn new(partition: impl Into<String>, namespace: impl Into<String>) -> Self {
+        Self {
+            partition: partition.into(),
+            namespace: namespace.into(),
+            remaps: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_remap(mut self, source: impl Into<String>, target: impl Into<String>) -> Self {
+        self.remaps.insert(source.into(), target.into());
         self
     }
 }
@@ -1258,6 +1277,7 @@ impl Snapshot {
     }
 
     fn into_partitioned_planning_snapshot(mut self) -> (Self, BTreeMap<String, String>) {
+        self.apply_partition_remaps();
         let mut variants: BTreeMap<&str, BTreeMap<&str, BTreeSet<&FactData>>> = BTreeMap::new();
         for fact in self.facts.iter().filter(|fact| fact.root) {
             let Some(owner) = self.root_owners.get(&fact.origin) else {
@@ -1385,6 +1405,77 @@ impl Snapshot {
             );
         }
         (self, display_names)
+    }
+
+    fn apply_partition_remaps(&mut self) {
+        let mut source_remaps: BTreeMap<(Location, String), BTreeSet<String>> = BTreeMap::new();
+        for fact in &self.facts {
+            if let Some(owner) = self.root_owners.get(&fact.origin)
+                && let Some(target) = owner.remaps.get(&fact.name)
+            {
+                source_remaps
+                    .entry((fact.spelling.clone(), fact.name.clone()))
+                    .or_default()
+                    .insert(target.clone());
+            }
+        }
+        let fact_remaps: BTreeMap<_, _> = self
+            .facts
+            .iter()
+            .filter_map(|fact| {
+                let target = self
+                    .root_owners
+                    .get(&fact.origin)
+                    .and_then(|owner| owner.remaps.get(&fact.name))
+                    .cloned()
+                    .or_else(|| {
+                        let targets =
+                            source_remaps.get(&(fact.spelling.clone(), fact.name.clone()))?;
+                        (targets.len() == 1).then(|| targets.first().unwrap().clone())
+                    })?;
+                Some((fact.origin.clone(), target))
+            })
+            .collect();
+        let declarations: BTreeMap<_, _> = self
+            .facts
+            .iter()
+            .filter_map(|fact| {
+                fact_remaps.get(&fact.origin).map(|target| {
+                    (
+                        (
+                            fact.origin.tu.clone(),
+                            fact.spelling.clone(),
+                            fact.name.clone(),
+                        ),
+                        target.clone(),
+                    )
+                })
+            })
+            .collect();
+        for fact in &mut self.facts {
+            remap_fact_types(
+                &mut fact.data,
+                &fact.origin.tu,
+                &declarations,
+                &self.root_partitions,
+            );
+            if let Some(target) = fact_remaps.get(&fact.origin) {
+                fact.name = target.clone();
+            }
+        }
+        for constant in &mut self.constants {
+            remap_type_ref(
+                &mut constant.ty,
+                &constant.root.tu,
+                &declarations,
+                &self.root_partitions,
+            );
+            if let Some(owner) = self.root_owners.get(&constant.root)
+                && let Some(target) = owner.remaps.get(&constant.name)
+            {
+                constant.name = target.clone();
+            }
+        }
     }
 
     fn partition_routes(
@@ -2610,6 +2701,102 @@ fn scoped_declaration_name<'a>(
             let names = tu_declarations.get(&(tu.to_string(), name.to_string()))?;
             (names.len() == 1).then(|| names.first().unwrap())
         })
+}
+
+fn remap_fact_types(
+    data: &mut FactData,
+    tu: &str,
+    declarations: &BTreeMap<(String, Location, String), String>,
+    roots: &BTreeMap<(String, String), RootOwner>,
+) {
+    match data {
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            for param in params {
+                remap_type_ref(&mut param.ty, tu, declarations, roots);
+            }
+            remap_type_ref(result, tu, declarations, roots);
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                remap_type_ref(base, tu, declarations, roots);
+            }
+            for method in methods {
+                for param in &mut method.params {
+                    remap_type_ref(&mut param.ty, tu, declarations, roots);
+                }
+                remap_type_ref(&mut method.result, tu, declarations, roots);
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                remap_type_ref(base, tu, declarations, roots);
+            }
+            for field in fields {
+                remap_type_ref(&mut field.ty, tu, declarations, roots);
+            }
+        }
+        FactData::Typedef { target } => remap_type_ref(target, tu, declarations, roots),
+        _ => {}
+    }
+}
+
+fn remap_type_ref(
+    ty: &mut TypeRef,
+    tu: &str,
+    declarations: &BTreeMap<(String, Location, String), String>,
+    roots: &BTreeMap<(String, String), RootOwner>,
+) {
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            if let Some(target) = declarations
+                .get(&(tu.to_string(), declaration.clone(), name.clone()))
+                .or_else(|| {
+                    roots
+                        .get(&(tu.to_string(), declaration.file.clone()))
+                        .and_then(|owner| owner.remaps.get(name))
+                })
+            {
+                *name = target.clone();
+            }
+        }
+        TypeRef::Generic {
+            name,
+            declaration,
+            args,
+        } => {
+            if let Some(target) = declarations
+                .get(&(tu.to_string(), declaration.clone(), name.clone()))
+                .or_else(|| {
+                    roots
+                        .get(&(tu.to_string(), declaration.file.clone()))
+                        .and_then(|owner| owner.remaps.get(name))
+                })
+            {
+                *name = target.clone();
+            }
+            for arg in args {
+                remap_type_ref(arg, tu, declarations, roots);
+            }
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => remap_type_ref(target, tu, declarations, roots),
+        TypeRef::FunctionPointer { params, result, .. } => {
+            for param in params {
+                remap_type_ref(param, tu, declarations, roots);
+            }
+            remap_type_ref(result, tu, declarations, roots);
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &mut record.base {
+                remap_type_ref(base, tu, declarations, roots);
+            }
+            for field in &mut record.fields {
+                remap_type_ref(&mut field.ty, tu, declarations, roots);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn rename_fact_types(

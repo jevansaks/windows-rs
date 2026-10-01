@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use windows_clang::{EmitOptions, Input, RdlPartition, extract_partitioned};
+use windows_clang::{EmitOptions, Input, RdlPartition, RootPartition, extract_partitioned};
 
 #[test]
 fn partitioned_emission_routes_owners_and_qualifies_types() {
@@ -413,4 +413,50 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
     );
 
     std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn owner_remap_applies_before_namespace_collision_planning() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                "first.h",
+                "typedef struct _PIN_INFO { int first; } _PIN_INFO;\n\
+                 extern \"C\" void UsePin(_PIN_INFO value);\n",
+            )
+            .partitioned("first-input")
+            .with_root_partition(
+                "first.h",
+                RootPartition::new("first", "Example.First").with_remap("_PIN_INFO", "PIN_INFO"),
+            ),
+            Input::new(
+                "second.h",
+                "typedef struct PIN_INFO { long long second; } PIN_INFO;\n",
+            )
+            .partitioned("second-input")
+            .with_root("second.h", "second", "Example.Second"),
+        ],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let first = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.First")
+        .unwrap()
+        .1;
+    let second = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Second")
+        .unwrap()
+        .1;
+    assert!(first.contains("struct PIN_INFO"), "{first}");
+    assert!(first.contains("fn UsePin(value: PIN_INFO)"), "{first}");
+    assert!(!first.contains("_PIN_INFO"), "{first}");
+    assert!(second.contains("struct PIN_INFO"), "{second}");
 }
