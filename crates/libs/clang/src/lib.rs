@@ -4840,6 +4840,15 @@ fn choose_function_root<'a>(name: &str, roots: &[&'a Fact]) -> Result<&'a Fact, 
         return Ok(root);
     }
     if let Some(first) = distinct.first()
+        && distinct.iter().all(|fact| {
+            fact.kind == first.kind
+                && fact.definition == first.definition
+                && fact.data == first.data
+        })
+    {
+        return Ok(preferred_fact(&distinct));
+    }
+    if let Some(first) = distinct.first()
         && let FactData::Function {
             link_name: first_link_name,
             ..

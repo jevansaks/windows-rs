@@ -1441,6 +1441,95 @@ fn namespace_authority_routes_untagged_transitive_type() {
 }
 
 #[test]
+fn identical_midl_helper_functions_coalesce_across_headers() {
+    helpers::ensure_libclang();
+
+    let scratch =
+        std::env::temp_dir().join(format!("windows-clang-midl-helpers-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let wtypes = scratch.join("wtypes.h");
+    std::fs::write(&wtypes, "typedef unsigned short *BSTR;\n").unwrap();
+    let inputs = ["azroles.h", "bitscfg.h", "qmgr.h"]
+        .into_iter()
+        .enumerate()
+        .map(|(index, header)| {
+            let path = scratch.join(header);
+            std::fs::write(
+                &path,
+                format!(
+                    "#include \"{}\"\n\
+                     extern \"C\" void BSTR_UserFree(unsigned long *flags, BSTR *value);\n\
+                     extern \"C\" unsigned long BSTR_UserSize(unsigned long *flags, \
+                     unsigned long offset, BSTR *value);\n",
+                    wtypes.to_string_lossy()
+                ),
+            )
+            .unwrap();
+            Input::new(
+                format!("{header}.cpp"),
+                format!("#include \"{}\"\n", path.to_string_lossy()),
+            )
+            .partitioned(format!("{header}-input"))
+            .with_root(
+                path.to_string_lossy(),
+                format!("{header}-partition"),
+                format!("Example.Header{index}"),
+            )
+        })
+        .collect::<Vec<_>>();
+    let snapshot =
+        extract_partitioned(inputs, &["-x", "c++", "--target=x86_64-pc-windows-msvc"]).unwrap();
+    let authorities = NamespaceAuthorities::new()
+        .with_exact("BSTR_UserFree", "Example.System.Com.Marshal")
+        .with_exact("BSTR_UserSize", "Example.System.Com.Marshal");
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("oleaut32.dll");
+    let partitions = snapshot
+        .emit_partitioned_with_options_and_authorities(&options, &authorities)
+        .unwrap();
+    let marshal = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.System.Com.Marshal")
+        .unwrap()
+        .1;
+
+    assert_eq!(marshal.matches("fn BSTR_UserFree").count(), 1, "{marshal}");
+    assert_eq!(marshal.matches("fn BSTR_UserSize").count(), 1, "{marshal}");
+
+    let ambiguous = extract_partitioned(
+        [
+            Input::new(
+                "first.h",
+                "extern \"C\" void BSTR_UserFree(unsigned long *flags, void **value);\n",
+            )
+            .partitioned("first-input"),
+            Input::new(
+                "second.h",
+                "extern \"C\" void BSTR_UserFree(unsigned long *flags, unsigned **value);\n",
+            )
+            .partitioned("second-input"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap()
+    .emit_partitioned_with_options_and_authorities(
+        &options,
+        &NamespaceAuthorities::new().with_exact("BSTR_UserFree", "Example.System.Com.Marshal"),
+    )
+    .unwrap_err();
+
+    assert!(
+        ambiguous
+            .to_string()
+            .contains("ambiguous function root `BSTR_UserFree`"),
+        "{ambiguous}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn namespace_authorities_reject_duplicate_and_conflicting_routes() {
     helpers::ensure_libclang();
 
