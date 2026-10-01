@@ -2500,8 +2500,20 @@ impl Snapshot {
                     let authority = self.authority_candidates(&roots.types);
                     let root =
                         choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
-                    root_names.insert(name.to_string());
-                    type_roots.push(root);
+                    let tagged = authority
+                        .iter()
+                        .any(|fact| self.root_owners.contains_key(&fact.origin));
+                    let routed = authority
+                        .iter()
+                        .any(|fact| self.fact_authority_namespace(fact).is_some());
+                    if tagged
+                        || routed
+                        || !matches!(root.data, FactData::Typedef { .. })
+                        || self.root_partitions.is_empty()
+                    {
+                        root_names.insert(name.to_string());
+                        type_roots.push(root);
+                    }
                 }
             } else if !roots.functions.is_empty() {
                 functions.push(choose_function_root(name, &roots.functions)?);
@@ -3036,6 +3048,50 @@ impl Snapshot {
                 });
             }
         }
+        let mut internal_type_names = BTreeMap::new();
+        let mut internal_aliases = BTreeSet::new();
+        if !self.root_partitions.is_empty() {
+            loop {
+                let mut added = false;
+                for (name, fact) in &facts_by_name {
+                    if root_names.contains(*name)
+                        || internal_aliases.contains(*name)
+                        || references.contains_key(*name)
+                        || self.fact_authority_namespace(fact).is_some()
+                        || facts_index
+                            .get(*name)
+                            .into_iter()
+                            .flatten()
+                            .any(|candidate| self.root_owners.contains_key(&candidate.origin))
+                    {
+                        continue;
+                    }
+                    let FactData::Typedef { target } = &fact.data else {
+                        continue;
+                    };
+                    if !internal_alias_target_resolved(target, &internal_aliases) {
+                        continue;
+                    }
+                    internal_type_names.insert(
+                        (*name).to_string(),
+                        planned_emitted_type_name(
+                            target,
+                            &internal_type_names,
+                            &BTreeSet::new(),
+                            &fact.origin.tu,
+                            &BTreeMap::new(),
+                            None,
+                        ),
+                    );
+                    internal_aliases.insert((*name).to_string());
+                    added = true;
+                }
+                if !added {
+                    break;
+                }
+            }
+        }
+        type_names.extend(internal_type_names);
         for (name, fact) in &facts_by_name {
             if required.contains(*name)
                 && canonical_named_type(name).is_some()
@@ -3053,6 +3109,7 @@ impl Snapshot {
         let mut types: Vec<_> = facts_by_name
             .into_iter()
             .filter(|(name, _)| required.contains(*name))
+            .filter(|(name, _)| !internal_aliases.contains(*name))
             .filter(|(name, _)| !alias_names.contains(*name))
             .map(|(_, fact)| {
                 let name = type_names
@@ -5618,6 +5675,19 @@ fn planned_emitted_type_name(
         );
     }
     planned_type_name(ty, type_names, local_types, namespace)
+}
+
+fn internal_alias_target_resolved(ty: &TypeRef, aliases: &BTreeSet<String>) -> bool {
+    match ty {
+        TypeRef::Scalar(_) | TypeRef::OpaquePointer { .. } => true,
+        TypeRef::Named { name, .. } => {
+            aliases.contains(name) || canonical_named_type(name).is_some()
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => internal_alias_target_resolved(target, aliases),
+        _ => false,
+    }
 }
 
 fn canonical_named_type(name: &str) -> Option<&'static str> {

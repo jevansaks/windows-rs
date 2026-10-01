@@ -1240,6 +1240,61 @@ fn tagged_source_fact_wins_over_transitive_copy_before_shape_selection() {
 }
 
 #[test]
+fn unowned_scalar_typedef_dependencies_are_inlined() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-internal-alias-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let common = scratch.join("common.h");
+    let api = scratch.join("api.h");
+    std::fs::write(
+        &common,
+        "typedef unsigned long ACCESS_MASK;\n\
+         typedef ACCESS_MASK *PACCESS_MASK;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &api,
+        format!(
+            "#include \"{}\"\n\
+             typedef struct OWNED_ACCESS {{ ACCESS_MASK access; PACCESS_MASK pointer; }} \
+             OWNED_ACCESS;\n",
+            common.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "owned.cpp",
+            format!("#include \"{}\"\n", api.to_string_lossy()),
+        )
+        .partitioned("owned-input")
+        .with_root(api.to_string_lossy(), "owned", "Example.Owned")],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let owned = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Owned")
+        .unwrap()
+        .1;
+
+    assert!(owned.contains("access: u32"), "{owned}");
+    assert!(owned.contains("pointer: *mut u32"), "{owned}");
+    assert!(!owned.contains("type ACCESS_MASK"), "{owned}");
+    assert!(!owned.contains("type PACCESS_MASK"), "{owned}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn namespace_authorities_support_wildcards_and_namespaces_without_partitions() {
     helpers::ensure_libclang();
 
