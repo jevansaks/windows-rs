@@ -646,15 +646,46 @@ fn required_owner_excluded_type_reports_reference_and_owner_diagnostics() {
         .unwrap_err();
     let error = error.to_string();
 
-    assert!(error.contains("unresolved local type `HIDDEN`"), "{error}");
-    assert!(error.contains("hidden.h:"), "{error}");
     assert!(
-        error.contains("normalized declaration path `hidden.h`"),
+        error.contains(
+            "owner-excluded local type `HIDDEN` in partition `hidden` namespace \
+             `Example.Hidden` is required without a retained public alias"
+        ),
         "{error}"
     );
-    assert!(error.contains("partition=\"hidden\""), "{error}");
-    assert!(error.contains("namespace=\"Example.Hidden\""), "{error}");
-    assert!(error.contains("excluded by owner setting"), "{error}");
+}
+
+#[test]
+fn excluded_native_tag_can_back_retained_public_aliases() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "dvdmedia.h",
+            "typedef unsigned char UCHAR;\n\
+             typedef struct _DVD_REGION { UCHAR copy; UCHAR system; } \
+             DVD_REGION, *PDVD_REGION;\n",
+        )
+        .partitioned("media-input")
+        .with_root_partition(
+            "dvdmedia.h",
+            RootPartition::new("media", "Example.Media").with_exclusion("_DVD_REGION"),
+        )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let partition = partitions.values().next().unwrap();
+
+    assert!(partition.contains("struct DVD_REGION"), "{partition}");
+    assert!(
+        partition.contains("type PDVD_REGION = *mut DVD_REGION"),
+        "{partition}"
+    );
+    assert!(!partition.contains("struct _DVD_REGION"), "{partition}");
 }
 
 #[test]
@@ -702,4 +733,119 @@ fn owner_libraries_distinguish_same_function_name_between_partitions() {
     assert!(audio.contains("fn GetDeviceID"), "{audio}");
     assert!(tbs.contains("#[library(\"tbs.dll\""), "{tbs}");
     assert!(tbs.contains("fn GetDeviceID"), "{tbs}");
+}
+
+#[test]
+fn owner_u32_type_override_does_not_change_common_emission() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new("value.h", "typedef int FORCED_UINT;\n")
+            .partitioned("value-input")
+            .with_root_partition(
+                "value.h",
+                RootPartition::new("value", "Example.Value").with_u32_type("FORCED_UINT"),
+            )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let common = snapshot.emit_with_options(&options).unwrap();
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let partition = partitions.values().next().unwrap();
+
+    assert!(common.contains("type FORCED_UINT = i32"), "{common}");
+    assert!(partition.contains("type FORCED_UINT = u32"), "{partition}");
+}
+
+#[test]
+fn owner_flags_force_unsigned_flag_enum_projection() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "flags.h",
+            "typedef enum FORCED_FLAGS { FORCED_NONE = 0, FORCED_ALL = -1 } FORCED_FLAGS;\n",
+        )
+        .partitioned("flags-input")
+        .with_root_partition(
+            "flags.h",
+            RootPartition::new("flags", "Example.Flags")
+                .with_flags("FORCED_FLAGS")
+                .with_remap("FORCED_FLAGS", "FLAGS"),
+        )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let partition = partitions.values().next().unwrap();
+
+    assert!(
+        partition.contains("#[repr(u32)]\n        #[flags]\n        enum FLAGS"),
+        "{partition}"
+    );
+    assert!(partition.contains("FORCED_ALL = 4294967295"), "{partition}");
+}
+
+#[test]
+fn owner_preserves_automatic_function_pointer_level() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "identity.h",
+            "typedef void IDENTITY_CALLBACK(int value);\n\
+             extern \"C\" void SetIdentity(IDENTITY_CALLBACK callback);\n",
+        )
+        .partitioned("identity-input")
+        .with_root_partition(
+            "identity.h",
+            RootPartition::new("identity", "Example.Identity")
+                .with_preserved_auto_function_pointer_level("IDENTITY_CALLBACK"),
+        )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("identity.dll");
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let partition = partitions.values().next().unwrap();
+
+    assert!(
+        partition.contains("fn SetIdentity(callback: *mut IDENTITY_CALLBACK)"),
+        "{partition}"
+    );
+}
+
+#[test]
+fn owner_excludes_empty_records_only_in_partitioned_emission() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "records.h",
+            "struct EMPTY_RECORD {};\nstruct FULL_RECORD { int value; };\n",
+        )
+        .partitioned("records-input")
+        .with_root_partition(
+            "records.h",
+            RootPartition::new("records", "Example.Records").exclude_empty_records(),
+        )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let common = snapshot.emit_with_options(&options).unwrap();
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let partition = partitions.values().next().unwrap();
+
+    assert!(common.contains("struct EMPTY_RECORD"), "{common}");
+    assert!(!partition.contains("struct EMPTY_RECORD"), "{partition}");
+    assert!(partition.contains("struct FULL_RECORD"), "{partition}");
 }

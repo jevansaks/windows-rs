@@ -96,6 +96,10 @@ pub struct RootPartition {
     pub remaps: BTreeMap<String, String>,
     pub exclusions: BTreeSet<String>,
     pub libraries: BTreeMap<String, String>,
+    pub u32_types: BTreeSet<String>,
+    pub flags: BTreeSet<String>,
+    pub preserved_auto_function_pointer_levels: BTreeSet<String>,
+    pub exclude_empty_records: bool,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -107,6 +111,10 @@ pub struct RootOwner {
     pub remaps: BTreeMap<String, String>,
     pub exclusions: BTreeSet<String>,
     pub libraries: BTreeMap<String, String>,
+    pub u32_types: BTreeSet<String>,
+    pub flags: BTreeSet<String>,
+    pub preserved_auto_function_pointer_levels: BTreeSet<String>,
+    pub exclude_empty_records: bool,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -270,6 +278,10 @@ impl RootPartition {
             remaps: BTreeMap::new(),
             exclusions: BTreeSet::new(),
             libraries: BTreeMap::new(),
+            u32_types: BTreeSet::new(),
+            flags: BTreeSet::new(),
+            preserved_auto_function_pointer_levels: BTreeSet::new(),
+            exclude_empty_records: false,
         }
     }
 
@@ -285,6 +297,27 @@ impl RootPartition {
 
     pub fn with_library(mut self, function: impl Into<String>, library: impl Into<String>) -> Self {
         self.libraries.insert(function.into(), library.into());
+        self
+    }
+
+    pub fn with_u32_type(mut self, name: impl Into<String>) -> Self {
+        self.u32_types.insert(name.into());
+        self
+    }
+
+    pub fn with_flags(mut self, name: impl Into<String>) -> Self {
+        self.flags.insert(name.into());
+        self
+    }
+
+    pub fn with_preserved_auto_function_pointer_level(mut self, name: impl Into<String>) -> Self {
+        self.preserved_auto_function_pointer_levels
+            .insert(name.into());
+        self
+    }
+
+    pub fn exclude_empty_records(mut self) -> Self {
+        self.exclude_empty_records = true;
         self
     }
 }
@@ -624,6 +657,8 @@ pub struct Snapshot {
     root_owners: BTreeMap<Origin, RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
     partition_exclusions: Vec<ExcludedPartitionDeclaration>,
+    forced_flags: BTreeSet<Origin>,
+    suppressed_type_origins: BTreeSet<Origin>,
     timing_target: Option<String>,
 }
 
@@ -648,6 +683,8 @@ impl PartialEq for Snapshot {
             && self.root_owners == other.root_owners
             && self.root_partitions == other.root_partitions
             && self.partition_exclusions == other.partition_exclusions
+            && self.forced_flags == other.forced_flags
+            && self.suppressed_type_origins == other.suppressed_type_origins
     }
 }
 
@@ -1356,6 +1393,7 @@ impl Snapshot {
     }
 
     fn into_partitioned_planning_snapshot(mut self) -> (Self, BTreeMap<String, String>) {
+        self.apply_partition_type_settings();
         self.apply_partition_exclusions();
         self.apply_partition_remaps();
         let mut variants: BTreeMap<&str, BTreeMap<&str, BTreeSet<&FactData>>> = BTreeMap::new();
@@ -1559,14 +1597,16 @@ impl Snapshot {
     }
 
     fn apply_partition_exclusions(&mut self) {
-        self.facts.retain(|fact| {
+        self.facts.retain_mut(|fact| {
             let Some(owner) = self.root_owners.get(&fact.origin).or_else(|| {
                 self.root_partitions
                     .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
             }) else {
                 return true;
             };
-            if !owner.exclusions.contains(&fact.name) {
+            let empty_record = owner.exclude_empty_records
+                && matches!(&fact.data, FactData::Record { fields, .. } if fields.is_empty());
+            if !owner.exclusions.contains(&fact.name) && !empty_record {
                 return true;
             }
             self.partition_exclusions
@@ -1581,7 +1621,13 @@ impl Snapshot {
                     root: fact.root,
                     owner: owner.clone(),
                 });
-            false
+            if is_type_fact(fact) {
+                fact.root = false;
+                self.suppressed_type_origins.insert(fact.origin.clone());
+                true
+            } else {
+                false
+            }
         });
         self.constants.retain(|constant| {
             self.root_owners
@@ -1592,6 +1638,43 @@ impl Snapshot {
                 })
                 .is_none_or(|owner| !owner.exclusions.contains(&constant.name))
         });
+    }
+
+    fn apply_partition_type_settings(&mut self) {
+        for fact in &mut self.facts {
+            let Some(owner) = self.root_owners.get(&fact.origin).or_else(|| {
+                self.root_partitions
+                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+            }) else {
+                continue;
+            };
+            if owner.u32_types.contains(&fact.name) {
+                fact.kind = FactKind::Typedef;
+                fact.definition = true;
+                fact.data = FactData::Typedef {
+                    target: TypeRef::Scalar(Scalar::U32),
+                };
+            } else {
+                if owner.flags.contains(&fact.name) {
+                    self.forced_flags.insert(fact.origin.clone());
+                }
+                preserve_auto_function_pointer_levels(
+                    &mut fact.data,
+                    &owner.preserved_auto_function_pointer_levels,
+                );
+            }
+        }
+        for constant in &mut self.constants {
+            if let Some(owner) = self.root_owners.get(&constant.root).or_else(|| {
+                self.root_partitions
+                    .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
+            }) {
+                preserve_auto_function_pointer_level(
+                    &mut constant.ty,
+                    &owner.preserved_auto_function_pointer_levels,
+                );
+            }
+        }
     }
 
     fn unresolved_local_type_error(&self, name: &str, tu: &str, declaration: &Location) -> Error {
@@ -2608,14 +2691,22 @@ impl Snapshot {
             .into_iter()
             .filter(|(name, _)| required.contains(*name))
             .filter(|(name, _)| !alias_names.contains(*name))
-            .map(|(_, fact)| PlannedFact {
-                name: type_names
+            .map(|(_, fact)| {
+                let name = type_names
                     .get(fact.name.as_str())
                     .cloned()
-                    .unwrap_or_else(|| fact.name.clone()),
-                fact,
+                    .unwrap_or_else(|| fact.name.clone());
+                if self.suppressed_type_origins.contains(&fact.origin) && name == fact.name {
+                    let owner = self.root_owners.get(&fact.origin).unwrap();
+                    return Err(Error(format!(
+                        "owner-excluded local type `{}` in partition `{}` namespace `{}` is \
+                         required without a retained public alias",
+                        fact.name, owner.partition, owner.namespace
+                    )));
+                }
+                Ok(PlannedFact { name, fact })
             })
-            .collect();
+            .collect::<Result<_, Error>>()?;
         let values: Vec<_> = value_roots
             .into_iter()
             .map(|fact| PlannedFact {
@@ -2765,7 +2856,7 @@ impl Snapshot {
             );
             phase_time = Some(std::time::Instant::now());
         }
-        let flag_enums = self
+        let mut flag_enums: BTreeSet<_> = self
             .facts
             .iter()
             .filter_map(|fact| {
@@ -2776,6 +2867,12 @@ impl Snapshot {
                 }
             })
             .collect();
+        flag_enums.extend(
+            self.facts
+                .iter()
+                .filter(|fact| self.forced_flags.contains(&fact.origin))
+                .map(|fact| (fact.origin.tu.clone(), fact.name.clone())),
+        );
         let mut type_output_names = BTreeSet::new();
         for planned in &types {
             if !type_output_names.insert(planned.name.as_str()) {
@@ -2971,6 +3068,72 @@ fn remap_fact_types(
             }
         }
         FactData::Typedef { target } => remap_type_ref(target, tu, declarations, roots),
+        _ => {}
+    }
+}
+
+fn preserve_auto_function_pointer_levels(data: &mut FactData, names: &BTreeSet<String>) {
+    match data {
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            for param in params {
+                preserve_auto_function_pointer_level(&mut param.ty, names);
+            }
+            preserve_auto_function_pointer_level(result, names);
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                preserve_auto_function_pointer_level(base, names);
+            }
+            for method in methods {
+                for param in &mut method.params {
+                    preserve_auto_function_pointer_level(&mut param.ty, names);
+                }
+                preserve_auto_function_pointer_level(&mut method.result, names);
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                preserve_auto_function_pointer_level(base, names);
+            }
+            for field in fields {
+                preserve_auto_function_pointer_level(&mut field.ty, names);
+            }
+        }
+        FactData::Typedef { target } => preserve_auto_function_pointer_level(target, names),
+        _ => {}
+    }
+}
+
+fn preserve_auto_function_pointer_level(ty: &mut TypeRef, names: &BTreeSet<String>) {
+    match ty {
+        TypeRef::Named { name, .. } if names.contains(name) => {
+            *ty = TypeRef::Pointer {
+                mutable: true,
+                target: Box::new(ty.clone()),
+            };
+        }
+        TypeRef::Generic { args, .. } => {
+            for arg in args {
+                preserve_auto_function_pointer_level(arg, names);
+            }
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => preserve_auto_function_pointer_level(target, names),
+        TypeRef::FunctionPointer { params, result, .. } => {
+            for param in params {
+                preserve_auto_function_pointer_level(param, names);
+            }
+            preserve_auto_function_pointer_level(result, names);
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &mut record.base {
+                preserve_auto_function_pointer_level(base, names);
+            }
+            for field in &mut record.fields {
+                preserve_auto_function_pointer_level(&mut field.ty, names);
+            }
+        }
         _ => {}
     }
 }

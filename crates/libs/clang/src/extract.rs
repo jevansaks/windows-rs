@@ -36,6 +36,12 @@ pub fn extract_partitioned(
                     remaps: partition.remaps.clone(),
                     exclusions: partition.exclusions.clone(),
                     libraries: partition.libraries.clone(),
+                    u32_types: partition.u32_types.clone(),
+                    flags: partition.flags.clone(),
+                    preserved_auto_function_pointer_levels: partition
+                        .preserved_auto_function_pointer_levels
+                        .clone(),
+                    exclude_empty_records: partition.exclude_empty_records,
                 },
             );
         }
@@ -292,6 +298,8 @@ fn extract_impl(
         root_owners,
         root_partitions: owners,
         partition_exclusions: vec![],
+        forced_flags: BTreeSet::new(),
+        suppressed_type_origins: BTreeSet::new(),
         timing_target: target,
     })
 }
