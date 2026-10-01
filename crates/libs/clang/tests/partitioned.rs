@@ -507,37 +507,45 @@ fn canonical_interface_root_reconciles_header_and_helper_typedefs() {
     let shared = scratch.join("d3d9.h");
     let direct3d = scratch.join("direct3d.cpp");
     let media = scratch.join("media.cpp");
-    std::fs::write(
-        &helper,
-        "#ifndef D3D9HELPER_H\n#define D3D9HELPER_H\n\
-         struct __declspec(uuid(\"d0223b96-bf7a-43fd-92bd-a43b0d82b9eb\")) \
-         IDirect3DDevice9;\n\
-         typedef struct IDirect3DDevice9 IDirect3DDevice9;\n\
-         #endif\n",
-    )
-    .unwrap();
-    std::fs::write(
-        &shared,
-        "#ifndef D3D9_H\n#define D3D9_H\n\
-         struct __declspec(uuid(\"d0223b96-bf7a-43fd-92bd-a43b0d82b9eb\")) \
-         IDirect3DDevice9;\n\
-         typedef struct IDirect3DDevice9 IDirect3DDevice9;\n\
-         struct __declspec(uuid(\"d0223b96-bf7a-43fd-92bd-a43b0d82b9eb\")) \
-         IDirect3DDevice9 { virtual void Present() = 0; };\n\
-         #endif\n",
-    )
-    .unwrap();
+    let interfaces = [
+        ("Device9", "DEVICE9", "d0223b96-bf7a-43fd-92bd-a43b0d82b9eb"),
+        (
+            "Surface9",
+            "SURFACE9",
+            "0cfbaf3a-9ff6-429a-99b3-a2796af8b89b",
+        ),
+    ];
+    let mut helper_source = "#ifndef D3D9HELPER_H\n#define D3D9HELPER_H\n".to_string();
+    let mut shared_source = "#ifndef D3D9_H\n#define D3D9_H\n".to_string();
+    let mut media_source = "#include \"d3d9helper.h\"\n".to_string();
+    for (suffix, alias_suffix, uuid) in interfaces {
+        for source in [&mut helper_source, &mut shared_source] {
+            source.push_str(&format!(
+                "struct __declspec(uuid(\"{uuid}\")) IDirect3D{suffix};\n\
+                 typedef struct IDirect3D{suffix} IDirect3D{suffix};\n\
+                 typedef IDirect3D{suffix} *LPDIRECT3D{alias_suffix};\n\
+                 typedef IDirect3D{suffix} *PDIRECT3D{alias_suffix};\n"
+            ));
+        }
+        shared_source.push_str(&format!(
+            "struct __declspec(uuid(\"{uuid}\")) IDirect3D{suffix} {{ \
+             virtual void Present() = 0; }};\n"
+        ));
+        media_source.push_str(&format!(
+            "extern \"C\" void Use{suffix}(IDirect3D{suffix}* value, \
+             LPDIRECT3D{alias_suffix} legacy, PDIRECT3D{alias_suffix} pointer);\n"
+        ));
+    }
+    helper_source.push_str("#endif\n");
+    shared_source.push_str("#endif\n");
+    std::fs::write(&helper, helper_source).unwrap();
+    std::fs::write(&shared, shared_source).unwrap();
     std::fs::write(
         &direct3d,
         "#include \"d3d9helper.h\"\n#include \"d3d9.h\"\n",
     )
     .unwrap();
-    std::fs::write(
-        &media,
-        "#include \"d3d9helper.h\"\n\
-         extern \"C\" void UseDevice(IDirect3DDevice9* value);\n",
-    )
-    .unwrap();
+    std::fs::write(&media, media_source).unwrap();
     let include = format!("-I{}", scratch.display());
     let snapshot = extract_partitioned(
         [
@@ -573,11 +581,34 @@ fn canonical_interface_root_reconciles_header_and_helper_typedefs() {
         .unwrap()
         .1;
 
-    assert_eq!(direct3d.matches("interface IDirect3DDevice9").count(), 1);
-    assert!(
-        media.contains("fn UseDevice(value: *mut Example::Direct3D9::IDirect3DDevice9)"),
-        "{media}"
-    );
+    for (suffix, alias_suffix, _) in interfaces {
+        assert_eq!(
+            direct3d
+                .matches(&format!("interface IDirect3D{suffix}"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            direct3d
+                .matches(&format!("type LPDIRECT3D{alias_suffix}"))
+                .count(),
+            0
+        );
+        assert_eq!(
+            direct3d
+                .matches(&format!("type PDIRECT3D{alias_suffix}"))
+                .count(),
+            0
+        );
+        assert!(
+            media.contains(&format!(
+                "fn Use{suffix}(value: *mut Example::Direct3D9::IDirect3D{suffix}, \
+                 legacy: Example::Direct3D9::IDirect3D{suffix}, \
+                 pointer: Example::Direct3D9::IDirect3D{suffix})"
+            )),
+            "{media}"
+        );
+    }
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
