@@ -1382,6 +1382,65 @@ fn namespace_authorities_support_wildcards_and_namespaces_without_partitions() {
 }
 
 #[test]
+fn namespace_authority_routes_untagged_transitive_type() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-authority-input-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let common = scratch.join("minwinbase.h");
+    let api = scratch.join("api.h");
+    std::fs::write(
+        &common,
+        "typedef struct CRITICAL_SECTION { unsigned lock_count; } CRITICAL_SECTION;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &api,
+        format!(
+            "#include \"{}\"\n\
+             typedef struct OWNED_LOCK {{ CRITICAL_SECTION section; }} OWNED_LOCK;\n",
+            common.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "dshow.cpp",
+            format!("#include \"{}\"\n", api.to_string_lossy()),
+        )
+        .partitioned("dshow-input")
+        .with_root(api.to_string_lossy(), "dshow", "Example.Media.DirectShow")],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let authorities =
+        NamespaceAuthorities::new().with_exact("CRITICAL_SECTION", "Example.System.Threading");
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options_and_authorities(
+            &EmitOptions::new("Example.Common", &references),
+            &authorities,
+        )
+        .unwrap();
+    let (partition, threading) = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.System.Threading")
+        .unwrap();
+
+    assert_eq!(partition.partition, "dshow-input");
+    assert_eq!(
+        partition.header,
+        common.to_string_lossy().replace('\\', "/")
+    );
+    assert!(threading.contains("struct CRITICAL_SECTION"), "{threading}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn namespace_authorities_reject_duplicate_and_conflicting_routes() {
     helpers::ensure_libclang();
 

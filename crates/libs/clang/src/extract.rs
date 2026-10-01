@@ -9,6 +9,7 @@ pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result
         inputs.into_iter().collect(),
         BTreeMap::new(),
         BTreeMap::new(),
+        BTreeMap::new(),
         args,
     )
 }
@@ -20,6 +21,7 @@ pub fn extract_partitioned(
     let inputs: Vec<_> = inputs.into_iter().collect();
     let mut identities = BTreeSet::new();
     let mut owners = BTreeMap::new();
+    let mut partition_inputs = BTreeMap::new();
     let mut input_arguments = BTreeMap::new();
     for input in &inputs {
         if input.identity.trim().is_empty() {
@@ -31,6 +33,7 @@ pub fn extract_partitioned(
                 input.identity
             )));
         }
+        partition_inputs.insert(input.input.name.clone(), input.identity.clone());
         for (root, partition) in &input.roots {
             owners.insert(
                 (input.input.name.clone(), root.clone()),
@@ -56,6 +59,7 @@ pub fn extract_partitioned(
     extract_impl(
         inputs.into_iter().map(|input| input.input).collect(),
         owners,
+        partition_inputs,
         input_arguments,
         args,
     )
@@ -64,6 +68,7 @@ pub fn extract_partitioned(
 fn extract_impl(
     inputs: Vec<Input>,
     owners: BTreeMap<(String, String), RootOwner>,
+    partition_inputs: BTreeMap<String, String>,
     input_arguments: BTreeMap<String, Vec<String>>,
     args: &[&str],
 ) -> Result<Snapshot, Error> {
@@ -342,6 +347,7 @@ fn extract_impl(
         annotations,
         root_owners,
         root_partitions: owners,
+        partition_inputs,
         partition_exclusions: vec![],
         forced_flags: BTreeSet::new(),
         suppressed_type_origins: BTreeSet::new(),

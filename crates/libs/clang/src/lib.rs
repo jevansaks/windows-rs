@@ -794,6 +794,7 @@ pub struct Snapshot {
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     root_owners: BTreeMap<Origin, RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
+    partition_inputs: BTreeMap<String, String>,
     partition_exclusions: Vec<ExcludedPartitionDeclaration>,
     forced_flags: BTreeSet<Origin>,
     suppressed_type_origins: BTreeSet<Origin>,
@@ -823,6 +824,7 @@ impl PartialEq for Snapshot {
             && self.annotations == other.annotations
             && self.root_owners == other.root_owners
             && self.root_partitions == other.root_partitions
+            && self.partition_inputs == other.partition_inputs
             && self.partition_exclusions == other.partition_exclusions
             && self.forced_flags == other.forced_flags
             && self.suppressed_type_origins == other.suppressed_type_origins
@@ -2112,7 +2114,7 @@ impl Snapshot {
         }
         let mut result = BTreeMap::new();
         for planned in &plan.types {
-            let owners = fact_owners
+            let mut owners = fact_owners
                 .get(&(
                     &planned.fact.name,
                     planned.fact.kind,
@@ -2121,19 +2123,17 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
+            let namespace = self
+                .fact_authority_namespace(planned.fact)
+                .map(String::as_str);
+            self.add_authority_fallback(&mut owners, planned.fact, namespace)?;
             result.insert(
                 (planned.name.clone(), OutputKind::Type),
-                self.authoritative_owner(
-                    &planned.name,
-                    OutputKind::Type,
-                    owners,
-                    self.fact_authority_namespace(planned.fact)
-                        .map(String::as_str),
-                )?,
+                self.authoritative_owner(&planned.name, OutputKind::Type, owners, namespace)?,
             );
         }
         for planned in &plan.values {
-            let owners = fact_owners
+            let mut owners = fact_owners
                 .get(&(
                     &planned.fact.name,
                     planned.fact.kind,
@@ -2142,19 +2142,17 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
+            let namespace = self
+                .fact_authority_namespace(planned.fact)
+                .map(String::as_str);
+            self.add_authority_fallback(&mut owners, planned.fact, namespace)?;
             result.insert(
                 (planned.name.clone(), OutputKind::Value),
-                self.authoritative_owner(
-                    &planned.name,
-                    OutputKind::Value,
-                    owners,
-                    self.fact_authority_namespace(planned.fact)
-                        .map(String::as_str),
-                )?,
+                self.authoritative_owner(&planned.name, OutputKind::Value, owners, namespace)?,
             );
         }
         for function in &plan.functions {
-            let owners = fact_owners
+            let mut owners = fact_owners
                 .get(&(
                     &function.name,
                     function.kind,
@@ -2163,34 +2161,90 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
+            let namespace = self.fact_authority_namespace(function).map(String::as_str);
+            self.add_authority_fallback(&mut owners, function, namespace)?;
             result.insert(
                 (function.name.clone(), OutputKind::Value),
-                self.authoritative_owner(
-                    &function.name,
-                    OutputKind::Value,
-                    owners,
-                    self.fact_authority_namespace(function).map(String::as_str),
-                )?,
+                self.authoritative_owner(&function.name, OutputKind::Value, owners, namespace)?,
             );
         }
         for planned in &plan.constants {
             let constant = planned.constant;
+            let mut owners = constant_owners
+                .get(&(&constant.name, &constant.ty, &constant.value))
+                .cloned()
+                .unwrap_or_default();
+            let namespace = self
+                .constant_namespace_authorities
+                .get(&constant.definition)
+                .map(String::as_str);
+            self.add_constant_authority_fallback(&mut owners, constant, namespace)?;
             result.insert(
                 (constant.name.clone(), OutputKind::Value),
-                self.authoritative_owner(
-                    &constant.name,
-                    OutputKind::Value,
-                    constant_owners
-                        .get(&(&constant.name, &constant.ty, &constant.value))
-                        .cloned()
-                        .unwrap_or_default(),
-                    self.constant_namespace_authorities
-                        .get(&constant.definition)
-                        .map(String::as_str),
-                )?,
+                self.authoritative_owner(&constant.name, OutputKind::Value, owners, namespace)?,
             );
         }
         Ok(result)
+    }
+
+    fn add_authority_fallback(
+        &self,
+        owners: &mut BTreeSet<RootOwner>,
+        fact: &Fact,
+        namespace: Option<&str>,
+    ) -> Result<(), Error> {
+        if !owners.is_empty() || namespace.is_none() {
+            return Ok(());
+        }
+        let Some(input) = self.partition_inputs.get(&fact.origin.tu) else {
+            return Ok(());
+        };
+        let namespace = namespace.unwrap();
+        validate_namespace(namespace)?;
+        owners.insert(RootOwner {
+            input: input.clone(),
+            root: fact.expansion.file.clone(),
+            partition: input.clone(),
+            namespace: namespace.to_string(),
+            remaps: BTreeMap::new(),
+            exclusions: BTreeSet::new(),
+            libraries: BTreeMap::new(),
+            u32_types: BTreeSet::new(),
+            flags: BTreeSet::new(),
+            preserved_auto_function_pointer_levels: BTreeSet::new(),
+            exclude_empty_records: false,
+        });
+        Ok(())
+    }
+
+    fn add_constant_authority_fallback(
+        &self,
+        owners: &mut BTreeSet<RootOwner>,
+        constant: &Constant,
+        namespace: Option<&str>,
+    ) -> Result<(), Error> {
+        if !owners.is_empty() || namespace.is_none() {
+            return Ok(());
+        }
+        let Some(input) = self.partition_inputs.get(&constant.root.tu) else {
+            return Ok(());
+        };
+        let namespace = namespace.unwrap();
+        validate_namespace(namespace)?;
+        owners.insert(RootOwner {
+            input: input.clone(),
+            root: constant.spelling.file.clone(),
+            partition: input.clone(),
+            namespace: namespace.to_string(),
+            remaps: BTreeMap::new(),
+            exclusions: BTreeSet::new(),
+            libraries: BTreeMap::new(),
+            u32_types: BTreeSet::new(),
+            flags: BTreeSet::new(),
+            preserved_auto_function_pointer_levels: BTreeSet::new(),
+            exclude_empty_records: false,
+        });
+        Ok(())
     }
 
     fn authoritative_owner(
