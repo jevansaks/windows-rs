@@ -11,6 +11,21 @@ fn timings_enabled() -> bool {
         .any(|value| value != "0")
 }
 
+fn declaration_uuid<'a>(
+    snapshot: &'a Snapshot,
+    name: &str,
+    tu: &str,
+    declaration: &Location,
+) -> Option<&'a str> {
+    let guids: BTreeSet<_> = snapshot
+        .facts
+        .iter()
+        .filter(|fact| fact.name == name && fact.origin.tu == tu && fact.spelling == *declaration)
+        .filter_map(fact_uuid)
+        .collect();
+    (guids.len() == 1).then(|| *guids.first().unwrap())
+}
+
 fn write_rdl_strict<'a>(
     namespace: &str,
     items: impl IntoIterator<Item = &'a str>,
@@ -884,6 +899,34 @@ impl Snapshot {
                     )));
                 }
             }
+            let mut uuid_namespaces: BTreeMap<(&str, &str), BTreeSet<&str>> = BTreeMap::new();
+            for planned in &plan.types {
+                let Some(guid) = fact_uuid(planned.fact) else {
+                    continue;
+                };
+                uuid_namespaces
+                    .entry((planned.fact.name.as_str(), guid))
+                    .or_default()
+                    .insert(
+                        routes[&(planned.name.clone(), OutputKind::Type)]
+                            .namespace
+                            .as_str(),
+                    );
+            }
+            for fact in &self.facts {
+                let Some(guid) = fact_uuid(fact) else {
+                    continue;
+                };
+                let Some(namespaces) = uuid_namespaces.get(&(fact.name.as_str(), guid)) else {
+                    continue;
+                };
+                if namespaces.len() == 1 {
+                    local_types.insert(
+                        fact.spelling.clone(),
+                        (*namespaces.first().unwrap()).to_string(),
+                    );
+                }
+            }
         }
         if let Some(display_names) = display_names {
             for name in plan.type_names.values_mut() {
@@ -1618,7 +1661,7 @@ impl Snapshot {
             .filter(|excluded| excluded.name == name)
         {
             candidates.push(format!(
-                "tu={:?} source={}:{} root={} owner={} uuid={} kind={:?}/{} definition={} rejection=excluded by owner setting",
+                "tu={:?} source={}:{} root={} owner={} uuid={} kind={:?}/{} definition={} rejection={}",
                 excluded.origin.tu,
                 excluded.spelling.file,
                 excluded.spelling.offset,
@@ -1628,6 +1671,7 @@ impl Snapshot {
                 excluded.kind,
                 excluded.data_kind,
                 excluded.definition,
+                "excluded by owner setting",
             ));
         }
         if candidates.is_empty() {
@@ -2120,7 +2164,9 @@ impl Snapshot {
                     .into_iter()
                     .flatten()
                     .copied()
-                    .filter(|fact| fact.origin.tu == tu && fact.spelling == *declaration)
+                    .filter(|fact| {
+                        fact.origin.tu == tu && fact.spelling == *declaration && is_type_fact(fact)
+                    })
                     .collect();
                 if matches.is_empty() {
                     matches.extend(
@@ -2162,7 +2208,7 @@ impl Snapshot {
                             }),
                     );
                 }
-                let fact = match matches.as_slice() {
+                let mut fact = match matches.as_slice() {
                     [fact] => *fact,
                     [] => {
                         return Err(self.unresolved_local_type_error(name, tu, declaration));
@@ -2171,6 +2217,34 @@ impl Snapshot {
                         choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)?
                     }
                 };
+                if self.root_owners.get(&fact.origin).is_none()
+                    && let Some(guid) = declaration_uuid(self, name, tu, declaration)
+                {
+                    let owned: Vec<_> = facts_index
+                        .get(name.as_str())
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                        .filter(|candidate| is_type_fact(candidate))
+                        .filter(|candidate| fact_uuid(candidate) == Some(guid))
+                        .filter(|candidate| self.root_owners.contains_key(&candidate.origin))
+                        .collect();
+                    let owners: BTreeSet<_> = owned
+                        .iter()
+                        .filter_map(|candidate| self.root_owners.get(&candidate.origin))
+                        .map(|owner| (&owner.partition, &owner.namespace))
+                        .collect();
+                    if owners.len() > 1 {
+                        return Err(Error(format!(
+                            "local type `{name}` at {}:{} matches UUID `{guid}` in multiple tagged owners",
+                            declaration.file, declaration.offset
+                        )));
+                    }
+                    if !owned.is_empty() {
+                        fact =
+                            choose_type_root_cached(name, &owned, &facts_index, &mut shape_cache)?;
+                    }
+                }
                 if let FactData::Unsupported { reason } = &fact.data {
                     return Err(Error(format!(
                         "unsupported type `{name}` in translation unit `{tu}`: {reason}"

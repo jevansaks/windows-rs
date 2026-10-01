@@ -416,6 +416,85 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
 }
 
 #[test]
+fn exact_non_type_class_fact_falls_back_to_same_header_typedef() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-class-typedef-fallback-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let shared_header = scratch.join("shared.h");
+    let alias_header = scratch.join("alias.h");
+    let direct3d_main = scratch.join("direct3d-main.cpp");
+    let media_main = scratch.join("media-main.cpp");
+    std::fs::write(
+        &shared_header,
+        "struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
+         IDirect3DSurface9;\n\
+         typedef struct IDirect3DSurface9 IDirect3DSurface9;\n\
+         struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
+         IDirect3DSurface9 { virtual void Present() = 0; };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &alias_header,
+        "struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
+         IDirect3DSurface9;\n\
+         typedef struct IDirect3DSurface9 IDirect3DSurface9;\n\
+         struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
+         IDirect3DSurface9 {};\n",
+    )
+    .unwrap();
+    std::fs::write(&direct3d_main, "#include \"shared.h\"\n").unwrap();
+    std::fs::write(
+        &media_main,
+        "#include \"alias.h\"\n\
+         extern \"C\" void UseSurface(struct IDirect3DSurface9* value);\n",
+    )
+    .unwrap();
+    let include = format!("-I{}", scratch.display());
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                direct3d_main.to_string_lossy(),
+                std::fs::read_to_string(&direct3d_main).unwrap(),
+            )
+            .partitioned("direct3d-input")
+            .with_root(
+                shared_header.to_string_lossy(),
+                "direct3d",
+                "Example.Direct3D9",
+            ),
+            Input::new(
+                media_main.to_string_lossy(),
+                std::fs::read_to_string(&media_main).unwrap(),
+            )
+            .partitioned("media-input")
+            .with_root(media_main.to_string_lossy(), "media", "Example.Media"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc", &include],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
+    let media = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Media")
+        .unwrap()
+        .1;
+
+    assert!(
+        media.contains("fn UseSurface(value: *mut Example::Direct3D9::IDirect3DSurface9)"),
+        "{media}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn owner_remap_applies_before_namespace_collision_planning() {
     helpers::ensure_libclang();
 
