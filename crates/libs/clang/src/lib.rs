@@ -993,12 +993,7 @@ impl Snapshot {
             .filter_map(|constant| {
                 self.namespace_authorities
                     .get(&constant.name)
-                    .map(|namespace| {
-                        (
-                            constant.definition.clone(),
-                            namespace.clone(),
-                        )
-                    })
+                    .map(|namespace| (constant.definition.clone(), namespace.clone()))
             })
             .collect();
         let timing = self.timing_target.is_some();

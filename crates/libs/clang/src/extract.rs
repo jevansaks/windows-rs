@@ -303,15 +303,30 @@ fn extract_impl(
             elapsed_ms(total_time)
         );
     }
-    let root_owners = facts
-        .iter()
-        .filter_map(|fact| {
-            owners
-                .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
-                .cloned()
-                .map(|owner| (fact.origin.clone(), owner))
-        })
-        .collect();
+    let mut root_owners = BTreeMap::new();
+    for fact in &facts {
+        let mut matches = owners
+            .iter()
+            .filter(|((tu, root), _)| {
+                tu == &fact.origin.tu && root_path_matches(root, &fact.spelling.file)
+            })
+            .map(|(_, owner)| owner);
+        let Some(owner) = matches.next() else {
+            continue;
+        };
+        if let Some(other) = matches.find(|other| *other != owner) {
+            return Err(Error(format!(
+                "source `{}` in translation unit `{}` matches multiple tagged roots: {}:{} and {}:{}",
+                fact.spelling.file,
+                fact.origin.tu,
+                owner.input,
+                owner.root,
+                other.input,
+                other.root,
+            )));
+        }
+        root_owners.insert(fact.origin.clone(), owner.clone());
+    }
     Ok(Snapshot {
         facts,
         constants,
@@ -326,6 +341,18 @@ fn extract_impl(
         constant_namespace_authorities: BTreeMap::new(),
         timing_target: target,
     })
+}
+
+fn root_path_matches(configured: &str, extracted: &str) -> bool {
+    let configured = normalize_name(configured);
+    let extracted = normalize_name(extracted);
+    configured == extracted
+        || extracted
+            .strip_suffix(&configured)
+            .is_some_and(|prefix| prefix.ends_with('/'))
+        || configured
+            .strip_suffix(&extracted)
+            .is_some_and(|prefix| prefix.ends_with('/'))
 }
 
 fn apply_macro_enum_overrides(facts: &mut [Fact], constants: &mut Vec<Constant>) {

@@ -1126,7 +1126,7 @@ fn namespace_authorities_route_opposite_owner_policies() {
             .partitioned("directdraw-input")
             .with_root("ddraw.h", "directdraw", "Example.DirectDraw"),
             Input::new(
-                "ksmedia.h",
+                "RecompiledIdlHeaders/shared/ksmedia.h",
                 "typedef struct _DDPIXELFORMAT { long long kernel; } \
                  DDPIXELFORMAT, *LPDDPIXELFORMAT;\n\
                  typedef struct _DDVIDEOPORTCONNECT { long long kernel; } \
@@ -1136,7 +1136,7 @@ fn namespace_authorities_route_opposite_owner_policies() {
             )
             .partitioned("kernel-input")
             .with_root_partition(
-                "ksmedia.h",
+                "shared/ksmedia.h",
                 RootPartition::new("kernel", "Example.KernelStreaming")
                     .with_exclusion("_DDPIXELFORMAT")
                     .with_exclusion("_DDVIDEOPORTCONNECT")
