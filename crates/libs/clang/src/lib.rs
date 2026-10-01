@@ -1388,10 +1388,11 @@ impl Snapshot {
                 return Err(Error(format!("duplicate planned name `{}`", planned.name)));
             }
         }
-        for function in plan.functions {
+        for planned in plan.functions {
+            let function = planned.fact;
             let output_name = display_names
-                .and_then(|names| names.get(&function.name))
-                .unwrap_or(&function.name);
+                .and_then(|names| names.get(&planned.name))
+                .unwrap_or(&planned.name);
             let FactData::Function {
                 link_name,
                 convention,
@@ -1407,7 +1408,7 @@ impl Snapshot {
                 )));
             };
             let namespace = routes
-                .and_then(|routes| routes.get(&(function.name.clone(), OutputKind::Value)))
+                .and_then(|routes| routes.get(&(planned.name.clone(), OutputKind::Value)))
                 .map(|owner| owner.namespace.as_str());
             let projection = TypeProjection::new(
                 &plan.type_names,
@@ -1446,7 +1447,7 @@ impl Snapshot {
                 &AnnotationTarget::Declaration(function.origin.clone()),
             );
             let route =
-                routes.and_then(|routes| routes.get(&(function.name.clone(), OutputKind::Value)));
+                routes.and_then(|routes| routes.get(&(planned.name.clone(), OutputKind::Value)));
             let library = declaration_annotations
                 .iter()
                 .find_map(|annotation| match annotation {
@@ -1470,7 +1471,7 @@ impl Snapshot {
                 })?;
             let abi = calling_convention(*convention);
             let set_last_error = declaration_annotations.contains(&Annotation::SetLastError);
-            let library = if function.name == *link_name {
+            let library = if planned.name == *link_name {
                 format!(
                     "#[library({library:?}{})]",
                     if set_last_error {
@@ -1497,12 +1498,12 @@ impl Snapshot {
             );
             if items
                 .insert(
-                    (function.name.clone(), OutputKind::Value),
+                    (planned.name.clone(), OutputKind::Value),
                     (function.spelling.file.clone(), item),
                 )
                 .is_some()
             {
-                return Err(Error(format!("duplicate planned name `{}`", function.name)));
+                return Err(Error(format!("duplicate planned name `{}`", planned.name)));
             }
         }
         for planned in plan.constants {
@@ -2168,7 +2169,8 @@ impl Snapshot {
                 self.authoritative_owner(&planned.name, OutputKind::Value, owners, namespace)?,
             );
         }
-        for function in &plan.functions {
+        for planned in &plan.functions {
+            let function = planned.fact;
             let mut owners = fact_owners
                 .get(&(
                     &function.name,
@@ -2181,8 +2183,8 @@ impl Snapshot {
             let namespace = self.fact_authority_namespace(function).map(String::as_str);
             self.add_authority_fallback(&mut owners, function, namespace)?;
             result.insert(
-                (function.name.clone(), OutputKind::Value),
-                self.authoritative_owner(&function.name, OutputKind::Value, owners, namespace)?,
+                (planned.name.clone(), OutputKind::Value),
+                self.authoritative_owner(&planned.name, OutputKind::Value, owners, namespace)?,
             );
         }
         for planned in &plan.constants {
@@ -2587,7 +2589,25 @@ impl Snapshot {
                     }
                 }
             } else if !roots.functions.is_empty() {
-                functions.push(choose_function_root(name, &roots.functions)?);
+                let mut by_link_name: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
+                for function in roots.functions {
+                    let FactData::Function { link_name, .. } = &function.data else {
+                        unreachable!()
+                    };
+                    by_link_name.entry(link_name).or_default().push(function);
+                }
+                let split_names = by_link_name.len() > 1;
+                for (link_name, roots) in by_link_name {
+                    let fact = choose_function_root(name, &roots)?;
+                    functions.push(PlannedFunction {
+                        name: if split_names {
+                            link_name.to_string()
+                        } else {
+                            fact.name.clone()
+                        },
+                        fact,
+                    });
+                }
             }
             if let Some(value) = value {
                 value_roots.push(value);
@@ -2599,7 +2619,7 @@ impl Snapshot {
         if let Some(selected) = selected_functions {
             let found: BTreeSet<_> = functions
                 .iter()
-                .filter_map(|function| match &function.data {
+                .filter_map(|function| match &function.fact.data {
                     FactData::Function { link_name, .. } => Some(link_name.as_str()),
                     _ => None,
                 })
@@ -2633,7 +2653,7 @@ impl Snapshot {
                 queue.push((constant.root.tu.as_str(), TypeEdge::Type(&constant.ty)));
             }
             for function in &functions {
-                queue_function_edges(function, &mut queue);
+                queue_function_edges(function.fact, &mut queue);
             }
 
             while let Some((tu, edge)) = queue.pop() {
@@ -2900,7 +2920,12 @@ impl Snapshot {
         }
         let validation_time = timing.then(std::time::Instant::now);
         for function in &functions {
-            validate_fact_layouts(function, &layout, &mut safe_layouts, &mut validated_layouts)?;
+            validate_fact_layouts(
+                function.fact,
+                &layout,
+                &mut safe_layouts,
+                &mut validated_layouts,
+            )?;
         }
         if timing {
             eprintln!(
@@ -3459,6 +3484,11 @@ struct PlannedConstant<'a> {
     ty: String,
 }
 
+struct PlannedFunction<'a> {
+    fact: &'a Fact,
+    name: String,
+}
+
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
 enum OutputKind {
     Value,
@@ -3468,7 +3498,7 @@ enum OutputKind {
 struct Plan<'a> {
     types: Vec<PlannedFact<'a>>,
     values: Vec<PlannedFact<'a>>,
-    functions: Vec<&'a Fact>,
+    functions: Vec<PlannedFunction<'a>>,
     constants: Vec<PlannedConstant<'a>>,
     type_names: BTreeMap<String, String>,
     interface_names: BTreeSet<(String, String)>,

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use windows_clang::{
-    EmitOptions, Input, NamespaceAuthorities, RdlPartition, RootPartition, extract_partitioned,
+    EmitOptions, Input, NamespaceAuthorities, RdlPartition, RootPartition, TypeReference,
+    TypeReferenceKind, extract_partitioned,
 };
 
 #[test]
@@ -1524,6 +1525,92 @@ fn identical_midl_helper_functions_coalesce_across_headers() {
             .to_string()
             .contains("ambiguous function root `BSTR_UserFree`"),
         "{ambiguous}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn macro_aliased_functions_preserve_distinct_link_names() {
+    helpers::ensure_libclang();
+
+    let scratch =
+        std::env::temp_dir().join(format!("windows-clang-psapi-alias-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let common = scratch.join("common.h");
+    let header = scratch.join("psapi.h");
+    std::fs::write(&common, "typedef void *HANDLE;\ntypedef int BOOL;\n").unwrap();
+    std::fs::write(
+        &header,
+        format!(
+            "#include \"{}\"\n\
+             extern \"C\" BOOL EmptyWorkingSet(HANDLE process);\n\
+             extern \"C\" BOOL EnumProcesses(unsigned *processes, unsigned bytes, \
+             unsigned *needed);\n",
+            common.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let include = format!("#include \"{}\"\n", header.to_string_lossy());
+    let v1 = RootPartition::new("psapi1", "Example.System.ProcessStatus")
+        .with_library("EmptyWorkingSet", "PSAPI.dll")
+        .with_library("EnumProcesses", "PSAPI.dll");
+    let v2 = RootPartition::new("psapi2", "Example.System.ProcessStatus")
+        .with_library("K32EmptyWorkingSet", "KERNEL32.dll")
+        .with_library("K32EnumProcesses", "KERNEL32.dll");
+    let snapshot = extract_partitioned(
+        [
+            Input::new("psapi1.cpp", &include)
+                .partitioned("psapi1-input")
+                .with_root_partition(header.to_string_lossy(), v1),
+            Input::new(
+                "psapi2.cpp",
+                format!(
+                    "#define EmptyWorkingSet K32EmptyWorkingSet\n\
+                     #define EnumProcesses K32EnumProcesses\n\
+                     {include}"
+                ),
+            )
+            .partitioned("psapi2-input")
+            .with_root_partition(header.to_string_lossy(), v2),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = BTreeMap::from([
+        (
+            "BOOL".to_string(),
+            TypeReference::new("Example.Foundation", "BOOL", TypeReferenceKind::Type),
+        ),
+        (
+            "HANDLE".to_string(),
+            TypeReference::new("Example.Foundation", "HANDLE", TypeReferenceKind::Type),
+        ),
+    ]);
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let process_status = partitions.values().cloned().collect::<Vec<_>>().join("\n");
+
+    for name in [
+        "EmptyWorkingSet",
+        "K32EmptyWorkingSet",
+        "EnumProcesses",
+        "K32EnumProcesses",
+    ] {
+        assert_eq!(
+            process_status.matches(&format!("fn {name}(")).count(),
+            1,
+            "{process_status}"
+        );
+    }
+    assert!(
+        process_status.contains("#[library(\"PSAPI.dll\")]"),
+        "{process_status}"
+    );
+    assert!(
+        process_status.contains("#[library(\"KERNEL32.dll\")]"),
+        "{process_status}"
     );
 
     std::fs::remove_dir_all(scratch).unwrap();
