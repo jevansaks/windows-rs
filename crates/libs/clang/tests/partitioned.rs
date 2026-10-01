@@ -1302,13 +1302,16 @@ fn macro_generated_declaration_uses_expansion_root_owner() {
         std::env::temp_dir().join(format!("windows-clang-macro-owner-{}", std::process::id()));
     std::fs::create_dir_all(&scratch).unwrap();
     let macros = scratch.join("macros.h");
-    let api = scratch.join("bdatypes.h");
+    let api = scratch.join("BdaTypes.h");
+    let configured_root = scratch.join("bdatypes.h");
     std::fs::write(&macros, "#define ENUM enum\n").unwrap();
     std::fs::write(
         &api,
         format!(
             "#include \"{}\"\n\
-             ENUM ApplicationTypeType {{ ApplicationTypeNone = 0 }};\n",
+             ENUM ApplicationTypeType {{ ApplicationTypeNone = 0 }};\n\
+             typedef struct ApplicationHolder {{ ApplicationTypeType value; }} \
+             ApplicationHolder;\n",
             macros.to_string_lossy()
         ),
     )
@@ -1319,7 +1322,11 @@ fn macro_generated_declaration_uses_expansion_root_owner() {
             format!("#include \"{}\"\n", api.to_string_lossy()),
         )
         .partitioned("dshow-input")
-        .with_root(api.to_string_lossy(), "dshow", "Example.Media.DirectShow")],
+        .with_root(
+            configured_root.to_string_lossy(),
+            "dshow",
+            "Example.Media.DirectShow",
+        )],
         &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
     )
     .unwrap();

@@ -353,8 +353,8 @@ fn extract_impl(
 }
 
 fn root_path_matches(configured: &str, extracted: &str) -> bool {
-    let configured = normalize_name(configured);
-    let extracted = normalize_name(extracted);
+    let configured = normalize_name(configured).to_ascii_lowercase();
+    let extracted = normalize_name(extracted).to_ascii_lowercase();
     configured == extracted
         || extracted
             .strip_suffix(&configured)
@@ -1083,16 +1083,29 @@ struct Extracted<'tu> {
 
 impl Traversal<'_> {
     fn is_root(&self, file: &str) -> bool {
-        !self.excluded_roots.contains(file)
-            && (self.roots.contains(file)
-                || self.root_dirs.iter().any(|root| file.starts_with(root))
-                || self.root_suffixes.iter().any(|root| {
-                    file == root
-                        || file
-                            .strip_suffix(root)
-                            .is_some_and(|prefix| prefix.ends_with('/'))
-                }))
+        is_root_path(
+            self.roots,
+            self.root_dirs,
+            self.root_suffixes,
+            self.excluded_roots,
+            file,
+        )
     }
+}
+
+fn is_root_path(
+    roots: &BTreeSet<String>,
+    root_dirs: &BTreeSet<String>,
+    root_suffixes: &BTreeSet<String>,
+    excluded_roots: &BTreeSet<String>,
+    file: &str,
+) -> bool {
+    !excluded_roots.contains(file)
+        && (roots.iter().any(|root| root_path_matches(root, file))
+            || root_dirs.iter().any(|root| file.starts_with(root))
+            || root_suffixes
+                .iter()
+                .any(|root| root_path_matches(root, file)))
 }
 
 fn extract_children(cursor: CXCursor, parent: Option<&Origin>, traversal: &mut Traversal<'_>) {
@@ -1286,19 +1299,13 @@ fn extract_child(
                 repeated = true;
             } else if let Some((spelling, expansion, _, system)) = cursor_locations(child) {
                 let main_file = spelling.file == traversal.tu;
-                let root = !traversal.excluded_roots.contains(&spelling.file)
-                    && (traversal.roots.contains(&spelling.file)
-                        || traversal
-                            .root_dirs
-                            .iter()
-                            .any(|root| spelling.file.starts_with(root))
-                        || traversal.root_suffixes.iter().any(|root| {
-                            spelling.file == *root
-                                || spelling
-                                    .file
-                                    .strip_suffix(root)
-                                    .is_some_and(|prefix| prefix.ends_with('/'))
-                        }));
+                let root = is_root_path(
+                    traversal.roots,
+                    traversal.root_dirs,
+                    traversal.root_suffixes,
+                    traversal.excluded_roots,
+                    &spelling.file,
+                );
                 let origin = Origin {
                     tu: traversal.tu.to_string(),
                     local,
