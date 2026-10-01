@@ -1873,6 +1873,31 @@ impl Snapshot {
     }
 
     fn authority_candidates<'a>(&self, facts: &[&'a Fact]) -> Vec<&'a Fact> {
+        let owned_sources: BTreeSet<_> = facts
+            .iter()
+            .filter(|fact| self.root_owners.contains_key(&fact.origin))
+            .map(|fact| {
+                (
+                    fact.name.as_str(),
+                    &fact.spelling,
+                    fact.kind,
+                    fact.definition,
+                )
+            })
+            .collect();
+        let facts: Vec<_> = facts
+            .iter()
+            .copied()
+            .filter(|fact| {
+                self.root_owners.contains_key(&fact.origin)
+                    || !owned_sources.contains(&(
+                        fact.name.as_str(),
+                        &fact.spelling,
+                        fact.kind,
+                        fact.definition,
+                    ))
+            })
+            .collect();
         let Some(namespace) = facts
             .iter()
             .find_map(|fact| self.fact_authority_namespace(fact))
@@ -1883,7 +1908,7 @@ impl Snapshot {
                 .filter(|fact| !self.type_projection_suppressed(fact, &mut BTreeSet::new()))
                 .collect();
             return if projected.is_empty() {
-                facts.to_vec()
+                facts
             } else {
                 projected
             };

@@ -1194,6 +1194,52 @@ fn namespace_authorities_route_opposite_owner_policies() {
 }
 
 #[test]
+fn tagged_source_fact_wins_over_transitive_copy_before_shape_selection() {
+    helpers::ensure_libclang();
+
+    let scratch =
+        std::env::temp_dir().join(format!("windows-clang-owned-source-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let header = scratch.join("ddraw.h");
+    std::fs::write(
+        &header,
+        "typedef struct _MDL { unsigned value; } _MDL;\n\
+         typedef struct _DDSURFACEDESC { _MDL mdl; } _DDSURFACEDESC;\n",
+    )
+    .unwrap();
+    let include = format!("#include \"{}\"\n", header.to_string_lossy());
+    let snapshot = extract_partitioned(
+        [
+            Input::new("owned.cpp", &include)
+                .partitioned("directdraw-input")
+                .with_root_partition(
+                    header.to_string_lossy(),
+                    RootPartition::new("directdraw", "Example.DirectDraw")
+                        .with_remap("_MDL", "DDMDL")
+                        .with_remap("_DDSURFACEDESC", "DDSURFACEDESC"),
+                ),
+            Input::new("transitive.cpp", &include).partitioned("transitive-input"),
+        ],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let directdraw = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.DirectDraw")
+        .unwrap()
+        .1;
+
+    assert!(directdraw.contains("struct DDSURFACEDESC"), "{directdraw}");
+    assert!(directdraw.contains("mdl: DDMDL"), "{directdraw}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn namespace_authorities_support_wildcards_and_namespaces_without_partitions() {
     helpers::ensure_libclang();
 
