@@ -318,7 +318,7 @@ fn extract_impl(
         let mut matches: Vec<_> = owners
             .iter()
             .filter(|((tu, root), _)| {
-                tu == &fact.origin.tu && root_path_matches(root, &fact.expansion.file)
+                tu == &fact.origin.tu && source_path_matches(root, &fact.expansion.file)
             })
             .map(|(_, owner)| owner)
             .collect();
@@ -329,7 +329,7 @@ fn extract_impl(
                 owners
                     .iter()
                     .filter(|((tu, root), _)| {
-                        tu == &fact.origin.tu && root_path_matches(root, &fact.spelling.file)
+                        tu == &fact.origin.tu && source_path_matches(root, &fact.spelling.file)
                     })
                     .map(|(_, owner)| owner),
             );
@@ -351,6 +351,7 @@ fn extract_impl(
         constants,
         annotations,
         root_owners,
+        constant_root_owners: BTreeMap::new(),
         root_partitions: owners,
         partition_inputs,
         input_order,
@@ -360,20 +361,9 @@ fn extract_impl(
         namespace_authorities: BTreeMap::new(),
         fact_namespace_authorities: BTreeMap::new(),
         constant_namespace_authorities: BTreeMap::new(),
+        header_partition_policy: false,
         timing_target: target,
     })
-}
-
-fn root_path_matches(configured: &str, extracted: &str) -> bool {
-    let configured = normalize_name(configured).to_ascii_lowercase();
-    let extracted = normalize_name(extracted).to_ascii_lowercase();
-    configured == extracted
-        || extracted
-            .strip_suffix(&configured)
-            .is_some_and(|prefix| prefix.ends_with('/'))
-        || configured
-            .strip_suffix(&extracted)
-            .is_some_and(|prefix| prefix.ends_with('/'))
 }
 
 fn apply_macro_enum_overrides(facts: &mut [Fact], constants: &mut Vec<Constant>) {
@@ -1113,11 +1103,11 @@ fn is_root_path(
     file: &str,
 ) -> bool {
     !excluded_roots.contains(file)
-        && (roots.iter().any(|root| root_path_matches(root, file))
+        && (roots.iter().any(|root| source_path_matches(root, file))
             || root_dirs.iter().any(|root| file.starts_with(root))
             || root_suffixes
                 .iter()
-                .any(|root| root_path_matches(root, file)))
+                .any(|root| source_path_matches(root, file)))
 }
 
 fn extract_children(cursor: CXCursor, parent: Option<&Origin>, traversal: &mut Traversal<'_>) {

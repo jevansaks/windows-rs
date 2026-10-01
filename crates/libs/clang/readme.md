@@ -33,6 +33,11 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+An aggregate translation unit can be routed after extraction with `HeaderPartitionPolicy` and
+`Snapshot::plan_header_partitions`. The policy maps traversed physical headers to logical
+`RootPartition` candidates. Audit the returned plan before calling `emit_with_options`; dependency
+declarations remain available for closure without becoming public roots.
+
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
 planning into RDL and WinMD attributes. Unknown, malformed, or misplaced annotations are errors.

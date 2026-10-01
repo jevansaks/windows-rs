@@ -118,6 +118,43 @@ pub struct RootOwner {
     pub exclude_empty_records: bool,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct HeaderPartitionPolicy {
+    headers: BTreeMap<String, HeaderPartitionEntry>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct HeaderPartitionEntry {
+    header: String,
+    partitions: BTreeSet<RootPartition>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PartitionItemKind {
+    Type,
+    Value,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PartitionConflictReason {
+    AmbiguousRootCandidates,
+    AmbiguousOwners,
+    MissingOwner,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PartitionConflict {
+    pub name: String,
+    pub kind: PartitionItemKind,
+    pub reason: PartitionConflictReason,
+    pub owners: Vec<RootOwner>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PartitionAudit {
+    conflicts: Vec<PartitionConflict>,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct RdlPartition {
     pub partition: String,
@@ -226,6 +263,107 @@ impl NamespaceAuthorities {
             }
         }
         Ok(result)
+    }
+}
+
+impl HeaderPartitionPolicy {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_traversed_header(
+        mut self,
+        header: impl Into<String>,
+        partition: RootPartition,
+    ) -> Self {
+        self.add_traversed_header(header, partition);
+        self
+    }
+
+    pub fn add_traversed_header(&mut self, header: impl Into<String>, partition: RootPartition) {
+        let header = normalize_name(&header.into());
+        let key = header.to_ascii_lowercase();
+        let entry = self
+            .headers
+            .entry(key)
+            .or_insert_with(|| HeaderPartitionEntry {
+                header: header.clone(),
+                partitions: BTreeSet::new(),
+            });
+        if header < entry.header {
+            entry.header = header;
+        }
+        entry.partitions.insert(partition);
+    }
+
+    pub fn traversed_headers(&self) -> impl Iterator<Item = (&str, &BTreeSet<RootPartition>)> {
+        self.headers
+            .values()
+            .map(|entry| (entry.header.as_str(), &entry.partitions))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.headers.is_empty()
+    }
+
+    fn owners(&self, tu: &str, file: &str) -> BTreeSet<RootOwner> {
+        self.headers
+            .values()
+            .filter(|entry| source_path_matches(&entry.header, file))
+            .flat_map(|entry| {
+                entry
+                    .partitions
+                    .iter()
+                    .map(|partition| root_owner(tu, &entry.header, partition))
+            })
+            .collect()
+    }
+}
+
+impl PartitionAudit {
+    pub fn is_clean(&self) -> bool {
+        self.conflicts.is_empty()
+    }
+
+    pub fn conflicts(&self) -> &[PartitionConflict] {
+        &self.conflicts
+    }
+}
+
+impl Display for PartitionAudit {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            formatter,
+            "header partition planning found {} conflict(s):",
+            self.conflicts.len()
+        )?;
+        for conflict in &self.conflicts {
+            let kind = match conflict.kind {
+                PartitionItemKind::Type => "type",
+                PartitionItemKind::Value => "value",
+            };
+            let reason = match conflict.reason {
+                PartitionConflictReason::AmbiguousRootCandidates => {
+                    "has ambiguous traversed-header candidates"
+                }
+                PartitionConflictReason::AmbiguousOwners => "has ambiguous logical owners",
+                PartitionConflictReason::MissingOwner => "has no logical owner",
+            };
+            let owners = if conflict.owners.is_empty() {
+                "none".to_string()
+            } else {
+                conflict
+                    .owners
+                    .iter()
+                    .map(|owner| {
+                        format!("{}:{} -> {}", owner.partition, owner.root, owner.namespace)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            };
+            writeln!(formatter, "- {kind} `{}` {reason}: {owners}", conflict.name)?;
+        }
+        Ok(())
     }
 }
 
@@ -793,6 +931,7 @@ pub struct Snapshot {
     constants: Vec<Constant>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     root_owners: BTreeMap<Origin, RootOwner>,
+    constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
     partition_inputs: BTreeMap<String, String>,
     input_order: BTreeMap<String, usize>,
@@ -801,8 +940,15 @@ pub struct Snapshot {
     suppressed_type_origins: BTreeSet<Origin>,
     namespace_authorities: BTreeMap<String, String>,
     fact_namespace_authorities: BTreeMap<Origin, String>,
-    constant_namespace_authorities: BTreeMap<Origin, String>,
+    constant_namespace_authorities: BTreeMap<(Origin, String), String>,
+    header_partition_policy: bool,
     timing_target: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HeaderPartitionPlan {
+    snapshot: Snapshot,
+    root_conflicts: Vec<PartitionConflict>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -824,6 +970,7 @@ impl PartialEq for Snapshot {
             && self.constants == other.constants
             && self.annotations == other.annotations
             && self.root_owners == other.root_owners
+            && self.constant_root_owners == other.constant_root_owners
             && self.root_partitions == other.root_partitions
             && self.partition_inputs == other.partition_inputs
             && self.partition_exclusions == other.partition_exclusions
@@ -832,6 +979,7 @@ impl PartialEq for Snapshot {
             && self.namespace_authorities == other.namespace_authorities
             && self.fact_namespace_authorities == other.fact_namespace_authorities
             && self.constant_namespace_authorities == other.constant_namespace_authorities
+            && self.header_partition_policy == other.header_partition_policy
     }
 }
 
@@ -975,6 +1123,50 @@ impl Snapshot {
         options: &EmitOptions<'_>,
         authorities: &NamespaceAuthorities,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        self.apply_namespace_authorities(authorities)?;
+        self.emit_partitioned_prepared(options)
+    }
+
+    pub fn plan_header_partitions(
+        &self,
+        policy: &HeaderPartitionPolicy,
+        authorities: &NamespaceAuthorities,
+    ) -> Result<HeaderPartitionPlan, Error> {
+        let mut snapshot = self.clone();
+        snapshot.apply_namespace_authorities(authorities)?;
+        let root_conflicts = snapshot.apply_header_partition_policy(policy)?;
+        Ok(HeaderPartitionPlan {
+            snapshot,
+            root_conflicts,
+        })
+    }
+
+    pub fn emit_header_partitions_with_options(
+        &self,
+        policy: &HeaderPartitionPolicy,
+        options: &EmitOptions<'_>,
+    ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        self.emit_header_partitions_with_options_and_authorities(
+            policy,
+            options,
+            &NamespaceAuthorities::default(),
+        )
+    }
+
+    pub fn emit_header_partitions_with_options_and_authorities(
+        &self,
+        policy: &HeaderPartitionPolicy,
+        options: &EmitOptions<'_>,
+        authorities: &NamespaceAuthorities,
+    ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        self.plan_header_partitions(policy, authorities)?
+            .emit_with_options(options)
+    }
+
+    fn apply_namespace_authorities(
+        &mut self,
+        authorities: &NamespaceAuthorities,
+    ) -> Result<(), Error> {
         self.namespace_authorities = authorities.resolve(
             self.facts
                 .iter()
@@ -996,9 +1188,21 @@ impl Snapshot {
             .filter_map(|constant| {
                 self.namespace_authorities
                     .get(&constant.name)
-                    .map(|namespace| (constant.definition.clone(), namespace.clone()))
+                    .map(|namespace| {
+                        (
+                            (constant.definition.clone(), constant.name.clone()),
+                            namespace.clone(),
+                        )
+                    })
             })
             .collect();
+        Ok(())
+    }
+
+    fn emit_partitioned_prepared(
+        self,
+        options: &EmitOptions<'_>,
+    ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.clone();
         let (snapshot, display_names) = self.into_partitioned_planning_snapshot();
@@ -1575,6 +1779,128 @@ impl Snapshot {
         Ok(items)
     }
 
+    fn apply_header_partition_policy(
+        &mut self,
+        policy: &HeaderPartitionPolicy,
+    ) -> Result<Vec<PartitionConflict>, Error> {
+        self.root_owners.clear();
+        self.constant_root_owners.clear();
+        self.root_partitions.clear();
+        self.partition_inputs.clear();
+        self.partition_exclusions.clear();
+        self.forced_flags.clear();
+        self.suppressed_type_origins.clear();
+        self.header_partition_policy = true;
+
+        let translation_units: BTreeSet<_> = self
+            .facts
+            .iter()
+            .map(|fact| fact.origin.tu.clone())
+            .chain(
+                self.constants
+                    .iter()
+                    .map(|constant| constant.root.tu.clone()),
+            )
+            .collect();
+        self.partition_inputs
+            .extend(translation_units.iter().map(|tu| (tu.clone(), tu.clone())));
+        for tu in &translation_units {
+            for entry in policy.headers.values() {
+                if entry.partitions.len() != 1 {
+                    continue;
+                }
+                let partition = entry.partitions.first().unwrap();
+                self.root_partitions.insert(
+                    (tu.clone(), entry.header.clone()),
+                    root_owner(tu, &entry.header, partition),
+                );
+            }
+        }
+
+        let mut conflicts = Vec::new();
+        for fact in &mut self.facts {
+            fact.root = false;
+            let candidates = header_fact_owner_candidates(policy, fact);
+            if candidates.is_empty() {
+                continue;
+            }
+            let candidates: BTreeSet<_> = candidates
+                .into_iter()
+                .filter(|owner| !owner_excludes_fact(owner, fact))
+                .collect();
+            if candidates.is_empty() {
+                if is_type_fact(fact) {
+                    self.suppressed_type_origins.insert(fact.origin.clone());
+                }
+                continue;
+            }
+            fact.root = true;
+            let kind = fact_partition_item_kind(fact);
+            let namespace = self
+                .namespace_authorities
+                .get(&fact.name)
+                .map(String::as_str);
+            let (owner, conflict) = resolve_header_owner(&fact.name, kind, candidates, namespace)?;
+            if let Some(conflict) = conflict {
+                conflicts.push(conflict);
+            }
+            self.root_owners.insert(fact.origin.clone(), owner);
+        }
+
+        let facts_by_origin: BTreeMap<_, _> = self
+            .facts
+            .iter()
+            .map(|fact| (fact.origin.clone(), fact))
+            .collect();
+        let associated_constants: BTreeSet<_> = self
+            .annotations
+            .values()
+            .flatten()
+            .filter_map(|annotation| match annotation {
+                Annotation::AssociatedConstant(name) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        let mut constants = Vec::with_capacity(self.constants.len());
+        for constant in std::mem::take(&mut self.constants) {
+            let candidates = facts_by_origin
+                .get(&constant.root)
+                .map_or_else(
+                    || policy.owners(&constant.root.tu, &constant.spelling.file),
+                    |fact| header_fact_owner_candidates(policy, fact),
+                )
+                .into_iter()
+                .filter(|owner| !owner.exclusions.contains(&constant.name))
+                .collect::<BTreeSet<_>>();
+            if candidates.is_empty() {
+                if associated_constants.contains(constant.name.as_str()) {
+                    constants.push(constant);
+                }
+                continue;
+            }
+            let namespace = self
+                .namespace_authorities
+                .get(&constant.name)
+                .map(String::as_str);
+            let (owner, conflict) = resolve_header_owner(
+                &constant.name,
+                Some(PartitionItemKind::Value),
+                candidates,
+                namespace,
+            )?;
+            if let Some(conflict) = conflict {
+                conflicts.push(conflict);
+            }
+            self.constant_root_owners
+                .insert((constant.root.clone(), constant.name.clone()), owner);
+            constants.push(constant);
+        }
+        self.constants = constants;
+        conflicts.sort();
+        conflicts.dedup();
+        Ok(conflicts)
+    }
+
     fn into_partitioned_planning_snapshot(mut self) -> (Self, BTreeMap<String, String>) {
         self.apply_partition_type_settings();
         self.apply_partition_exclusions();
@@ -1692,10 +2018,29 @@ impl Snapshot {
         }
         for constant in &mut self.constants {
             let original = constant.name.clone();
-            if let Some(owner) = self.root_owners.get(&constant.root)
-                && let Some(scoped) = scoped_names.get(&(original, owner.namespace.clone()))
+            let owner = self
+                .constant_root_owners
+                .get(&(constant.root.clone(), original.clone()))
+                .or_else(|| self.root_owners.get(&constant.root));
+            let namespace = owner.map(|owner| owner.namespace.clone());
+            if let Some(namespace) = namespace
+                && let Some(scoped) = scoped_names.get(&(original.clone(), namespace))
             {
                 constant.name = scoped.clone();
+                if let Some(owner) = self
+                    .constant_root_owners
+                    .remove(&(constant.root.clone(), original.clone()))
+                {
+                    self.constant_root_owners
+                        .insert((constant.root.clone(), scoped.clone()), owner);
+                }
+                if let Some(namespace) = self
+                    .constant_namespace_authorities
+                    .remove(&(constant.definition.clone(), original))
+                {
+                    self.constant_namespace_authorities
+                        .insert((constant.definition.clone(), scoped.clone()), namespace);
+                }
             }
             rename_type_ref(
                 &mut constant.ty,
@@ -1771,10 +2116,28 @@ impl Snapshot {
                 &declarations,
                 &self.root_partitions,
             );
-            if let Some(owner) = self.root_owners.get(&constant.root)
-                && let Some(target) = owner.remaps.get(&constant.name)
-            {
+            let original = constant.name.clone();
+            let owner = self
+                .constant_root_owners
+                .get(&(constant.root.clone(), original.clone()))
+                .or_else(|| self.root_owners.get(&constant.root));
+            let target = owner.and_then(|owner| owner.remaps.get(&constant.name).cloned());
+            if let Some(target) = target {
                 constant.name = target.clone();
+                if let Some(owner) = self
+                    .constant_root_owners
+                    .remove(&(constant.root.clone(), original.clone()))
+                {
+                    self.constant_root_owners
+                        .insert((constant.root.clone(), target.clone()), owner);
+                }
+                if let Some(namespace) = self
+                    .constant_namespace_authorities
+                    .remove(&(constant.definition.clone(), original))
+                {
+                    self.constant_namespace_authorities
+                        .insert((constant.definition.clone(), target), namespace);
+                }
             }
         }
     }
@@ -1813,8 +2176,9 @@ impl Snapshot {
             }
         });
         self.constants.retain(|constant| {
-            self.root_owners
-                .get(&constant.root)
+            self.constant_root_owners
+                .get(&(constant.root.clone(), constant.name.clone()))
+                .or_else(|| self.root_owners.get(&constant.root))
                 .or_else(|| {
                     self.root_partitions
                         .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
@@ -1864,10 +2228,15 @@ impl Snapshot {
         }
 
         for constant in &mut self.constants {
-            if let Some(owner) = self.root_owners.get(&constant.root).or_else(|| {
-                self.root_partitions
-                    .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
-            }) {
+            if let Some(owner) = self
+                .constant_root_owners
+                .get(&(constant.root.clone(), constant.name.clone()))
+                .or_else(|| self.root_owners.get(&constant.root))
+                .or_else(|| {
+                    self.root_partitions
+                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
+                })
+            {
                 preserve_auto_function_pointer_level(
                     &mut constant.ty,
                     &owner.preserved_auto_function_pointer_levels,
@@ -2096,6 +2465,34 @@ impl Snapshot {
         &self,
         plan: &Plan<'_>,
     ) -> Result<BTreeMap<(String, OutputKind), RootOwner>, Error> {
+        self.partition_route_candidates(plan)?
+            .into_iter()
+            .map(|candidate| {
+                Ok((
+                    candidate.key,
+                    self.authoritative_owner(
+                        &candidate.name,
+                        candidate.kind,
+                        candidate.owners,
+                        candidate.namespace.as_deref(),
+                    )?,
+                ))
+            })
+            .collect()
+    }
+
+    fn partition_route_conflicts(&self, plan: &Plan<'_>) -> Result<Vec<PartitionConflict>, Error> {
+        let mut conflicts = self
+            .partition_route_candidates(plan)?
+            .into_iter()
+            .filter_map(route_candidate_conflict)
+            .collect::<Vec<_>>();
+        conflicts.sort();
+        conflicts.dedup();
+        Ok(conflicts)
+    }
+
+    fn partition_route_candidates(&self, plan: &Plan<'_>) -> Result<Vec<RouteCandidate>, Error> {
         let mut fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         let mut source_fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         for fact in &self.facts {
@@ -2110,7 +2507,7 @@ impl Snapshot {
                     .insert(owner.clone());
             }
         }
-        let mut result = BTreeMap::new();
+        let mut result = Vec::new();
         for planned in &plan.types {
             let mut owners = fact_owners
                 .get(&(
@@ -2133,14 +2530,15 @@ impl Snapshot {
                     .flatten()
                     .cloned(),
             );
-            let namespace = self
-                .fact_authority_namespace(planned.fact)
-                .map(String::as_str);
-            self.add_authority_fallback(&mut owners, planned.fact, namespace)?;
-            result.insert(
-                (planned.name.clone(), OutputKind::Type),
-                self.authoritative_owner(&planned.name, OutputKind::Type, owners, namespace)?,
-            );
+            let namespace = self.fact_authority_namespace(planned.fact).cloned();
+            self.add_authority_fallback(&mut owners, planned.fact, namespace.as_deref())?;
+            result.push(RouteCandidate {
+                key: (planned.name.clone(), OutputKind::Type),
+                name: planned.name.clone(),
+                kind: OutputKind::Type,
+                owners,
+                namespace,
+            });
         }
         for planned in &plan.values {
             let mut owners = fact_owners
@@ -2152,14 +2550,15 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
-            let namespace = self
-                .fact_authority_namespace(planned.fact)
-                .map(String::as_str);
-            self.add_authority_fallback(&mut owners, planned.fact, namespace)?;
-            result.insert(
-                (planned.name.clone(), OutputKind::Value),
-                self.authoritative_owner(&planned.name, OutputKind::Value, owners, namespace)?,
-            );
+            let namespace = self.fact_authority_namespace(planned.fact).cloned();
+            self.add_authority_fallback(&mut owners, planned.fact, namespace.as_deref())?;
+            result.push(RouteCandidate {
+                key: (planned.name.clone(), OutputKind::Value),
+                name: planned.name.clone(),
+                kind: OutputKind::Value,
+                owners,
+                namespace,
+            });
         }
         for planned in &plan.functions {
             let function = planned.fact;
@@ -2172,32 +2571,147 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
-            let namespace = self.fact_authority_namespace(function).map(String::as_str);
-            self.add_authority_fallback(&mut owners, function, namespace)?;
-            result.insert(
-                (planned.name.clone(), OutputKind::Value),
-                self.authoritative_owner(&planned.name, OutputKind::Value, owners, namespace)?,
-            );
+            let namespace = self.fact_authority_namespace(function).cloned();
+            self.add_authority_fallback(&mut owners, function, namespace.as_deref())?;
+            result.push(RouteCandidate {
+                key: (planned.name.clone(), OutputKind::Value),
+                name: planned.name.clone(),
+                kind: OutputKind::Value,
+                owners,
+                namespace,
+            });
         }
         for planned in &plan.constants {
             let constant = planned.constant;
             let mut owners = self
-                .root_owners
-                .get(&constant.root)
+                .constant_root_owners
+                .get(&(constant.root.clone(), constant.name.clone()))
+                .or_else(|| self.root_owners.get(&constant.root))
                 .cloned()
                 .into_iter()
                 .collect();
             let namespace = self
                 .constant_namespace_authorities
-                .get(&constant.definition)
-                .map(String::as_str);
-            self.add_constant_authority_fallback(&mut owners, constant, namespace)?;
-            result.insert(
-                (constant.name.clone(), OutputKind::Value),
-                self.authoritative_owner(&constant.name, OutputKind::Value, owners, namespace)?,
+                .get(&(constant.definition.clone(), constant.name.clone()))
+                .cloned();
+            self.add_constant_authority_fallback(&mut owners, constant, namespace.as_deref())?;
+            result.push(RouteCandidate {
+                key: (constant.name.clone(), OutputKind::Value),
+                name: constant.name.clone(),
+                kind: OutputKind::Value,
+                owners,
+                namespace,
+            });
+        }
+        self.inherit_dependency_owners(plan, &mut result);
+        Ok(result)
+    }
+
+    fn inherit_dependency_owners(&self, plan: &Plan<'_>, routes: &mut [RouteCandidate]) {
+        let route_indices: BTreeMap<_, _> = routes
+            .iter()
+            .enumerate()
+            .map(|(index, route)| (route.key.clone(), index))
+            .collect();
+        let mut declarations = BTreeMap::new();
+        let mut names: BTreeMap<(String, String), BTreeSet<(String, OutputKind)>> = BTreeMap::new();
+        for planned in &plan.types {
+            let key = (planned.name.clone(), OutputKind::Type);
+            declarations.insert(
+                (
+                    planned.fact.origin.tu.clone(),
+                    planned.fact.spelling.clone(),
+                    planned.fact.name.clone(),
+                ),
+                key.clone(),
+            );
+            names
+                .entry((planned.fact.origin.tu.clone(), planned.fact.name.clone()))
+                .or_default()
+                .insert(key);
+        }
+        let output_type_names: BTreeSet<_> = plan
+            .types
+            .iter()
+            .map(|planned| planned.name.as_str())
+            .collect();
+        let mut edges = BTreeSet::new();
+        for planned in &plan.types {
+            let source = (planned.name.clone(), OutputKind::Type);
+            collect_fact_route_edges(
+                planned.fact,
+                &source,
+                &declarations,
+                &names,
+                &plan.type_names,
+                &output_type_names,
+                &mut edges,
             );
         }
-        Ok(result)
+        for planned in &plan.values {
+            let source = (planned.name.clone(), OutputKind::Value);
+            collect_fact_route_edges(
+                planned.fact,
+                &source,
+                &declarations,
+                &names,
+                &plan.type_names,
+                &output_type_names,
+                &mut edges,
+            );
+        }
+        for planned in &plan.functions {
+            let source = (planned.name.clone(), OutputKind::Value);
+            collect_fact_route_edges(
+                planned.fact,
+                &source,
+                &declarations,
+                &names,
+                &plan.type_names,
+                &output_type_names,
+                &mut edges,
+            );
+        }
+        for planned in &plan.constants {
+            let source = (planned.constant.name.clone(), OutputKind::Value);
+            collect_type_route_edges(
+                &planned.constant.ty,
+                &planned.constant.root.tu,
+                &source,
+                &declarations,
+                &names,
+                &plan.type_names,
+                &output_type_names,
+                &mut edges,
+            );
+        }
+
+        let anchored: Vec<_> = routes
+            .iter()
+            .map(|route| !route.owners.is_empty() || route.namespace.is_some())
+            .collect();
+        loop {
+            let previous: Vec<_> = routes.iter().map(|route| route.owners.clone()).collect();
+            let mut changed = false;
+            for (source, target) in &edges {
+                let (Some(&source), Some(&target)) =
+                    (route_indices.get(source), route_indices.get(target))
+                else {
+                    continue;
+                };
+                if anchored[target] {
+                    continue;
+                }
+                let before = routes[target].owners.len();
+                routes[target]
+                    .owners
+                    .extend(previous[source].iter().cloned());
+                changed |= routes[target].owners.len() != before;
+            }
+            if !changed {
+                break;
+            }
+        }
     }
 
     fn add_authority_fallback(
@@ -2626,7 +3140,7 @@ impl Snapshot {
                     if tagged
                         || routed
                         || !matches!(root.data, FactData::Typedef { .. })
-                        || self.root_partitions.is_empty()
+                        || (self.root_partitions.is_empty() && !self.header_partition_policy)
                     {
                         root_names.insert(name.to_string());
                         type_roots.push(root);
@@ -3190,7 +3704,7 @@ impl Snapshot {
         }
         let mut internal_type_names = BTreeMap::new();
         let mut internal_aliases = BTreeSet::new();
-        if !self.root_partitions.is_empty() {
+        if !self.root_partitions.is_empty() || self.header_partition_policy {
             loop {
                 let mut added = false;
                 for (name, fact) in &facts_by_name {
@@ -3485,6 +3999,37 @@ impl Snapshot {
     }
 }
 
+impl HeaderPartitionPlan {
+    pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
+        let timing = self.snapshot.timing_target.is_some();
+        let (snapshot, _) = self.snapshot.clone().into_partitioned_planning_snapshot();
+        let plan = snapshot.plan(
+            options.references,
+            options.excluded_types.or(options.excluded),
+            options.excluded_functions.or(options.excluded),
+            options.excluded_constants.or(options.excluded),
+            options.functions,
+            timing,
+        )?;
+        let mut conflicts = self.root_conflicts.clone();
+        conflicts.extend(snapshot.partition_route_conflicts(&plan)?);
+        conflicts.sort();
+        conflicts.dedup();
+        Ok(PartitionAudit { conflicts })
+    }
+
+    pub fn emit_with_options(
+        &self,
+        options: &EmitOptions<'_>,
+    ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        let audit = self.audit(options)?;
+        if !audit.is_clean() {
+            return Err(Error(audit.to_string()));
+        }
+        self.snapshot.clone().emit_partitioned_prepared(options)
+    }
+}
+
 fn write_rdl<'a>(
     namespace: &str,
     items: impl IntoIterator<Item = &'a str>,
@@ -3549,6 +4094,50 @@ struct Plan<'a> {
     pointer_interface_aliases: BTreeMap<String, String>,
     interface_guids: BTreeMap<String, String>,
     flag_enums: BTreeSet<(String, String)>,
+}
+
+struct RouteCandidate {
+    key: (String, OutputKind),
+    name: String,
+    kind: OutputKind,
+    owners: BTreeSet<RootOwner>,
+    namespace: Option<String>,
+}
+
+fn route_candidate_conflict(mut candidate: RouteCandidate) -> Option<PartitionConflict> {
+    if let Some(namespace) = &candidate.namespace {
+        let matching: BTreeSet<_> = candidate
+            .owners
+            .iter()
+            .filter(|owner| owner.namespace == *namespace)
+            .cloned()
+            .collect();
+        if !matching.is_empty() {
+            candidate.owners = matching;
+        }
+    }
+    let reason = if candidate.owners.is_empty() {
+        PartitionConflictReason::MissingOwner
+    } else {
+        let first = candidate.owners.first().unwrap();
+        if candidate
+            .owners
+            .iter()
+            .all(|owner| same_owner_policy(first, owner))
+        {
+            return None;
+        }
+        PartitionConflictReason::AmbiguousOwners
+    };
+    Some(PartitionConflict {
+        name: candidate.name,
+        kind: match candidate.kind {
+            OutputKind::Type => PartitionItemKind::Type,
+            OutputKind::Value => PartitionItemKind::Value,
+        },
+        reason,
+        owners: candidate.owners.into_iter().collect(),
+    })
 }
 
 struct TypeProjection<'a> {
@@ -3866,6 +4455,114 @@ fn rename_type_ref(
         }
         _ => {}
     }
+}
+
+fn root_owner(tu: &str, root: &str, partition: &RootPartition) -> RootOwner {
+    RootOwner {
+        input: tu.to_string(),
+        root: root.to_string(),
+        partition: partition.partition.clone(),
+        namespace: partition.namespace.clone(),
+        remaps: partition.remaps.clone(),
+        exclusions: partition.exclusions.clone(),
+        libraries: partition.libraries.clone(),
+        u32_types: partition.u32_types.clone(),
+        flags: partition.flags.clone(),
+        preserved_auto_function_pointer_levels: partition
+            .preserved_auto_function_pointer_levels
+            .clone(),
+        exclude_empty_records: partition.exclude_empty_records,
+    }
+}
+
+fn header_fact_owner_candidates(
+    policy: &HeaderPartitionPolicy,
+    fact: &Fact,
+) -> BTreeSet<RootOwner> {
+    let candidates = policy.owners(&fact.origin.tu, &fact.expansion.file);
+    if candidates.is_empty() && fact.expansion.file != fact.spelling.file {
+        policy.owners(&fact.origin.tu, &fact.spelling.file)
+    } else {
+        candidates
+    }
+}
+
+fn owner_excludes_fact(owner: &RootOwner, fact: &Fact) -> bool {
+    owner.exclusions.contains(&fact.name)
+        || (owner.exclude_empty_records
+            && matches!(&fact.data, FactData::Record { fields, .. } if fields.is_empty()))
+}
+
+fn fact_partition_item_kind(fact: &Fact) -> Option<PartitionItemKind> {
+    if is_type_fact(fact) {
+        Some(PartitionItemKind::Type)
+    } else if is_value_fact(fact) || matches!(fact.data, FactData::Function { .. }) {
+        Some(PartitionItemKind::Value)
+    } else {
+        None
+    }
+}
+
+fn resolve_header_owner(
+    name: &str,
+    kind: Option<PartitionItemKind>,
+    mut owners: BTreeSet<RootOwner>,
+    namespace: Option<&str>,
+) -> Result<(RootOwner, Option<PartitionConflict>), Error> {
+    if let Some(namespace) = namespace {
+        let matching: BTreeSet<_> = owners
+            .iter()
+            .filter(|owner| owner.namespace == namespace)
+            .cloned()
+            .collect();
+        if !matching.is_empty() {
+            owners = matching;
+        }
+    }
+    let ambiguous = owners
+        .first()
+        .is_some_and(|first| owners.iter().any(|owner| !same_owner_policy(first, owner)));
+    let candidates = owners.iter().cloned().collect::<Vec<_>>();
+    let mut owner = owners
+        .pop_first()
+        .ok_or_else(|| Error(format!("traversed item `{name}` has no logical owner")))?;
+    if let Some(namespace) = namespace
+        && !candidates
+            .iter()
+            .any(|candidate| candidate.namespace == namespace)
+    {
+        owner.namespace = namespace.to_string();
+    }
+    validate_namespace(&owner.namespace)?;
+    if owner.partition.trim().is_empty() {
+        return Err(Error(format!(
+            "selected item `{name}` has an empty partition identity"
+        )));
+    }
+    let conflict = if ambiguous {
+        kind.map(|kind| PartitionConflict {
+            name: name.to_string(),
+            kind,
+            reason: PartitionConflictReason::AmbiguousRootCandidates,
+            owners: candidates,
+        })
+    } else {
+        None
+    };
+    Ok((owner, conflict))
+}
+
+fn same_owner_policy(left: &RootOwner, right: &RootOwner) -> bool {
+    left.partition == right.partition
+        && left.namespace == right.namespace
+        && left.remaps == right.remaps
+        && left.exclusions == right.exclusions
+        && left.libraries == right.libraries
+        && left.u32_types == right.u32_types
+        && left.flags == right.flags
+        && left.preserved_auto_function_pointer_levels
+            == right.preserved_auto_function_pointer_levels
+        && left.exclude_empty_records == right.exclude_empty_records
 }
 
 fn unique_owner(
@@ -5277,6 +5974,193 @@ fn validate_complete_layout(
     }
 }
 
+fn collect_fact_route_edges(
+    fact: &Fact,
+    source: &(String, OutputKind),
+    declarations: &BTreeMap<(String, Location, String), (String, OutputKind)>,
+    names: &BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
+    type_names: &BTreeMap<String, String>,
+    output_type_names: &BTreeSet<&str>,
+    edges: &mut BTreeSet<((String, OutputKind), (String, OutputKind))>,
+) {
+    let mut queue = Vec::new();
+    queue_type_edges(fact, &mut queue);
+    queue_function_edges(fact, &mut queue);
+    for (tu, edge) in queue {
+        match edge {
+            TypeEdge::Type(ty) => collect_type_route_edges(
+                ty,
+                tu,
+                source,
+                declarations,
+                names,
+                type_names,
+                output_type_names,
+                edges,
+            ),
+            TypeEdge::Projected(name) => {
+                if let Some(target) = planned_type_route(
+                    tu,
+                    name,
+                    None,
+                    declarations,
+                    names,
+                    type_names,
+                    output_type_names,
+                ) {
+                    edges.insert((source.clone(), target));
+                }
+            }
+        }
+    }
+}
+
+fn collect_type_route_edges(
+    ty: &TypeRef,
+    tu: &str,
+    source: &(String, OutputKind),
+    declarations: &BTreeMap<(String, Location, String), (String, OutputKind)>,
+    names: &BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
+    type_names: &BTreeMap<String, String>,
+    output_type_names: &BTreeSet<&str>,
+    edges: &mut BTreeSet<((String, OutputKind), (String, OutputKind))>,
+) {
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            if let Some(target) = planned_type_route(
+                tu,
+                name,
+                Some(declaration),
+                declarations,
+                names,
+                type_names,
+                output_type_names,
+            ) {
+                edges.insert((source.clone(), target));
+            }
+        }
+        TypeRef::Generic {
+            name,
+            declaration,
+            args,
+        } => {
+            if let Some(target) = planned_type_route(
+                tu,
+                name,
+                Some(declaration),
+                declarations,
+                names,
+                type_names,
+                output_type_names,
+            ) {
+                edges.insert((source.clone(), target));
+            }
+            for arg in args {
+                collect_type_route_edges(
+                    arg,
+                    tu,
+                    source,
+                    declarations,
+                    names,
+                    type_names,
+                    output_type_names,
+                    edges,
+                );
+            }
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => collect_type_route_edges(
+            target,
+            tu,
+            source,
+            declarations,
+            names,
+            type_names,
+            output_type_names,
+            edges,
+        ),
+        TypeRef::FunctionPointer { params, result, .. } => {
+            for param in params {
+                collect_type_route_edges(
+                    param,
+                    tu,
+                    source,
+                    declarations,
+                    names,
+                    type_names,
+                    output_type_names,
+                    edges,
+                );
+            }
+            collect_type_route_edges(
+                result,
+                tu,
+                source,
+                declarations,
+                names,
+                type_names,
+                output_type_names,
+                edges,
+            );
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &record.base {
+                collect_type_route_edges(
+                    base,
+                    tu,
+                    source,
+                    declarations,
+                    names,
+                    type_names,
+                    output_type_names,
+                    edges,
+                );
+            }
+            for field in &record.fields {
+                collect_type_route_edges(
+                    &field.ty,
+                    tu,
+                    source,
+                    declarations,
+                    names,
+                    type_names,
+                    output_type_names,
+                    edges,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+fn planned_type_route(
+    tu: &str,
+    name: &str,
+    declaration: Option<&Location>,
+    declarations: &BTreeMap<(String, Location, String), (String, OutputKind)>,
+    names: &BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
+    type_names: &BTreeMap<String, String>,
+    output_type_names: &BTreeSet<&str>,
+) -> Option<(String, OutputKind)> {
+    declaration
+        .and_then(|declaration| {
+            declarations
+                .get(&(tu.to_string(), declaration.clone(), name.to_string()))
+                .cloned()
+        })
+        .or_else(|| {
+            let matches = names.get(&(tu.to_string(), name.to_string()))?;
+            (matches.len() == 1).then(|| matches.first().unwrap().clone())
+        })
+        .or_else(|| {
+            let output = type_names.get(name)?;
+            output_type_names
+                .contains(output.as_str())
+                .then(|| (output.clone(), OutputKind::Type))
+        })
+}
+
 enum TypeEdge<'a> {
     Type(&'a TypeRef),
     Projected(&'static str),
@@ -6451,6 +7335,18 @@ fn rdl_ident(name: &str) -> String {
 
 fn normalize_name(name: &str) -> String {
     name.replace('\\', "/")
+}
+
+fn source_path_matches(configured: &str, extracted: &str) -> bool {
+    let configured = normalize_name(configured).to_ascii_lowercase();
+    let extracted = normalize_name(extracted).to_ascii_lowercase();
+    configured == extracted
+        || extracted
+            .strip_suffix(&configured)
+            .is_some_and(|prefix| prefix.ends_with('/'))
+        || configured
+            .strip_suffix(&extracted)
+            .is_some_and(|prefix| prefix.ends_with('/'))
 }
 
 fn format_owner(root: &str, owner: &RootOwner) -> String {
