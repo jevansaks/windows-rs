@@ -2095,10 +2095,15 @@ impl Snapshot {
         plan: &Plan<'_>,
     ) -> Result<BTreeMap<(String, OutputKind), RootOwner>, Error> {
         let mut fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+        let mut source_fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         for fact in &self.facts {
             if let Some(owner) = self.root_owners.get(&fact.origin) {
                 fact_owners
                     .entry((&fact.name, fact.kind, fact.definition, &fact.data))
+                    .or_default()
+                    .insert(owner.clone());
+                source_fact_owners
+                    .entry((&fact.name, fact.kind, fact.definition, &fact.spelling))
                     .or_default()
                     .insert(owner.clone());
             }
@@ -2123,6 +2128,18 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
+            owners.extend(
+                source_fact_owners
+                    .get(&(
+                        &planned.fact.name,
+                        planned.fact.kind,
+                        planned.fact.definition,
+                        &planned.fact.spelling,
+                    ))
+                    .into_iter()
+                    .flatten()
+                    .cloned(),
+            );
             let namespace = self
                 .fact_authority_namespace(planned.fact)
                 .map(String::as_str);
@@ -4170,7 +4187,8 @@ fn choose_type_root_cached<'a>(
             target: first_target,
         } = &first.data
         && distinct.iter().all(|fact| {
-            ((fact.origin.tu == first.origin.tu && fact.parent == first.parent)
+            (fact.spelling == first.spelling
+                || (fact.origin.tu == first.origin.tu && fact.parent == first.parent)
                 || (fact.parent.is_none() && first.parent.is_none()))
                 && matches!(
                     &fact.data,
@@ -6320,6 +6338,107 @@ fn origin(origin: &Origin) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_fact(
+        local: u32,
+        parent: Option<u32>,
+        kind: FactKind,
+        name: &str,
+        spelling: Location,
+        data: FactData,
+    ) -> Fact {
+        Fact {
+            origin: Origin {
+                tu: "tu".to_string(),
+                local,
+            },
+            parent: parent.map(|local| Origin {
+                tu: "tu".to_string(),
+                local,
+            }),
+            kind,
+            name: name.to_string(),
+            spelling: spelling.clone(),
+            expansion: spelling,
+            definition: true,
+            main_file: false,
+            root: true,
+            system: false,
+            data,
+        }
+    }
+
+    #[test]
+    fn same_location_typedefs_require_equivalent_resolved_targets() {
+        let typedef_location = Location {
+            file: "dciddi.h".to_string(),
+            offset: 9754,
+        };
+        let first_record_location = Location {
+            file: "dciddi.h".to_string(),
+            offset: 9000,
+        };
+        let second_record_location = Location {
+            file: "dciddi.h".to_string(),
+            offset: 9001,
+        };
+        let record = |local, location: Location, scalar| {
+            test_fact(
+                local,
+                None,
+                FactKind::Struct,
+                "_DCIENUMINPUT",
+                location,
+                FactData::Record {
+                    base: None,
+                    fields: vec![Field {
+                        name: "value".to_string(),
+                        ty: TypeRef::Scalar(scalar),
+                        offset: 0,
+                        align: 4,
+                        size: 4,
+                        bit_width: None,
+                    }],
+                    size: 4,
+                    align: 4,
+                    packing: None,
+                    alignment: None,
+                    union: false,
+                },
+            )
+        };
+        let first_record = record(1, first_record_location.clone(), Scalar::U32);
+        let equivalent_record = record(2, second_record_location.clone(), Scalar::U32);
+        let different_record = record(3, second_record_location.clone(), Scalar::U64);
+        let typedef = |local, parent, declaration| {
+            test_fact(
+                local,
+                Some(parent),
+                FactKind::Typedef,
+                "DCIENUMINPUT",
+                typedef_location.clone(),
+                FactData::Typedef {
+                    target: TypeRef::Named {
+                        name: "_DCIENUMINPUT".to_string(),
+                        declaration,
+                    },
+                },
+            )
+        };
+        let first = typedef(4, 10, first_record_location);
+        let equivalent = typedef(5, 11, second_record_location.clone());
+        let different = typedef(6, 12, second_record_location);
+        let equivalent_targets = vec![&first_record, &equivalent_record];
+        let equivalent_index = HashMap::from([("_DCIENUMINPUT", equivalent_targets)]);
+
+        assert!(
+            choose_type_root("DCIENUMINPUT", &[&first, &equivalent], &equivalent_index).is_ok()
+        );
+
+        let different_targets = vec![&first_record, &different_record];
+        let different_index = HashMap::from([("_DCIENUMINPUT", different_targets)]);
+        assert!(choose_type_root("DCIENUMINPUT", &[&first, &different], &different_index).is_err());
+    }
 
     #[test]
     fn recursive_shape_cache_is_context_specific() {
