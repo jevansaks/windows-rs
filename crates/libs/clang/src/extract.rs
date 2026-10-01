@@ -305,24 +305,33 @@ fn extract_impl(
     }
     let mut root_owners = BTreeMap::new();
     for fact in &facts {
-        let mut matches = owners
+        let mut matches: Vec<_> = owners
             .iter()
             .filter(|((tu, root), _)| {
-                tu == &fact.origin.tu && root_path_matches(root, &fact.spelling.file)
+                tu == &fact.origin.tu && root_path_matches(root, &fact.expansion.file)
             })
-            .map(|(_, owner)| owner);
+            .map(|(_, owner)| owner)
+            .collect();
+        let mut matched_file = &fact.expansion.file;
+        if matches.is_empty() {
+            matched_file = &fact.spelling.file;
+            matches.extend(
+                owners
+                    .iter()
+                    .filter(|((tu, root), _)| {
+                        tu == &fact.origin.tu && root_path_matches(root, &fact.spelling.file)
+                    })
+                    .map(|(_, owner)| owner),
+            );
+        }
+        let mut matches = matches.into_iter();
         let Some(owner) = matches.next() else {
             continue;
         };
         if let Some(other) = matches.find(|other| *other != owner) {
             return Err(Error(format!(
                 "source `{}` in translation unit `{}` matches multiple tagged roots: {}:{} and {}:{}",
-                fact.spelling.file,
-                fact.origin.tu,
-                owner.input,
-                owner.root,
-                other.input,
-                other.root,
+                matched_file, fact.origin.tu, owner.input, owner.root, other.input, other.root,
             )));
         }
         root_owners.insert(fact.origin.clone(), owner.clone());

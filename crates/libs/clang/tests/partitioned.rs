@@ -1295,6 +1295,50 @@ fn unowned_scalar_typedef_dependencies_are_inlined() {
 }
 
 #[test]
+fn macro_generated_declaration_uses_expansion_root_owner() {
+    helpers::ensure_libclang();
+
+    let scratch =
+        std::env::temp_dir().join(format!("windows-clang-macro-owner-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let macros = scratch.join("macros.h");
+    let api = scratch.join("bdatypes.h");
+    std::fs::write(&macros, "#define ENUM enum\n").unwrap();
+    std::fs::write(
+        &api,
+        format!(
+            "#include \"{}\"\n\
+             ENUM ApplicationTypeType {{ ApplicationTypeNone = 0 }};\n",
+            macros.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "dshow.cpp",
+            format!("#include \"{}\"\n", api.to_string_lossy()),
+        )
+        .partitioned("dshow-input")
+        .with_root(api.to_string_lossy(), "dshow", "Example.Media.DirectShow")],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let dshow = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Media.DirectShow")
+        .unwrap()
+        .1;
+
+    assert!(dshow.contains("enum ApplicationTypeType"), "{dshow}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn namespace_authorities_support_wildcards_and_namespaces_without_partitions() {
     helpers::ensure_libclang();
 
