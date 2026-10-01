@@ -1857,17 +1857,37 @@ impl Snapshot {
                 if references.contains_key(name) && !root_names.contains(name) {
                     continue;
                 }
-                let matches: Vec<_> = facts_index
+                let mut matches: Vec<_> = facts_index
                     .get(name.as_str())
                     .into_iter()
                     .flatten()
                     .copied()
                     .filter(|fact| fact.origin.tu == tu && fact.spelling == *declaration)
                     .collect();
-                let [fact] = matches.as_slice() else {
-                    return Err(Error(format!(
-                        "unresolved local type `{name}` in translation unit `{tu}`"
-                    )));
+                if matches.is_empty() {
+                    matches.extend(
+                        facts_index
+                            .get(name.as_str())
+                            .into_iter()
+                            .flatten()
+                            .copied()
+                            .filter(|fact| {
+                                fact.origin.tu == tu
+                                    && fact.spelling.file == declaration.file
+                                    && is_type_fact(fact)
+                            }),
+                    );
+                }
+                let fact = match matches.as_slice() {
+                    [fact] => *fact,
+                    [] => {
+                        return Err(Error(format!(
+                            "unresolved local type `{name}` in translation unit `{tu}`"
+                        )));
+                    }
+                    choices => {
+                        choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)?
+                    }
                 };
                 if let FactData::Unsupported { reason } = &fact.data {
                     return Err(Error(format!(

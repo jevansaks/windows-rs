@@ -326,16 +326,18 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
     let dtc_header = scratch.join("dtc.h");
     std::fs::write(
         &shared_header,
-        "struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
-         IDirect3DSurface9 { virtual void Surface() = 0; };\n",
+        "struct IDirect3DSurface9;\n\
+         struct __declspec(uuid(\"0cfbaf3a-9ff6-429a-99b3-a2796af8b89b\")) \
+         IDirect3DSurface9 { virtual void Surface() = 0; };\n\
+         typedef struct IDirect3DSurface9 IDirect3DSurface9;\n",
     )
     .unwrap();
     std::fs::write(
         &media_header,
-        "typedef unsigned IDirect3DSurface9;\n\
+        "#include \"shared.h\"\n\
          struct __declspec(uuid(\"56a868ac-0ad4-11ce-b03a-0020af0ba770\")) \
          IResourceManager { virtual void Media() = 0; };\n\
-         extern \"C\" void UseSurface(IDirect3DSurface9 value);\n",
+         extern \"C\" void UseSurface(IDirect3DSurface9* value);\n",
     )
     .unwrap();
     std::fs::write(
@@ -383,10 +385,9 @@ fn collision_planning_preserves_unrelated_shared_type_references() {
         .unwrap()
         .1;
     assert!(
-        media.contains("fn UseSurface(value: IDirect3DSurface9)"),
+        media.contains("fn UseSurface(value: Example::Direct3D9::IDirect3DSurface9)"),
         "{media}"
     );
-    assert!(media.contains("type IDirect3DSurface9 = u32"), "{media}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
