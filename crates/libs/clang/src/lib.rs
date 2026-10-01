@@ -125,6 +125,131 @@ pub struct RdlPartition {
     pub header: String,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct NamespaceAuthorities {
+    routes: Vec<NamespaceAuthority>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NamespaceAuthority {
+    Exact { name: String, namespace: String },
+    Wildcard { pattern: String, namespace: String },
+}
+
+impl NamespaceAuthorities {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_exact(mut self, name: impl Into<String>, namespace: impl Into<String>) -> Self {
+        self.routes.push(NamespaceAuthority::Exact {
+            name: name.into(),
+            namespace: namespace.into(),
+        });
+        self
+    }
+
+    pub fn with_wildcard(
+        mut self,
+        pattern: impl Into<String>,
+        namespace: impl Into<String>,
+    ) -> Self {
+        self.routes.push(NamespaceAuthority::Wildcard {
+            pattern: pattern.into(),
+            namespace: namespace.into(),
+        });
+        self
+    }
+
+    fn resolve<'a>(
+        &self,
+        names: impl IntoIterator<Item = &'a str>,
+    ) -> Result<BTreeMap<String, String>, Error> {
+        let mut exact = BTreeMap::new();
+        let mut wildcards = Vec::new();
+        for route in &self.routes {
+            let (pattern, namespace, wildcard) = match route {
+                NamespaceAuthority::Exact { name, namespace } => {
+                    (name.as_str(), namespace.as_str(), false)
+                }
+                NamespaceAuthority::Wildcard { pattern, namespace } => {
+                    (pattern.as_str(), namespace.as_str(), true)
+                }
+            };
+            if pattern.is_empty() {
+                return Err(Error("namespace authority pattern is empty".to_string()));
+            }
+            validate_namespace(namespace)?;
+            if wildcard {
+                if !pattern.contains('*') {
+                    return Err(Error(format!(
+                        "namespace authority wildcard `{pattern}` has no `*`"
+                    )));
+                }
+                if wildcards.iter().any(|(existing, _)| existing == pattern) {
+                    return Err(Error(format!(
+                        "duplicate namespace authority wildcard `{pattern}`"
+                    )));
+                }
+                wildcards.push((pattern.to_string(), namespace.to_string()));
+            } else if exact
+                .insert(pattern.to_string(), namespace.to_string())
+                .is_some()
+            {
+                return Err(Error(format!(
+                    "duplicate namespace authority name `{pattern}`"
+                )));
+            }
+        }
+        let mut result = BTreeMap::new();
+        for name in names {
+            let namespace = if let Some(namespace) = exact.get(name) {
+                Some(namespace.clone())
+            } else {
+                let matches: BTreeSet<_> = wildcards
+                    .iter()
+                    .filter(|(pattern, _)| wildcard_matches(pattern, name))
+                    .map(|(_, namespace)| namespace.clone())
+                    .collect();
+                match matches.len() {
+                    0 => None,
+                    1 => Some(matches.first().unwrap().clone()),
+                    _ => {
+                        return Err(Error(format!(
+                            "namespace authority wildcards conflict for `{name}`"
+                        )));
+                    }
+                }
+            };
+            if let Some(namespace) = namespace {
+                result.insert(name.to_string(), namespace);
+            }
+        }
+        Ok(result)
+    }
+}
+
+fn wildcard_matches(pattern: &str, name: &str) -> bool {
+    let parts: Vec<_> = pattern.split('*').collect();
+    let mut remainder = name;
+    for (index, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        if index == 0 && !pattern.starts_with('*') {
+            let Some(rest) = remainder.strip_prefix(part) else {
+                return false;
+            };
+            remainder = rest;
+        } else if let Some(offset) = remainder.find(part) {
+            remainder = &remainder[offset + part.len()..];
+        } else {
+            return false;
+        }
+    }
+    pattern.ends_with('*') || remainder.is_empty()
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypeReference {
     pub namespace: String,
@@ -672,6 +797,9 @@ pub struct Snapshot {
     partition_exclusions: Vec<ExcludedPartitionDeclaration>,
     forced_flags: BTreeSet<Origin>,
     suppressed_type_origins: BTreeSet<Origin>,
+    namespace_authorities: BTreeMap<String, String>,
+    fact_namespace_authorities: BTreeMap<Origin, String>,
+    constant_namespace_authorities: BTreeMap<Origin, String>,
     timing_target: Option<String>,
 }
 
@@ -698,6 +826,9 @@ impl PartialEq for Snapshot {
             && self.partition_exclusions == other.partition_exclusions
             && self.forced_flags == other.forced_flags
             && self.suppressed_type_origins == other.suppressed_type_origins
+            && self.namespace_authorities == other.namespace_authorities
+            && self.fact_namespace_authorities == other.fact_namespace_authorities
+            && self.constant_namespace_authorities == other.constant_namespace_authorities
     }
 }
 
@@ -830,6 +961,46 @@ impl Snapshot {
         self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        self.emit_partitioned_with_options_and_authorities(
+            options,
+            &NamespaceAuthorities::default(),
+        )
+    }
+
+    pub fn emit_partitioned_with_options_and_authorities(
+        mut self,
+        options: &EmitOptions<'_>,
+        authorities: &NamespaceAuthorities,
+    ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        self.namespace_authorities = authorities.resolve(
+            self.facts
+                .iter()
+                .map(|fact| fact.name.as_str())
+                .chain(self.constants.iter().map(|constant| constant.name.as_str())),
+        )?;
+        self.fact_namespace_authorities = self
+            .facts
+            .iter()
+            .filter_map(|fact| {
+                self.namespace_authorities
+                    .get(&fact.name)
+                    .map(|namespace| (fact.origin.clone(), namespace.clone()))
+            })
+            .collect();
+        self.constant_namespace_authorities = self
+            .constants
+            .iter()
+            .filter_map(|constant| {
+                self.namespace_authorities
+                    .get(&constant.name)
+                    .map(|namespace| {
+                        (
+                            constant.definition.clone(),
+                            namespace.clone(),
+                        )
+                    })
+            })
+            .collect();
         let timing = self.timing_target.is_some();
         let target = self.timing_target.clone();
         let (snapshot, display_names) = self.into_partitioned_planning_snapshot();
@@ -1692,6 +1863,7 @@ impl Snapshot {
                 );
             }
         }
+
         for constant in &mut self.constants {
             if let Some(owner) = self.root_owners.get(&constant.root).or_else(|| {
                 self.root_partitions
@@ -1702,6 +1874,104 @@ impl Snapshot {
                     &owner.preserved_auto_function_pointer_levels,
                 );
             }
+        }
+    }
+
+    fn authority_candidates<'a>(&self, facts: &[&'a Fact]) -> Vec<&'a Fact> {
+        let Some(namespace) = facts
+            .iter()
+            .find_map(|fact| self.fact_authority_namespace(fact))
+        else {
+            let projected: Vec<_> = facts
+                .iter()
+                .copied()
+                .filter(|fact| !self.type_projection_suppressed(fact, &mut BTreeSet::new()))
+                .collect();
+            return if projected.is_empty() {
+                facts.to_vec()
+            } else {
+                projected
+            };
+        };
+        let matching: Vec<_> = facts
+            .iter()
+            .copied()
+            .filter(|fact| {
+                self.root_owners
+                    .get(&fact.origin)
+                    .or_else(|| {
+                        self.root_partitions
+                            .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+                    })
+                    .is_some_and(|owner| owner.namespace == *namespace)
+            })
+            .collect();
+        if matching.is_empty() {
+            facts.to_vec()
+        } else {
+            matching
+        }
+    }
+
+    fn fact_authority_namespace<'a>(&'a self, fact: &'a Fact) -> Option<&'a String> {
+        self.fact_namespace_authorities
+            .get(&fact.origin)
+            .or_else(|| {
+                let FactData::Typedef {
+                    target: TypeRef::Named { name, declaration },
+                } = &fact.data
+                else {
+                    return None;
+                };
+                self.facts
+                    .iter()
+                    .filter(|target| {
+                        target.name == *name
+                            && target.origin.tu == fact.origin.tu
+                            && target.spelling == *declaration
+                    })
+                    .find_map(|target| self.fact_namespace_authorities.get(&target.origin))
+            })
+    }
+
+    fn type_projection_suppressed(
+        &self,
+        fact: &Fact,
+        seen: &mut BTreeSet<(String, Location)>,
+    ) -> bool {
+        if self.suppressed_type_origins.contains(&fact.origin) {
+            return true;
+        }
+        let FactData::Typedef { target } = &fact.data else {
+            return false;
+        };
+        self.type_ref_projection_suppressed(target, &fact.origin.tu, seen)
+    }
+
+    fn type_ref_projection_suppressed(
+        &self,
+        ty: &TypeRef,
+        tu: &str,
+        seen: &mut BTreeSet<(String, Location)>,
+    ) -> bool {
+        match ty {
+            TypeRef::Named { name, declaration } => {
+                if !seen.insert((tu.to_string(), declaration.clone())) {
+                    return false;
+                }
+                self.facts
+                    .iter()
+                    .filter(|fact| {
+                        fact.name == *name && fact.origin.tu == tu && fact.spelling == *declaration
+                    })
+                    .any(|fact| self.type_projection_suppressed(fact, seen))
+            }
+            TypeRef::Pointer { target, .. }
+            | TypeRef::Reference { target, .. }
+            | TypeRef::Array { target, .. } => {
+                self.type_ref_projection_suppressed(target, tu, seen)
+            }
+            _ => false,
         }
     }
 
@@ -1822,56 +2092,64 @@ impl Snapshot {
         }
         let mut result = BTreeMap::new();
         for planned in &plan.types {
+            let owners = fact_owners
+                .get(&(
+                    &planned.fact.name,
+                    planned.fact.kind,
+                    planned.fact.definition,
+                    &planned.fact.data,
+                ))
+                .cloned()
+                .unwrap_or_default();
             result.insert(
                 (planned.name.clone(), OutputKind::Type),
-                unique_owner(
+                self.authoritative_owner(
                     &planned.name,
                     OutputKind::Type,
-                    fact_owners
-                        .get(&(
-                            &planned.fact.name,
-                            planned.fact.kind,
-                            planned.fact.definition,
-                            &planned.fact.data,
-                        ))
-                        .cloned()
-                        .unwrap_or_default(),
+                    owners,
+                    self.fact_authority_namespace(planned.fact)
+                        .map(String::as_str),
                 )?,
             );
         }
         for planned in &plan.values {
+            let owners = fact_owners
+                .get(&(
+                    &planned.fact.name,
+                    planned.fact.kind,
+                    planned.fact.definition,
+                    &planned.fact.data,
+                ))
+                .cloned()
+                .unwrap_or_default();
             result.insert(
                 (planned.name.clone(), OutputKind::Value),
-                unique_owner(
+                self.authoritative_owner(
                     &planned.name,
                     OutputKind::Value,
-                    fact_owners
-                        .get(&(
-                            &planned.fact.name,
-                            planned.fact.kind,
-                            planned.fact.definition,
-                            &planned.fact.data,
-                        ))
-                        .cloned()
-                        .unwrap_or_default(),
+                    owners,
+                    self.fact_authority_namespace(planned.fact)
+                        .map(String::as_str),
                 )?,
             );
         }
         for function in &plan.functions {
+            let owners = fact_owners
+                .get(&(
+                    &function.name,
+                    function.kind,
+                    function.definition,
+                    &function.data,
+                ))
+                .cloned()
+                .unwrap_or_default();
             result.insert(
                 (function.name.clone(), OutputKind::Value),
-                unique_owner(
+                self.authoritative_owner(
                     &function.name,
                     OutputKind::Value,
-                    fact_owners
-                        .get(&(
-                            &function.name,
-                            function.kind,
-                            function.definition,
-                            &function.data,
-                        ))
-                        .cloned()
-                        .unwrap_or_default(),
+                    owners,
+                    self.fact_authority_namespace(function).map(String::as_str),
                 )?,
             );
         }
@@ -1879,17 +2157,56 @@ impl Snapshot {
             let constant = planned.constant;
             result.insert(
                 (constant.name.clone(), OutputKind::Value),
-                unique_owner(
+                self.authoritative_owner(
                     &constant.name,
                     OutputKind::Value,
                     constant_owners
                         .get(&(&constant.name, &constant.ty, &constant.value))
                         .cloned()
                         .unwrap_or_default(),
+                    self.constant_namespace_authorities
+                        .get(&constant.definition)
+                        .map(String::as_str),
                 )?,
             );
         }
         Ok(result)
+    }
+
+    fn authoritative_owner(
+        &self,
+        name: &str,
+        kind: OutputKind,
+        owners: BTreeSet<RootOwner>,
+        namespace: Option<&str>,
+    ) -> Result<RootOwner, Error> {
+        let Some(namespace) = namespace else {
+            return unique_owner(name, kind, owners);
+        };
+        let matching: BTreeSet<_> = owners
+            .iter()
+            .filter(|owner| owner.namespace == namespace)
+            .cloned()
+            .collect();
+        if !matching.is_empty() {
+            return unique_owner(name, kind, matching);
+        }
+        let Some(mut owner) = owners.into_iter().next() else {
+            let kind = match kind {
+                OutputKind::Type => "type",
+                OutputKind::Value => "value",
+            };
+            return Err(Error(format!(
+                "selected {kind} `{name}` has no tagged root owner"
+            )));
+        };
+        if owner.partition.trim().is_empty() {
+            return Err(Error(format!(
+                "selected item `{name}` has an empty partition identity"
+            )));
+        }
+        owner.namespace = namespace.to_string();
+        Ok(owner)
     }
 
     fn plan(
@@ -2160,12 +2477,9 @@ impl Snapshot {
                             .iter()
                             .any(|fact| defines_local_type(name, fact)));
                 if !excluded {
-                    let root = choose_type_root_cached(
-                        name,
-                        &roots.types,
-                        &facts_index,
-                        &mut shape_cache,
-                    )?;
+                    let authority = self.authority_candidates(&roots.types);
+                    let root =
+                        choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
                     root_names.insert(name.to_string());
                     type_roots.push(root);
                 }
@@ -2408,8 +2722,9 @@ impl Snapshot {
 
             let mut facts_by_name = BTreeMap::new();
             for (name, choices) in grouped {
+                let authority = self.authority_candidates(&choices);
                 let selected =
-                    choose_type_root_cached(name, &choices, &facts_index, &mut shape_cache)?;
+                    choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
                 facts_by_name.insert(name, selected);
             }
             break facts_by_name;
@@ -2724,7 +3039,10 @@ impl Snapshot {
                     .get(fact.name.as_str())
                     .cloned()
                     .unwrap_or_else(|| fact.name.clone());
-                if self.suppressed_type_origins.contains(&fact.origin) && name == fact.name {
+                if self.suppressed_type_origins.contains(&fact.origin)
+                    && name == fact.name
+                    && self.fact_authority_namespace(fact).is_none()
+                {
                     let owner = self.root_owners.get(&fact.origin).unwrap();
                     return Err(Error(format!(
                         "owner-excluded local type `{}` in partition `{}` namespace `{}` is \

@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
-use windows_clang::{EmitOptions, Input, RdlPartition, RootPartition, extract_partitioned};
+use windows_clang::{
+    EmitOptions, Input, NamespaceAuthorities, RdlPartition, RootPartition, extract_partitioned,
+};
 
 #[test]
 fn partitioned_emission_routes_owners_and_qualifies_types() {
@@ -1106,4 +1108,165 @@ fn partitioned_input_can_add_include_directory() {
     );
 
     std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn namespace_authorities_route_opposite_owner_policies() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [
+            Input::new(
+                "ddraw.h",
+                "typedef struct _DDPIXELFORMAT { int directdraw; } \
+                 DDPIXELFORMAT, *LPDDPIXELFORMAT;\n\
+                 typedef struct _DDVIDEOPORTCONNECT { int directdraw; } \
+                 DDVIDEOPORTCONNECT, *LPDDVIDEOPORTCONNECT;\n",
+            )
+            .partitioned("directdraw-input")
+            .with_root("ddraw.h", "directdraw", "Example.DirectDraw"),
+            Input::new(
+                "ksmedia.h",
+                "typedef struct _DDPIXELFORMAT { long long kernel; } \
+                 DDPIXELFORMAT, *LPDDPIXELFORMAT;\n\
+                 typedef struct _DDVIDEOPORTCONNECT { long long kernel; } \
+                 DDVIDEOPORTCONNECT, *LPDDVIDEOPORTCONNECT;\n\
+                 struct __declspec(uuid(\"28f54685-06fd-11d2-b27a-00a0c9223196\")) \
+                 IKsControl { virtual void Kernel() = 0; };\n",
+            )
+            .partitioned("kernel-input")
+            .with_root_partition(
+                "ksmedia.h",
+                RootPartition::new("kernel", "Example.KernelStreaming")
+                    .with_exclusion("_DDPIXELFORMAT")
+                    .with_exclusion("_DDVIDEOPORTCONNECT")
+                    .with_exclusion("IKsControl"),
+            ),
+            Input::new(
+                "audio.h",
+                "struct __declspec(uuid(\"28f54685-06fd-11d2-b27a-00a0c9223196\")) \
+                 IKsControl { virtual void Audio() = 0; };\n\
+                 extern \"C\" void UseKs(IKsControl* value);\n",
+            )
+            .partitioned("audio-input")
+            .with_root("audio.h", "audio", "Example.Audio"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let authorities =
+        NamespaceAuthorities::new().with_exact("IKsControl", "Example.KernelStreaming");
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    let partitions = snapshot
+        .emit_partitioned_with_options_and_authorities(&options, &authorities)
+        .unwrap();
+    let directdraw = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.DirectDraw")
+        .unwrap()
+        .1;
+    let kernel = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.KernelStreaming")
+        .unwrap()
+        .1;
+    let audio = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Audio")
+        .unwrap()
+        .1;
+
+    assert!(directdraw.contains("struct DDPIXELFORMAT"), "{directdraw}");
+    assert!(
+        directdraw.contains("struct DDVIDEOPORTCONNECT"),
+        "{directdraw}"
+    );
+    assert!(!directdraw.contains("kernel: i64"), "{directdraw}");
+    assert!(!kernel.contains("DDPIXELFORMAT"), "{kernel}");
+    assert!(!kernel.contains("DDVIDEOPORTCONNECT"), "{kernel}");
+    assert!(kernel.contains("interface IKsControl"), "{kernel}");
+    assert!(
+        audio.contains("fn UseKs(value: Example::KernelStreaming::IKsControl)"),
+        "{audio}"
+    );
+}
+
+#[test]
+fn namespace_authorities_support_wildcards_and_namespaces_without_partitions() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new(
+            "dpi.h",
+            "typedef unsigned DPI_VALUE;\n\
+             #define DPI_DEFAULT 96\n\
+             extern \"C\" DPI_VALUE DPI_GetValue(void);\n",
+        )
+        .partitioned("dpi-input")
+        .with_root("dpi.h", "ui", "Example.UI")],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let authorities = NamespaceAuthorities::new()
+        .with_exact("DPI_VALUE", "Example.UI.HiDpi")
+        .with_wildcard("DPI_*", "Example.UI.HiDpi");
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("dpi.dll");
+    let partitions = snapshot
+        .emit_partitioned_with_options_and_authorities(&options, &authorities)
+        .unwrap();
+    let dpi = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.UI.HiDpi")
+        .unwrap()
+        .1;
+
+    assert!(dpi.contains("type DPI_VALUE = u32"), "{dpi}");
+    assert!(dpi.contains("const DPI_DEFAULT"), "{dpi}");
+    assert!(dpi.contains("fn DPI_GetValue() -> DPI_VALUE"), "{dpi}");
+}
+
+#[test]
+fn namespace_authorities_reject_duplicate_and_conflicting_routes() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract_partitioned(
+        [Input::new("value.h", "typedef unsigned VALUE;\n")
+            .partitioned("value-input")
+            .with_root("value.h", "value", "Example.Value")],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let duplicate = NamespaceAuthorities::new()
+        .with_exact("VALUE", "Example.One")
+        .with_exact("VALUE", "Example.One");
+    let references = BTreeMap::new();
+    let error = snapshot
+        .clone()
+        .emit_partitioned_with_options_and_authorities(
+            &EmitOptions::new("Example.Common", &references),
+            &duplicate,
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "duplicate namespace authority name `VALUE`"
+    );
+
+    let conflicting = NamespaceAuthorities::new()
+        .with_wildcard("V*", "Example.One")
+        .with_wildcard("*E", "Example.Two");
+    let error = snapshot
+        .emit_partitioned_with_options_and_authorities(
+            &EmitOptions::new("Example.Common", &references),
+            &conflicting,
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "namespace authority wildcards conflict for `VALUE`"
+    );
 }
