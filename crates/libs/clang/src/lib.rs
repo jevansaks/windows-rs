@@ -21,7 +21,7 @@ fn declaration_uuid<'a>(
         .facts
         .iter()
         .filter(|fact| fact.name == name && fact.origin.tu == tu && fact.spelling == *declaration)
-        .filter_map(fact_uuid)
+        .filter_map(|fact| snapshot.fact_uuid(fact))
         .collect();
     (guids.len() == 1).then(|| *guids.first().unwrap())
 }
@@ -1146,6 +1146,7 @@ pub struct Snapshot {
     constants: Vec<Constant>,
     included_files: Vec<IncludedFile>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    declaration_guids: BTreeMap<Origin, String>,
     root_owners: BTreeMap<Origin, RootOwner>,
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
@@ -1186,6 +1187,7 @@ impl PartialEq for Snapshot {
         self.facts == other.facts
             && self.constants == other.constants
             && self.annotations == other.annotations
+            && self.declaration_guids == other.declaration_guids
             && self.root_owners == other.root_owners
             && self.constant_root_owners == other.constant_root_owners
             && self.root_partitions == other.root_partitions
@@ -1228,6 +1230,10 @@ impl Snapshot {
                 None
             }
         })
+    }
+
+    fn fact_uuid<'a>(&'a self, fact: &'a Fact) -> Option<&'a str> {
+        fact_uuid(fact).or_else(|| self.declaration_guids.get(&fact.origin).map(String::as_str))
     }
 
     pub fn dump(&self) -> String {
@@ -1560,7 +1566,7 @@ impl Snapshot {
             }
             let mut uuid_namespaces: BTreeMap<(&str, &str), BTreeSet<&str>> = BTreeMap::new();
             for planned in &plan.types {
-                let Some(guid) = fact_uuid(planned.fact) else {
+                let Some(guid) = self.fact_uuid(planned.fact) else {
                     continue;
                 };
                 uuid_namespaces
@@ -1573,7 +1579,7 @@ impl Snapshot {
                     );
             }
             for fact in &self.facts {
-                let Some(guid) = fact_uuid(fact) else {
+                let Some(guid) = self.fact_uuid(fact) else {
                     continue;
                 };
                 let Some(namespaces) = uuid_namespaces.get(&(fact.name.as_str(), guid)) else {
@@ -1778,14 +1784,17 @@ impl Snapshot {
                         Some((&self.annotations, &fact.origin)),
                     )?;
                     format!(
-                        "{}{item}",
+                        "{}{}{item}",
                         annotation_lines(
                             annotations_for(
                                 &self.annotations,
                                 &AnnotationTarget::Declaration(fact.origin.clone()),
                             ),
                             "    ",
-                        )?
+                        )?,
+                        self.fact_uuid(fact).map_or_else(String::new, |guid| {
+                            format!("    #[guid({})]\n", rdl_uuid(guid))
+                        }),
                     )
                 }
                 FactData::Interface {
@@ -2429,6 +2438,7 @@ impl Snapshot {
     }
 
     fn apply_partition_exclusions(&mut self) {
+        let declaration_guids = &self.declaration_guids;
         self.facts.retain_mut(|fact| {
             let Some(owner) = self.root_owners.get(&fact.origin).or_else(|| {
                 self.root_partitions
@@ -2448,7 +2458,9 @@ impl Snapshot {
                     spelling: fact.spelling.clone(),
                     kind: fact.kind,
                     data_kind: fact_data_kind(&fact.data),
-                    uuid: fact_uuid(fact).map(str::to_string),
+                    uuid: fact_uuid(fact)
+                        .or_else(|| declaration_guids.get(&fact.origin).map(String::as_str))
+                        .map(str::to_string),
                     definition: fact.definition,
                     root: fact.root,
                     owner: owner.clone(),
@@ -2782,7 +2794,11 @@ impl Snapshot {
                 self.root_partitions
                     .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
             });
-            let rejection = if !is_type_fact(fact) {
+            let rejection = if let FactData::Unsupported { reason } = &fact.data {
+                format!("unsupported declaration: {reason}")
+            } else if matches!(fact.data, FactData::Class { .. }) {
+                "classified as a coclass GUID value, not a type fact".to_string()
+            } else if !is_type_fact(fact) {
                 "not a type fact".to_string()
             } else if fact.origin.tu == tu && fact.spelling == *declaration {
                 "exact declaration match was unexpectedly rejected".to_string()
@@ -2815,7 +2831,7 @@ impl Snapshot {
                 owner.map_or_else(|| "none".to_string(), |owner| {
                     format_owner(&owner.root, owner)
                 }),
-                fact_uuid(fact).unwrap_or("none"),
+                self.fact_uuid(fact).unwrap_or("none"),
                 fact.kind,
                 fact_data_kind(&fact.data),
                 fact.definition,
@@ -3799,7 +3815,7 @@ impl Snapshot {
                         .flatten()
                         .copied()
                         .filter(|candidate| is_type_fact(candidate))
-                        .filter(|candidate| fact_uuid(candidate) == Some(guid))
+                        .filter(|candidate| self.fact_uuid(candidate) == Some(guid))
                         .filter(|candidate| self.root_owners.contains_key(&candidate.origin))
                         .collect();
                     let owners: BTreeSet<_> = owned

@@ -355,6 +355,12 @@ Defined POD C++ classes with public instance fields and no inheritance, methods,
 destructors, conversions, or function templates use the checked record-layout path. Other
 non-interface C++ classes remain opaque.
 
+UUID attributes do not by themselves make a declaration a coclass. Defined UUID-bearing structs
+and public data-only classes use the record-layout path and retain the UUID as a `GuidAttribute` on
+the emitted WinMD type. Structurally recognized COM interfaces remain interfaces. An incomplete
+UUID-bearing class or struct with no data or interface definition remains a coclass GUID value,
+which preserves the SDK forward-declaration convention.
+
 Record layout inference keeps member packing and forced record alignment separate. When more than
 one representation matches Clang's size, alignment, and field offsets, it prefers one without
 forced alignment and then the least restrictive packing. This distinguishes `#pragma pack(N)` from

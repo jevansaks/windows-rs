@@ -166,19 +166,22 @@ fn extract_impl(
     let mut facts = vec![];
     let mut constants = vec![];
     let mut annotations = BTreeMap::new();
+    let mut declaration_guids = BTreeMap::new();
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
     for (input, parsed) in inputs.iter().zip(&translation_units) {
-        let (result, metrics) = parsed.translation_unit.extract(
-            input,
-            &mut facts,
-            &mut constants,
-            &mut annotations,
-            timing,
-            validate_annotations,
-        )?;
+        let mut output = ExtractionState {
+            facts: &mut facts,
+            constants: &mut constants,
+            annotations: &mut annotations,
+            declaration_guids: &mut declaration_guids,
+        };
+        let (result, metrics) =
+            parsed
+                .translation_unit
+                .extract(input, &mut output, timing, validate_annotations)?;
         if let Some(metrics) = metrics {
             traversal_cursors += metrics.cursors;
             traversal_facts += metrics.facts;
@@ -373,6 +376,7 @@ fn extract_impl(
         constants,
         included_files,
         annotations,
+        declaration_guids,
         root_owners,
         constant_root_owners: BTreeMap::new(),
         root_partitions: owners,
@@ -1226,9 +1230,7 @@ impl TranslationUnit {
     fn extract<'tu>(
         &'tu self,
         input: &Input,
-        facts: &mut Vec<Fact>,
-        constants: &mut Vec<Constant>,
-        annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+        output: &mut ExtractionState<'_>,
         timing: bool,
         validate_annotations: bool,
     ) -> Result<(Extracted<'tu>, Option<ExtractionMetrics>), Error> {
@@ -1237,8 +1239,8 @@ impl TranslationUnit {
         let macros = macro_definitions(self, unsafe { clang_getTranslationUnitCursor(self.0) });
         let macro_index_ms = elapsed_ms(phase_time);
         let phase_time = timing.then(std::time::Instant::now);
-        let initial_facts = facts.len();
-        let initial_constants = constants.len();
+        let initial_facts = output.facts.len();
+        let initial_constants = output.constants.len();
         let mut traversal = Traversal {
             tu: &input.name,
             roots: &input.roots,
@@ -1250,9 +1252,10 @@ impl TranslationUnit {
             macros: &macros,
             pending_structs: vec![],
             pending_macros: vec![],
-            facts,
-            constants,
-            annotations,
+            facts: &mut *output.facts,
+            constants: &mut *output.constants,
+            annotations: &mut *output.annotations,
+            declaration_guids: &mut *output.declaration_guids,
             error: None,
             validate_annotations,
         };
@@ -1309,8 +1312,16 @@ struct Traversal<'a> {
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    declaration_guids: &'a mut BTreeMap<Origin, String>,
     error: Option<Error>,
     validate_annotations: bool,
+}
+
+struct ExtractionState<'a> {
+    facts: &'a mut Vec<Fact>,
+    constants: &'a mut Vec<Constant>,
+    annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    declaration_guids: &'a mut BTreeMap<Origin, String>,
 }
 
 struct Extracted<'tu> {
@@ -1598,6 +1609,9 @@ fn extract_child(
                         fact_data(child, fact_kind, traversal.macros)
                     };
                     let index = traversal.facts.len();
+                    let declaration_guid = matches!(fact_kind, FactKind::Class | FactKind::Struct)
+                        .then(|| cursor_uuid(child))
+                        .flatten();
                     traversal.facts.push(Fact {
                         origin: origin.clone(),
                         parent: parent.cloned(),
@@ -1611,6 +1625,9 @@ fn extract_child(
                         system,
                         data,
                     });
+                    if let Some(guid) = declaration_guid {
+                        traversal.declaration_guids.insert(origin.clone(), guid);
+                    }
                     if let Err(error) = collect_fact_annotations(
                         child,
                         fact_kind,
@@ -3029,12 +3046,22 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
             if matches!(kind, FactKind::Class | FactKind::Struct) && is_interface(cursor) {
                 return interface_fact(cursor, macros);
             }
+            let guid = cursor_uuid(cursor);
+            let definition_cursor = cursor_definition(cursor);
+            let has_definition = unsafe { clang_isCursorDefinition(definition_cursor) } != 0;
+            let data_record = match kind {
+                FactKind::Class => is_data_class(cursor),
+                FactKind::Struct => has_definition,
+                FactKind::Union => true,
+                _ => unreachable!(),
+            };
             if matches!(kind, FactKind::Class | FactKind::Struct)
-                && let Some(guid) = cursor_uuid(cursor)
+                && !data_record
+                && let Some(guid) = &guid
             {
-                return FactData::Class { guid };
+                return FactData::Class { guid: guid.clone() };
             }
-            if kind == FactKind::Class && !is_data_class(cursor) {
+            if kind == FactKind::Class && !data_record {
                 return FactData::Unsupported {
                     reason: "class is not a public data-only record".to_string(),
                 };
