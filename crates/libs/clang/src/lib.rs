@@ -64,7 +64,9 @@ fn elapsed_ms(start: Option<std::time::Instant>) -> f64 {
 }
 
 mod extract;
-pub use extract::{extract, extract_partitioned};
+pub use extract::{
+    extract, extract_partitioned, extract_partitioned_with_options, extract_with_options,
+};
 
 mod builder;
 pub use builder::{Clang, clang};
@@ -80,6 +82,36 @@ pub struct Input {
     pub root_dirs: BTreeSet<String>,
     pub root_suffixes: BTreeSet<String>,
     pub excluded_roots: BTreeSet<String>,
+}
+
+/// Controls translation-unit extraction without changing root or emission policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExtractionOptions {
+    parallelism: usize,
+}
+
+impl Default for ExtractionOptions {
+    fn default() -> Self {
+        Self { parallelism: 1 }
+    }
+}
+
+impl ExtractionOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the maximum number of original translation units parsed concurrently.
+    ///
+    /// Zero and one both select serial parsing.
+    pub fn with_parallelism(mut self, parallelism: usize) -> Self {
+        self.parallelism = parallelism;
+        self
+    }
+
+    pub fn parallelism(&self) -> usize {
+        self.parallelism
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -657,6 +689,26 @@ impl Input {
     ) -> Self {
         self.excluded_roots
             .extend(roots.into_iter().map(|root| normalize_name(&root.into())));
+        self
+    }
+
+    /// Excludes declarations whose spelling location is beneath these directories.
+    ///
+    /// The files remain visible through [`Snapshot::included_files`].
+    pub fn with_excluded_source_dirs(
+        mut self,
+        roots: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        for root in roots {
+            let mut root = normalize_name(&root.into());
+            while root.ends_with('/') {
+                root.pop();
+            }
+            if !root.is_empty() {
+                root.push('/');
+                self.excluded_roots.insert(root);
+            }
+        }
         self
     }
 
@@ -7253,6 +7305,39 @@ fn canonical_named_type(name: &str) -> Option<&'static str> {
             "usize"
         }
         "INT_PTR" | "LONG_PTR" | "SSIZE_T" | "intptr_t" | "ptrdiff_t" => "isize",
+        "HNSTIME" => "i64",
+        "SCRIPTTHREADID"
+        | "mdToken"
+        | "mdModule"
+        | "mdTypeRef"
+        | "mdTypeDef"
+        | "mdFieldDef"
+        | "mdMethodDef"
+        | "mdParamDef"
+        | "mdInterfaceImpl"
+        | "mdMemberRef"
+        | "mdCustomAttribute"
+        | "mdPermission"
+        | "mdSignature"
+        | "mdEvent"
+        | "mdProperty"
+        | "mdModuleRef"
+        | "mdAssembly"
+        | "mdAssemblyRef"
+        | "mdFile"
+        | "mdExportedType"
+        | "mdManifestResource"
+        | "mdTypeSpec"
+        | "mdGenericParam"
+        | "mdMethodSpec"
+        | "mdGenericParamConstraint"
+        | "mdString"
+        | "mdCPToken" => "u32",
+        "COR_SIGNATURE" => "u8",
+        "PCOR_SIGNATURE" => "*mut u8",
+        "PCCOR_SIGNATURE" => "*const u8",
+        "HCORENUM" => "*mut void",
+        "MDUTF8CSTR" => "*const i8",
         "LPUNKNOWN" => "IUnknown",
         "PVOID" | "LPVOID" => "*mut void",
         "IID" | "CLSID" | "FMTID" | "UUID" => "GUID",

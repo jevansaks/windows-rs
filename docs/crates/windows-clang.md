@@ -38,6 +38,10 @@ The builder is an adapter over the extraction and emission APIs described below.
 `reference_default` supplies the Windows metadata references, and `write` calls `extract` and
 emits with `EmitOptions`. It does not have a separate parser or projection path.
 
+`parallelism` bounds concurrent parsing of original translation units. Zero and one select serial
+parsing. `exclude_path` omits declarations spelled beneath a directory, such as Clang's resource
+headers, without hiding that the files were visited.
+
 Use the lower-level API when a generator must inspect facts, compare architectures, merge
 snapshots, assign libraries per function, or control output promotion.
 
@@ -55,9 +59,10 @@ Each `Input` contains:
 | `excluded_roots` | Header paths excluded from output ownership. |
 
 `Input::new(name, source)` treats `name` as a root. `with_roots`, `with_root_dirs`,
-`with_root_suffixes`, and `with_excluded_roots` extend that policy. The caller supplies all
-compiler arguments to `extract`, including the language, target, include paths, defines, forced
-includes, and extensions.
+`with_root_suffixes`, and `with_excluded_roots` extend that policy.
+`with_excluded_source_dirs` excludes every declaration spelled beneath a directory while retaining
+the file in inclusion provenance. The caller supplies all compiler arguments to `extract`,
+including the language, target, include paths, defines, forced includes, and extensions.
 
 ```rust,no_run
 let input = windows_clang::Input::new(
@@ -70,6 +75,24 @@ let snapshot = windows_clang::extract(
 )
 .unwrap();
 ```
+
+Use `extract_with_options` or `extract_partitioned_with_options` to parse independent original
+translation units concurrently:
+
+```rust,no_run
+let options = windows_clang::ExtractionOptions::new().with_parallelism(4);
+let snapshot = windows_clang::extract_with_options(
+    [windows_clang::Input::new("aggregate.cpp", "#include \"all.h\"")],
+    &["-x", "c++"],
+    &options,
+)
+.unwrap();
+```
+
+The worker count is bounded by the configured value and input count. Each concurrent translation
+unit owns a separate libclang index until the translation unit is dropped. Results and errors are
+collected in input order. Only original extraction translation units use this setting; synthetic
+constant-probe translation units keep their existing bounded probe scheduling.
 
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
@@ -278,6 +301,7 @@ have the same meaning.
 | Scalar vocabulary (`BYTE`, `DWORD`, `FLOAT`, `DOUBLE`) | Use the corresponding RDL primitive. |
 | MIDL predefined scalars (`boolean`) | Use the corresponding RDL primitive (`u8`). |
 | Pointer-sized vocabulary (`SIZE_T`, `ULONG_PTR`, `LONG_PTR`) | Use `usize` or `isize`. |
+| ABI aliases (`HNSTIME`, CLR tokens, signatures, and handles) | Use their fixed ABI shapes. |
 | String aliases (`LPCWSTR`, `LPWSTR`) | Use the canonical RDL string vocabulary. |
 | GUID aliases (`IID`, `CLSID`, `UUID`) | Use `GUID`. |
 | Generic void pointers (`PVOID`, `LPVOID`) | Use the corresponding raw pointer. |

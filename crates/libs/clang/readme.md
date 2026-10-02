@@ -33,6 +33,14 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+`Clang::parallelism` bounds concurrent parsing of original translation units. The lower-level
+`extract_with_options` and `extract_partitioned_with_options` functions accept the same setting
+through `ExtractionOptions`. Results, diagnostics, and inclusion records retain extraction input
+order. Zero and one select serial parsing.
+
+`Input::with_excluded_source_dirs` and `Clang::exclude_path` omit declarations spelled beneath
+toolchain resource directories while retaining those files in inclusion provenance.
+
 `Snapshot::included_files` returns the normalized physical files visited in each original
 translation unit, including headers that produced no extracted fact or constant. Records retain
 the corresponding `Input::name` identity and have deterministic per-input ordering.

@@ -3,20 +3,39 @@ use clang_sys::*;
 use std::cell::OnceCell;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::Arc;
 
 pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
+    extract_with_options(inputs, args, &ExtractionOptions::default())
+}
+
+pub fn extract_with_options(
+    inputs: impl IntoIterator<Item = Input>,
+    args: &[&str],
+    options: &ExtractionOptions,
+) -> Result<Snapshot, Error> {
     extract_impl(
         inputs.into_iter().collect(),
         BTreeMap::new(),
         BTreeMap::new(),
         BTreeMap::new(),
         args,
+        options,
     )
 }
 
 pub fn extract_partitioned(
     inputs: impl IntoIterator<Item = PartitionedInput>,
     args: &[&str],
+) -> Result<Snapshot, Error> {
+    extract_partitioned_with_options(inputs, args, &ExtractionOptions::default())
+}
+
+pub fn extract_partitioned_with_options(
+    inputs: impl IntoIterator<Item = PartitionedInput>,
+    args: &[&str],
+    options: &ExtractionOptions,
 ) -> Result<Snapshot, Error> {
     let inputs: Vec<_> = inputs.into_iter().collect();
     let mut identities = BTreeSet::new();
@@ -62,6 +81,7 @@ pub fn extract_partitioned(
         partition_inputs,
         input_arguments,
         args,
+        options,
     )
 }
 
@@ -71,6 +91,7 @@ fn extract_impl(
     partition_inputs: BTreeMap<String, String>,
     input_arguments: BTreeMap<String, Vec<String>>,
     args: &[&str],
+    options: &ExtractionOptions,
 ) -> Result<Snapshot, Error> {
     let input_order = inputs
         .iter()
@@ -84,7 +105,7 @@ fn extract_impl(
         }
     }
 
-    let _library = Library::new()?;
+    let library = Library::new()?;
     let index = Index::new()?;
     let timing = timings_enabled();
     let validate_annotations = args.contains(&"-DWIN32METADATA=1")
@@ -94,40 +115,37 @@ fn extract_impl(
     let target = timing.then(|| timing_target(args));
     let total_time = timing.then(std::time::Instant::now);
     let parse_time = timing.then(std::time::Instant::now);
-    let mut translation_units = Vec::with_capacity(inputs.len());
-    for input in &inputs {
-        let tu_time = timing.then(std::time::Instant::now);
-        let local_arguments = input_arguments.get(&input.name);
-        let parse_arguments: Vec<_> = args
+    let parse_context = ParseContext {
+        args,
+        input_arguments: &input_arguments,
+    };
+    let translation_units = if options.parallelism() <= 1 || inputs.len() <= 1 {
+        inputs
             .iter()
-            .copied()
-            .chain(local_arguments.into_iter().flatten().map(String::as_str))
-            .collect();
-        match TranslationUnit::parse(&index, input, &parse_arguments) {
-            Ok(translation_unit) => {
-                if timing {
-                    eprintln!(
-                        "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} elapsed_ms={:.3}",
-                        target.as_deref().unwrap(),
-                        input.name,
-                        input.source.len(),
-                        elapsed_ms(tu_time)
-                    );
-                }
-                translation_units.push((input.name.clone(), translation_unit));
-            }
-            Err(error) => {
-                if timing {
-                    eprintln!(
-                        "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} status=error elapsed_ms={:.3}",
-                        target.as_deref().unwrap(),
-                        input.name,
-                        input.source.len(),
-                        elapsed_ms(tu_time)
-                    );
-                }
-                return Err(error);
-            }
+            .map(|input| parse_input(&index, input, &parse_context, timing))
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        let shared_library = library.shared();
+        try_map_ordered_bounded(
+            &inputs,
+            options.parallelism(),
+            || Library::from_shared(shared_library.clone()),
+            |_, input| {
+                let input_index = Index::new()?;
+                parse_input(&input_index, input, &parse_context, timing)
+                    .map(|parsed| parsed.with_index(input_index))
+            },
+        )?
+    };
+    if timing {
+        for parsed in &translation_units {
+            eprintln!(
+                "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                parsed.input,
+                parsed.source_bytes,
+                parsed.elapsed_ms,
+            );
         }
     }
     if timing {
@@ -141,7 +159,7 @@ fn extract_impl(
 
     let included_files = translation_units
         .iter()
-        .flat_map(|(input, translation_unit)| translation_unit.included_files(input))
+        .flat_map(|parsed| parsed.translation_unit.included_files(&parsed.input))
         .collect();
 
     let traversal_time = timing.then(std::time::Instant::now);
@@ -152,9 +170,8 @@ fn extract_impl(
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
-    for (name, translation_unit) in &translation_units {
-        let input = inputs.iter().find(|input| input.name == *name).unwrap();
-        let (result, metrics) = translation_unit.extract(
+    for (input, parsed) in inputs.iter().zip(&translation_units) {
+        let (result, metrics) = parsed.translation_unit.extract(
             input,
             &mut facts,
             &mut constants,
@@ -820,18 +837,36 @@ fn reference_counts(facts: &[Fact], constants: &[Constant]) -> HashMap<(String, 
     result
 }
 
-struct Library;
+struct Library {
+    current: Arc<SharedLibrary>,
+    previous: Option<Arc<SharedLibrary>>,
+}
 
 impl Library {
     fn new() -> Result<Self, Error> {
-        load().map_err(|error| Error(format!("failed to load libclang: {error}")))?;
-        Ok(Self)
+        let current = match get_library() {
+            Some(library) => library,
+            None => Arc::new(
+                load_manually()
+                    .map_err(|error| Error(format!("failed to load libclang: {error}")))?,
+            ),
+        };
+        Ok(Self::from_shared(current))
+    }
+
+    fn from_shared(current: Arc<SharedLibrary>) -> Self {
+        let previous = set_library(Some(current.clone()));
+        Self { current, previous }
+    }
+
+    fn shared(&self) -> Arc<SharedLibrary> {
+        self.current.clone()
     }
 }
 
 impl Drop for Library {
     fn drop(&mut self) {
-        _ = unload();
+        set_library(self.previous.take());
     }
 }
 
@@ -855,6 +890,141 @@ impl Drop for Index {
 }
 
 struct TranslationUnit(CXTranslationUnit);
+
+struct OwnedTranslationUnit {
+    translation_unit: TranslationUnit,
+    _index: Option<Index>,
+}
+
+impl OwnedTranslationUnit {
+    fn new(translation_unit: TranslationUnit) -> Self {
+        Self {
+            translation_unit,
+            _index: None,
+        }
+    }
+
+    fn with_index(mut self, index: Index) -> Self {
+        self._index = Some(index);
+        self
+    }
+}
+
+impl Deref for OwnedTranslationUnit {
+    type Target = TranslationUnit;
+
+    fn deref(&self) -> &Self::Target {
+        &self.translation_unit
+    }
+}
+
+// SAFETY: this private bundle uniquely owns both libclang handles and is moved only after parsing
+// finishes. It is never accessed from two threads at once, and its fields drop the translation
+// unit before the index that created it.
+unsafe impl Send for OwnedTranslationUnit {}
+
+struct ParsedTranslationUnit {
+    input: String,
+    source_bytes: usize,
+    elapsed_ms: f64,
+    translation_unit: OwnedTranslationUnit,
+}
+
+impl ParsedTranslationUnit {
+    fn with_index(mut self, index: Index) -> Self {
+        self.translation_unit = self.translation_unit.with_index(index);
+        self
+    }
+}
+
+struct ParseContext<'a> {
+    args: &'a [&'a str],
+    input_arguments: &'a BTreeMap<String, Vec<String>>,
+}
+
+fn parse_input(
+    index: &Index,
+    input: &Input,
+    context: &ParseContext<'_>,
+    timing: bool,
+) -> Result<ParsedTranslationUnit, Error> {
+    let start = timing.then(std::time::Instant::now);
+    let local_arguments = context.input_arguments.get(&input.name);
+    let arguments: Vec<_> = context
+        .args
+        .iter()
+        .copied()
+        .chain(local_arguments.into_iter().flatten().map(String::as_str))
+        .collect();
+    let translation_unit = TranslationUnit::parse(index, input, &arguments)?;
+    Ok(ParsedTranslationUnit {
+        input: input.name.clone(),
+        source_bytes: input.source.len(),
+        elapsed_ms: elapsed_ms(start),
+        translation_unit: OwnedTranslationUnit::new(translation_unit),
+    })
+}
+
+fn try_map_ordered_bounded<T, S, R, E>(
+    inputs: &[T],
+    parallelism: usize,
+    init: impl Fn() -> S + Sync,
+    map: impl Fn(&mut S, &T) -> Result<R, E> + Sync,
+) -> Result<Vec<R>, E>
+where
+    T: Sync,
+    R: Send,
+    E: Send,
+{
+    if inputs.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let workers = parallelism.max(1).min(inputs.len());
+    if workers == 1 {
+        let mut state = init();
+        return inputs.iter().map(|input| map(&mut state, input)).collect();
+    }
+
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        use std::sync::atomic::Ordering;
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut handles = Vec::with_capacity(workers);
+        for _ in 0..workers {
+            let init = &init;
+            let map = &map;
+            let sender = sender.clone();
+            let next = &next;
+            handles.push(scope.spawn(move || {
+                let mut state = init();
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    if index >= inputs.len()
+                        || sender
+                            .send((index, map(&mut state, &inputs[index])))
+                            .is_err()
+                    {
+                        break;
+                    }
+                }
+            }));
+        }
+        drop(sender);
+
+        let mut output: Vec<Option<Result<R, E>>> = (0..inputs.len()).map(|_| None).collect();
+        for (index, result) in receiver {
+            output[index] = Some(result);
+        }
+        for handle in handles {
+            if let Err(payload) = handle.join() {
+                std::panic::resume_unwind(payload);
+            }
+        }
+        output.into_iter().map(|result| result.unwrap()).collect()
+    })
+}
 
 struct Evaluated {
     name: String,
@@ -984,7 +1154,10 @@ impl TranslationUnit {
         for index in 0..count {
             let diagnostic = unsafe { clang_getDiagnostic(self.0, index) };
             let severity = unsafe { clang_getDiagnosticSeverity(diagnostic) };
-            if severity >= CXDiagnostic_Error {
+            let spelling = cx_string(unsafe { clang_getDiagnosticSpelling(diagnostic) });
+            if severity >= CXDiagnostic_Error
+                && spelling != "expression is not an integral constant expression"
+            {
                 result.push(cx_string(unsafe {
                     clang_formatDiagnostic(diagnostic, clang_defaultDiagnosticDisplayOptions())
                 }));
@@ -1156,6 +1329,12 @@ impl Traversal<'_> {
             file,
         )
     }
+
+    fn is_source_excluded(&self, file: &str) -> bool {
+        self.excluded_roots.iter().any(|root| {
+            root.ends_with('/') && source_path_is_under(file, root.trim_end_matches('/'))
+        })
+    }
 }
 
 fn is_root_path(
@@ -1165,12 +1344,30 @@ fn is_root_path(
     excluded_roots: &BTreeSet<String>,
     file: &str,
 ) -> bool {
-    !excluded_roots.contains(file)
-        && (roots.iter().any(|root| source_path_matches(root, file))
-            || root_dirs.iter().any(|root| file.starts_with(root))
-            || root_suffixes
-                .iter()
-                .any(|root| source_path_matches(root, file)))
+    !excluded_roots.iter().any(|root| {
+        if root.ends_with('/') {
+            source_path_is_under(file, root.trim_end_matches('/'))
+        } else {
+            source_path_matches(root, file)
+        }
+    }) && (roots.iter().any(|root| source_path_matches(root, file))
+        || root_dirs
+            .iter()
+            .any(|root| source_path_is_under(file, root.trim_end_matches('/')))
+        || root_suffixes
+            .iter()
+            .any(|root| source_path_matches(root, file)))
+}
+
+fn source_path_is_under(path: &str, root: &str) -> bool {
+    let path = normalize_name(path).to_ascii_lowercase();
+    let root = normalize_name(root)
+        .trim_end_matches('/')
+        .to_ascii_lowercase();
+    path == root
+        || path
+            .strip_prefix(&root)
+            .is_some_and(|suffix| suffix.starts_with('/'))
 }
 
 fn extract_children(cursor: CXCursor, parent: Option<&Origin>, traversal: &mut Traversal<'_>) {
@@ -1217,6 +1414,11 @@ fn extract_child(
     parent: Option<&Origin>,
     traversal: &mut Traversal<'_>,
 ) {
+    if let Some((spelling, _, _, _)) = cursor_locations(child)
+        && traversal.is_source_excluded(&spelling.file)
+    {
+        return;
+    }
     let local = traversal.next;
     traversal.next += 1;
     let kind = unsafe { clang_getCursorKind(child) };

@@ -21,6 +21,8 @@ pub struct Clang {
     library: String,
     filters: BTreeSet<String>,
     functions: BTreeSet<String>,
+    excluded_source_dirs: BTreeSet<String>,
+    parallelism: usize,
 }
 
 impl Clang {
@@ -92,6 +94,21 @@ impl Clang {
         self
     }
 
+    /// Sets the maximum number of original translation units parsed concurrently.
+    ///
+    /// Zero and one both select serial parsing.
+    pub fn parallelism(&mut self, parallelism: usize) -> &mut Self {
+        self.parallelism = parallelism;
+        self
+    }
+
+    /// Excludes declarations originating beneath a header directory.
+    pub fn exclude_path(&mut self, path: impl AsRef<Path>) -> &mut Self {
+        self.excluded_source_dirs
+            .insert(normalize_name(&path.as_ref().to_string_lossy()));
+        self
+    }
+
     /// Includes declarations from headers matching this path suffix.
     pub fn filter(&mut self, filter: impl Into<String>) -> &mut Self {
         self.filters.insert(normalize_name(&filter.into()));
@@ -134,13 +151,15 @@ impl Clang {
                 .map_err(|error| Error(format!("failed to read {}: {error}", path.display())))?;
             inputs.push(
                 Input::new(path.to_string_lossy(), source)
-                    .with_root_suffixes(self.filters.iter().cloned()),
+                    .with_root_suffixes(self.filters.iter().cloned())
+                    .with_excluded_source_dirs(self.excluded_source_dirs.iter().cloned()),
             );
         }
         for (index, source) in self.input_text.iter().enumerate() {
             inputs.push(
                 Input::new(format!("windows-clang-{index}.h"), source)
-                    .with_root_suffixes(self.filters.iter().cloned()),
+                    .with_root_suffixes(self.filters.iter().cloned())
+                    .with_excluded_source_dirs(self.excluded_source_dirs.iter().cloned()),
             );
         }
         if inputs.is_empty() {
@@ -148,7 +167,11 @@ impl Clang {
         }
 
         let args: Vec<&str> = self.args.iter().map(String::as_str).collect();
-        extract(inputs, &args)
+        extract_with_options(
+            inputs,
+            &args,
+            &ExtractionOptions::new().with_parallelism(self.parallelism),
+        )
     }
 
     fn load_references(&self) -> Result<MetadataReferences, Error> {
