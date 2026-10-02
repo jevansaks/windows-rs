@@ -35,8 +35,12 @@ combine immutable snapshots before emission.
 
 An aggregate translation unit can be routed after extraction with `HeaderPartitionPolicy` and
 `Snapshot::plan_header_partitions`. The policy maps traversed physical headers to logical
-`RootPartition` candidates. Audit the returned plan before calling `emit_with_options`; dependency
-declarations remain available for closure without becoming public roots.
+`RootPartition` candidates. Input-qualified entries support the same physical header parsed under
+different compile definitions without making the extraction input a logical partition. Header
+selectors are case-insensitive path suffixes; emitted partition headers and owner settings use the
+resolved physical source path. Audit the returned plan before calling the consuming
+`emit_with_options`; dependency declarations remain available for closure without becoming public
+roots.
 
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`

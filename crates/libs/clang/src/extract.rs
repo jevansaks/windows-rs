@@ -362,6 +362,7 @@ fn extract_impl(
         fact_namespace_authorities: BTreeMap::new(),
         constant_namespace_authorities: BTreeMap::new(),
         header_partition_policy: false,
+        header_authority_partition: None,
         timing_target: target,
     })
 }
