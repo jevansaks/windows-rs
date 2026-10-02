@@ -89,6 +89,108 @@ fn traversed_headers_select_roots_and_inherit_dependency_owners() {
 }
 
 #[test]
+fn canonical_dependency_typedef_does_not_require_a_tagged_owner() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("canonical-dependency-typedef");
+    let foundation = scratch.join("minwindef.h");
+    let alternate = scratch.join("alternate.h");
+    let intsafe = scratch.join("intsafe.h");
+    let satellite = scratch.join("satellite.h");
+    std::fs::write(&foundation, "typedef unsigned long DWORD;\n").unwrap();
+    std::fs::write(&alternate, "typedef unsigned long long DWORD;\n").unwrap();
+    std::fs::write(&intsafe, "typedef unsigned long DWORD;\n").unwrap();
+    std::fs::write(
+        &satellite,
+        "#include \"minwindef.h\"\n\
+         #include \"intsafe.h\"\n\
+         typedef struct SATELLITE_VALUE { DWORD value; } SATELLITE_VALUE;\n",
+    )
+    .unwrap();
+
+    let include = format!("-I{}", scratch.display());
+    let snapshot = extract(
+        [
+            Input::new("foundation.cpp", "#include \"minwindef.h\"\n")
+                .with_root_dirs([scratch.to_string_lossy().to_string()]),
+            Input::new("alternate.cpp", "#include \"alternate.h\"\n")
+                .with_root_dirs([scratch.to_string_lossy().to_string()]),
+            Input::new("satellites.cpp", "#include \"satellite.h\"\n")
+                .with_root_dirs([scratch.to_string_lossy().to_string()]),
+        ],
+        &[
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+            include.as_str(),
+        ],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "foundation.cpp",
+            "minwindef.h",
+            RootPartition::new("MinWinDef", "Example.Foundation"),
+        )
+        .with_traversed_header_for_input(
+            "alternate.cpp",
+            "alternate.h",
+            RootPartition::new("Alternate", "Example.Alternate"),
+        )
+        .with_traversed_header_for_input(
+            "satellites.cpp",
+            "satellite.h",
+            RootPartition::new("Satellite", "Example.Satellite"),
+        );
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let satellite = output(&partitions, "Example.Satellite");
+
+    assert!(satellite.contains("struct SATELLITE_VALUE"), "{satellite}");
+    assert!(satellite.contains("value: u32"), "{satellite}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn canonical_name_on_dependency_record_still_requires_closure() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("canonical-name-record");
+    let dependency = scratch.join("dependency.h");
+    let public = scratch.join("public.h");
+    std::fs::write(&dependency, "struct DWORD { unsigned value; };\n").unwrap();
+    std::fs::write(
+        &public,
+        "#include \"dependency.h\"\n\
+         typedef struct PUBLIC_VALUE { struct DWORD value; } PUBLIC_VALUE;\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&public]);
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        public.to_string_lossy(),
+        RootPartition::new("Public", "Example.Public"),
+    );
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let public = output(&partitions, "Example.Public");
+
+    assert!(public.contains("struct DWORD"), "{public}");
+    assert!(public.contains("value: DWORD"), "{public}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn aggregate_facts_route_to_two_logical_namespaces() {
     helpers::ensure_libclang();
 

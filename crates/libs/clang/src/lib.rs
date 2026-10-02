@@ -2199,8 +2199,14 @@ impl Snapshot {
         let collisions: BTreeSet<_> = variants
             .into_iter()
             .filter_map(|(name, namespaces)| {
+                let canonical_typedef = canonical_named_type(name).is_some()
+                    && namespaces
+                        .values()
+                        .flatten()
+                        .all(|data| matches!(data, &&FactData::Typedef { .. }));
                 let distinct: BTreeSet<_> = namespaces.values().flatten().copied().collect();
-                (namespaces.len() > 1 && distinct.len() > 1).then_some(name.to_string())
+                (namespaces.len() > 1 && distinct.len() > 1 && !canonical_typedef)
+                    .then_some(name.to_string())
             })
             .collect();
         if collisions.is_empty() {
@@ -3485,6 +3491,15 @@ impl Snapshot {
         for fact in self.facts.iter().filter(|fact| is_flat_dependency(fact)) {
             facts_index.entry(&fact.name).or_default().push(fact);
         }
+        let canonical_typedef_declarations: HashSet<_> = self
+            .facts
+            .iter()
+            .filter(|fact| {
+                canonical_named_type(&fact.name).is_some()
+                    && matches!(fact.data, FactData::Typedef { .. })
+            })
+            .map(|fact| (fact.origin.tu.as_str(), &fact.spelling))
+            .collect();
         let facts_by_declaration: BTreeMap<_, _> = self
             .facts
             .iter()
@@ -3737,6 +3752,9 @@ impl Snapshot {
                     continue;
                 }
                 if references.contains_key(name) && !root_names.contains(name) {
+                    continue;
+                }
+                if canonical_typedef_declarations.contains(&(tu, declaration)) {
                     continue;
                 }
                 let mut matches: Vec<_> = facts_index
