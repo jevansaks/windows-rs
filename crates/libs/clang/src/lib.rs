@@ -2,7 +2,7 @@
 #![doc = include_str!("../readme.md")]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write};
 
 fn timings_enabled() -> bool {
     ["WINDOWS_CLANG_TIMINGS", "WINDOWS_CLANG_TIMING"]
@@ -3639,35 +3639,78 @@ impl Snapshot {
             let mut queue = vec![];
             let mut pointer_alias_candidates = BTreeSet::new();
             let mut retained_pointer_aliases = BTreeSet::new();
+            let mut dependency_diagnostics =
+                DependencyClosureDiagnostics::new(self.header_partition_policy);
             for root in &type_roots {
+                let root_node = dependency_diagnostics.add_root(
+                    "type",
+                    &root.name,
+                    &root.origin.tu,
+                    &root.expansion,
+                );
+                let fact_node = DependencyNode::Fact(&root.origin);
+                dependency_diagnostics.add_edge(root_node, fact_node);
                 if facts.insert(root.origin.clone()) {
                     collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
-                    queue_type_edges(root, &mut queue);
+                    queue_type_edges(root, fact_node, &mut queue);
                 }
             }
             for root in &value_roots {
+                let root_node = dependency_diagnostics.add_root(
+                    "value",
+                    &root.name,
+                    &root.origin.tu,
+                    &root.expansion,
+                );
+                let fact_node = DependencyNode::Fact(&root.origin);
+                dependency_diagnostics.add_edge(root_node, fact_node);
                 collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
-                queue_type_edges(root, &mut queue);
+                queue_type_edges(root, fact_node, &mut queue);
             }
             for constant in &constants {
+                let root_node = dependency_diagnostics.add_root(
+                    "constant",
+                    &constant.name,
+                    &constant.root.tu,
+                    &constant.spelling,
+                );
                 collect_pointer_alias_candidates(
                     &constant.ty,
                     constant.root.tu.as_str(),
                     false,
                     &mut pointer_alias_candidates,
                 );
-                queue.push((constant.root.tu.as_str(), TypeEdge::Type(&constant.ty)));
+                queue.push((
+                    constant.root.tu.as_str(),
+                    TypeEdge::Type(&constant.ty),
+                    root_node,
+                ));
             }
             for function in &functions {
+                let root_node = dependency_diagnostics.add_root(
+                    "function",
+                    &function.name,
+                    &function.fact.origin.tu,
+                    &function.fact.expansion,
+                );
+                let fact_node = DependencyNode::Fact(&function.fact.origin);
+                dependency_diagnostics.add_edge(root_node, fact_node);
                 collect_fact_pointer_alias_candidates(function.fact, &mut pointer_alias_candidates);
-                queue_function_edges(function.fact, &mut queue);
+                queue_function_edges(function.fact, fact_node, &mut queue);
             }
 
-            while let Some((tu, edge)) = queue.pop() {
+            while let Some((tu, edge, source)) = queue.pop() {
                 let ty = match edge {
                     TypeEdge::Type(ty) => ty,
                     TypeEdge::Projected(name) => {
+                        let reference = DependencyReference {
+                            name,
+                            tu,
+                            declaration: None,
+                        };
+                        dependency_diagnostics.process(reference);
                         if references.contains_key(name) && !root_names.contains(name) {
+                            dependency_diagnostics.resolve(reference);
                             continue;
                         }
                         let matches: Vec<_> = facts_index
@@ -3677,45 +3720,63 @@ impl Snapshot {
                             .copied()
                             .filter(|fact| fact.origin.tu == tu && is_type_fact(fact))
                             .collect();
-                        let fact = choose_type_root_cached(
+                        let fact = match choose_type_root_cached(
                             name,
                             &matches,
                             &facts_index,
                             &mut shape_cache,
-                        )?;
+                        ) {
+                            Ok(fact) => fact,
+                            Err(error) if self.header_partition_policy => {
+                                dependency_diagnostics.block(reference, error.to_string(), source);
+                                continue;
+                            }
+                            Err(error) => return Err(error),
+                        };
+                        dependency_diagnostics.resolve(reference);
+                        let fact_node = DependencyNode::Fact(&fact.origin);
+                        dependency_diagnostics.add_edge(source, fact_node);
                         if facts.insert(fact.origin.clone()) {
                             collect_fact_pointer_alias_candidates(
                                 fact,
                                 &mut pointer_alias_candidates,
                             );
-                            queue_type_edges(fact, &mut queue);
+                            queue_type_edges(fact, fact_node, &mut queue);
                         }
                         continue;
                     }
                 };
                 let (name, declaration) = match ty {
                     TypeRef::Pointer { target, .. } | TypeRef::Reference { target, .. } => {
-                        queue.push((tu, TypeEdge::Type(target)));
+                        queue.push((tu, TypeEdge::Type(target), source));
                         continue;
                     }
                     TypeRef::FunctionPointer { .. } | TypeRef::OpaquePointer { .. } => continue,
                     TypeRef::Array { target, .. } => {
-                        queue.push((tu, TypeEdge::Type(target)));
+                        queue.push((tu, TypeEdge::Type(target), source));
                         continue;
                     }
                     TypeRef::InlineRecord(record) => {
                         for field in &record.fields {
-                            queue.push((tu, TypeEdge::Type(&field.ty)));
+                            queue.push((tu, TypeEdge::Type(&field.ty), source));
                         }
                         continue;
                     }
                     TypeRef::Named { name, declaration } => (name, declaration),
                     _ => continue,
                 };
+                let reference = DependencyReference {
+                    name,
+                    tu,
+                    declaration: Some(declaration),
+                };
+                dependency_diagnostics.process(reference);
                 if excluded_local_names.contains(&(tu.to_string(), name.clone())) {
+                    dependency_diagnostics.resolve(reference);
                     continue;
                 }
                 if references.contains_key(name) && !root_names.contains(name) {
+                    dependency_diagnostics.resolve(reference);
                     continue;
                 }
                 let pointer_alias_candidate =
@@ -3724,6 +3785,7 @@ impl Snapshot {
                 if canonical_typedef_declarations.contains(&(tu, declaration))
                     && !(retain_pointer_alias && canonical_pointer_alias_name(name))
                 {
+                    dependency_diagnostics.resolve(reference);
                     continue;
                 }
                 let mut matches: Vec<_> = facts_index
@@ -3791,21 +3853,41 @@ impl Snapshot {
                             }),
                     );
                 }
-                let mut fact = match matches.as_slice() {
+                let selected = match matches.as_slice() {
                     [fact] => *fact,
-                    [] => {
-                        return Err(self.unresolved_local_type_error(name, tu, declaration));
-                    }
-                    choices if exact_non_flat => choose_type_root_cached(
+                    [] => match self.unresolved_local_type_error(name, tu, declaration) {
+                        error if self.header_partition_policy => {
+                            dependency_diagnostics.block(reference, error.to_string(), source);
+                            continue;
+                        }
+                        error => return Err(error),
+                    },
+                    choices if exact_non_flat => match choose_type_root_cached(
                         name,
                         choices,
                         &exact_dependency_facts_index,
                         &mut shape_cache,
-                    )?,
+                    ) {
+                        Ok(fact) => fact,
+                        Err(error) if self.header_partition_policy => {
+                            dependency_diagnostics.block(reference, error.to_string(), source);
+                            continue;
+                        }
+                        Err(error) => return Err(error),
+                    },
                     choices => {
-                        choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)?
+                        match choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)
+                        {
+                            Ok(fact) => fact,
+                            Err(error) if self.header_partition_policy => {
+                                dependency_diagnostics.block(reference, error.to_string(), source);
+                                continue;
+                            }
+                            Err(error) => return Err(error),
+                        }
                     }
                 };
+                let mut fact = selected;
                 if !self.root_owners.contains_key(&fact.origin)
                     && let Some(guid) = declaration_uuid(self, name, tu, declaration)
                 {
@@ -3824,41 +3906,86 @@ impl Snapshot {
                         .map(|owner| (&owner.partition, &owner.namespace))
                         .collect();
                     if owners.len() > 1 {
-                        return Err(Error(format!(
+                        let error = Error(format!(
                             "local type `{name}` at {}:{} matches UUID `{guid}` in multiple tagged owners",
                             declaration.file, declaration.offset
-                        )));
+                        ));
+                        if self.header_partition_policy {
+                            dependency_diagnostics.block(reference, error.to_string(), source);
+                            continue;
+                        }
+                        return Err(error);
                     }
                     if !owned.is_empty() {
-                        fact =
-                            choose_type_root_cached(name, &owned, &facts_index, &mut shape_cache)?;
+                        fact = match choose_type_root_cached(
+                            name,
+                            &owned,
+                            &facts_index,
+                            &mut shape_cache,
+                        ) {
+                            Ok(fact) => fact,
+                            Err(error) if self.header_partition_policy => {
+                                dependency_diagnostics.block(reference, error.to_string(), source);
+                                continue;
+                            }
+                            Err(error) => return Err(error),
+                        };
                     }
                 }
                 if let FactData::Unsupported { reason } = &fact.data {
-                    return Err(Error(format!(
+                    let error = Error(format!(
                         "unsupported type `{name}` in translation unit `{tu}`: {reason}"
-                    )));
+                    ));
+                    if self.header_partition_policy {
+                        dependency_diagnostics.block(reference, error.to_string(), source);
+                        continue;
+                    }
+                    return Err(error);
                 }
                 if !is_type_fact(fact) {
-                    return Err(self.unresolved_local_type_error(name, tu, declaration));
+                    let error = self.unresolved_local_type_error(name, tu, declaration);
+                    if self.header_partition_policy {
+                        dependency_diagnostics.block(reference, error.to_string(), source);
+                        continue;
+                    }
+                    return Err(error);
                 };
                 if canonical_named_type(name).is_some()
                     && matches!(fact.data, FactData::Typedef { .. })
                     && !retain_pointer_alias
                 {
+                    dependency_diagnostics.resolve(reference);
                     continue;
                 }
+                dependency_diagnostics.resolve(reference);
                 if retain_pointer_alias
                     && is_pointer_alias_fact(fact, &facts_by_declaration, &mut BTreeSet::new())
                 {
                     retained_pointer_aliases.insert(fact.name.as_str());
                 }
+                let fact_node = DependencyNode::Fact(&fact.origin);
+                dependency_diagnostics.add_edge(source, fact_node);
                 if facts.insert(fact.origin.clone()) {
                     collect_fact_pointer_alias_candidates(fact, &mut pointer_alias_candidates);
-                    queue_type_edges(fact, &mut queue);
+                    queue_type_edges(fact, fact_node, &mut queue);
                 }
             }
 
+            if dependency_diagnostics.is_blocked() {
+                if timing && self.header_partition_policy {
+                    eprintln!(
+                        "windows-clang timing phase=plan-dependencies target={target} \
+                         selected_roots={} processed_unique_dependencies={} \
+                         resolved_dependencies={} unique_blockers={} elapsed_ms={:.3}",
+                        dependency_diagnostics.selected_roots(),
+                        dependency_diagnostics.processed_references(),
+                        dependency_diagnostics.resolved_references(),
+                        dependency_diagnostics.unique_blockers(),
+                        elapsed_ms(phase_time),
+                    );
+                }
+                return Err(dependency_diagnostics.error());
+            }
             let mut grouped: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
             for fact in facts.into_iter().map(|origin| facts_by_origin[&origin]) {
                 grouped.entry(&fact.name).or_default().push(fact);
@@ -3897,6 +4024,18 @@ impl Snapshot {
                 let selected =
                     choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
                 facts_by_name.insert(name, selected);
+            }
+            if timing && self.header_partition_policy {
+                eprintln!(
+                    "windows-clang timing phase=plan-dependencies target={target} \
+                     selected_roots={} processed_unique_dependencies={} \
+                     resolved_dependencies={} unique_blockers=0 elapsed_ms={:.3}",
+                    dependency_diagnostics.selected_roots(),
+                    dependency_diagnostics.processed_references(),
+                    dependency_diagnostics.resolved_references(),
+                    elapsed_ms(phase_time),
+                );
+                phase_time = Some(std::time::Instant::now());
             }
             break (facts_by_name, retained_pointer_aliases);
         };
@@ -6592,6 +6731,218 @@ enum TypeEdge<'a> {
     Projected(&'static str),
 }
 
+type PendingTypeEdge<'a> = (&'a str, TypeEdge<'a>, DependencyNode<'a>);
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DependencyRoot<'a> {
+    kind: &'static str,
+    name: &'a str,
+    tu: &'a str,
+    source: &'a Location,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+enum DependencyNode<'a> {
+    Root(usize),
+    Fact(&'a Origin),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct DependencyReference<'a> {
+    name: &'a str,
+    tu: &'a str,
+    declaration: Option<&'a Location>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DependencyBlocker<'a> {
+    reference: DependencyReference<'a>,
+    reason: String,
+}
+
+#[derive(Default)]
+struct DependencyClosureDiagnostics<'a> {
+    enabled: bool,
+    roots: Vec<DependencyRoot<'a>>,
+    reverse_edges: HashMap<DependencyNode<'a>, HashSet<DependencyNode<'a>>>,
+    processed: HashSet<DependencyReference<'a>>,
+    resolved: HashSet<DependencyReference<'a>>,
+    blockers: BTreeMap<DependencyBlocker<'a>, HashSet<DependencyNode<'a>>>,
+}
+
+impl<'a> DependencyClosureDiagnostics<'a> {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            ..Self::default()
+        }
+    }
+
+    fn add_root(
+        &mut self,
+        kind: &'static str,
+        name: &'a str,
+        tu: &'a str,
+        source: &'a Location,
+    ) -> DependencyNode<'a> {
+        if !self.enabled {
+            return DependencyNode::Root(usize::MAX);
+        }
+        let index = self.roots.len();
+        self.roots.push(DependencyRoot {
+            kind,
+            name,
+            tu,
+            source,
+        });
+        DependencyNode::Root(index)
+    }
+
+    fn add_edge(&mut self, source: DependencyNode<'a>, target: DependencyNode<'a>) {
+        if !self.enabled {
+            return;
+        }
+        self.reverse_edges.entry(target).or_default().insert(source);
+    }
+
+    fn process(&mut self, reference: DependencyReference<'a>) {
+        if !self.enabled {
+            return;
+        }
+        self.processed.insert(reference);
+    }
+
+    fn resolve(&mut self, reference: DependencyReference<'a>) {
+        if !self.enabled {
+            return;
+        }
+        self.resolved.insert(reference);
+    }
+
+    fn block(
+        &mut self,
+        reference: DependencyReference<'a>,
+        reason: impl Into<String>,
+        source: DependencyNode<'a>,
+    ) {
+        if !self.enabled {
+            return;
+        }
+        self.blockers
+            .entry(DependencyBlocker {
+                reference,
+                reason: reason.into(),
+            })
+            .or_default()
+            .insert(source);
+    }
+
+    fn is_blocked(&self) -> bool {
+        !self.blockers.is_empty()
+    }
+
+    fn selected_roots(&self) -> usize {
+        self.roots.len()
+    }
+
+    fn processed_references(&self) -> usize {
+        self.processed.len()
+    }
+
+    fn resolved_references(&self) -> usize {
+        let blocked: HashSet<_> = self
+            .blockers
+            .keys()
+            .map(|blocker| &blocker.reference)
+            .collect();
+        self.resolved
+            .iter()
+            .filter(|reference| !blocked.contains(reference))
+            .count()
+    }
+
+    fn unique_blockers(&self) -> usize {
+        self.blockers.len()
+    }
+
+    fn referencing_roots(
+        &self,
+        sources: &HashSet<DependencyNode<'a>>,
+    ) -> BTreeSet<DependencyRoot<'a>> {
+        let mut roots = BTreeSet::new();
+        let mut seen = HashSet::new();
+        let mut queue: Vec<_> = sources.iter().copied().collect();
+        while let Some(node) = queue.pop() {
+            if !seen.insert(node) {
+                continue;
+            }
+            match node {
+                DependencyNode::Root(index) => {
+                    roots.insert(self.roots[index]);
+                }
+                DependencyNode::Fact(_) => {
+                    queue.extend(self.reverse_edges.get(&node).into_iter().flatten().copied());
+                }
+            }
+        }
+        roots
+    }
+
+    fn error(&self) -> Error {
+        let mut result = format!(
+            "header partition dependency closure found {} blocker(s)\n\
+             coverage: selected_roots={} processed_unique_dependencies={} \
+             resolved_dependencies={} unique_blockers={}",
+            self.unique_blockers(),
+            self.selected_roots(),
+            self.processed_references(),
+            self.resolved_references(),
+            self.unique_blockers(),
+        );
+        for (index, (blocker, sources)) in self.blockers.iter().enumerate() {
+            let declaration = blocker.reference.declaration.as_ref().map_or_else(
+                || "projected dependency".to_string(),
+                |declaration| format!("{}:{}", declaration.file, declaration.offset),
+            );
+            write!(
+                result,
+                "\n{}. `{}` in translation unit `{}` at {}\n   reason: ",
+                index + 1,
+                blocker.reference.name,
+                blocker.reference.tu,
+                declaration,
+            )
+            .unwrap();
+            for (line, reason) in blocker.reason.lines().enumerate() {
+                if line > 0 {
+                    result.push_str("\n           ");
+                }
+                result.push_str(reason);
+            }
+            result.push_str("\n   referenced by:");
+            let roots = self.referencing_roots(sources);
+            if roots.is_empty() {
+                result.push_str("\n     - no selected root provenance");
+            } else {
+                for root in roots {
+                    write!(
+                        result,
+                        "\n     - {} `{}` in translation unit `{}` at {}:{}",
+                        root.kind, root.name, root.tu, root.source.file, root.source.offset,
+                    )
+                    .unwrap();
+                }
+            }
+        }
+        result.push_str(
+            "\nlimitation: dependencies beneath a missing, ambiguous, or unsupported type \
+             cannot be inspected until that blocker is resolved; later layout, ownership, and RDL \
+             validation has not run for this failed plan",
+        );
+        Error(result)
+    }
+}
+
 fn collect_fact_pointer_alias_candidates<'a>(
     fact: &'a Fact,
     candidates: &mut BTreeSet<(&'a str, &'a Location, &'a str)>,
@@ -6731,46 +7082,61 @@ fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
     }
 }
 
-fn queue_type_edges<'a>(fact: &'a Fact, queue: &mut Vec<(&'a str, TypeEdge<'a>)>) {
-    if let FactData::Typedef { target } = &fact.data {
-        queue.push((fact.origin.tu.as_str(), TypeEdge::Type(target)));
-    } else if let FactData::Callback { params, result, .. } = &fact.data {
-        queue.push((fact.origin.tu.as_str(), TypeEdge::Type(result)));
-        for param in params {
-            queue.push((fact.origin.tu.as_str(), TypeEdge::Type(&param.ty)));
+fn queue_type_edges<'a>(
+    fact: &'a Fact,
+    source: DependencyNode<'a>,
+    queue: &mut Vec<PendingTypeEdge<'a>>,
+) {
+    let tu = fact.origin.tu.as_str();
+    let mut push = |edge| queue.push((tu, edge, source));
+    match &fact.data {
+        FactData::Typedef { target } => push(TypeEdge::Type(target)),
+        FactData::Callback { params, result, .. } => {
+            push(TypeEdge::Type(result));
+            for param in params {
+                push(TypeEdge::Type(&param.ty));
+            }
         }
-    } else if let FactData::PropertyKey { ty, .. } = &fact.data {
-        queue.push((fact.origin.tu.as_str(), TypeEdge::Projected(ty)));
-    } else if let FactData::Record { base, fields, .. } = &fact.data {
-        if let Some(base) = base {
-            queue.push((fact.origin.tu.as_str(), TypeEdge::Type(base)));
+        FactData::PropertyKey { ty, .. } => push(TypeEdge::Projected(ty)),
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                push(TypeEdge::Type(base));
+            }
+            for field in fields {
+                push(TypeEdge::Type(&field.ty));
+            }
         }
-        for field in fields {
-            queue.push((fact.origin.tu.as_str(), TypeEdge::Type(&field.ty)));
-        }
-    } else if let FactData::Interface { base, methods, .. } = &fact.data {
-        if let Some(base) = base {
-            queue.push((fact.origin.tu.as_str(), TypeEdge::Type(base)));
-        }
-        for method in methods {
-            queue.push((fact.origin.tu.as_str(), TypeEdge::Type(&method.result)));
-            for param in &method.params {
-                queue.push((fact.origin.tu.as_str(), TypeEdge::Type(&param.ty)));
-                if let Some(name) = parameter_string_name(param) {
-                    queue.push((fact.origin.tu.as_str(), TypeEdge::Projected(name)));
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                push(TypeEdge::Type(base));
+            }
+            for method in methods {
+                push(TypeEdge::Type(&method.result));
+                for param in &method.params {
+                    push(TypeEdge::Type(&param.ty));
+                    if let Some(name) = parameter_string_name(param) {
+                        push(TypeEdge::Projected(name));
+                    }
                 }
             }
         }
+        _ => {}
     }
 }
 
-fn queue_function_edges<'a>(fact: &'a Fact, queue: &mut Vec<(&'a str, TypeEdge<'a>)>) {
+fn queue_function_edges<'a>(
+    fact: &'a Fact,
+    source: DependencyNode<'a>,
+    queue: &mut Vec<PendingTypeEdge<'a>>,
+) {
     if let FactData::Function { params, result, .. } = &fact.data {
-        queue.push((fact.origin.tu.as_str(), TypeEdge::Type(result)));
+        let tu = fact.origin.tu.as_str();
+        let mut push = |edge| queue.push((tu, edge, source));
+        push(TypeEdge::Type(result));
         for param in params {
-            queue.push((fact.origin.tu.as_str(), TypeEdge::Type(&param.ty)));
+            push(TypeEdge::Type(&param.ty));
             if let Some(name) = parameter_string_name(param) {
-                queue.push((fact.origin.tu.as_str(), TypeEdge::Projected(name)));
+                push(TypeEdge::Projected(name));
             }
         }
     }

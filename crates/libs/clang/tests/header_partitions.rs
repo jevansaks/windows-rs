@@ -705,6 +705,114 @@ fn audit_reports_every_unresolved_shared_header_owner() {
 }
 
 #[test]
+fn dependency_closure_reports_all_independent_blockers() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("dependency-blockers");
+    let dependencies = scratch.join("dependencies.h");
+    let public = scratch.join("public.h");
+    std::fs::write(
+        &dependencies,
+        "class BAD_UNSUPPORTED {\n\
+         private:\n\
+             int value;\n\
+         };\n\
+         struct SHARED_WRAPPER {\n\
+             BAD_UNSUPPORTED unsupported;\n\
+         };\n\
+         class __declspec(uuid(\"12345678-1234-5678-90ab-cdef12345678\")) BAD_COCLASS;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &public,
+        format!(
+            "#include \"{}\"\n\
+             struct ROOT_B {{\n\
+                 SHARED_WRAPPER wrapper;\n\
+                 BAD_COCLASS *coclass;\n\
+             }};\n\
+             struct ROOT_A {{\n\
+                 SHARED_WRAPPER wrapper;\n\
+             }};\n",
+            dependencies.to_string_lossy()
+        ),
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&public]);
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        public.to_string_lossy(),
+        RootPartition::new("public", "Example.Public"),
+    );
+    let references = nonempty_references();
+    let options = EmitOptions::new("Example.Common", &references);
+
+    let audit_error = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .audit(&options)
+        .unwrap_err()
+        .to_string();
+    let emit_error = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(audit_error, emit_error);
+    assert!(
+        emit_error.contains("header partition dependency closure found 2 blocker(s)"),
+        "{emit_error}"
+    );
+    assert!(
+        emit_error.contains(
+            "coverage: selected_roots=2 processed_unique_dependencies=3 \
+             resolved_dependencies=1 unique_blockers=2"
+        ),
+        "{emit_error}"
+    );
+    let coclass = emit_error.find("`BAD_COCLASS`").unwrap();
+    let unsupported = emit_error.find("`BAD_UNSUPPORTED`").unwrap();
+    assert!(coclass < unsupported, "{emit_error}");
+    let coclass_blocker = &emit_error[coclass..unsupported];
+    assert!(
+        coclass_blocker.contains("classified as a coclass GUID value, not a type fact"),
+        "{coclass_blocker}"
+    );
+    assert!(
+        coclass_blocker.contains("type `ROOT_B`"),
+        "{coclass_blocker}"
+    );
+    assert!(
+        !coclass_blocker.contains("type `ROOT_A`"),
+        "{coclass_blocker}"
+    );
+    let unsupported_blocker = &emit_error[unsupported..];
+    assert!(
+        unsupported_blocker
+            .contains("unsupported declaration: class is not a public data-only record"),
+        "{unsupported_blocker}"
+    );
+    assert!(
+        unsupported_blocker.contains("type `ROOT_A`"),
+        "{unsupported_blocker}"
+    );
+    assert!(
+        unsupported_blocker.contains("type `ROOT_B`"),
+        "{unsupported_blocker}"
+    );
+    assert!(
+        emit_error.contains(
+            "limitation: dependencies beneath a missing, ambiguous, or unsupported type cannot be \
+             inspected until that blocker is resolved"
+        ),
+        "{emit_error}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn macro_generated_declarations_use_expansion_provenance() {
     helpers::ensure_libclang();
 

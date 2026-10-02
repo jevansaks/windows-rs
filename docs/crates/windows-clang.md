@@ -209,6 +209,26 @@ routes, and formats once, avoiding repeated planning for SDK-scale snapshots. Us
 `HeaderPartitionPlan::audit` only for report-only callers that will not emit the same plan.
 Calling `audit` before `emit_with_options` repeats planning and clones the snapshot.
 
+Header-plan dependency closure collects independent missing, ambiguous, and unsupported dependency
+edges before returning an error. The report groups each blocker by translation unit, declaration
+location, name, and reason, then lists every selected root that reaches it through the resolved
+dependency graph. No partial RDL is returned. Legacy single-namespace and partitioned emission keep
+their existing first-error behavior.
+
+The closure report and the `plan-dependencies` timing line use these counters:
+
+| Counter | Meaning |
+| --- | --- |
+| `selected_roots` | Selected type, value, function, and constant roots that started the walk. |
+| `processed_unique_dependencies` | Distinct named or projected dependency references examined. |
+| `resolved_dependencies` | Examined references satisfied without a blocker. |
+| `unique_blockers` | Distinct declaration/name/reason groups in the report. |
+
+A blocked declaration has no trustworthy child graph, so dependencies beneath it cannot be
+reported until it is fixed. Layout, owner routing, and RDL validation also run after a successful
+closure and are not represented by these counters. The counters therefore describe closure
+coverage, not an overall completion percentage.
+
 Set `WINDOWS_CLANG_TIMINGS=1` before extraction to write phase timings and counts to stderr. The
 structured lines cover initial parsing, cursor traversal and fact extraction, macro and constant
 probe batches and worker bounds, planning, item construction, and RDL formatting. Timing is
