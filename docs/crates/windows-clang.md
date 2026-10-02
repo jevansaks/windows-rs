@@ -150,8 +150,10 @@ The extraction roots must cover every traversed header whose functions, GUIDs, m
 record bodies are needed. They control extraction coverage only for this API; the
 `HeaderPartitionPolicy` supplies logical root ownership after extraction. Included headers that
 are not in the policy remain available for layout and type closure. If a referenced dependency
-needs emission, it inherits the logical owner of its callers. Multiple inherited owners are an
-audit conflict unless namespace authority resolves the dependency.
+needs emission, it is routed to the namespace in `EmitOptions`. An explicit traversed-header
+mapping or namespace authority takes precedence. Exact declaration-path dependencies may come from
+C++ namespaces that are not eligible as public roots; unrelated declarations from those headers
+remain excluded.
 
 Use `with_traversed_header_for_input(input, header, partition)` when one physical header is parsed
 in several extraction inputs with different compile definitions. The input selector matches

@@ -1436,7 +1436,8 @@ impl Snapshot {
             options.functions,
             timing,
         )?;
-        let candidates = snapshot.partition_route_candidates(&plan, &source_names)?;
+        let candidates =
+            snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
         let routes = snapshot.resolve_partition_routes(candidates)?;
         snapshot.format_partitioned_plan(plan, options, &routes, &display_names, target.as_deref())
     }
@@ -2890,6 +2891,7 @@ impl Snapshot {
         &self,
         plan: &Plan<'_>,
         source_names: &PlanningSourceNames,
+        default_namespace: &str,
     ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate>, Error> {
         let projection_suppression = self
             .header_partition_policy
@@ -3057,112 +3059,35 @@ impl Snapshot {
             );
         }
         if self.header_partition_policy {
-            self.inherit_dependency_owners(plan, &mut result);
+            self.assign_default_dependency_owners(plan, &mut result, default_namespace)?;
         }
         Ok(result)
     }
 
-    fn inherit_dependency_owners(
+    fn assign_default_dependency_owners(
         &self,
         plan: &Plan<'_>,
         routes: &mut BTreeMap<(String, OutputKind), RouteCandidate>,
-    ) {
-        let route_keys: Vec<_> = routes.keys().cloned().collect();
-        let route_indices: BTreeMap<_, _> = route_keys
-            .iter()
-            .enumerate()
-            .map(|(index, key)| (key.clone(), index))
-            .collect();
-        let mut declarations = BTreeMap::new();
-        let mut names: BTreeMap<(String, String), BTreeSet<(String, OutputKind)>> = BTreeMap::new();
+        default_namespace: &str,
+    ) -> Result<(), Error> {
+        validate_namespace(default_namespace)?;
         for planned in &plan.types {
             let key = (planned.name.clone(), OutputKind::Type);
-            declarations.insert(
-                (
-                    planned.fact.origin.tu.clone(),
-                    planned.fact.spelling.clone(),
-                    planned.fact.name.clone(),
-                ),
-                key.clone(),
-            );
-            names
-                .entry((planned.fact.origin.tu.clone(), planned.fact.name.clone()))
-                .or_default()
-                .insert(key);
-        }
-        let output_type_names: BTreeSet<_> = plan
-            .types
-            .iter()
-            .map(|planned| planned.name.as_str())
-            .collect();
-        let type_routes = TypeRouteIndex {
-            declarations: &declarations,
-            names: &names,
-            type_names: &plan.type_names,
-            output_type_names: &output_type_names,
-        };
-        let mut edges = BTreeSet::new();
-        for planned in &plan.types {
-            let source = (planned.name.clone(), OutputKind::Type);
-            collect_fact_route_edges(planned.fact, &source, &type_routes, &mut edges);
-        }
-        for planned in &plan.values {
-            let source = (planned.name.clone(), OutputKind::Value);
-            collect_fact_route_edges(planned.fact, &source, &type_routes, &mut edges);
-        }
-        for planned in &plan.functions {
-            let source = (planned.name.clone(), OutputKind::Value);
-            collect_fact_route_edges(planned.fact, &source, &type_routes, &mut edges);
-        }
-        for planned in &plan.constants {
-            let source = (planned.constant.name.clone(), OutputKind::Value);
-            collect_type_route_edges(
-                &planned.constant.ty,
-                &planned.constant.root.tu,
-                &source,
-                &type_routes,
-                &mut edges,
-            );
-        }
-
-        let anchored: Vec<_> = route_keys
-            .iter()
-            .map(|key| {
-                let route = &routes[key];
-                !route.owners.is_empty() || route.namespace.is_some()
-            })
-            .collect();
-        let mut inherited_targets = vec![Vec::new(); route_keys.len()];
-        for (source, target) in edges {
-            let (Some(&source), Some(&target)) =
-                (route_indices.get(&source), route_indices.get(&target))
-            else {
+            let route = routes.get_mut(&key).unwrap();
+            if planned.fact.root
+                || self.suppressed_type_origins.contains(&planned.fact.origin)
+                || !route.owners.is_empty()
+                || route.namespace.is_some()
+            {
                 continue;
-            };
-            if !anchored[target] {
-                inherited_targets[source].push(target);
             }
+            route.owners.insert(authority_root_owner(
+                default_namespace,
+                default_namespace,
+                &planned.fact.expansion.file,
+            ));
         }
-        let mut owners: Vec<_> = route_keys
-            .iter()
-            .map(|key| routes[key].owners.clone())
-            .collect();
-        let mut queue = std::collections::VecDeque::new();
-        for (index, owner_set) in owners.iter().enumerate() {
-            for owner in owner_set {
-                queue.push_back((index, owner.clone()));
-            }
-        }
-        while let Some((source, owner)) = queue.pop_front() {
-            for &target in &inherited_targets[source] {
-                if owners[target].insert(owner.clone()) {
-                    queue.push_back((target, owner.clone()));
-                }
-            }
-        }
-        for (key, owners) in route_keys.into_iter().zip(owners) {
-            routes.get_mut(&key).unwrap().owners = owners;
-        }
+        Ok(())
     }
 
     fn add_authority_fallback(
@@ -3488,8 +3413,16 @@ impl Snapshot {
         }
 
         let mut facts_index: HashMap<&str, Vec<&Fact>> = HashMap::new();
-        for fact in self.facts.iter().filter(|fact| is_flat_dependency(fact)) {
-            facts_index.entry(&fact.name).or_default().push(fact);
+        let mut exact_dependency_facts_index: HashMap<&str, Vec<&Fact>> = HashMap::new();
+        for fact in &self.facts {
+            if is_flat_dependency(fact) {
+                facts_index.entry(&fact.name).or_default().push(fact);
+            } else if self.header_partition_policy && is_type_fact(fact) {
+                exact_dependency_facts_index
+                    .entry(&fact.name)
+                    .or_default()
+                    .push(fact);
+            }
         }
         let canonical_typedef_declarations: HashSet<_> = self
             .facts
@@ -3766,6 +3699,22 @@ impl Snapshot {
                         fact.origin.tu == tu && fact.spelling == *declaration && is_type_fact(fact)
                     })
                     .collect();
+                let mut exact_non_flat = false;
+                if matches.is_empty() && self.header_partition_policy {
+                    matches.extend(
+                        exact_dependency_facts_index
+                            .get(name.as_str())
+                            .into_iter()
+                            .flatten()
+                            .copied()
+                            .filter(|fact| {
+                                fact.origin.tu == tu
+                                    && fact.spelling == *declaration
+                                    && is_type_fact(fact)
+                            }),
+                    );
+                    exact_non_flat = !matches.is_empty();
+                }
                 if matches.is_empty() {
                     matches.extend(
                         facts_index
@@ -3811,6 +3760,12 @@ impl Snapshot {
                     [] => {
                         return Err(self.unresolved_local_type_error(name, tu, declaration));
                     }
+                    choices if exact_non_flat => choose_type_root_cached(
+                        name,
+                        choices,
+                        &exact_dependency_facts_index,
+                        &mut shape_cache,
+                    )?,
                     choices => {
                         choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)?
                     }
@@ -4511,7 +4466,8 @@ impl HeaderPartitionPlan {
             options.functions,
             timing,
         )?;
-        let candidates = snapshot.partition_route_candidates(&plan, &source_names)?;
+        let candidates =
+            snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
         let mut conflicts = self.root_conflicts.clone();
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
         conflicts.sort();
@@ -4535,7 +4491,8 @@ impl HeaderPartitionPlan {
             options.functions,
             timing,
         )?;
-        let candidates = snapshot.partition_route_candidates(&plan, &source_names)?;
+        let candidates =
+            snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
         let mut conflicts = self.root_conflicts;
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
         conflicts.sort();
@@ -6559,112 +6516,6 @@ fn validate_complete_layout(
             result
         }
     }
-}
-
-struct TypeRouteIndex<'a, 'names> {
-    declarations: &'a BTreeMap<(String, Location, String), (String, OutputKind)>,
-    names: &'a BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
-    type_names: &'a BTreeMap<String, String>,
-    output_type_names: &'a BTreeSet<&'names str>,
-}
-
-fn collect_fact_route_edges(
-    fact: &Fact,
-    source: &(String, OutputKind),
-    routes: &TypeRouteIndex<'_, '_>,
-    edges: &mut BTreeSet<((String, OutputKind), (String, OutputKind))>,
-) {
-    let mut queue = Vec::new();
-    queue_type_edges(fact, &mut queue);
-    queue_function_edges(fact, &mut queue);
-    for (tu, edge) in queue {
-        match edge {
-            TypeEdge::Type(ty) => collect_type_route_edges(ty, tu, source, routes, edges),
-            TypeEdge::Projected(name) => {
-                if let Some(target) = planned_type_route(tu, name, None, routes) {
-                    edges.insert((source.clone(), target));
-                }
-            }
-        }
-    }
-}
-
-fn collect_type_route_edges(
-    ty: &TypeRef,
-    tu: &str,
-    source: &(String, OutputKind),
-    routes: &TypeRouteIndex<'_, '_>,
-    edges: &mut BTreeSet<((String, OutputKind), (String, OutputKind))>,
-) {
-    match ty {
-        TypeRef::Named { name, declaration } => {
-            if let Some(target) = planned_type_route(tu, name, Some(declaration), routes) {
-                edges.insert((source.clone(), target));
-            }
-        }
-        TypeRef::Generic {
-            name,
-            declaration,
-            args,
-        } => {
-            if let Some(target) = planned_type_route(tu, name, Some(declaration), routes) {
-                edges.insert((source.clone(), target));
-            }
-            for arg in args {
-                collect_type_route_edges(arg, tu, source, routes, edges);
-            }
-        }
-        TypeRef::Pointer { target, .. }
-        | TypeRef::Reference { target, .. }
-        | TypeRef::Array { target, .. } => {
-            collect_type_route_edges(target, tu, source, routes, edges);
-        }
-        TypeRef::FunctionPointer { params, result, .. } => {
-            for param in params {
-                collect_type_route_edges(param, tu, source, routes, edges);
-            }
-            collect_type_route_edges(result, tu, source, routes, edges);
-        }
-        TypeRef::InlineRecord(record) => {
-            if let Some(base) = &record.base {
-                collect_type_route_edges(base, tu, source, routes, edges);
-            }
-            for field in &record.fields {
-                collect_type_route_edges(&field.ty, tu, source, routes, edges);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn planned_type_route(
-    tu: &str,
-    name: &str,
-    declaration: Option<&Location>,
-    routes: &TypeRouteIndex<'_, '_>,
-) -> Option<(String, OutputKind)> {
-    declaration
-        .and_then(|declaration| {
-            routes
-                .declarations
-                .get(&(tu.to_string(), declaration.clone(), name.to_string()))
-                .cloned()
-        })
-        .or_else(|| {
-            let matches = routes.names.get(&(tu.to_string(), name.to_string()))?;
-            if matches.len() == 1 {
-                matches.first().cloned()
-            } else {
-                None
-            }
-        })
-        .or_else(|| {
-            let output = routes.type_names.get(name)?;
-            routes
-                .output_type_names
-                .contains(output.as_str())
-                .then(|| (output.clone(), OutputKind::Type))
-        })
 }
 
 enum TypeEdge<'a> {

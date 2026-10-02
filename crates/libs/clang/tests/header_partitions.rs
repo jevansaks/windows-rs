@@ -39,8 +39,15 @@ fn output<'a>(partitions: &'a BTreeMap<RdlPartition, String>, namespace: &str) -
         .1
 }
 
+fn nonempty_references() -> BTreeMap<String, TypeReference> {
+    BTreeMap::from([(
+        "EXTERNAL_TYPE".to_string(),
+        TypeReference::new("Example.External", "EXTERNAL_TYPE", TypeReferenceKind::Type),
+    )])
+}
+
 #[test]
-fn traversed_headers_select_roots_and_inherit_dependency_owners() {
+fn traversed_headers_select_roots_and_route_dependencies_to_default() {
     helpers::ensure_libclang();
 
     let scratch = scratch("closure");
@@ -68,7 +75,7 @@ fn traversed_headers_select_roots_and_inherit_dependency_owners() {
         public.to_string_lossy(),
         RootPartition::new("public", "Example.Public"),
     );
-    let references = BTreeMap::new();
+    let references = nonempty_references();
     let options = EmitOptions::new("Example.Common", &references);
     let plan = snapshot
         .plan_header_partitions(&policy, &NamespaceAuthorities::new())
@@ -76,14 +83,246 @@ fn traversed_headers_select_roots_and_inherit_dependency_owners() {
     assert!(plan.audit(&options).unwrap().is_clean());
     let partitions = plan.emit_with_options(&options).unwrap();
     let public_rdl = output(&partitions, "Example.Public");
+    let common_rdl = output(&partitions, "Example.Common");
 
     assert!(public_rdl.contains("struct PUBLIC_TYPE"), "{public_rdl}");
     assert!(
         public_rdl.contains("type PUBLIC_ALIAS = u32"),
         "{public_rdl}"
     );
-    assert!(public_rdl.contains("struct DEPENDENCY"), "{public_rdl}");
-    assert!(!public_rdl.contains("INCLUDED_ONLY"), "{public_rdl}");
+    assert!(!public_rdl.contains("struct DEPENDENCY"), "{public_rdl}");
+    assert!(common_rdl.contains("struct DEPENDENCY"), "{common_rdl}");
+    assert!(
+        !partitions.values().any(|rdl| rdl.contains("INCLUDED_ONLY")),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn namespaced_exact_dependency_uses_default_namespace() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("namespaced-exact-dependency");
+    let dependency = scratch.join("DirectXMath.h");
+    let public = scratch.join("x3daudio.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         namespace DirectX {\n\
+         struct XMFLOAT3 { float x; float y; float z; };\n\
+         struct UNUSED_VECTOR { float x; float y; float z; float w; };\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &public,
+        "#include \"DirectXMath.h\"\n\
+         typedef DirectX::XMFLOAT3 X3DAUDIO_VECTOR;\n\
+         typedef struct X3DAUDIO_EMITTER { X3DAUDIO_VECTOR position; } X3DAUDIO_EMITTER;\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&public]);
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        public.to_string_lossy(),
+        RootPartition::new("XAudio2", "Example.XAudio2"),
+    );
+    let references = nonempty_references();
+    let options = EmitOptions::new("Windows.Win32", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let xaudio = output(&partitions, "Example.XAudio2");
+    let default = output(&partitions, "Windows.Win32");
+
+    assert!(
+        xaudio.contains("type X3DAUDIO_VECTOR = Windows::Win32::XMFLOAT3"),
+        "{xaudio}"
+    );
+    assert!(xaudio.contains("struct X3DAUDIO_EMITTER"), "{xaudio}");
+    assert!(default.contains("struct XMFLOAT3"), "{default}");
+    assert!(
+        !partitions.values().any(|rdl| rdl.contains("UNUSED_VECTOR")),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn explicit_dependency_header_mapping_wins_over_default_namespace() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("explicit-namespaced-dependency");
+    let dependency = scratch.join("DirectXMath.h");
+    let public = scratch.join("x3daudio.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         namespace DirectX {\n\
+         struct XMFLOAT3 { float x; float y; float z; };\n\
+         struct UNUSED_VECTOR { float x; float y; float z; float w; };\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &public,
+        "#include \"DirectXMath.h\"\n\
+         typedef DirectX::XMFLOAT3 X3DAUDIO_VECTOR;\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&public]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            public.to_string_lossy(),
+            RootPartition::new("XAudio2", "Example.XAudio2"),
+        )
+        .with_traversed_header(
+            dependency.to_string_lossy(),
+            RootPartition::new("DirectX", "Example.DirectX").with_exclusion("UNUSED_VECTOR"),
+        );
+    let references = nonempty_references();
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Windows.Win32", &references))
+        .unwrap();
+    let xaudio = output(&partitions, "Example.XAudio2");
+    let directx = output(&partitions, "Example.DirectX");
+
+    assert!(
+        xaudio.contains("type X3DAUDIO_VECTOR = Example::DirectX::XMFLOAT3"),
+        "{xaudio}"
+    );
+    assert!(directx.contains("struct XMFLOAT3"), "{directx}");
+    assert!(
+        !partitions
+            .keys()
+            .any(|key| key.namespace == "Windows.Win32")
+    );
+    assert!(
+        !partitions.values().any(|rdl| rdl.contains("UNUSED_VECTOR")),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn shared_unlisted_dependency_emits_once_in_default_namespace() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("shared-default-dependency");
+    let dependency = scratch.join("DirectXMath.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         namespace DirectX { struct XMFLOAT3 { float x; float y; float z; }; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &first,
+        "#include \"DirectXMath.h\"\n\
+         typedef DirectX::XMFLOAT3 FIRST_VECTOR;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#include \"DirectXMath.h\"\n\
+         typedef DirectX::XMFLOAT3 SECOND_VECTOR;\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&first, &second]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            first.to_string_lossy(),
+            RootPartition::new("First", "Example.First"),
+        )
+        .with_traversed_header(
+            second.to_string_lossy(),
+            RootPartition::new("Second", "Example.Second"),
+        );
+    let references = nonempty_references();
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Windows.Win32", &references))
+        .unwrap();
+    let combined = partitions.values().cloned().collect::<Vec<_>>().join("\n");
+
+    assert_eq!(combined.matches("struct XMFLOAT3").count(), 1, "{combined}");
+    assert!(
+        output(&partitions, "Example.First")
+            .contains("type FIRST_VECTOR = Windows::Win32::XMFLOAT3"),
+        "{partitions:#?}"
+    );
+    assert!(
+        output(&partitions, "Example.Second")
+            .contains("type SECOND_VECTOR = Windows::Win32::XMFLOAT3"),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn transitive_unlisted_dependencies_use_default_namespace() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("transitive-default-dependency");
+    let dependency = scratch.join("internal.h");
+    let public = scratch.join("public.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         namespace Internal {\n\
+         struct LEAF { int value; };\n\
+         struct MIDDLE { LEAF leaf; };\n\
+         struct UNUSED { int value; };\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &public,
+        "#include \"internal.h\"\n\
+         typedef Internal::MIDDLE PUBLIC_CHAIN;\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&public]);
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        public.to_string_lossy(),
+        RootPartition::new("Public", "Example.Public"),
+    );
+    let references = nonempty_references();
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Windows.Win32", &references))
+        .unwrap();
+    let public = output(&partitions, "Example.Public");
+    let default = output(&partitions, "Windows.Win32");
+
+    assert!(
+        public.contains("type PUBLIC_CHAIN = Windows::Win32::MIDDLE"),
+        "{public}"
+    );
+    assert!(default.contains("struct MIDDLE"), "{default}");
+    assert!(default.contains("leaf: LEAF"), "{default}");
+    assert!(default.contains("struct LEAF"), "{default}");
+    assert!(
+        !partitions.values().any(|rdl| rdl.contains("UNUSED")),
+        "{partitions:#?}"
+    );
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -183,9 +422,10 @@ fn canonical_name_on_dependency_record_still_requires_closure() {
         .emit_with_options(&EmitOptions::new("Example.Common", &references))
         .unwrap();
     let public = output(&partitions, "Example.Public");
+    let common = output(&partitions, "Example.Common");
 
-    assert!(public.contains("struct DWORD"), "{public}");
-    assert!(public.contains("value: DWORD"), "{public}");
+    assert!(common.contains("struct DWORD"), "{common}");
+    assert!(public.contains("value: Example::Common::DWORD"), "{public}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -337,7 +577,7 @@ fn shared_header_default_owner_accepts_named_overrides() {
 }
 
 #[test]
-fn audit_reports_all_dependency_owner_conflicts_and_authority_resolves_them() {
+fn unlisted_dependencies_use_default_namespace_and_authority_overrides() {
     helpers::ensure_libclang();
 
     let scratch = scratch("dependency-audit");
@@ -382,24 +622,14 @@ fn audit_reports_all_dependency_owner_conflicts_and_authority_resolves_them() {
         );
     let references = BTreeMap::new();
     let options = EmitOptions::new("Example.Common", &references);
-    let audit = snapshot
+    let plan = snapshot
         .plan_header_partitions(&policy, &NamespaceAuthorities::new())
-        .unwrap()
-        .audit(&options)
         .unwrap();
-
-    assert_eq!(audit.conflicts().len(), 2, "{audit}");
-    assert_eq!(
-        audit
-            .conflicts()
-            .iter()
-            .map(|conflict| conflict.name.as_str())
-            .collect::<Vec<_>>(),
-        ["DEP_FIRST", "DEP_SECOND"]
-    );
-    assert!(audit.conflicts().iter().all(|conflict| {
-        conflict.reason == PartitionConflictReason::AmbiguousOwners && conflict.owners.len() == 2
-    }));
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let dependencies = output(&partitions, "Example.Common");
+    assert!(dependencies.contains("struct DEP_FIRST"), "{dependencies}");
+    assert!(dependencies.contains("struct DEP_SECOND"), "{dependencies}");
 
     let authorities = NamespaceAuthorities::new().with_wildcard("DEP_*", "Example.Dependencies");
     let plan = snapshot
@@ -680,7 +910,7 @@ fn legacy_partitioned_dependencies_remain_unowned() {
 }
 
 #[test]
-fn inherited_dependencies_compare_effective_partition_identity() {
+fn shared_required_dependency_emits_once_in_default_namespace() {
     helpers::ensure_libclang();
 
     let scratch = scratch("effective-dependency-owner");
@@ -730,10 +960,18 @@ fn inherited_dependencies_compare_effective_partition_identity() {
 
     assert!(plan.audit(&options).unwrap().is_clean());
     let partitions = plan.emit_with_options(&options).unwrap();
-    let shared = partitions.values().cloned().collect::<Vec<_>>().join("\n");
-    assert_eq!(shared.matches("struct DEPENDENCY").count(), 1, "{shared}");
-    assert!(shared.contains("struct FIRST_ROOT"), "{shared}");
-    assert!(shared.contains("struct SECOND_ROOT"), "{shared}");
+    let combined = partitions.values().cloned().collect::<Vec<_>>().join("\n");
+    assert_eq!(
+        combined.matches("struct DEPENDENCY").count(),
+        1,
+        "{combined}"
+    );
+    assert!(combined.contains("struct FIRST_ROOT"), "{combined}");
+    assert!(combined.contains("struct SECOND_ROOT"), "{combined}");
+    assert!(
+        output(&partitions, "Example.Common").contains("struct DEPENDENCY"),
+        "{partitions:#?}"
+    );
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
