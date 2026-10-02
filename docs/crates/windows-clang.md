@@ -373,7 +373,12 @@ Incompatible declaration kinds remain ambiguous.
 
 Defined POD C++ classes with public instance fields and no inheritance, methods, constructors,
 destructors, conversions, or function templates use the checked record-layout path. Other
-non-interface C++ classes remain opaque.
+defined non-interface C++ classes remain opaque. A forward-only non-UUID class uses the same named
+empty-record representation as an incomplete struct, so pointer parameters, return values, and
+typedef aliases retain their source type identity. If a definition is available, it still controls
+classification: public data-only definitions become records, while behavioral definitions remain
+opaque. The incomplete projection does not infer fields, packing, or alignment, and by-value uses
+fail complete-layout validation.
 
 UUID attributes do not by themselves make a declaration a coclass. Defined UUID-bearing structs
 and public data-only classes use the record-layout path and retain the UUID as a `GuidAttribute` on

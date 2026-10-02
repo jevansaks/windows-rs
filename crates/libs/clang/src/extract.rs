@@ -3061,7 +3061,7 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
             {
                 return FactData::Class { guid: guid.clone() };
             }
-            if kind == FactKind::Class && !data_record {
+            if kind == FactKind::Class && !data_record && has_definition {
                 return FactData::Unsupported {
                     reason: "class is not a public data-only record".to_string(),
                 };
@@ -5664,6 +5664,7 @@ fn type_ref(ty: CXType) -> Option<TypeRef> {
             && unsafe { clang_getCursorKind(declaration) } == CXCursor_ClassDecl
             && !is_interface(declaration)
             && cursor_uuid(declaration).is_none()
+            && unsafe { clang_isCursorDefinition(cursor_definition(declaration)) } != 0
             && !is_data_class(declaration)
         {
             return Some(TypeRef::OpaquePointer {
