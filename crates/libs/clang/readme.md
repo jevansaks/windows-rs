@@ -40,7 +40,8 @@ different compile definitions without making the extraction input a logical part
 selectors are case-insensitive path suffixes; emitted partition headers and owner settings use the
 resolved physical source path. Audit the returned plan before calling the consuming
 `emit_with_options`; dependency declarations remain available for closure without becoming public
-roots.
+roots. When equivalent compile variants exist, an owner whose typedef projection reaches an
+excluded type is omitted if another unsuppressed projection can own that output.
 
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`

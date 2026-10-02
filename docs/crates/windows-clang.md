@@ -152,6 +152,12 @@ ownership resolution. Namespace authorities then select a matching namespace. Th
 candidate's remaps, type overrides, flags, pointer-level overrides, and library mappings are
 applied by the existing partition emitter. If candidates still differ, `PartitionAudit` reports
 all independent conflicts in deterministic name order and emission fails without selecting one.
+For equivalent compile variants, a type owner is omitted when its typedef or pointer-alias
+projection reaches an owner-excluded type and another unsuppressed projection exists. The excluded
+facts remain available for layout and dependency closure. If every projection is suppressed, the
+owners are retained so existing exclusion diagnostics and single-partition alias behavior remain
+unchanged.
+
 An authority-routed dependency uses the partition identity set by `with_authority_partition`; if
 none is set, its namespace is the deterministic fallback partition. Its header remains the
 physical declaration or expansion path rather than the aggregate translation-unit name.

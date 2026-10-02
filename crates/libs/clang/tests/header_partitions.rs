@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use windows_clang::{
     EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, PartitionConflictReason,
@@ -921,6 +921,94 @@ fn input_qualified_headers_preserve_psapi_compile_variants() {
         process_status.contains("#[library(\"KERNEL32.dll\")]"),
         "{process_status}"
     );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn input_qualified_exclusions_filter_equivalent_alias_owners() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("input-qualified-exclusions");
+    let header = scratch.join("PsApi.h");
+    std::fs::write(
+        &header,
+        "#ifndef PSAPI_VERSION\n\
+         #define PSAPI_VERSION 2\n\
+         #endif\n\
+         typedef struct _MODULEINFO { unsigned value; } MODULEINFO, *LPMODULEINFO;\n\
+         typedef int (__stdcall *PENUM_PAGE_FILE_CALLBACK)(LPMODULEINFO value);\n\
+         #if PSAPI_VERSION > 1\n\
+         #define GetModuleInformation K32GetModuleInformation\n\
+         #endif\n\
+         extern \"C\" int GetModuleInformation(\
+             LPMODULEINFO value, PENUM_PAGE_FILE_CALLBACK callback);\n",
+    )
+    .unwrap();
+    let include = format!("#include \"{}\"\n", header.to_string_lossy());
+    let snapshot = extract(
+        [
+            Input::new(
+                "win32metadata-psapi-v1.cpp",
+                format!("#define PSAPI_VERSION 1\n{include}"),
+            )
+            .with_root_dirs([scratch.to_string_lossy().to_string()]),
+            Input::new(
+                "win32metadata-psapi-v2.cpp",
+                format!("#define PSAPI_VERSION 2\n{include}"),
+            )
+            .with_root_dirs([scratch.to_string_lossy().to_string()]),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "win32metadata-psapi-v1.cpp",
+            "psapi.h",
+            RootPartition::new("PsApi1", "Example.System.ProcessStatus")
+                .with_library("GetModuleInformation", "PSAPI.dll"),
+        )
+        .with_traversed_header_for_input(
+            "win32metadata-psapi-v2.cpp",
+            "psapi.h",
+            RootPartition::new("PsApi2", "Example.System.ProcessStatus")
+                .with_exclusion("_MODULEINFO")
+                .with_exclusion("PENUM_PAGE_FILE_CALLBACK")
+                .with_library("K32GetModuleInformation", "KERNEL32.dll"),
+        );
+    let references = BTreeMap::new();
+    let selected = BTreeSet::from([
+        "GetModuleInformation".to_string(),
+        "K32GetModuleInformation".to_string(),
+    ]);
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&selected);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let v1 = partitions
+        .iter()
+        .find(|(partition, _)| partition.partition == "PsApi1")
+        .unwrap()
+        .1;
+    let v2 = partitions
+        .iter()
+        .find(|(partition, _)| partition.partition == "PsApi2")
+        .unwrap()
+        .1;
+
+    assert!(v1.contains("struct MODULEINFO"), "{v1}");
+    assert!(v1.contains("type LPMODULEINFO = *mut MODULEINFO"), "{v1}");
+    assert!(v1.contains("extern fn PENUM_PAGE_FILE_CALLBACK"), "{v1}");
+    assert!(!v2.contains("struct MODULEINFO"), "{v2}");
+    assert!(!v2.contains("type LPMODULEINFO"), "{v2}");
+    assert!(!v2.contains("extern fn PENUM_PAGE_FILE_CALLBACK"), "{v2}");
+    assert!(v1.contains("fn GetModuleInformation("), "{v1}");
+    assert!(v2.contains("fn K32GetModuleInformation("), "{v2}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }

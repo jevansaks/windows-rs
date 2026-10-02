@@ -2480,6 +2480,113 @@ impl Snapshot {
         }
     }
 
+    fn route_projection_suppression(&self) -> HashMap<Origin, bool> {
+        let facts: HashMap<_, _> = self
+            .facts
+            .iter()
+            .map(|fact| (fact.origin.clone(), fact))
+            .collect();
+        let mut declarations: HashMap<(String, String, Location), Vec<Origin>> = HashMap::new();
+        for fact in &self.facts {
+            declarations
+                .entry((
+                    fact.origin.tu.clone(),
+                    fact.name.clone(),
+                    fact.spelling.clone(),
+                ))
+                .or_default()
+                .push(fact.origin.clone());
+        }
+        let mut result = HashMap::new();
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| self.root_owners.contains_key(&fact.origin))
+        {
+            self.route_fact_projection_suppressed(
+                &fact.origin,
+                &facts,
+                &declarations,
+                &mut result,
+                &mut HashSet::new(),
+            );
+        }
+        result
+    }
+
+    fn route_fact_projection_suppressed(
+        &self,
+        origin: &Origin,
+        facts: &HashMap<Origin, &Fact>,
+        declarations: &HashMap<(String, String, Location), Vec<Origin>>,
+        memo: &mut HashMap<Origin, bool>,
+        visiting: &mut HashSet<Origin>,
+    ) -> bool {
+        if let Some(&suppressed) = memo.get(origin) {
+            return suppressed;
+        }
+        if self.suppressed_type_origins.contains(origin) {
+            memo.insert(origin.clone(), true);
+            return true;
+        }
+        if !visiting.insert(origin.clone()) {
+            return false;
+        }
+        let suppressed = facts.get(origin).is_some_and(|fact| {
+            let FactData::Typedef { target } = &fact.data else {
+                return false;
+            };
+            self.route_type_ref_projection_suppressed(
+                target,
+                &fact.origin.tu,
+                facts,
+                declarations,
+                memo,
+                visiting,
+            )
+        });
+        visiting.remove(origin);
+        memo.insert(origin.clone(), suppressed);
+        suppressed
+    }
+
+    fn route_type_ref_projection_suppressed(
+        &self,
+        ty: &TypeRef,
+        tu: &str,
+        facts: &HashMap<Origin, &Fact>,
+        declarations: &HashMap<(String, String, Location), Vec<Origin>>,
+        memo: &mut HashMap<Origin, bool>,
+        visiting: &mut HashSet<Origin>,
+    ) -> bool {
+        match ty {
+            TypeRef::Named { name, declaration } => declarations
+                .get(&(tu.to_string(), name.clone(), declaration.clone()))
+                .is_some_and(|origins| {
+                    origins.iter().any(|origin| {
+                        self.route_fact_projection_suppressed(
+                            origin,
+                            facts,
+                            declarations,
+                            memo,
+                            visiting,
+                        )
+                    })
+                }),
+            TypeRef::Pointer { target, .. }
+            | TypeRef::Reference { target, .. }
+            | TypeRef::Array { target, .. } => self.route_type_ref_projection_suppressed(
+                target,
+                tu,
+                facts,
+                declarations,
+                memo,
+                visiting,
+            ),
+            _ => false,
+        }
+    }
+
     fn unresolved_local_type_error(&self, name: &str, tu: &str, declaration: &Location) -> Error {
         let normalized_declaration = normalize_name(&declaration.file);
         let declaration_owners: Vec<_> = self
@@ -2611,18 +2718,42 @@ impl Snapshot {
         plan: &Plan<'_>,
         source_names: &PlanningSourceNames,
     ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate>, Error> {
+        let projection_suppressed = self.route_projection_suppression();
+        let projected_fact_keys: BTreeSet<_> = self
+            .facts
+            .iter()
+            .filter(|fact| {
+                self.root_owners.contains_key(&fact.origin) && !projection_suppressed[&fact.origin]
+            })
+            .map(|fact| (&fact.name, fact.kind, fact.definition, &fact.data))
+            .collect();
+        let projected_source_keys: BTreeSet<_> = self
+            .facts
+            .iter()
+            .filter(|fact| {
+                self.root_owners.contains_key(&fact.origin) && !projection_suppressed[&fact.origin]
+            })
+            .map(|fact| (&fact.name, fact.kind, fact.definition, &fact.spelling))
+            .collect();
         let mut fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         let mut source_fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         for fact in &self.facts {
             if let Some(owner) = self.root_owners.get(&fact.origin) {
-                fact_owners
-                    .entry((&fact.name, fact.kind, fact.definition, &fact.data))
-                    .or_default()
-                    .insert(owner.clone());
-                source_fact_owners
-                    .entry((&fact.name, fact.kind, fact.definition, &fact.spelling))
-                    .or_default()
-                    .insert(owner.clone());
+                let fact_key = (&fact.name, fact.kind, fact.definition, &fact.data);
+                let source_key = (&fact.name, fact.kind, fact.definition, &fact.spelling);
+                let suppressed = projection_suppressed[&fact.origin];
+                if !suppressed || !projected_fact_keys.contains(&fact_key) {
+                    fact_owners
+                        .entry(fact_key)
+                        .or_default()
+                        .insert(owner.clone());
+                }
+                if !suppressed || !projected_source_keys.contains(&source_key) {
+                    source_fact_owners
+                        .entry(source_key)
+                        .or_default()
+                        .insert(owner.clone());
+                }
             }
         }
         let mut result = BTreeMap::new();
