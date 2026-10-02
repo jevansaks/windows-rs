@@ -1866,7 +1866,8 @@ impl Snapshot {
         self.forced_flags.clear();
         self.suppressed_type_origins.clear();
         self.header_partition_policy = true;
-        self.header_authority_partition = policy.authority_partition.clone();
+        self.header_authority_partition
+            .clone_from(&policy.authority_partition);
         if self
             .header_authority_partition
             .as_deref()
@@ -2116,9 +2117,9 @@ impl Snapshot {
         for fact in &mut self.facts {
             let original = fact.name.clone();
             if let Some(namespace) = fact_namespaces.get(&fact.origin)
-                && let Some(scoped) = scoped_names.get(&(original.clone(), namespace.clone()))
+                && let Some(scoped) = scoped_names.get(&(original, namespace.clone()))
             {
-                fact.name = scoped.clone();
+                fact.name.clone_from(scoped);
             }
             rename_fact_types(
                 &mut fact.data,
@@ -2138,7 +2139,7 @@ impl Snapshot {
             if let Some(namespace) = namespace
                 && let Some(scoped) = scoped_names.get(&(original.clone(), namespace))
             {
-                constant.name = scoped.clone();
+                constant.name.clone_from(scoped);
                 if let Some(owner) = self
                     .constant_root_owners
                     .remove(&(constant.root.clone(), original.clone()))
@@ -2235,7 +2236,7 @@ impl Snapshot {
                 .or_else(|| self.root_owners.get(&constant.root));
             let target = owner.and_then(|owner| owner.remaps.get(&constant.name).cloned());
             if let Some(target) = target {
-                constant.name = target.clone();
+                constant.name.clone_from(&target);
                 if let Some(owner) = self
                     .constant_root_owners
                     .remove(&(constant.root.clone(), original.clone()))
@@ -2412,7 +2413,7 @@ impl Snapshot {
             })
             .collect();
         if matching.is_empty() {
-            facts.to_vec()
+            facts.clone()
         } else {
             matching
         }
@@ -2718,12 +2719,19 @@ impl Snapshot {
         plan: &Plan<'_>,
         source_names: &PlanningSourceNames,
     ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate>, Error> {
-        let projection_suppressed = self.route_projection_suppression();
+        let projection_suppression = self
+            .header_partition_policy
+            .then(|| self.route_projection_suppression());
+        let projection_suppressed = |fact: &Fact| {
+            projection_suppression
+                .as_ref()
+                .is_some_and(|suppression| suppression[&fact.origin])
+        };
         let projected_fact_keys: BTreeSet<_> = self
             .facts
             .iter()
             .filter(|fact| {
-                self.root_owners.contains_key(&fact.origin) && !projection_suppressed[&fact.origin]
+                self.root_owners.contains_key(&fact.origin) && !projection_suppressed(fact)
             })
             .map(|fact| (&fact.name, fact.kind, fact.definition, &fact.data))
             .collect();
@@ -2731,7 +2739,7 @@ impl Snapshot {
             .facts
             .iter()
             .filter(|fact| {
-                self.root_owners.contains_key(&fact.origin) && !projection_suppressed[&fact.origin]
+                self.root_owners.contains_key(&fact.origin) && !projection_suppressed(fact)
             })
             .map(|fact| (&fact.name, fact.kind, fact.definition, &fact.spelling))
             .collect();
@@ -2741,7 +2749,7 @@ impl Snapshot {
             if let Some(owner) = self.root_owners.get(&fact.origin) {
                 let fact_key = (&fact.name, fact.kind, fact.definition, &fact.data);
                 let source_key = (&fact.name, fact.kind, fact.definition, &fact.spelling);
-                let suppressed = projection_suppressed[&fact.origin];
+                let suppressed = projection_suppressed(fact);
                 if !suppressed || !projected_fact_keys.contains(&fact_key) {
                     fact_owners
                         .entry(fact_key)
@@ -2915,42 +2923,24 @@ impl Snapshot {
             .iter()
             .map(|planned| planned.name.as_str())
             .collect();
+        let type_routes = TypeRouteIndex {
+            declarations: &declarations,
+            names: &names,
+            type_names: &plan.type_names,
+            output_type_names: &output_type_names,
+        };
         let mut edges = BTreeSet::new();
         for planned in &plan.types {
             let source = (planned.name.clone(), OutputKind::Type);
-            collect_fact_route_edges(
-                planned.fact,
-                &source,
-                &declarations,
-                &names,
-                &plan.type_names,
-                &output_type_names,
-                &mut edges,
-            );
+            collect_fact_route_edges(planned.fact, &source, &type_routes, &mut edges);
         }
         for planned in &plan.values {
             let source = (planned.name.clone(), OutputKind::Value);
-            collect_fact_route_edges(
-                planned.fact,
-                &source,
-                &declarations,
-                &names,
-                &plan.type_names,
-                &output_type_names,
-                &mut edges,
-            );
+            collect_fact_route_edges(planned.fact, &source, &type_routes, &mut edges);
         }
         for planned in &plan.functions {
             let source = (planned.name.clone(), OutputKind::Value);
-            collect_fact_route_edges(
-                planned.fact,
-                &source,
-                &declarations,
-                &names,
-                &plan.type_names,
-                &output_type_names,
-                &mut edges,
-            );
+            collect_fact_route_edges(planned.fact, &source, &type_routes, &mut edges);
         }
         for planned in &plan.constants {
             let source = (planned.constant.name.clone(), OutputKind::Value);
@@ -2958,10 +2948,7 @@ impl Snapshot {
                 &planned.constant.ty,
                 &planned.constant.root.tu,
                 &source,
-                &declarations,
-                &names,
-                &plan.type_names,
-                &output_type_names,
+                &type_routes,
                 &mut edges,
             );
         }
@@ -3081,22 +3068,10 @@ impl Snapshot {
             .filter(|((tu, _), _)| tu == &constant.root.tu)
             .map(|(_, owner)| owner.clone())
             .collect::<BTreeSet<_>>();
-        let owner = if namespace.is_none() {
-            let Some(mut owner) = input_owners.pop_first() else {
-                return Ok(());
-            };
-            if input_owners.iter().any(|candidate| {
-                candidate.partition != owner.partition || candidate.namespace != owner.namespace
-            }) {
-                return Ok(());
-            }
-            owner.root = constant.spelling.file.clone();
-            owner
-        } else {
+        let owner = if let Some(namespace) = namespace {
             let Some(input) = self.partition_inputs.get(&constant.root.tu) else {
                 return Ok(());
             };
-            let namespace = namespace.unwrap();
             validate_namespace(namespace)?;
             RootOwner {
                 input: input.clone(),
@@ -3111,6 +3086,17 @@ impl Snapshot {
                 preserved_auto_function_pointer_levels: BTreeSet::new(),
                 exclude_empty_records: false,
             }
+        } else {
+            let Some(mut owner) = input_owners.pop_first() else {
+                return Ok(());
+            };
+            if input_owners.iter().any(|candidate| {
+                candidate.partition != owner.partition || candidate.namespace != owner.namespace
+            }) {
+                return Ok(());
+            }
+            owner.root.clone_from(&constant.spelling.file);
+            owner
         };
         owners.insert(owner);
         Ok(())
@@ -3645,7 +3631,7 @@ impl Snapshot {
                         choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)?
                     }
                 };
-                if self.root_owners.get(&fact.origin).is_none()
+                if !self.root_owners.contains_key(&fact.origin)
                     && let Some(guid) = declaration_uuid(self, name, tu, declaration)
                 {
                     let owned: Vec<_> = facts_index
@@ -4792,7 +4778,7 @@ fn rename_fact_types(
             }
         }
         FactData::Typedef { target } => {
-            rename_type_ref(target, tu, declarations, tu_declarations, collisions)
+            rename_type_ref(target, tu, declarations, tu_declarations, collisions);
         }
         _ => {}
     }
@@ -4821,12 +4807,11 @@ fn rename_type_ref(
             declaration,
             args,
         } => {
-            if collisions.contains(name) {
-                if let Some(scoped) =
+            if collisions.contains(name)
+                && let Some(scoped) =
                     scoped_declaration_name(tu, declaration, name, declarations, tu_declarations)
-                {
-                    *name = scoped.clone();
-                }
+            {
+                *name = scoped.clone();
             }
             for arg in args {
                 rename_type_ref(arg, tu, declarations, tu_declarations, collisions);
@@ -4835,7 +4820,7 @@ fn rename_type_ref(
         TypeRef::Pointer { target, .. }
         | TypeRef::Reference { target, .. }
         | TypeRef::Array { target, .. } => {
-            rename_type_ref(target, tu, declarations, tu_declarations, collisions)
+            rename_type_ref(target, tu, declarations, tu_declarations, collisions);
         }
         TypeRef::FunctionPointer { params, result, .. } => {
             for param in params {
@@ -6392,13 +6377,17 @@ fn validate_complete_layout(
     }
 }
 
+struct TypeRouteIndex<'a, 'names> {
+    declarations: &'a BTreeMap<(String, Location, String), (String, OutputKind)>,
+    names: &'a BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
+    type_names: &'a BTreeMap<String, String>,
+    output_type_names: &'a BTreeSet<&'names str>,
+}
+
 fn collect_fact_route_edges(
     fact: &Fact,
     source: &(String, OutputKind),
-    declarations: &BTreeMap<(String, Location, String), (String, OutputKind)>,
-    names: &BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
-    type_names: &BTreeMap<String, String>,
-    output_type_names: &BTreeSet<&str>,
+    routes: &TypeRouteIndex<'_, '_>,
     edges: &mut BTreeSet<((String, OutputKind), (String, OutputKind))>,
 ) {
     let mut queue = Vec::new();
@@ -6406,26 +6395,9 @@ fn collect_fact_route_edges(
     queue_function_edges(fact, &mut queue);
     for (tu, edge) in queue {
         match edge {
-            TypeEdge::Type(ty) => collect_type_route_edges(
-                ty,
-                tu,
-                source,
-                declarations,
-                names,
-                type_names,
-                output_type_names,
-                edges,
-            ),
+            TypeEdge::Type(ty) => collect_type_route_edges(ty, tu, source, routes, edges),
             TypeEdge::Projected(name) => {
-                if let Some(target) = planned_type_route(
-                    tu,
-                    name,
-                    None,
-                    declarations,
-                    names,
-                    type_names,
-                    output_type_names,
-                ) {
+                if let Some(target) = planned_type_route(tu, name, None, routes) {
                     edges.insert((source.clone(), target));
                 }
             }
@@ -6437,23 +6409,12 @@ fn collect_type_route_edges(
     ty: &TypeRef,
     tu: &str,
     source: &(String, OutputKind),
-    declarations: &BTreeMap<(String, Location, String), (String, OutputKind)>,
-    names: &BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
-    type_names: &BTreeMap<String, String>,
-    output_type_names: &BTreeSet<&str>,
+    routes: &TypeRouteIndex<'_, '_>,
     edges: &mut BTreeSet<((String, OutputKind), (String, OutputKind))>,
 ) {
     match ty {
         TypeRef::Named { name, declaration } => {
-            if let Some(target) = planned_type_route(
-                tu,
-                name,
-                Some(declaration),
-                declarations,
-                names,
-                type_names,
-                output_type_names,
-            ) {
+            if let Some(target) = planned_type_route(tu, name, Some(declaration), routes) {
                 edges.insert((source.clone(), target));
             }
         }
@@ -6462,90 +6423,30 @@ fn collect_type_route_edges(
             declaration,
             args,
         } => {
-            if let Some(target) = planned_type_route(
-                tu,
-                name,
-                Some(declaration),
-                declarations,
-                names,
-                type_names,
-                output_type_names,
-            ) {
+            if let Some(target) = planned_type_route(tu, name, Some(declaration), routes) {
                 edges.insert((source.clone(), target));
             }
             for arg in args {
-                collect_type_route_edges(
-                    arg,
-                    tu,
-                    source,
-                    declarations,
-                    names,
-                    type_names,
-                    output_type_names,
-                    edges,
-                );
+                collect_type_route_edges(arg, tu, source, routes, edges);
             }
         }
         TypeRef::Pointer { target, .. }
         | TypeRef::Reference { target, .. }
-        | TypeRef::Array { target, .. } => collect_type_route_edges(
-            target,
-            tu,
-            source,
-            declarations,
-            names,
-            type_names,
-            output_type_names,
-            edges,
-        ),
+        | TypeRef::Array { target, .. } => {
+            collect_type_route_edges(target, tu, source, routes, edges);
+        }
         TypeRef::FunctionPointer { params, result, .. } => {
             for param in params {
-                collect_type_route_edges(
-                    param,
-                    tu,
-                    source,
-                    declarations,
-                    names,
-                    type_names,
-                    output_type_names,
-                    edges,
-                );
+                collect_type_route_edges(param, tu, source, routes, edges);
             }
-            collect_type_route_edges(
-                result,
-                tu,
-                source,
-                declarations,
-                names,
-                type_names,
-                output_type_names,
-                edges,
-            );
+            collect_type_route_edges(result, tu, source, routes, edges);
         }
         TypeRef::InlineRecord(record) => {
             if let Some(base) = &record.base {
-                collect_type_route_edges(
-                    base,
-                    tu,
-                    source,
-                    declarations,
-                    names,
-                    type_names,
-                    output_type_names,
-                    edges,
-                );
+                collect_type_route_edges(base, tu, source, routes, edges);
             }
             for field in &record.fields {
-                collect_type_route_edges(
-                    &field.ty,
-                    tu,
-                    source,
-                    declarations,
-                    names,
-                    type_names,
-                    output_type_names,
-                    edges,
-                );
+                collect_type_route_edges(&field.ty, tu, source, routes, edges);
             }
         }
         _ => {}
@@ -6556,24 +6457,27 @@ fn planned_type_route(
     tu: &str,
     name: &str,
     declaration: Option<&Location>,
-    declarations: &BTreeMap<(String, Location, String), (String, OutputKind)>,
-    names: &BTreeMap<(String, String), BTreeSet<(String, OutputKind)>>,
-    type_names: &BTreeMap<String, String>,
-    output_type_names: &BTreeSet<&str>,
+    routes: &TypeRouteIndex<'_, '_>,
 ) -> Option<(String, OutputKind)> {
     declaration
         .and_then(|declaration| {
-            declarations
+            routes
+                .declarations
                 .get(&(tu.to_string(), declaration.clone(), name.to_string()))
                 .cloned()
         })
         .or_else(|| {
-            let matches = names.get(&(tu.to_string(), name.to_string()))?;
-            (matches.len() == 1).then(|| matches.first().unwrap().clone())
+            let matches = routes.names.get(&(tu.to_string(), name.to_string()))?;
+            if matches.len() == 1 {
+                matches.first().cloned()
+            } else {
+                None
+            }
         })
         .or_else(|| {
-            let output = type_names.get(name)?;
-            output_type_names
+            let output = routes.type_names.get(name)?;
+            routes
+                .output_type_names
                 .contains(output.as_str())
                 .then(|| (output.clone(), OutputKind::Type))
         })

@@ -707,7 +707,6 @@ fn authority_routes_use_policy_partition_and_physical_header() {
     let options = EmitOptions::new("Example.Common", &references);
 
     let partitions = snapshot
-        .clone()
         .plan_header_partitions(&policy, &authorities)
         .unwrap()
         .emit_with_options(&options)

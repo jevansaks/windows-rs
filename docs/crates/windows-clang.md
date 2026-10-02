@@ -78,7 +78,7 @@ The resulting `Snapshot` owns translation-unit-local facts and constants. `facts
 
 `HeaderPartitionPolicy` separates logical output partitions from extraction translation units. A
 caller can compile one aggregate source, map each explicitly traversed physical header to one or
-more `RootPartition` candidates, audit the complete ownership plan, and then emit RDL:
+more `RootPartition` candidates, and emit RDL after an internal complete ownership audit:
 
 ```rust,no_run
 use std::collections::BTreeMap;
@@ -109,8 +109,6 @@ let options = EmitOptions::new("Example.Common", &references);
 let plan = snapshot
     .plan_header_partitions(&policy, &NamespaceAuthorities::new())
     .unwrap();
-let audit = plan.audit(&options).unwrap();
-assert!(audit.is_clean(), "{audit}");
 let partitions = plan.emit_with_options(&options).unwrap();
 ```
 
@@ -163,7 +161,9 @@ none is set, its namespace is the deterministic fallback partition. Its header r
 physical declaration or expansion path rather than the aggregate translation-unit name.
 
 `HeaderPartitionPlan::emit_with_options` consumes the prepared plan. It transforms, plans, audits,
-routes, and formats once, avoiding repeated planning for SDK-scale snapshots.
+routes, and formats once, avoiding repeated planning for SDK-scale snapshots. Use
+`HeaderPartitionPlan::audit` only for report-only callers that will not emit the same plan.
+Calling `audit` before `emit_with_options` repeats planning and clones the snapshot.
 
 Set `WINDOWS_CLANG_TIMINGS=1` before extraction to write phase timings and counts to stderr. The
 structured lines cover initial parsing, cursor traversal and fact extraction, macro and constant

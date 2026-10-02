@@ -124,6 +124,41 @@ fn equivalent_declarations_require_one_partition_owner() {
 }
 
 #[test]
+fn legacy_typedef_target_exclusion_does_not_suppress_competing_owner() {
+    helpers::ensure_libclang();
+
+    let source = "typedef struct _SHARED { int value; } _SHARED;\n\
+                  typedef _SHARED SHARED;\n\
+                  typedef SHARED *PSHARED;\n";
+    let snapshot = extract_partitioned(
+        [
+            Input::new("first.h", source)
+                .partitioned("first-input")
+                .with_root("first.h", "first", "Example.First"),
+            Input::new("second.h", source)
+                .partitioned("second-input")
+                .with_root_partition(
+                    "second.h",
+                    RootPartition::new("second", "Example.Second").with_exclusion("_SHARED"),
+                ),
+        ],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let error = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("has ambiguous tagged root owners"),
+        "{error}"
+    );
+}
+
+#[test]
 fn equivalent_declarations_with_same_partition_are_deterministic() {
     helpers::ensure_libclang();
 

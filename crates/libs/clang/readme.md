@@ -38,10 +38,12 @@ An aggregate translation unit can be routed after extraction with `HeaderPartiti
 `RootPartition` candidates. Input-qualified entries support the same physical header parsed under
 different compile definitions without making the extraction input a logical partition. Header
 selectors are case-insensitive path suffixes; emitted partition headers and owner settings use the
-resolved physical source path. Audit the returned plan before calling the consuming
-`emit_with_options`; dependency declarations remain available for closure without becoming public
-roots. When equivalent compile variants exist, an owner whose typedef projection reaches an
-excluded type is omitted if another unsuppressed projection can own that output.
+resolved physical source path. Call the consuming `emit_with_options` for normal generation; it
+audits internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report
+without emission because auditing before emission repeats planning and clones the snapshot.
+Dependency declarations remain available for closure without becoming public roots. When
+equivalent compile variants exist, an owner whose typedef projection reaches an excluded type is
+omitted if another unsuppressed projection can own that output.
 
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
