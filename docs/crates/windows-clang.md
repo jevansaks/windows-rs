@@ -335,6 +335,12 @@ resolve or collapse an alias when needed, while recovering a discarded source na
 Likewise, do not use SAL direction to change `P*` aliases or mutable pointers into const pointers.
 RDL records the declared C type and the SAL contract as separate facts.
 
+Header-partition emission retains dependency pointer typedefs when they provide a nested pointer
+boundary. WinMD can represent `LPCWSTR *` as an outer mutable pointer to the `PCWSTR` typedef, but
+not as one raw pointer chain with different constness at each level. Required aliases and aliases
+that depend on them use the configured default namespace. The RDL compiler continues to reject a
+mixed raw `*mut`/`*const` chain when the source provides no named boundary.
+
 Incomplete records are valid when used through pointers and rejected when a complete by-value
 layout is required. Fixed-underlying forward enums can be represented by their declared integer
 type. Unfixed forward enums are rejected rather than assigned a guessed representation.

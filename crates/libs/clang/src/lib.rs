@@ -3618,21 +3618,32 @@ impl Snapshot {
             phase_time = Some(std::time::Instant::now());
         }
 
-        let facts_by_name = loop {
+        let (facts_by_name, mut retained_pointer_aliases) = loop {
             let mut facts = BTreeSet::new();
             let mut queue = vec![];
+            let mut pointer_alias_candidates = BTreeSet::new();
+            let mut retained_pointer_aliases = BTreeSet::new();
             for root in &type_roots {
                 if facts.insert(root.origin.clone()) {
+                    collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
                     queue_type_edges(root, &mut queue);
                 }
             }
             for root in &value_roots {
+                collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
                 queue_type_edges(root, &mut queue);
             }
             for constant in &constants {
+                collect_pointer_alias_candidates(
+                    &constant.ty,
+                    constant.root.tu.as_str(),
+                    false,
+                    &mut pointer_alias_candidates,
+                );
                 queue.push((constant.root.tu.as_str(), TypeEdge::Type(&constant.ty)));
             }
             for function in &functions {
+                collect_fact_pointer_alias_candidates(function.fact, &mut pointer_alias_candidates);
                 queue_function_edges(function.fact, &mut queue);
             }
 
@@ -3657,6 +3668,10 @@ impl Snapshot {
                             &mut shape_cache,
                         )?;
                         if facts.insert(fact.origin.clone()) {
+                            collect_fact_pointer_alias_candidates(
+                                fact,
+                                &mut pointer_alias_candidates,
+                            );
                             queue_type_edges(fact, &mut queue);
                         }
                         continue;
@@ -3687,7 +3702,12 @@ impl Snapshot {
                 if references.contains_key(name) && !root_names.contains(name) {
                     continue;
                 }
-                if canonical_typedef_declarations.contains(&(tu, declaration)) {
+                let pointer_alias_candidate =
+                    pointer_alias_candidates.contains(&(tu, declaration, name.as_str()));
+                let retain_pointer_alias = self.header_partition_policy && pointer_alias_candidate;
+                if canonical_typedef_declarations.contains(&(tu, declaration))
+                    && !(retain_pointer_alias && canonical_pointer_alias_name(name))
+                {
                     continue;
                 }
                 let mut matches: Vec<_> = facts_index
@@ -3808,10 +3828,17 @@ impl Snapshot {
                 };
                 if canonical_named_type(name).is_some()
                     && matches!(fact.data, FactData::Typedef { .. })
+                    && !retain_pointer_alias
                 {
                     continue;
                 }
+                if retain_pointer_alias
+                    && is_pointer_alias_fact(fact, &facts_by_declaration, &mut BTreeSet::new())
+                {
+                    retained_pointer_aliases.insert(fact.name.as_str());
+                }
                 if facts.insert(fact.origin.clone()) {
+                    collect_fact_pointer_alias_candidates(fact, &mut pointer_alias_candidates);
                     queue_type_edges(fact, &mut queue);
                 }
             }
@@ -3855,8 +3882,28 @@ impl Snapshot {
                     choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
                 facts_by_name.insert(name, selected);
             }
-            break facts_by_name;
+            break (facts_by_name, retained_pointer_aliases);
         };
+        loop {
+            let retained_names: BTreeSet<_> = retained_pointer_aliases
+                .iter()
+                .map(|name| canonical_string_name(name).unwrap_or(name))
+                .collect();
+            let additions: Vec<_> = facts_by_name
+                .iter()
+                .filter(|(name, _)| !retained_pointer_aliases.contains(**name))
+                .filter_map(|(name, fact)| {
+                    let FactData::Typedef { target } = &fact.data else {
+                        return None;
+                    };
+                    type_ref_uses_alias(target, &retained_names).then_some(*name)
+                })
+                .collect();
+            if additions.is_empty() {
+                break;
+            }
+            retained_pointer_aliases.extend(additions);
+        }
         let mut validated_layouts: HashSet<_> = facts_by_name
             .values()
             .filter(|fact| {
@@ -4017,6 +4064,11 @@ impl Snapshot {
                 Some((target.to_string(), (*aliases.first().unwrap()).to_string()))
             })
             .collect();
+        for name in &retained_pointer_aliases {
+            type_names
+                .entry((*name).to_string())
+                .or_insert_with(|| canonical_string_name(name).unwrap_or(name).to_string());
+        }
         for name in &extended_reference_enums {
             let enum_names: BTreeSet<_> = self
                 .facts
@@ -4157,6 +4209,7 @@ impl Snapshot {
                 for (name, fact) in &facts_by_name {
                     if root_names.contains(*name)
                         || internal_aliases.contains(*name)
+                        || retained_pointer_aliases.contains(*name)
                         || references.contains_key(*name)
                         || self.fact_authority_namespace(fact).is_some()
                         || facts_index
@@ -6521,6 +6574,145 @@ fn validate_complete_layout(
 enum TypeEdge<'a> {
     Type(&'a TypeRef),
     Projected(&'static str),
+}
+
+fn collect_fact_pointer_alias_candidates<'a>(
+    fact: &'a Fact,
+    candidates: &mut BTreeSet<(&'a str, &'a Location, &'a str)>,
+) {
+    let tu = fact.origin.tu.as_str();
+    match &fact.data {
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            collect_pointer_alias_candidates(result, tu, false, candidates);
+            for param in params {
+                collect_pointer_alias_candidates(&param.ty, tu, false, candidates);
+            }
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                collect_pointer_alias_candidates(base, tu, false, candidates);
+            }
+            for method in methods {
+                collect_pointer_alias_candidates(&method.result, tu, false, candidates);
+                for param in &method.params {
+                    collect_pointer_alias_candidates(&param.ty, tu, false, candidates);
+                }
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                collect_pointer_alias_candidates(base, tu, false, candidates);
+            }
+            for field in fields {
+                collect_pointer_alias_candidates(&field.ty, tu, false, candidates);
+            }
+        }
+        FactData::Typedef { target } => {
+            collect_pointer_alias_candidates(target, tu, false, candidates);
+        }
+        _ => {}
+    }
+}
+
+fn collect_pointer_alias_candidates<'a>(
+    ty: &'a TypeRef,
+    tu: &'a str,
+    pointer_parent: bool,
+    candidates: &mut BTreeSet<(&'a str, &'a Location, &'a str)>,
+) {
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            if pointer_parent {
+                candidates.insert((tu, declaration, name));
+            }
+        }
+        TypeRef::Pointer { target, .. } | TypeRef::Reference { target, .. } => {
+            collect_pointer_alias_candidates(target, tu, true, candidates);
+        }
+        TypeRef::FunctionPointer { params, result, .. } => {
+            collect_pointer_alias_candidates(result, tu, false, candidates);
+            for param in params {
+                collect_pointer_alias_candidates(param, tu, false, candidates);
+            }
+        }
+        TypeRef::Array { target, .. } => {
+            collect_pointer_alias_candidates(target, tu, false, candidates);
+        }
+        TypeRef::Generic { args, .. } => {
+            for arg in args {
+                collect_pointer_alias_candidates(arg, tu, false, candidates);
+            }
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &record.base {
+                collect_pointer_alias_candidates(base, tu, false, candidates);
+            }
+            for field in &record.fields {
+                collect_pointer_alias_candidates(&field.ty, tu, false, candidates);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_pointer_alias_fact(
+    fact: &Fact,
+    facts_by_declaration: &BTreeMap<(String, Location), &Fact>,
+    seen: &mut BTreeSet<Origin>,
+) -> bool {
+    if !seen.insert(fact.origin.clone()) {
+        return false;
+    }
+    let FactData::Typedef { target } = &fact.data else {
+        return false;
+    };
+    match target {
+        TypeRef::Pointer { .. }
+        | TypeRef::Reference { .. }
+        | TypeRef::FunctionPointer { .. }
+        | TypeRef::OpaquePointer { .. } => true,
+        TypeRef::Named { name, declaration } => {
+            canonical_pointer_alias_name(name)
+                || facts_by_declaration
+                    .get(&(fact.origin.tu.clone(), declaration.clone()))
+                    .is_some_and(|target| is_pointer_alias_fact(target, facts_by_declaration, seen))
+        }
+        _ => false,
+    }
+}
+
+fn canonical_pointer_alias_name(name: &str) -> bool {
+    canonical_string_name(name).is_some()
+        || canonical_named_type(name).is_some_and(|target| target.starts_with('*'))
+}
+
+fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
+    match ty {
+        TypeRef::Named { name, .. } => {
+            aliases.contains(canonical_string_name(name).unwrap_or(name))
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => type_ref_uses_alias(target, aliases),
+        TypeRef::FunctionPointer { params, result, .. } => {
+            type_ref_uses_alias(result, aliases)
+                || params
+                    .iter()
+                    .any(|param| type_ref_uses_alias(param, aliases))
+        }
+        TypeRef::Generic { args, .. } => args.iter().any(|arg| type_ref_uses_alias(arg, aliases)),
+        TypeRef::InlineRecord(record) => {
+            record
+                .base
+                .as_ref()
+                .is_some_and(|base| type_ref_uses_alias(base, aliases))
+                || record
+                    .fields
+                    .iter()
+                    .any(|field| type_ref_uses_alias(&field.ty, aliases))
+        }
+        _ => false,
+    }
 }
 
 fn queue_type_edges<'a>(fact: &'a Fact, queue: &mut Vec<(&'a str, TypeEdge<'a>)>) {
