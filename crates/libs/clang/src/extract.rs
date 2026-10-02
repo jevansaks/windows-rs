@@ -5416,6 +5416,7 @@ fn inline_record(
             {
                 *convention = source;
             }
+            let (align, size) = field_layout(child, field_ty, &name)?;
             let bit_width = if unsafe { clang_Cursor_isBitField(child) } != 0 {
                 let width = unsafe { clang_getFieldDeclBitWidth(child) };
                 if width < 0 {
@@ -5433,16 +5434,8 @@ fn inline_record(
                 name,
                 ty,
                 offset: unsafe { clang_Cursor_getOffsetOfField(child) },
-                align: if field_ty.kind == CXType_IncompleteArray {
-                    unsafe { clang_Type_getAlignOf(clang_getArrayElementType(field_ty)) }
-                } else {
-                    unsafe { clang_Type_getAlignOf(field_ty) }
-                },
-                size: if field_ty.kind == CXType_IncompleteArray {
-                    0
-                } else {
-                    unsafe { clang_Type_getSizeOf(field_ty) }
-                },
+                align,
+                size,
                 bit_width,
             });
         } else if matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
@@ -5499,6 +5492,50 @@ fn inline_record(
         alignment,
         union,
     })
+}
+
+fn field_layout(cursor: CXCursor, ty: CXType, name: &str) -> Result<(i64, i64), String> {
+    if ty.kind == CXType_IncompleteArray {
+        return Ok((
+            unsafe { clang_Type_getAlignOf(clang_getArrayElementType(ty)) },
+            0,
+        ));
+    }
+    let canonical = unsafe { clang_getCanonicalType(ty) };
+    if !matches!(
+        canonical.kind,
+        CXType_LValueReference | CXType_RValueReference
+    ) {
+        return Ok(unsafe { (clang_Type_getAlignOf(ty), clang_Type_getSizeOf(ty)) });
+    }
+    let referent = unsafe { clang_getCanonicalType(clang_getPointeeType(canonical)) };
+    if matches!(referent.kind, CXType_FunctionProto | CXType_FunctionNoProto) {
+        return Err(format!(
+            "field `{name}` has unsupported function reference type `{}`",
+            cx_string(unsafe { clang_getTypeSpelling(ty) })
+        ));
+    }
+    reference_storage_layout(cursor).ok_or_else(|| {
+        format!(
+            "field `{name}` has unavailable reference storage layout for `{}`",
+            cx_string(unsafe { clang_getTypeSpelling(ty) })
+        )
+    })
+}
+
+fn reference_storage_layout(cursor: CXCursor) -> Option<(i64, i64)> {
+    let target =
+        unsafe { clang_getTranslationUnitTargetInfo(clang_Cursor_getTranslationUnit(cursor)) };
+    if target.is_null() {
+        return None;
+    }
+    let width = unsafe { clang_TargetInfo_getPointerWidth(target) };
+    unsafe { clang_TargetInfo_dispose(target) };
+    if width <= 0 || width % 8 != 0 {
+        return None;
+    }
+    let size = i64::from(width / 8);
+    Some((size, size))
 }
 
 fn name_indirect_inline_records(record: &mut InlineRecord, owner: &str) {

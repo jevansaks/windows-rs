@@ -354,6 +354,11 @@ one representation matches Clang's size, alignment, and field offsets, it prefer
 forced alignment and then the least restrictive packing. This distinguishes `#pragma pack(N)` from
 an explicitly over-aligned record and permits records that require both.
 
+C++ reference data members use the target pointer size and alignment for record layout, including
+references hidden behind typedefs. Their declared reference type and constness are preserved, so
+RDL represents them as mutable or const unmanaged pointers. Function and callback parameter
+references continue to use their existing parameter conversion independently of record storage.
+
 MIDL-generated headers assign `__MIDL...` tags to anonymous IDL declarations and `_NAME` backing
 enum tags to some public scalar typedefs named `NAME`. An unreferenced generated enum is emitted as
 loose constants, matching the IDL API identity. When it is followed by a scalar typedef in the
