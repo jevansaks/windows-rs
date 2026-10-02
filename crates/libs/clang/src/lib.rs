@@ -129,6 +129,7 @@ pub struct HeaderPartitionPolicy {
 struct HeaderPartitionEntry {
     header: String,
     partitions: BTreeSet<RootPartition>,
+    overrides: BTreeMap<String, BTreeSet<RootPartition>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -291,11 +292,48 @@ impl HeaderPartitionPolicy {
             .or_insert_with(|| HeaderPartitionEntry {
                 header: header.clone(),
                 partitions: BTreeSet::new(),
+                overrides: BTreeMap::new(),
             });
         if header < entry.header {
             entry.header = header;
         }
         entry.partitions.insert(partition);
+    }
+
+    pub fn with_traversed_header_override(
+        mut self,
+        header: impl Into<String>,
+        name: impl Into<String>,
+        partition: RootPartition,
+    ) -> Self {
+        self.add_traversed_header_override(header, name, partition);
+        self
+    }
+
+    pub fn add_traversed_header_override(
+        &mut self,
+        header: impl Into<String>,
+        name: impl Into<String>,
+        partition: RootPartition,
+    ) {
+        let header = normalize_name(&header.into());
+        let key = header.to_ascii_lowercase();
+        let entry = self
+            .headers
+            .entry(key)
+            .or_insert_with(|| HeaderPartitionEntry {
+                header: header.clone(),
+                partitions: BTreeSet::new(),
+                overrides: BTreeMap::new(),
+            });
+        if header < entry.header {
+            entry.header = header;
+        }
+        entry
+            .overrides
+            .entry(name.into())
+            .or_default()
+            .insert(partition);
     }
 
     pub fn with_traversed_header_for_input(
@@ -323,11 +361,51 @@ impl HeaderPartitionPolicy {
             .or_insert_with(|| HeaderPartitionEntry {
                 header: header.clone(),
                 partitions: BTreeSet::new(),
+                overrides: BTreeMap::new(),
             });
         if header < entry.header {
             entry.header = header;
         }
         entry.partitions.insert(partition);
+    }
+
+    pub fn with_traversed_header_override_for_input(
+        mut self,
+        input: impl Into<String>,
+        header: impl Into<String>,
+        name: impl Into<String>,
+        partition: RootPartition,
+    ) -> Self {
+        self.add_traversed_header_override_for_input(input, header, name, partition);
+        self
+    }
+
+    pub fn add_traversed_header_override_for_input(
+        &mut self,
+        input: impl Into<String>,
+        header: impl Into<String>,
+        name: impl Into<String>,
+        partition: RootPartition,
+    ) {
+        let input = normalize_name(&input.into());
+        let header = normalize_name(&header.into());
+        let key = (input.to_ascii_lowercase(), header.to_ascii_lowercase());
+        let entry = self
+            .input_headers
+            .entry(key)
+            .or_insert_with(|| HeaderPartitionEntry {
+                header: header.clone(),
+                partitions: BTreeSet::new(),
+                overrides: BTreeMap::new(),
+            });
+        if header < entry.header {
+            entry.header = header;
+        }
+        entry
+            .overrides
+            .entry(name.into())
+            .or_default()
+            .insert(partition);
     }
 
     pub fn traversed_headers(&self) -> impl Iterator<Item = (&str, &BTreeSet<RootPartition>)> {
@@ -357,9 +435,18 @@ impl HeaderPartitionPolicy {
     }
 
     fn owners(&self, tu: &str, file: &str) -> BTreeSet<RootOwner> {
+        self.owners_for_name(tu, file, None)
+    }
+
+    fn named_owners(&self, tu: &str, file: &str, name: &str) -> BTreeSet<RootOwner> {
+        self.owners_for_name(tu, file, Some(name))
+    }
+
+    fn owners_for_name(&self, tu: &str, file: &str, name: Option<&str>) -> BTreeSet<RootOwner> {
         let normalized_tu = normalize_name(tu).to_ascii_lowercase();
         let file = normalize_name(file);
-        self.headers
+        let entries = self
+            .headers
             .values()
             .filter(|entry| source_path_matches(&entry.header, &file))
             .chain(
@@ -369,13 +456,23 @@ impl HeaderPartitionPolicy {
                         input == &normalized_tu && source_path_matches(&entry.header, &file)
                     })
                     .map(|(_, entry)| entry),
-            )
-            .flat_map(|entry| {
-                entry
-                    .partitions
-                    .iter()
-                    .map(|partition| root_owner(tu, &file, partition))
-            })
+            );
+        let mut defaults = BTreeSet::new();
+        let mut overrides = BTreeSet::new();
+        for entry in entries {
+            defaults.extend(entry.partitions.iter());
+            if let Some(partitions) = name.and_then(|name| entry.overrides.get(name)) {
+                overrides.extend(partitions);
+            }
+        }
+        let partitions = if overrides.is_empty() {
+            defaults
+        } else {
+            overrides
+        };
+        partitions
+            .into_iter()
+            .map(|partition| root_owner(tu, &file, partition))
             .collect()
     }
 }
@@ -668,6 +765,12 @@ pub struct Origin {
 pub struct Location {
     pub file: String,
     pub offset: u32,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct IncludedFile {
+    pub input: String,
+    pub path: String,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -989,6 +1092,7 @@ pub struct Constant {
 pub struct Snapshot {
     facts: Vec<Fact>,
     constants: Vec<Constant>,
+    included_files: Vec<IncludedFile>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     root_owners: BTreeMap<Origin, RootOwner>,
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
@@ -1054,6 +1158,10 @@ impl Snapshot {
 
     pub fn constants(&self) -> &[Constant] {
         &self.constants
+    }
+
+    pub fn included_files(&self) -> &[IncludedFile] {
+        &self.included_files
     }
 
     pub fn annotations(&self) -> &BTreeMap<AnnotationTarget, Vec<Annotation>> {
@@ -1980,7 +2088,13 @@ impl Snapshot {
                 .cloned()
                 .unwrap_or_else(|| {
                     facts_by_origin.get(&constant.root).map_or_else(
-                        || policy.owners(&constant.root.tu, &constant.spelling.file),
+                        || {
+                            policy.named_owners(
+                                &constant.root.tu,
+                                &constant.spelling.file,
+                                &constant.name,
+                            )
+                        },
                         |fact| header_fact_owner_candidates(policy, fact),
                     )
                 });
@@ -4878,9 +4992,9 @@ fn header_fact_owner_candidates(
     policy: &HeaderPartitionPolicy,
     fact: &Fact,
 ) -> BTreeSet<RootOwner> {
-    let candidates = policy.owners(&fact.origin.tu, &fact.expansion.file);
+    let candidates = policy.named_owners(&fact.origin.tu, &fact.expansion.file, &fact.name);
     if candidates.is_empty() && fact.expansion.file != fact.spelling.file {
-        policy.owners(&fact.origin.tu, &fact.spelling.file)
+        policy.named_owners(&fact.origin.tu, &fact.spelling.file, &fact.name)
     } else {
         candidates
     }

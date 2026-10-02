@@ -180,6 +180,61 @@ fn shared_header_candidates_use_exclusions_authority_and_owner_settings() {
 }
 
 #[test]
+fn shared_header_default_owner_accepts_named_overrides() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("named-overrides");
+    let shared = scratch.join("shared.h");
+    std::fs::write(
+        &shared,
+        "typedef int DEFAULT_TYPE;\n\
+         typedef int SPECIAL_TYPE;\n\
+         #define DEFAULT_VALUE 1\n\
+         #define SPECIAL_VALUE 2\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&shared]);
+    let default = RootPartition::new("default", "Example.Default");
+    let special = RootPartition::new("special", "Example.Special");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input("AGGREGATE.CPP", shared.to_string_lossy(), default)
+        .with_traversed_header_override("SHARED.H", "SPECIAL_TYPE", special.clone())
+        .with_traversed_header_override_for_input(
+            "aggregate.cpp",
+            "shared.h",
+            "SPECIAL_VALUE",
+            special,
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let default = output(&partitions, "Example.Default");
+    let special = output(&partitions, "Example.Special");
+
+    assert!(default.contains("type DEFAULT_TYPE = i32"), "{default}");
+    assert!(
+        default.contains("const DEFAULT_VALUE: i32 = 1"),
+        "{default}"
+    );
+    assert!(!default.contains("SPECIAL_TYPE"), "{default}");
+    assert!(!default.contains("SPECIAL_VALUE"), "{default}");
+    assert!(special.contains("type SPECIAL_TYPE = i32"), "{special}");
+    assert!(
+        special.contains("const SPECIAL_VALUE: i32 = 2"),
+        "{special}"
+    );
+    assert!(!special.contains("DEFAULT_TYPE"), "{special}");
+    assert!(!special.contains("DEFAULT_VALUE"), "{special}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn audit_reports_all_dependency_owner_conflicts_and_authority_resolves_them() {
     helpers::ensure_libclang();
 

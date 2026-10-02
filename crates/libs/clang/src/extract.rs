@@ -139,6 +139,11 @@ fn extract_impl(
         );
     }
 
+    let included_files = translation_units
+        .iter()
+        .flat_map(|(input, translation_unit)| translation_unit.included_files(input))
+        .collect();
+
     let traversal_time = timing.then(std::time::Instant::now);
     let mut facts = vec![];
     let mut constants = vec![];
@@ -349,6 +354,7 @@ fn extract_impl(
     Ok(Snapshot {
         facts,
         constants,
+        included_files,
         annotations,
         root_owners,
         constant_root_owners: BTreeMap::new(),
@@ -986,6 +992,62 @@ impl TranslationUnit {
             unsafe { clang_disposeDiagnostic(diagnostic) };
         }
         result
+    }
+
+    fn included_files(&self, input: &str) -> Vec<IncludedFile> {
+        struct Visit {
+            paths: Vec<String>,
+            panic: Option<Box<dyn std::any::Any + Send>>,
+        }
+
+        extern "C" fn visit(
+            file: CXFile,
+            _inclusion_stack: *mut CXSourceLocation,
+            _include_len: u32,
+            data: CXClientData,
+        ) {
+            let visit = unsafe { &mut *(data as *mut Visit) };
+            if visit.panic.is_some() {
+                return;
+            }
+            if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if !file.is_null() {
+                    let path = normalize_name(&cx_string(unsafe { clang_getFileName(file) }));
+                    if !path.is_empty() {
+                        visit.paths.push(path);
+                    }
+                }
+            })) {
+                visit.panic = Some(panic);
+            }
+        }
+
+        let mut state = Visit {
+            paths: vec![],
+            panic: None,
+        };
+        unsafe {
+            clang_getInclusions(self.0, visit, &mut state as *mut _ as CXClientData);
+        }
+        if let Some(panic) = state.panic {
+            std::panic::resume_unwind(panic);
+        }
+
+        state.paths.sort_by_cached_key(|path| {
+            let folded = path.to_ascii_lowercase();
+            (folded, path.clone())
+        });
+        state
+            .paths
+            .dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+        state
+            .paths
+            .into_iter()
+            .map(|path| IncludedFile {
+                input: input.to_string(),
+                path,
+            })
+            .collect()
     }
 
     fn extract<'tu>(

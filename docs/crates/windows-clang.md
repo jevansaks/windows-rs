@@ -73,6 +73,17 @@ let snapshot = windows_clang::extract(
 
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
+`included_files` returns `IncludedFile` records for the physical files visited in each original
+translation unit, including the main input and headers that produced no fact or constant. The
+`input` field is the normalized `Input::name` used by `Origin::tu`; `path` is the slash-normalized
+filename reported by libclang.
+
+Inclusion records are grouped by extraction input order, then sorted by ASCII-case-insensitive
+path with original spelling as the tie-break. Duplicate path spellings within an input are
+collapsed case-insensitively. The records do not include synthetic translation units used to
+evaluate constants, skipped conditional includes, or headers supplied by a precompiled header.
+Paths are not filesystem-canonicalized, so symlinks and junctions may retain different spellings.
+These records are extraction provenance only and do not change root selection or emission.
 
 ### Aggregate header partition planning
 
@@ -123,6 +134,14 @@ Use `with_traversed_header_for_input(input, header, partition)` when one physica
 in several extraction inputs with different compile definitions. The input selector matches
 `Fact::origin.tu` and limits which compile variant is a public root; it does not supply the logical
 partition identity. Unqualified entries still apply to every matching extraction input.
+
+Use `with_traversed_header_override(header, name, partition)` to route a named declaration away
+from the header's default candidates without listing every declaration that remains with the
+default owner. `with_traversed_header_override_for_input` adds the same rule for one extraction
+input. Override names match extracted declaration or constant names before remaps. If at least one
+override matches a name, its candidates replace the default header candidates for that name.
+Multiple override candidates still use exclusions and namespace authority, and remain an audit
+conflict when those policies do not select one owner.
 
 Input identities are normalized and matched case-insensitively. Header selectors are also
 case-insensitive and may be full paths or path-component suffixes. Once a header matches, root
