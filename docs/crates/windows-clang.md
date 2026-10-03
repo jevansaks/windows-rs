@@ -202,6 +202,9 @@ unchanged.
 
 Namespace collision scoping uses internal planner names only. External references and exclusions
 continue to match the public post-remap name, and owner diagnostics do not expose scoped names.
+Typedef variants are compared after following exact local typedef chains only for collision
+classification. ABI-equivalent alias and primitive spellings therefore keep the deterministic
+surviving public owner instead of creating separate scoped types.
 
 The extractor records direct `DECLARE_HANDLE(name)` macro invocations and validates the exact
 `name__ { int unused; }` plus `typedef name__ *name` expansion. When a header partition suppresses

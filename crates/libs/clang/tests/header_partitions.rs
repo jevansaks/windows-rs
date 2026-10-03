@@ -1047,6 +1047,83 @@ fn collision_scoped_excluded_type_without_reference_reports_public_name() {
 }
 
 #[test]
+fn equivalent_alias_and_primitive_typedefs_do_not_scope_partitions() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("equivalent-alias-partitions");
+    let programming = scratch.join("programming.h");
+    let display = scratch.join("display.h");
+    let kernel = scratch.join("kernel.h");
+    let constants = scratch.join("constants.h");
+    std::fs::write(
+        &programming,
+        "typedef long LONG;\n\
+         typedef LONG NTSTATUS;\n",
+    )
+    .unwrap();
+    std::fs::write(&display, "typedef long NTSTATUS;\n").unwrap();
+    std::fs::write(&kernel, "typedef LONG NTSTATUS;\n").unwrap();
+    std::fs::write(&constants, "#define STATUS_SUCCESS ((NTSTATUS)0)\n").unwrap();
+
+    let policy = |include_display| {
+        let mut policy = HeaderPartitionPolicy::new().with_traversed_header(
+            programming.to_string_lossy(),
+            RootPartition::new("programming", "Example.WindowsProgramming"),
+        );
+        if include_display {
+            policy = policy.with_traversed_header(
+                display.to_string_lossy(),
+                RootPartition::new("display", "Example.Display"),
+            );
+        }
+        policy
+            .with_traversed_header(
+                kernel.to_string_lossy(),
+                RootPartition::new("kernel", "Example.Kernel").with_exclusion("NTSTATUS"),
+            )
+            .with_traversed_header(
+                constants.to_string_lossy(),
+                RootPartition::new("constants", "Example.Foundation"),
+            )
+    };
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let baseline = aggregate_snapshot(&scratch, &[&programming, &kernel, &constants])
+        .plan_header_partitions(&policy(false), &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(baseline.audit(&options).unwrap().is_clean());
+    let baseline = baseline.emit_with_options(&options).unwrap();
+
+    let expanded = aggregate_snapshot(&scratch, &[&programming, &display, &kernel, &constants])
+        .plan_header_partitions(&policy(true), &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(expanded.audit(&options).unwrap().is_clean());
+    let expanded = expanded.emit_with_options(&options).unwrap();
+    let baseline_programming = output(&baseline, "Example.WindowsProgramming");
+    let baseline_constants = output(&baseline, "Example.Foundation");
+    let expanded_programming = output(&expanded, "Example.WindowsProgramming");
+    let expanded_constants = output(&expanded, "Example.Foundation");
+
+    assert!(
+        baseline_programming.contains("type NTSTATUS = i32"),
+        "{baseline_programming}"
+    );
+    assert_eq!(baseline_programming, expanded_programming);
+    assert!(
+        baseline_constants
+            .contains("const STATUS_SUCCESS: Example::WindowsProgramming::NTSTATUS = 0"),
+        "{baseline_constants}"
+    );
+    assert_eq!(baseline_constants, expanded_constants);
+    assert!(
+        !expanded.values().any(|rdl| rdl.contains("__partition_")),
+        "{expanded:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn excluded_dependency_owner_diagnostics_batch_all_blockers_and_referrers() {
     helpers::ensure_libclang();
 

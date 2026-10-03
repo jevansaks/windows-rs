@@ -2225,7 +2225,8 @@ impl Snapshot {
         self.apply_partition_type_settings();
         self.apply_partition_exclusions();
         self.apply_partition_remaps();
-        let mut variants: BTreeMap<&str, BTreeMap<&str, BTreeSet<&FactData>>> = BTreeMap::new();
+        let declarations = DeclarationIndex::new(&self.facts);
+        let mut variants: BTreeMap<&str, BTreeMap<&str, Vec<&Fact>>> = BTreeMap::new();
         for fact in self.facts.iter().filter(|fact| fact.root) {
             let Some(owner) = self.root_owners.get(&fact.origin) else {
                 continue;
@@ -2235,19 +2236,33 @@ impl Snapshot {
                 .or_default()
                 .entry(&owner.namespace)
                 .or_default()
-                .insert(&fact.data);
+                .push(fact);
         }
         let collisions: BTreeSet<_> = variants
             .into_iter()
             .filter_map(|(name, namespaces)| {
-                let canonical_typedef = canonical_named_type(name).is_some()
+                let all_typedefs = namespaces
+                    .values()
+                    .flatten()
+                    .all(|fact| matches!(fact.data, FactData::Typedef { .. }));
+                let canonical_typedef = canonical_named_type(name).is_some() && all_typedefs;
+                let distinct: BTreeSet<_> = namespaces
+                    .values()
+                    .flatten()
+                    .map(|fact| &fact.data)
+                    .collect();
+                if namespaces.len() <= 1 || distinct.len() <= 1 || canonical_typedef {
+                    return None;
+                }
+                let equivalent_typedefs = all_typedefs
                     && namespaces
                         .values()
                         .flatten()
-                        .all(|data| matches!(data, &&FactData::Typedef { .. }));
-                let distinct: BTreeSet<_> = namespaces.values().flatten().copied().collect();
-                (namespaces.len() > 1 && distinct.len() > 1 && !canonical_typedef)
-                    .then_some(name.to_string())
+                        .filter_map(|fact| partition_collision_typedef_target(fact, &declarations))
+                        .collect::<BTreeSet<_>>()
+                        .len()
+                        == 1;
+                (!equivalent_typedefs).then_some(name.to_string())
             })
             .collect();
         if collisions.is_empty() {
@@ -4986,6 +5001,100 @@ impl PlanningSourceNames {
             .filter(|names| names.len() == 1)
             .and_then(BTreeSet::first)
             .map_or(constant.name.as_str(), String::as_str)
+    }
+}
+
+fn partition_collision_typedef_target(
+    fact: &Fact,
+    declarations: &DeclarationIndex<'_>,
+) -> Option<TypeRef> {
+    let FactData::Typedef { target } = &fact.data else {
+        return None;
+    };
+    Some(partition_collision_type(
+        target,
+        &fact.origin.tu,
+        declarations,
+        &mut BTreeSet::new(),
+    ))
+}
+
+fn partition_collision_type(
+    ty: &TypeRef,
+    tu: &str,
+    declarations: &DeclarationIndex<'_>,
+    seen: &mut BTreeSet<(String, String, Location)>,
+) -> TypeRef {
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            let key = (tu.to_string(), name.clone(), declaration.clone());
+            if !seen.insert(key.clone()) {
+                return ty.clone();
+            }
+            let targets: BTreeSet<_> = declarations
+                .get(tu, name, declaration)
+                .iter()
+                .filter_map(|fact| match &fact.data {
+                    FactData::Typedef { target } => Some(target),
+                    _ => None,
+                })
+                .collect();
+            let result = if let [target] = targets.into_iter().collect::<Vec<_>>().as_slice() {
+                partition_collision_type(target, tu, declarations, seen)
+            } else {
+                ty.clone()
+            };
+            seen.remove(&key);
+            result
+        }
+        TypeRef::Pointer { mutable, target } => TypeRef::Pointer {
+            mutable: *mutable,
+            target: Box::new(partition_collision_type(target, tu, declarations, seen)),
+        },
+        TypeRef::Reference { mutable, target } => TypeRef::Reference {
+            mutable: *mutable,
+            target: Box::new(partition_collision_type(target, tu, declarations, seen)),
+        },
+        TypeRef::FunctionPointer {
+            convention,
+            params,
+            result,
+        } => TypeRef::FunctionPointer {
+            convention: *convention,
+            params: params
+                .iter()
+                .map(|param| partition_collision_type(param, tu, declarations, seen))
+                .collect(),
+            result: Box::new(partition_collision_type(result, tu, declarations, seen)),
+        },
+        TypeRef::Array { target, len } => TypeRef::Array {
+            target: Box::new(partition_collision_type(target, tu, declarations, seen)),
+            len: *len,
+        },
+        TypeRef::Generic {
+            name,
+            declaration,
+            args,
+        } => TypeRef::Generic {
+            name: name.clone(),
+            declaration: declaration.clone(),
+            args: args
+                .iter()
+                .map(|arg| partition_collision_type(arg, tu, declarations, seen))
+                .collect(),
+        },
+        TypeRef::InlineRecord(record) => {
+            let mut record = (**record).clone();
+            record.base = record
+                .base
+                .as_ref()
+                .map(|base| partition_collision_type(base, tu, declarations, seen));
+            for field in &mut record.fields {
+                field.ty = partition_collision_type(&field.ty, tu, declarations, seen);
+            }
+            TypeRef::InlineRecord(Box::new(record))
+        }
+        _ => ty.clone(),
     }
 }
 
