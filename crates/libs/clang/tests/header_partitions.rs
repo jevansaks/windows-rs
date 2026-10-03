@@ -5,6 +5,10 @@ use windows_clang::{
     PartitionItemKind, RdlPartition, RootPartition, Snapshot, TypeReference, TypeReferenceKind,
     extract, extract_partitioned,
 };
+use windows_metadata::{
+    Type, Value,
+    reader::{HasAttributes, Item},
+};
 
 fn scratch(name: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
@@ -1086,7 +1090,7 @@ fn collision_scoped_excluded_type_without_reference_reports_public_name() {
 }
 
 #[test]
-fn equivalent_alias_and_primitive_typedefs_do_not_scope_partitions() {
+fn equivalent_alias_and_primitive_typedefs_preserve_excluded_dependency_route() {
     helpers::ensure_libclang();
 
     let scratch = scratch("equivalent-alias-partitions");
@@ -1141,6 +1145,7 @@ fn equivalent_alias_and_primitive_typedefs_do_not_scope_partitions() {
     let baseline_programming = output(&baseline, "Example.WindowsProgramming");
     let baseline_constants = output(&baseline, "Example.Foundation");
     let expanded_programming = output(&expanded, "Example.WindowsProgramming");
+    let expanded_display = output(&expanded, "Example.Display");
     let expanded_constants = output(&expanded, "Example.Foundation");
 
     assert!(
@@ -1148,6 +1153,10 @@ fn equivalent_alias_and_primitive_typedefs_do_not_scope_partitions() {
         "{baseline_programming}"
     );
     assert_eq!(baseline_programming, expanded_programming);
+    assert!(
+        expanded_display.contains("type NTSTATUS = i32"),
+        "{expanded_display}"
+    );
     assert!(
         baseline_constants
             .contains("const STATUS_SUCCESS: Example::WindowsProgramming::NTSTATUS = 0"),
@@ -1555,7 +1564,7 @@ fn equivalent_function_libraries_use_the_effective_value() {
 }
 
 #[test]
-fn different_namespace_routes_remain_ambiguous() {
+fn equivalent_declarations_in_different_namespaces_emit_independently() {
     helpers::ensure_libclang();
 
     let scratch = scratch("different-namespace-routes");
@@ -1574,15 +1583,229 @@ fn different_namespace_routes_remain_ambiguous() {
         .unwrap();
     let audit = plan.audit(&options).unwrap();
 
-    assert_eq!(audit.conflicts().len(), 1, "{audit}");
-    assert_eq!(audit.conflicts()[0].name, "DISTINCT_HANDLE");
-    assert_eq!(
-        audit.conflicts()[0].reason,
-        PartitionConflictReason::AmbiguousOwners
+    assert!(audit.is_clean(), "{audit}");
+    let partitions = plan.emit_with_options(&options).unwrap();
+    for namespace in ["Example.First", "Example.Second"] {
+        let rdl = output(&partitions, namespace);
+        assert!(rdl.contains("type DISTINCT_HANDLE = *mut void"), "{rdl}");
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn equivalent_declarations_keep_namespace_specific_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("equivalent-declaration-routes");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    let declarations = |function: &str| {
+        format!(
+            "#ifndef SHARED_GUID_DEFINITIONS\n\
+             #define SHARED_GUID_DEFINITIONS\n\
+             #define DEFINE_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8)\n\
+             #endif\n\
+             typedef void* SHARED_HANDLE;\n\
+             typedef unsigned short SHARED_PORT;\n\
+             extern \"C\" SHARED_HANDLE {function}(SHARED_HANDLE previous, SHARED_PORT port);\n\
+             DEFINE_GUID(GUID_SHARED, 0x12345678, 0x1234, 0x5678, 0x90, 0xab, 0xcd, \
+                 0xef, 0x12, 0x34, 0x56, 0x78)\n"
+        )
+    };
+    std::fs::write(&first, declarations("FirstOpen")).unwrap();
+    std::fs::write(&second, declarations("SecondOpen")).unwrap();
+
+    let forward = aggregate_snapshot(&scratch, &[&first, &second]);
+    let reverse = aggregate_snapshot(&scratch, &[&second, &first]);
+    let first_partition =
+        RootPartition::new("first", "Example.First").with_library("FirstOpen", "first.dll");
+    let second_partition =
+        RootPartition::new("second", "Example.Second").with_library("SecondOpen", "second.dll");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(first.to_string_lossy(), first_partition.clone())
+        .with_traversed_header(second.to_string_lossy(), second_partition.clone());
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(second.to_string_lossy(), second_partition)
+        .with_traversed_header(first.to_string_lossy(), first_partition);
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+
+    let plan = forward
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let reverse_plan = reverse
+        .plan_header_partitions(&reverse_policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(reverse_plan.audit(&options).unwrap().is_clean());
+    let reverse_partitions = reverse_plan.emit_with_options(&options).unwrap();
+
+    assert_eq!(partitions, reverse_partitions);
+    let first_rdl = output(&partitions, "Example.First");
+    assert!(first_rdl.contains("fn FirstOpen"), "{first_rdl}");
+    assert!(first_rdl.contains("type SHARED_HANDLE"), "{first_rdl}");
+    assert!(first_rdl.contains("type SHARED_PORT"), "{first_rdl}");
+    assert!(first_rdl.contains("const GUID_SHARED"), "{first_rdl}");
+    assert!(!first_rdl.contains("SecondOpen"), "{first_rdl}");
+    let second_rdl = output(&partitions, "Example.Second");
+    assert!(second_rdl.contains("fn SecondOpen"), "{second_rdl}");
+    assert!(second_rdl.contains("type SHARED_HANDLE"), "{second_rdl}");
+    assert!(second_rdl.contains("type SHARED_PORT"), "{second_rdl}");
+    assert!(second_rdl.contains("const GUID_SHARED"), "{second_rdl}");
+    assert!(!second_rdl.contains("FirstOpen"), "{second_rdl}");
+    assert!(
+        partitions.values().all(|rdl| !rdl.contains("__partition_")),
+        "{partitions:#?}"
     );
-    assert_eq!(audit.conflicts()[0].owners.len(), 2);
-    let error = plan.emit_with_options(&options).unwrap_err();
-    assert!(error.to_string().contains("DISTINCT_HANDLE"), "{error}");
+
+    let winmd = scratch.join("equivalent-declaration-routes.winmd");
+    let mut compiler = windows_rdl::reader();
+    for rdl in partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler.reference_default().output(&winmd).write().unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    for (namespace, function) in [
+        ("Example.First", "FirstOpen"),
+        ("Example.Second", "SecondOpen"),
+    ] {
+        assert_eq!(
+            index.expect(namespace, "SHARED_HANDLE").underlying_type(),
+            Some(Type::PtrMut(Box::new(Type::Void), 1))
+        );
+        assert_eq!(
+            index.expect(namespace, "SHARED_PORT").underlying_type(),
+            Some(Type::U16)
+        );
+        let Item::Fn(function) = index.expect_item(namespace, function) else {
+            panic!("{namespace}.{function} was not emitted as a function");
+        };
+        let signature = function.signature(&[]);
+        assert_eq!(
+            signature.return_type,
+            Type::value_named(namespace, "SHARED_HANDLE")
+        );
+        assert_eq!(
+            signature.types,
+            [
+                Type::value_named(namespace, "SHARED_HANDLE"),
+                Type::value_named(namespace, "SHARED_PORT"),
+            ]
+        );
+        let Item::Const(guid) = index.expect_item(namespace, "GUID_SHARED") else {
+            panic!("{namespace}.GUID_SHARED was not emitted as a constant");
+        };
+        assert_eq!(
+            guid.find_attribute("GuidAttribute").unwrap().value(),
+            [
+                Value::U32(0x12345678),
+                Value::U16(0x1234),
+                Value::U16(0x5678),
+                Value::U8(0x90),
+                Value::U8(0xab),
+                Value::U8(0xcd),
+                Value::U8(0xef),
+                Value::U8(0x12),
+                Value::U8(0x34),
+                Value::U8(0x56),
+                Value::U8(0x78),
+            ]
+            .into_iter()
+            .map(|value| (String::new(), value))
+            .collect::<Vec<_>>()
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn equivalent_declarations_coalesce_per_destination_deterministically() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("equivalent-declarations-per-destination");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    let other = scratch.join("other.h");
+    for header in [&first, &second, &other] {
+        std::fs::write(header, "typedef long SHARED_TIME;\n").unwrap();
+    }
+    let forward = aggregate_snapshot(&scratch, &[&first, &second, &other]);
+    let reverse = aggregate_snapshot(&scratch, &[&other, &second, &first]);
+    let first_partition = RootPartition::new("first", "Example.Time");
+    let second_partition = RootPartition::new("second", "Example.Time");
+    let other_partition = RootPartition::new("other", "Example.Other");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(first.to_string_lossy(), first_partition.clone())
+        .with_traversed_header(second.to_string_lossy(), second_partition.clone())
+        .with_traversed_header(other.to_string_lossy(), other_partition.clone());
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(other.to_string_lossy(), other_partition)
+        .with_traversed_header(second.to_string_lossy(), second_partition)
+        .with_traversed_header(first.to_string_lossy(), first_partition);
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy| {
+        let plan = snapshot
+            .plan_header_partitions(policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+
+    let partitions = emit(forward, &policy);
+    let reverse_partitions = emit(reverse, &reverse_policy);
+    assert_eq!(partitions, reverse_partitions);
+    assert_eq!(partitions.len(), 2);
+    assert!(
+        output(&partitions, "Example.Time").contains("type SHARED_TIME = i32"),
+        "{partitions:#?}"
+    );
+    assert!(
+        output(&partitions, "Example.Other").contains("type SHARED_TIME = i32"),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn one_declaration_with_multiple_namespaces_remains_ambiguous() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("one-declaration-multiple-namespaces");
+    let shared = scratch.join("shared.h");
+    std::fs::write(
+        &shared,
+        "typedef void* SHARED_HANDLE;\n\
+         extern \"C\" SHARED_HANDLE OpenShared(void);\n",
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&shared]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            shared.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header(
+            shared.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let audit = plan.audit(&options).unwrap();
+
+    assert_eq!(audit.conflicts().len(), 2, "{audit}");
+    assert!(audit.conflicts().iter().all(|conflict| {
+        conflict.reason == PartitionConflictReason::AmbiguousRootCandidates
+            && conflict.owners.len() == 2
+    }));
+    assert!(plan.emit_with_options(&options).is_err());
 
     std::fs::remove_dir_all(scratch).unwrap();
 }

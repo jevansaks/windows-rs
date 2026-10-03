@@ -2226,15 +2226,27 @@ impl Snapshot {
         self.apply_partition_exclusions();
         self.apply_partition_remaps();
         let declarations = DeclarationIndex::new(&self.facts);
-        let mut variants: BTreeMap<&str, BTreeMap<&str, Vec<&Fact>>> = BTreeMap::new();
+        let rooted_fact_namespaces: BTreeMap<_, _> = self
+            .facts
+            .iter()
+            .filter(|fact| fact.root)
+            .filter_map(|fact| {
+                let owner = self.root_owners.get(&fact.origin)?;
+                let namespace = self
+                    .fact_authority_namespace(fact, &declarations)
+                    .unwrap_or(&owner.namespace);
+                Some((fact.origin.clone(), namespace.clone()))
+            })
+            .collect();
+        let mut variants: BTreeMap<&str, BTreeMap<String, Vec<&Fact>>> = BTreeMap::new();
         for fact in self.facts.iter().filter(|fact| fact.root) {
-            let Some(owner) = self.root_owners.get(&fact.origin) else {
+            let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) else {
                 continue;
             };
             variants
                 .entry(&fact.name)
                 .or_default()
-                .entry(&owner.namespace)
+                .entry(namespace.clone())
                 .or_default()
                 .push(fact);
         }
@@ -2246,12 +2258,32 @@ impl Snapshot {
                     .flatten()
                     .all(|fact| matches!(fact.data, FactData::Typedef { .. }));
                 let canonical_typedef = canonical_named_type(name).is_some() && all_typedefs;
+                if namespaces.len() <= 1 || canonical_typedef {
+                    return None;
+                }
+                let mut source_namespaces: BTreeMap<&Location, BTreeSet<&str>> = BTreeMap::new();
+                for (namespace, facts) in &namespaces {
+                    for fact in facts {
+                        source_namespaces
+                            .entry(&fact.spelling)
+                            .or_default()
+                            .insert(namespace);
+                    }
+                }
+                let independent_header_routes = self.header_partition_policy
+                    && source_namespaces.len() > 1
+                    && source_namespaces
+                        .values()
+                        .all(|namespaces| namespaces.len() == 1);
+                if independent_header_routes {
+                    return Some(name.to_string());
+                }
                 let distinct: BTreeSet<_> = namespaces
                     .values()
                     .flatten()
                     .map(|fact| &fact.data)
                     .collect();
-                if namespaces.len() <= 1 || distinct.len() <= 1 || canonical_typedef {
+                if distinct.len() <= 1 {
                     return None;
                 }
                 let equivalent_typedefs = all_typedefs
@@ -2275,30 +2307,98 @@ impl Snapshot {
             .iter()
             .filter(|fact| collisions.contains(&fact.name))
         {
-            if let Some(owner) = self.root_owners.get(&fact.origin) {
+            if let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) {
                 source_namespaces
                     .entry((fact.spelling.clone(), fact.name.clone()))
                     .or_default()
-                    .insert(owner.namespace.clone());
+                    .insert(namespace.clone());
             }
         }
+        let rooted_collision_facts: BTreeMap<&str, Vec<&Fact>> = self
+            .facts
+            .iter()
+            .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| rooted_fact_namespaces.contains_key(&fact.origin))
+            .fold(BTreeMap::new(), |mut facts, fact| {
+                facts.entry(fact.name.as_str()).or_default().push(fact);
+                facts
+            });
         let fact_namespaces: BTreeMap<_, _> = self
             .facts
             .iter()
             .filter(|fact| collisions.contains(&fact.name))
             .filter_map(|fact| {
-                let namespace = self
-                    .root_owners
+                let namespace = rooted_fact_namespaces
                     .get(&fact.origin)
-                    .map(|owner| owner.namespace.clone())
+                    .cloned()
                     .or_else(|| {
                         let namespaces =
                             source_namespaces.get(&(fact.spelling.clone(), fact.name.clone()))?;
                         (namespaces.len() == 1).then(|| namespaces.first().unwrap().clone())
+                    })
+                    .or_else(|| {
+                        if !self.suppressed_type_origins.contains(&fact.origin) {
+                            return None;
+                        }
+                        let candidates = rooted_collision_facts.get(fact.name.as_str())?;
+                        if candidates.is_empty()
+                            || candidates.iter().any(|candidate| {
+                                !partition_collision_equivalent(fact, candidate, &declarations)
+                            })
+                        {
+                            return None;
+                        }
+                        rooted_fact_namespaces
+                            .get(&preferred_fact(candidates).origin)
+                            .cloned()
                     })?;
                 Some((fact.origin.clone(), namespace))
             })
             .collect();
+        if self.header_partition_policy {
+            let mut namespace_facts: BTreeMap<(String, String), Vec<&Fact>> = BTreeMap::new();
+            for fact in self.facts.iter().filter(|fact| fact.root) {
+                let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) else {
+                    continue;
+                };
+                namespace_facts
+                    .entry((fact.name.clone(), namespace.clone()))
+                    .or_default()
+                    .push(fact);
+            }
+            let noncanonical_roots: BTreeSet<_> = namespace_facts
+                .values()
+                .filter(|facts| {
+                    facts.len() > 1
+                        && facts.iter().all(|fact| {
+                            partition_collision_equivalent(facts[0], fact, &declarations)
+                        })
+                })
+                .flat_map(|facts| {
+                    let canonical = facts
+                        .iter()
+                        .copied()
+                        .min_by_key(|fact| {
+                            (
+                                self.root_owners.get(&fact.origin).unwrap(),
+                                &fact.spelling,
+                                &fact.origin,
+                            )
+                        })
+                        .unwrap();
+                    facts
+                        .iter()
+                        .copied()
+                        .filter(move |fact| fact.origin != canonical.origin)
+                        .map(|fact| fact.origin.clone())
+                })
+                .collect();
+            for fact in &mut self.facts {
+                if noncanonical_roots.contains(&fact.origin) {
+                    fact.root = false;
+                }
+            }
+        }
         let mut scoped_names = BTreeMap::new();
         let mut display_names = BTreeMap::new();
         for (index, (name, namespace)) in self
@@ -5222,6 +5322,17 @@ fn partition_collision_typedef_target(
         declarations,
         &mut BTreeSet::new(),
     ))
+}
+
+fn partition_collision_equivalent(
+    left: &Fact,
+    right: &Fact,
+    declarations: &DeclarationIndex<'_>,
+) -> bool {
+    left.data == right.data
+        || partition_collision_typedef_target(left, declarations)
+            .zip(partition_collision_typedef_target(right, declarations))
+            .is_some_and(|(left, right)| left == right)
 }
 
 fn partition_collision_type(

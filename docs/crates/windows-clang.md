@@ -206,15 +206,28 @@ or the owners themselves, gives one destination namespace and the transformed de
 same emitted annotations, UUID, flags treatment, and effective import library. Unrelated entries in
 an owner's remap, exclusion, override, or library maps do not create a conflict. The canonical
 planned declaration supplies the output partition and physical header, while every candidate remains
-available in an ambiguity report. Different destination namespaces or effective emission settings
-remain conflicts. This rule applies to `HeaderPartitionPlan`; legacy partitioned emission keeps its
-existing owner selection behavior.
+available in an ambiguity report.
+
+When equivalent roots resolve to different namespaces, header planning keeps one public identity per
+namespace if each exact source declaration belongs to one effective namespace. Type references tied
+to an exact spelling location follow that declaration's scoped identity, so APIs from separate
+header families keep their own aliases. Duplicate GUID macro facts follow the same rule. Namespace
+authorities are applied before this classification, so declarations routed to one destination still
+coalesce under the semantic comparison above. When several physical declarations share one
+destination, a stable policy-and-source ordering selects its output partition independently of
+declaration order. For a colliding public name, a source declaration claimed by several namespaces
+or a reference tied to such an irreconcilable declaration remains a conflict rather than selecting a
+lexical owner across destinations. Genuinely unowned dependencies still use the default namespace.
+These rules apply to `HeaderPartitionPlan`; legacy partitioned emission keeps its existing owner
+selection behavior.
 
 Namespace collision scoping uses internal planner names only. External references and exclusions
 continue to match the public post-remap name, and owner diagnostics do not expose scoped names.
 Typedef variants are compared after following exact local typedef chains only for collision
-classification. ABI-equivalent alias and primitive spellings therefore keep the deterministic
-surviving public owner instead of creating separate scoped types.
+classification. If an explicitly owner-excluded declaration refers to several retained declarations
+that are all equivalent, its exact references keep the deterministic surviving public owner that
+planning selected before namespace scoping. If any retained declaration differs, the normal
+owner-exclusion diagnostic remains.
 
 The extractor records direct `DECLARE_HANDLE(name)` macro invocations and validates the exact
 `name__ { int unused; }` plus `typedef name__ *name` expansion. When a header partition suppresses
