@@ -31,6 +31,45 @@ fn aggregate_snapshot(scratch: &Path, headers: &[&Path]) -> Snapshot {
     .unwrap()
 }
 
+fn duplicate_declaration_snapshot(
+    scratch: &Path,
+    declaration: &str,
+) -> (PathBuf, PathBuf, Snapshot) {
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(&first, declaration).unwrap();
+    std::fs::write(&second, declaration).unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    (first, second, snapshot)
+}
+
+fn duplicate_declaration_policy(
+    first: &Path,
+    first_partition: RootPartition,
+    second: &Path,
+    second_partition: RootPartition,
+) -> HeaderPartitionPolicy {
+    HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input("first.cpp", first.to_string_lossy(), first_partition)
+        .with_traversed_header_for_input("second.cpp", second.to_string_lossy(), second_partition)
+}
+
 fn output<'a>(partitions: &'a BTreeMap<RdlPartition, String>, namespace: &str) -> &'a str {
     partitions
         .iter()
@@ -1325,50 +1364,225 @@ fn shared_required_dependency_emits_once_in_default_namespace() {
 }
 
 #[test]
-fn equivalent_roots_compare_full_owner_policy() {
+fn equivalent_same_namespace_roots_compare_effective_item_policy() {
     helpers::ensure_libclang();
 
-    let scratch = scratch("full-root-policy");
-    let first = scratch.join("first.h");
-    let second = scratch.join("second.h");
-    std::fs::write(&first, "typedef unsigned SHARED_VALUE;\n").unwrap();
-    std::fs::write(&second, "typedef unsigned SHARED_VALUE;\n").unwrap();
-    let snapshot = extract(
-        [
-            Input::new(
-                "first.cpp",
-                format!("#include \"{}\"\n", first.to_string_lossy()),
-            ),
-            Input::new(
-                "second.cpp",
-                format!("#include \"{}\"\n", second.to_string_lossy()),
-            ),
-        ],
-        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
-    )
-    .unwrap();
-    let policy = HeaderPartitionPolicy::new()
-        .with_traversed_header(
-            first.to_string_lossy(),
-            RootPartition::new("shared", "Example.Shared").with_library("FirstApi", "first.dll"),
-        )
-        .with_traversed_header(
-            second.to_string_lossy(),
-            RootPartition::new("shared", "Example.Shared").with_library("SecondApi", "second.dll"),
-        );
+    let scratch = scratch("effective-root-policy");
+    let (first, second, snapshot) =
+        duplicate_declaration_snapshot(&scratch, "typedef unsigned SHARED_VALUE;\n");
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.Shared")
+            .with_library("FirstApi", "first.dll")
+            .with_exclusion("FIRST_UNUSED")
+            .with_remap("FIRST_OTHER", "FIRST_REMAPPED")
+            .with_flags("FIRST_FLAGS")
+            .exclude_empty_records(),
+        &second,
+        RootPartition::new("second", "Example.Shared")
+            .with_library("SecondApi", "second.dll")
+            .with_exclusion("SECOND_UNUSED")
+            .with_u32_type("SECOND_U32"),
+    );
     let references = BTreeMap::new();
-    let audit = snapshot
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
         .plan_header_partitions(&policy, &NamespaceAuthorities::new())
-        .unwrap()
-        .audit(&EmitOptions::new("Example.Common", &references))
         .unwrap();
 
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let route = partitions
+        .keys()
+        .find(|partition| partition.namespace == "Example.Shared")
+        .unwrap();
+    assert_eq!(route.partition, "first");
+    assert_eq!(route.header, first.to_string_lossy().replace('\\', "/"));
+    assert_eq!(
+        partitions
+            .values()
+            .map(|rdl| rdl.matches("type SHARED_VALUE = u32").count())
+            .sum::<usize>(),
+        1,
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn exact_authority_collapses_equivalent_logical_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("exact-equivalent-routes");
+    let (first, second, snapshot) =
+        duplicate_declaration_snapshot(&scratch, "typedef unsigned EXACT_SHARED;\n");
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.First"),
+        &second,
+        RootPartition::new("second", "Example.Second"),
+    );
+    let authorities = NamespaceAuthorities::new().with_exact("EXACT_SHARED", "Example.Authority");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let route = partitions
+        .keys()
+        .find(|partition| partition.namespace == "Example.Authority")
+        .unwrap();
+    assert_eq!(route.partition, "first");
+    assert_eq!(route.header, first.to_string_lossy().replace('\\', "/"));
+    assert!(output(&partitions, "Example.Authority").contains("type EXACT_SHARED = u32"));
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn wildcard_authority_collapses_equivalent_logical_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("wildcard-equivalent-routes");
+    let (first, second, snapshot) =
+        duplicate_declaration_snapshot(&scratch, "typedef unsigned WILDCARD_SHARED;\n");
+    let first_partition = RootPartition::new("first", "Example.First");
+    let second_partition = RootPartition::new("second", "Example.Second");
+    let policy = duplicate_declaration_policy(
+        &first,
+        first_partition.clone(),
+        &second,
+        second_partition.clone(),
+    );
+    let reverse = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input("second.cpp", second.to_string_lossy(), second_partition)
+        .with_traversed_header_for_input("first.cpp", first.to_string_lossy(), first_partition);
+    let authorities = NamespaceAuthorities::new().with_wildcard("WILDCARD_*", "Example.Authority");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let reverse_partitions = snapshot
+        .plan_header_partitions(&reverse, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    assert_eq!(partitions, reverse_partitions);
+    let route = partitions
+        .keys()
+        .find(|partition| partition.namespace == "Example.Authority")
+        .unwrap();
+    assert_eq!(route.partition, "first");
+    assert_eq!(route.header, first.to_string_lossy().replace('\\', "/"));
+    assert!(output(&partitions, "Example.Authority").contains("type WILDCARD_SHARED = u32"));
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn relevant_function_library_difference_remains_a_route_conflict() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("effective-library-conflict");
+    let (first, second, snapshot) =
+        duplicate_declaration_snapshot(&scratch, "extern \"C\" int SharedFunction(void);\n");
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.Shared").with_library("SharedFunction", "first.dll"),
+        &second,
+        RootPartition::new("second", "Example.Shared").with_library("SharedFunction", "second.dll"),
+    );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let audit = plan.audit(&options).unwrap();
+
     assert_eq!(audit.conflicts().len(), 1, "{audit}");
-    assert_eq!(audit.conflicts()[0].name, "SHARED_VALUE");
+    assert_eq!(audit.conflicts()[0].name, "SharedFunction");
     assert_eq!(
         audit.conflicts()[0].reason,
         PartitionConflictReason::AmbiguousOwners
     );
+    let error = plan.emit_with_options(&options).unwrap_err();
+    assert!(error.to_string().contains("SharedFunction"), "{error}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn equivalent_function_libraries_use_the_effective_value() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("effective-library-equivalence");
+    let (first, second, snapshot) =
+        duplicate_declaration_snapshot(&scratch, "extern \"C\" int SharedFunction(void);\n");
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.Shared").with_library("SharedFunction", "shared.dll"),
+        &second,
+        RootPartition::new("second", "Example.Shared")
+            .with_library("UnrelatedFunction", "other.dll"),
+    );
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("shared.dll");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let route = partitions
+        .keys()
+        .find(|partition| partition.namespace == "Example.Shared")
+        .unwrap();
+    assert_eq!(route.partition, "first");
+    let rdl = output(&partitions, "Example.Shared");
+    assert!(rdl.contains("#[library(\"shared.dll\")]"), "{rdl}");
+    assert!(rdl.contains("fn SharedFunction() -> i32"), "{rdl}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn different_namespace_routes_remain_ambiguous() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("different-namespace-routes");
+    let (first, second, snapshot) =
+        duplicate_declaration_snapshot(&scratch, "typedef void* DISTINCT_HANDLE;\n");
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.First"),
+        &second,
+        RootPartition::new("second", "Example.Second"),
+    );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let audit = plan.audit(&options).unwrap();
+
+    assert_eq!(audit.conflicts().len(), 1, "{audit}");
+    assert_eq!(audit.conflicts()[0].name, "DISTINCT_HANDLE");
+    assert_eq!(
+        audit.conflicts()[0].reason,
+        PartitionConflictReason::AmbiguousOwners
+    );
+    assert_eq!(audit.conflicts()[0].owners.len(), 2);
+    let error = plan.emit_with_options(&options).unwrap_err();
+    assert!(error.to_string().contains("DISTINCT_HANDLE"), "{error}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }

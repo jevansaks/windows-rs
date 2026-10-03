@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter, Write};
+use std::rc::Rc;
 
 fn timings_enabled() -> bool {
     ["WINDOWS_CLANG_TIMINGS", "WINDOWS_CLANG_TIMING"]
@@ -1470,8 +1471,7 @@ impl Snapshot {
         let target = self.timing_target.clone();
         let (snapshot, display_names, source_names) = self.into_partitioned_planning_snapshot();
         let plan = snapshot.plan_partitioned(options, &display_names)?;
-        let candidates =
-            snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
+        let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let routes = snapshot.resolve_partition_routes(candidates)?;
         snapshot.format_partitioned_plan(plan, options, &routes, &display_names, target.as_deref())
     }
@@ -2974,27 +2974,37 @@ impl Snapshot {
 
     fn resolve_partition_routes(
         &self,
-        candidates: BTreeMap<(String, OutputKind), RouteCandidate>,
+        candidates: BTreeMap<(String, OutputKind), RouteCandidate<'_>>,
     ) -> Result<BTreeMap<(String, OutputKind), RootOwner>, Error> {
         candidates
             .into_iter()
             .map(|(key, candidate)| {
-                Ok((
-                    key,
+                let owner = if candidate.header_partition_policy {
+                    resolve_equivalent_header_route(&candidate)
+                        .map_err(|reason| route_candidate_error(&candidate, reason))?
+                } else {
                     self.authoritative_owner(
                         &candidate.name,
                         candidate.kind,
-                        candidate.owners,
+                        candidate.owners(),
                         candidate.namespace.as_deref(),
-                    )?,
-                ))
+                    )?
+                };
+                validate_namespace(&owner.namespace)?;
+                if owner.partition.trim().is_empty() {
+                    return Err(Error(format!(
+                        "selected item `{}` has an empty partition identity",
+                        candidate.name
+                    )));
+                }
+                Ok((key, owner))
             })
             .collect()
     }
 
     fn partition_route_conflicts(
         &self,
-        candidates: &BTreeMap<(String, OutputKind), RouteCandidate>,
+        candidates: &BTreeMap<(String, OutputKind), RouteCandidate<'_>>,
     ) -> Vec<PartitionConflict> {
         let mut conflicts = candidates
             .values()
@@ -3005,13 +3015,21 @@ impl Snapshot {
         conflicts
     }
 
-    fn partition_route_candidates(
-        &self,
-        plan: &Plan<'_>,
+    fn partition_route_candidates<'a>(
+        &'a self,
+        plan: &Plan<'a>,
         source_names: &PlanningSourceNames,
-        default_namespace: &str,
-    ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate>, Error> {
+        options: &EmitOptions<'_>,
+    ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate<'a>>, Error> {
         let declarations = DeclarationIndex::new(&self.facts);
+        let annotation_signatures = self.route_annotation_signatures();
+        let empty_annotations = Rc::new(Vec::new());
+        let route_context = RouteClaimContext {
+            annotations: &annotation_signatures,
+            empty_annotations: &empty_annotations,
+            flag_enums: &plan.flag_enums,
+            options,
+        };
         let projection_suppression = self
             .header_partition_policy
             .then(|| self.route_projection_suppression());
@@ -3036,30 +3054,36 @@ impl Snapshot {
             })
             .map(|fact| (&fact.name, fact.kind, fact.definition, &fact.spelling))
             .collect();
-        let mut fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-        let mut source_fact_owners: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+        let mut fact_claims: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+        let mut source_fact_claims: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         for fact in &self.facts {
             if let Some(owner) = self.root_owners.get(&fact.origin) {
                 let fact_key = (&fact.name, fact.kind, fact.definition, &fact.data);
                 let source_key = (&fact.name, fact.kind, fact.definition, &fact.spelling);
                 let suppressed = projection_suppressed(fact);
+                let annotations = annotation_signatures
+                    .get(&fact.origin)
+                    .cloned()
+                    .unwrap_or_else(|| empty_annotations.clone());
+                let claim =
+                    self.fact_route_claim(fact, owner, annotations, &plan.flag_enums, options);
                 if !suppressed || !projected_fact_keys.contains(&fact_key) {
-                    fact_owners
+                    fact_claims
                         .entry(fact_key)
                         .or_default()
-                        .insert(owner.clone());
+                        .insert(claim.clone());
                 }
                 if !suppressed || !projected_source_keys.contains(&source_key) {
-                    source_fact_owners
+                    source_fact_claims
                         .entry(source_key)
                         .or_default()
-                        .insert(owner.clone());
+                        .insert(claim);
                 }
             }
         }
         let mut result = BTreeMap::new();
         for planned in &plan.types {
-            let mut owners = fact_owners
+            let mut claims = fact_claims
                 .get(&(
                     &planned.fact.name,
                     planned.fact.kind,
@@ -3068,8 +3092,8 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
-            owners.extend(
-                source_fact_owners
+            claims.extend(
+                source_fact_claims
                     .get(&(
                         &planned.fact.name,
                         planned.fact.kind,
@@ -3083,23 +3107,24 @@ impl Snapshot {
             let namespace = self
                 .fact_authority_namespace(planned.fact, &declarations)
                 .cloned();
-            self.add_authority_fallback(&mut owners, planned.fact, namespace.as_deref())?;
-            let anchored = !owners.is_empty() || namespace.is_some();
             let key = (planned.name.clone(), OutputKind::Type);
             result.insert(
                 key,
-                RouteCandidate {
-                    name: planned.name.clone(),
-                    source_name: source_names.fact_name(planned.fact).to_string(),
-                    kind: OutputKind::Type,
-                    owners,
+                self.fact_route_candidate(
+                    planned.fact,
+                    (
+                        planned.name.clone(),
+                        source_names.fact_name(planned.fact).to_string(),
+                    ),
+                    OutputKind::Type,
+                    claims,
                     namespace,
-                    anchored,
-                },
+                    &route_context,
+                )?,
             );
         }
         for planned in &plan.values {
-            let mut owners = fact_owners
+            let claims = fact_claims
                 .get(&(
                     &planned.fact.name,
                     planned.fact.kind,
@@ -3111,24 +3136,25 @@ impl Snapshot {
             let namespace = self
                 .fact_authority_namespace(planned.fact, &declarations)
                 .cloned();
-            self.add_authority_fallback(&mut owners, planned.fact, namespace.as_deref())?;
-            let anchored = !owners.is_empty() || namespace.is_some();
             let key = (planned.name.clone(), OutputKind::Value);
             result.insert(
                 key,
-                RouteCandidate {
-                    name: planned.name.clone(),
-                    source_name: source_names.fact_name(planned.fact).to_string(),
-                    kind: OutputKind::Value,
-                    owners,
+                self.fact_route_candidate(
+                    planned.fact,
+                    (
+                        planned.name.clone(),
+                        source_names.fact_name(planned.fact).to_string(),
+                    ),
+                    OutputKind::Value,
+                    claims,
                     namespace,
-                    anchored,
-                },
+                    &route_context,
+                )?,
             );
         }
         for planned in &plan.functions {
             let function = planned.fact;
-            let mut owners = fact_owners
+            let claims = fact_claims
                 .get(&(
                     &function.name,
                     function.kind,
@@ -3140,24 +3166,25 @@ impl Snapshot {
             let namespace = self
                 .fact_authority_namespace(function, &declarations)
                 .cloned();
-            self.add_authority_fallback(&mut owners, function, namespace.as_deref())?;
-            let anchored = !owners.is_empty() || namespace.is_some();
             let key = (planned.name.clone(), OutputKind::Value);
             result.insert(
                 key,
-                RouteCandidate {
-                    name: planned.name.clone(),
-                    source_name: source_names.fact_name(function).to_string(),
-                    kind: OutputKind::Value,
-                    owners,
+                self.fact_route_candidate(
+                    function,
+                    (
+                        planned.name.clone(),
+                        source_names.fact_name(function).to_string(),
+                    ),
+                    OutputKind::Value,
+                    claims,
                     namespace,
-                    anchored,
-                },
+                    &route_context,
+                )?,
             );
         }
         for planned in &plan.constants {
             let constant = planned.constant;
-            let mut owners = self
+            let mut owners: BTreeSet<_> = self
                 .constant_root_owners
                 .get(&(constant.root.clone(), constant.name.clone()))
                 .or_else(|| self.root_owners.get(&constant.root))
@@ -3169,7 +3196,22 @@ impl Snapshot {
                 .get(&(constant.definition.clone(), constant.name.clone()))
                 .cloned();
             self.add_constant_authority_fallback(&mut owners, constant, namespace.as_deref())?;
-            let anchored = !owners.is_empty() || namespace.is_some();
+            let annotations = annotation_signatures
+                .get(&constant.root)
+                .cloned()
+                .unwrap_or_else(|| empty_annotations.clone());
+            let claims: BTreeSet<_> = owners
+                .iter()
+                .map(|owner| self.constant_route_claim(constant, owner, annotations.clone()))
+                .collect();
+            let preferred = self
+                .constant_root_owners
+                .get(&(constant.root.clone(), constant.name.clone()))
+                .or_else(|| self.root_owners.get(&constant.root))
+                .map(|owner| self.constant_route_claim(constant, owner, annotations))
+                .filter(|claim| claims.contains(claim))
+                .or_else(|| (claims.len() == 1).then(|| claims.first().unwrap().clone()));
+            let anchored = !claims.is_empty() || namespace.is_some();
             let key = (constant.name.clone(), OutputKind::Value);
             result.insert(
                 key,
@@ -3177,23 +3219,84 @@ impl Snapshot {
                     name: constant.name.clone(),
                     source_name: source_names.constant_name(constant).to_string(),
                     kind: OutputKind::Value,
-                    owners,
+                    claims,
+                    preferred,
                     namespace,
                     anchored,
+                    header_partition_policy: self.header_partition_policy,
                 },
             );
         }
         if self.header_partition_policy {
-            self.assign_default_dependency_owners(plan, &mut result, default_namespace)?;
+            self.assign_default_dependency_owners(
+                plan,
+                &mut result,
+                options.namespace,
+                &route_context,
+            )?;
         }
         Ok(result)
     }
 
-    fn assign_default_dependency_owners(
-        &self,
-        plan: &Plan<'_>,
-        routes: &mut BTreeMap<(String, OutputKind), RouteCandidate>,
+    fn fact_route_candidate<'a>(
+        &'a self,
+        fact: &'a Fact,
+        names: (String, String),
+        kind: OutputKind,
+        mut claims: BTreeSet<RouteClaim<'a>>,
+        namespace: Option<String>,
+        context: &RouteClaimContext<'_, '_>,
+    ) -> Result<RouteCandidate<'a>, Error> {
+        let annotations = context
+            .annotations
+            .get(&fact.origin)
+            .cloned()
+            .unwrap_or_else(|| context.empty_annotations.clone());
+        if claims.is_empty() {
+            let mut owners = BTreeSet::new();
+            self.add_authority_fallback(&mut owners, fact, namespace.as_deref())?;
+            for owner in owners {
+                claims.insert(self.fact_route_claim(
+                    fact,
+                    &owner,
+                    annotations.clone(),
+                    context.flag_enums,
+                    context.options,
+                ));
+            }
+        }
+        let preferred = self
+            .root_owners
+            .get(&fact.origin)
+            .map(|owner| {
+                self.fact_route_claim(
+                    fact,
+                    owner,
+                    annotations,
+                    context.flag_enums,
+                    context.options,
+                )
+            })
+            .filter(|claim| claims.contains(claim))
+            .or_else(|| (claims.len() == 1).then(|| claims.first().unwrap().clone()));
+        Ok(RouteCandidate {
+            name: names.0,
+            source_name: names.1,
+            kind,
+            anchored: !claims.is_empty() || namespace.is_some(),
+            claims,
+            preferred,
+            namespace,
+            header_partition_policy: self.header_partition_policy,
+        })
+    }
+
+    fn assign_default_dependency_owners<'a>(
+        &'a self,
+        plan: &Plan<'a>,
+        routes: &mut BTreeMap<(String, OutputKind), RouteCandidate<'a>>,
         default_namespace: &str,
+        context: &RouteClaimContext<'_, '_>,
     ) -> Result<(), Error> {
         validate_namespace(default_namespace)?;
         for planned in &plan.types {
@@ -3201,18 +3304,122 @@ impl Snapshot {
             let route = routes.get_mut(&key).unwrap();
             if planned.fact.root
                 || self.suppressed_type_origins.contains(&planned.fact.origin)
-                || !route.owners.is_empty()
+                || !route.claims.is_empty()
                 || route.namespace.is_some()
             {
                 continue;
             }
-            route.owners.insert(authority_root_owner(
+            let owner = authority_root_owner(
                 default_namespace,
                 default_namespace,
                 &planned.fact.expansion.file,
-            ));
+            );
+            let annotations = context
+                .annotations
+                .get(&planned.fact.origin)
+                .cloned()
+                .unwrap_or_else(|| context.empty_annotations.clone());
+            let claim = self.fact_route_claim(
+                planned.fact,
+                &owner,
+                annotations,
+                context.flag_enums,
+                context.options,
+            );
+            route.preferred = Some(claim.clone());
+            route.claims.insert(claim);
         }
         Ok(())
+    }
+
+    fn route_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
+        let mut result: BTreeMap<Origin, RouteAnnotations> = BTreeMap::new();
+        for (target, annotations) in &self.annotations {
+            let (origin, target) = route_annotation_target(target);
+            let annotations: Vec<_> = annotations
+                .iter()
+                .filter(|annotation| !matches!(annotation, Annotation::ImportLibrary(_)))
+                .cloned()
+                .collect();
+            if !annotations.is_empty() {
+                result
+                    .entry(origin.clone())
+                    .or_default()
+                    .push((target, annotations));
+            }
+        }
+        result
+            .into_iter()
+            .map(|(origin, mut annotations)| {
+                annotations.sort();
+                (origin, Rc::new(annotations))
+            })
+            .collect()
+    }
+
+    fn fact_route_claim<'a>(
+        &'a self,
+        fact: &'a Fact,
+        owner: &RootOwner,
+        annotations: Rc<RouteAnnotations>,
+        flag_enums: &BTreeSet<(String, String)>,
+        options: &EmitOptions<'_>,
+    ) -> RouteClaim<'a> {
+        let library = if let FactData::Function { link_name, .. } = &fact.data {
+            annotations_for(
+                &self.annotations,
+                &AnnotationTarget::Declaration(fact.origin.clone()),
+            )
+            .iter()
+            .find_map(|annotation| match annotation {
+                Annotation::ImportLibrary(library) => Some(library.clone()),
+                _ => None,
+            })
+            .or_else(|| owner.libraries.get(link_name).cloned())
+            .or_else(|| {
+                options
+                    .libraries
+                    .and_then(|libraries| libraries.get(link_name).cloned())
+            })
+            .or_else(|| options.library.map(str::to_string))
+        } else {
+            None
+        };
+        RouteClaim {
+            owner: owner.clone(),
+            semantics: RouteSemantics {
+                item: RouteItemSemantics::Fact {
+                    kind: fact.kind,
+                    definition: fact.definition,
+                    data: &fact.data,
+                },
+                annotations,
+                uuid: self.fact_uuid(fact),
+                flags: flag_enums.contains(&(fact.origin.tu.clone(), fact.name.clone())),
+                library,
+            },
+        }
+    }
+
+    fn constant_route_claim<'a>(
+        &'a self,
+        constant: &'a Constant,
+        owner: &RootOwner,
+        annotations: Rc<RouteAnnotations>,
+    ) -> RouteClaim<'a> {
+        RouteClaim {
+            owner: owner.clone(),
+            semantics: RouteSemantics {
+                item: RouteItemSemantics::Constant {
+                    ty: &constant.ty,
+                    value: &constant.value,
+                },
+                annotations,
+                uuid: None,
+                flags: false,
+                library: None,
+            },
+        }
     }
 
     fn add_authority_fallback(
@@ -4860,8 +5067,7 @@ impl HeaderPartitionPlan {
             self.snapshot.clone().into_partitioned_planning_snapshot();
         snapshot.project_suppressed_declare_handles();
         let plan = snapshot.plan_partitioned(options, &display_names)?;
-        let candidates =
-            snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
+        let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let mut conflicts = self.root_conflicts.clone();
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
         conflicts.sort();
@@ -4878,8 +5084,7 @@ impl HeaderPartitionPlan {
             self.snapshot.into_partitioned_planning_snapshot();
         snapshot.project_suppressed_declare_handles();
         let plan = snapshot.plan_partitioned(options, &display_names)?;
-        let candidates =
-            snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
+        let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let mut conflicts = self.root_conflicts;
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
         conflicts.sort();
@@ -5139,17 +5344,129 @@ fn scoped_planning_set<'a>(
     Some(Cow::Owned(scoped))
 }
 
-struct RouteCandidate {
+type RouteAnnotations = Vec<(RouteAnnotationTarget, Vec<Annotation>)>;
+
+struct RouteClaimContext<'a, 'options> {
+    annotations: &'a BTreeMap<Origin, Rc<RouteAnnotations>>,
+    empty_annotations: &'a Rc<RouteAnnotations>,
+    flag_enums: &'a BTreeSet<(String, String)>,
+    options: &'a EmitOptions<'options>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum RouteAnnotationTarget {
+    Declaration,
+    Return,
+    Parameter(usize),
+    Field(usize),
+    NestedField(Vec<usize>),
+    Variant(usize),
+    Method(usize),
+    MethodReturn(usize),
+    MethodParameter { method: usize, parameter: usize },
+}
+
+fn route_annotation_target(target: &AnnotationTarget) -> (&Origin, RouteAnnotationTarget) {
+    match target {
+        AnnotationTarget::Declaration(origin) => (origin, RouteAnnotationTarget::Declaration),
+        AnnotationTarget::Return(origin) => (origin, RouteAnnotationTarget::Return),
+        AnnotationTarget::Parameter { declaration, index } => {
+            (declaration, RouteAnnotationTarget::Parameter(*index))
+        }
+        AnnotationTarget::Field { declaration, index } => {
+            (declaration, RouteAnnotationTarget::Field(*index))
+        }
+        AnnotationTarget::NestedField { declaration, path } => (
+            declaration,
+            RouteAnnotationTarget::NestedField(path.clone()),
+        ),
+        AnnotationTarget::Variant { declaration, index } => {
+            (declaration, RouteAnnotationTarget::Variant(*index))
+        }
+        AnnotationTarget::Method { declaration, index } => {
+            (declaration, RouteAnnotationTarget::Method(*index))
+        }
+        AnnotationTarget::MethodReturn { declaration, index } => {
+            (declaration, RouteAnnotationTarget::MethodReturn(*index))
+        }
+        AnnotationTarget::MethodParameter {
+            declaration,
+            method,
+            parameter,
+        } => (
+            declaration,
+            RouteAnnotationTarget::MethodParameter {
+                method: *method,
+                parameter: *parameter,
+            },
+        ),
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum RouteItemSemantics<'a> {
+    Fact {
+        kind: FactKind,
+        definition: bool,
+        data: &'a FactData,
+    },
+    Constant {
+        ty: &'a TypeRef,
+        value: &'a Value,
+    },
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RouteSemantics<'a> {
+    item: RouteItemSemantics<'a>,
+    annotations: Rc<RouteAnnotations>,
+    uuid: Option<&'a str>,
+    flags: bool,
+    library: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RouteClaim<'a> {
+    owner: RootOwner,
+    semantics: RouteSemantics<'a>,
+}
+
+struct RouteCandidate<'a> {
     name: String,
     source_name: String,
     kind: OutputKind,
-    owners: BTreeSet<RootOwner>,
+    claims: BTreeSet<RouteClaim<'a>>,
+    preferred: Option<RouteClaim<'a>>,
     namespace: Option<String>,
     anchored: bool,
+    header_partition_policy: bool,
+}
+
+impl RouteCandidate<'_> {
+    fn owners(&self) -> BTreeSet<RootOwner> {
+        self.claims
+            .iter()
+            .map(|claim| claim.owner.clone())
+            .collect()
+    }
 }
 
 fn route_candidate_conflict(candidate: &RouteCandidate) -> Option<PartitionConflict> {
-    let mut owners = candidate.owners.clone();
+    if candidate.header_partition_policy {
+        return resolve_equivalent_header_route(candidate)
+            .err()
+            .map(|reason| PartitionConflict {
+                name: candidate.source_name.clone(),
+                kind: match candidate.kind {
+                    OutputKind::Type => PartitionItemKind::Type,
+                    OutputKind::Value => PartitionItemKind::Value,
+                },
+                reason,
+                owners: candidate.owners().into_iter().collect(),
+            });
+    }
+
+    let mut owners = candidate.owners();
     if let Some(namespace) = &candidate.namespace {
         let matching: BTreeSet<_> = owners
             .iter()
@@ -5185,6 +5502,63 @@ fn route_candidate_conflict(candidate: &RouteCandidate) -> Option<PartitionConfl
         reason,
         owners: owners.into_iter().collect(),
     })
+}
+
+fn resolve_equivalent_header_route(
+    candidate: &RouteCandidate<'_>,
+) -> Result<RootOwner, PartitionConflictReason> {
+    let Some(first) = candidate.claims.first() else {
+        return Err(PartitionConflictReason::MissingOwner);
+    };
+    let namespace = candidate
+        .namespace
+        .as_deref()
+        .unwrap_or(&first.owner.namespace);
+    if candidate.claims.iter().any(|claim| {
+        candidate
+            .namespace
+            .as_deref()
+            .unwrap_or(&claim.owner.namespace)
+            != namespace
+            || claim.semantics != first.semantics
+    }) {
+        return Err(PartitionConflictReason::AmbiguousOwners);
+    }
+    let Some(preferred) = candidate
+        .preferred
+        .as_ref()
+        .filter(|preferred| candidate.claims.contains(*preferred))
+        .or_else(|| (candidate.claims.len() == 1).then_some(first))
+    else {
+        return Err(PartitionConflictReason::AmbiguousOwners);
+    };
+    let mut owner = preferred.owner.clone();
+    owner.namespace = namespace.to_string();
+    Ok(owner)
+}
+
+fn route_candidate_error(candidate: &RouteCandidate<'_>, reason: PartitionConflictReason) -> Error {
+    let kind = match candidate.kind {
+        OutputKind::Type => "type",
+        OutputKind::Value => "value",
+    };
+    match reason {
+        PartitionConflictReason::MissingOwner => Error(format!(
+            "selected {kind} `{}` has no tagged root owner",
+            candidate.name
+        )),
+        PartitionConflictReason::AmbiguousRootCandidates
+        | PartitionConflictReason::AmbiguousOwners => Error(format!(
+            "selected {kind} `{}` has ambiguous tagged root owners: {}",
+            candidate.name,
+            candidate
+                .owners()
+                .iter()
+                .map(|owner| format!("{}:{} -> {}", owner.input, owner.root, owner.namespace))
+                .collect::<Vec<_>>()
+                .join("; ")
+        )),
+    }
 }
 
 struct TypeProjection<'a> {

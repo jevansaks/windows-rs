@@ -200,6 +200,16 @@ facts remain available for layout and dependency closure. If every projection is
 owners are retained so existing exclusion diagnostics and single-partition alias behavior remain
 unchanged.
 
+Equivalent declarations from different traversed headers can retain several logical owners after
+root selection. Header-plan routing merges those claims only when an exact or wildcard authority,
+or the owners themselves, gives one destination namespace and the transformed declaration has the
+same emitted annotations, UUID, flags treatment, and effective import library. Unrelated entries in
+an owner's remap, exclusion, override, or library maps do not create a conflict. The canonical
+planned declaration supplies the output partition and physical header, while every candidate remains
+available in an ambiguity report. Different destination namespaces or effective emission settings
+remain conflicts. This rule applies to `HeaderPartitionPlan`; legacy partitioned emission keeps its
+existing owner selection behavior.
+
 Namespace collision scoping uses internal planner names only. External references and exclusions
 continue to match the public post-remap name, and owner diagnostics do not expose scoped names.
 Typedef variants are compared after following exact local typedef chains only for collision
