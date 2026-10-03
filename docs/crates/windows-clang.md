@@ -257,10 +257,11 @@ location rather than from equivalent canonical declarations that were projected 
 and unowned copies in other extraction inputs still project to the raw pointer and do not create
 nominal aliases in their logical or default namespaces.
 
-Equivalent canonical raw-pointer declarations are scoped separately when every logical namespace
-uses its own declaration below another pointer boundary. Each namespace then retains the authored
-alias and exact references keep that identity instead of falling back to a mixed raw pointer chain.
-Declarations used only directly keep the canonical projection behavior above.
+Equivalent canonical raw-pointer declarations are scoped only for exact declarations that need a
+nominal identity: another pointer typedef points through the declaration, or a pointer boundary
+changes mutability. Those namespaces retain the authored alias and exact references keep that
+identity. Direct uses and representable same-mutability function or field pointer chains keep the
+canonical projection behavior above.
 
 The extractor records direct `DECLARE_HANDLE(name)` macro invocations and validates the exact
 `name__ { int unused; }` plus `typedef name__ *name` expansion. When a header partition suppresses

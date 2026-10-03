@@ -2278,7 +2278,7 @@ impl Snapshot {
                 Some((fact.origin.clone(), namespace.clone()))
             })
             .collect();
-        let nested_pointer_alias_declarations = {
+        let retained_canonical_pointer_declarations = {
             let mut candidates = BTreeSet::new();
             for fact in self.facts.iter().filter(|fact| fact.root) {
                 collect_fact_pointer_alias_candidates(fact, &mut candidates);
@@ -2302,6 +2302,25 @@ impl Snapshot {
                 .or_default()
                 .push(fact);
         }
+        let canonical_pointer_collisions: BTreeSet<_> = variants
+            .iter()
+            .filter(|(name, namespaces)| {
+                namespaces.len() > 1
+                    && canonical_raw_pointer_name(name)
+                    && namespaces
+                        .values()
+                        .flatten()
+                        .all(|fact| matches!(fact.data, FactData::Typedef { .. }))
+                    && namespaces.values().flatten().any(|fact| {
+                        retained_canonical_pointer_declarations.contains(&(
+                            fact.origin.tu.clone(),
+                            fact.spelling.clone(),
+                            fact.name.clone(),
+                        ))
+                    })
+            })
+            .map(|(name, _)| (*name).to_string())
+            .collect();
         let collisions: BTreeSet<_> = variants
             .into_iter()
             .filter_map(|(name, namespaces)| {
@@ -2309,18 +2328,10 @@ impl Snapshot {
                     .values()
                     .flatten()
                     .all(|fact| matches!(fact.data, FactData::Typedef { .. }));
-                let retained_canonical_pointer = canonical_raw_pointer_name(name)
-                    && namespaces.values().all(|facts| {
-                        facts.iter().any(|fact| {
-                            nested_pointer_alias_declarations.contains(&(
-                                fact.origin.tu.clone(),
-                                fact.spelling.clone(),
-                                fact.name.clone(),
-                            ))
-                        })
-                    });
                 let canonical_typedef = canonical_named_type(name).is_some() && all_typedefs;
-                if namespaces.len() <= 1 || (canonical_typedef && !retained_canonical_pointer) {
+                if namespaces.len() <= 1
+                    || (canonical_typedef && !canonical_pointer_collisions.contains(name))
+                {
                     return None;
                 }
                 let mut source_namespaces: BTreeMap<&Location, BTreeSet<&str>> = BTreeMap::new();
@@ -2362,12 +2373,21 @@ impl Snapshot {
         if collisions.is_empty() {
             return (self, BTreeMap::new(), source_names);
         }
+        let scoped_collision_fact = |fact: &Fact| {
+            !canonical_pointer_collisions.contains(&fact.name)
+                || retained_canonical_pointer_declarations.contains(&(
+                    fact.origin.tu.clone(),
+                    fact.spelling.clone(),
+                    fact.name.clone(),
+                ))
+        };
 
         let mut source_namespaces: BTreeMap<(Location, String), BTreeSet<String>> = BTreeMap::new();
         for fact in self
             .facts
             .iter()
             .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| scoped_collision_fact(fact))
         {
             if let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) {
                 source_namespaces
@@ -2383,6 +2403,7 @@ impl Snapshot {
             .facts
             .iter()
             .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| scoped_collision_fact(fact))
             .filter(|fact| rooted_fact_namespaces.contains_key(&fact.origin))
             .fold(BTreeMap::new(), |mut facts, fact| {
                 facts.entry(fact.name.as_str()).or_default().push(fact);
@@ -2392,6 +2413,7 @@ impl Snapshot {
             .facts
             .iter()
             .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| scoped_collision_fact(fact))
             .filter_map(|fact| {
                 let namespace = rooted_fact_namespaces
                     .get(&fact.origin)
@@ -4229,7 +4251,6 @@ impl Snapshot {
                 collect_pointer_alias_candidates(
                     &constant.ty,
                     constant.root.tu.as_str(),
-                    false,
                     &mut pointer_alias_candidates,
                 );
                 queue.push((
@@ -7966,35 +7987,61 @@ fn collect_fact_pointer_alias_candidates<'a>(
     fact: &'a Fact,
     candidates: &mut BTreeSet<(&'a str, &'a Location, &'a str)>,
 ) {
+    let alias_typedef = matches!(
+        fact.data,
+        FactData::Typedef {
+            target: TypeRef::Pointer { .. } | TypeRef::Reference { .. }
+        }
+    );
+    visit_fact_pointer_alias_references(fact, &mut |tu, declaration, name, parent_mutable| {
+        if pointer_alias_reference_is_retained(name, parent_mutable, alias_typedef) {
+            candidates.insert((tu, declaration, name));
+        }
+    });
+}
+
+fn pointer_alias_reference_is_retained(
+    name: &str,
+    parent_mutable: bool,
+    alias_typedef: bool,
+) -> bool {
+    canonical_raw_pointer_mutability(name)
+        .is_none_or(|alias_mutable| alias_typedef || alias_mutable != parent_mutable)
+}
+
+fn visit_fact_pointer_alias_references<'a, F>(fact: &'a Fact, visit: &mut F)
+where
+    F: FnMut(&'a str, &'a Location, &'a str, bool),
+{
     let tu = fact.origin.tu.as_str();
     match &fact.data {
         FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
-            collect_pointer_alias_candidates(result, tu, false, candidates);
+            visit_pointer_alias_references(result, tu, None, visit);
             for param in params {
-                collect_pointer_alias_candidates(&param.ty, tu, false, candidates);
+                visit_pointer_alias_references(&param.ty, tu, None, visit);
             }
         }
         FactData::Interface { base, methods, .. } => {
             if let Some(base) = base {
-                collect_pointer_alias_candidates(base, tu, false, candidates);
+                visit_pointer_alias_references(base, tu, None, visit);
             }
             for method in methods {
-                collect_pointer_alias_candidates(&method.result, tu, false, candidates);
+                visit_pointer_alias_references(&method.result, tu, None, visit);
                 for param in &method.params {
-                    collect_pointer_alias_candidates(&param.ty, tu, false, candidates);
+                    visit_pointer_alias_references(&param.ty, tu, None, visit);
                 }
             }
         }
         FactData::Record { base, fields, .. } => {
             if let Some(base) = base {
-                collect_pointer_alias_candidates(base, tu, false, candidates);
+                visit_pointer_alias_references(base, tu, None, visit);
             }
             for field in fields {
-                collect_pointer_alias_candidates(&field.ty, tu, false, candidates);
+                visit_pointer_alias_references(&field.ty, tu, None, visit);
             }
         }
         FactData::Typedef { target } => {
-            collect_pointer_alias_candidates(target, tu, false, candidates);
+            visit_pointer_alias_references(target, tu, None, visit);
         }
         _ => {}
     }
@@ -8003,38 +8050,57 @@ fn collect_fact_pointer_alias_candidates<'a>(
 fn collect_pointer_alias_candidates<'a>(
     ty: &'a TypeRef,
     tu: &'a str,
-    pointer_parent: bool,
     candidates: &mut BTreeSet<(&'a str, &'a Location, &'a str)>,
 ) {
-    match ty {
-        TypeRef::Named { name, declaration } => {
-            if pointer_parent {
+    visit_pointer_alias_references(
+        ty,
+        tu,
+        None,
+        &mut |tu, declaration, name, parent_mutable| {
+            if pointer_alias_reference_is_retained(name, parent_mutable, false) {
                 candidates.insert((tu, declaration, name));
             }
+        },
+    );
+}
+
+fn visit_pointer_alias_references<'a, F>(
+    ty: &'a TypeRef,
+    tu: &'a str,
+    pointer_parent: Option<bool>,
+    visit: &mut F,
+) where
+    F: FnMut(&'a str, &'a Location, &'a str, bool),
+{
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            if let Some(parent_mutable) = pointer_parent {
+                visit(tu, declaration, name, parent_mutable);
+            }
         }
-        TypeRef::Pointer { target, .. } | TypeRef::Reference { target, .. } => {
-            collect_pointer_alias_candidates(target, tu, true, candidates);
+        TypeRef::Pointer { mutable, target } | TypeRef::Reference { mutable, target } => {
+            visit_pointer_alias_references(target, tu, Some(*mutable), visit);
         }
         TypeRef::FunctionPointer { params, result, .. } => {
-            collect_pointer_alias_candidates(result, tu, false, candidates);
+            visit_pointer_alias_references(result, tu, None, visit);
             for param in params {
-                collect_pointer_alias_candidates(param, tu, false, candidates);
+                visit_pointer_alias_references(param, tu, None, visit);
             }
         }
         TypeRef::Array { target, .. } => {
-            collect_pointer_alias_candidates(target, tu, false, candidates);
+            visit_pointer_alias_references(target, tu, None, visit);
         }
         TypeRef::Generic { args, .. } => {
             for arg in args {
-                collect_pointer_alias_candidates(arg, tu, false, candidates);
+                visit_pointer_alias_references(arg, tu, None, visit);
             }
         }
         TypeRef::InlineRecord(record) => {
             if let Some(base) = &record.base {
-                collect_pointer_alias_candidates(base, tu, false, candidates);
+                visit_pointer_alias_references(base, tu, None, visit);
             }
             for field in &record.fields {
-                collect_pointer_alias_candidates(&field.ty, tu, false, candidates);
+                visit_pointer_alias_references(&field.ty, tu, None, visit);
             }
         }
         _ => {}
@@ -8072,7 +8138,18 @@ fn canonical_pointer_alias_name(name: &str) -> bool {
 }
 
 fn canonical_raw_pointer_name(name: &str) -> bool {
-    canonical_named_type(name).is_some_and(|target| target.starts_with('*'))
+    canonical_raw_pointer_mutability(name).is_some()
+}
+
+fn canonical_raw_pointer_mutability(name: &str) -> Option<bool> {
+    let target = canonical_named_type(name)?;
+    if target.starts_with("*mut ") {
+        Some(true)
+    } else if target.starts_with("*const ") {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 fn canonical_raw_pointer_is_retained(

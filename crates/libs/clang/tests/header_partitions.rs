@@ -2395,22 +2395,25 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
         &first,
         "typedef void* PVOID;\n\
          typedef PVOID PSID;\n\
-         extern \"C\" void FirstUse(PSID value);\n",
+         extern \"C\" void FirstUse(PSID value);\n\
+         extern \"C\" void FirstRaw(PVOID* value);\n",
     )
     .unwrap();
     std::fs::write(
         &second,
         "typedef void* PVOID;\n\
+         typedef PVOID* PTBS_HCONTEXT;\n\
          typedef PVOID TBS_HCONTEXT;\n\
-         extern \"C\" void SecondUse(PVOID* value, TBS_HCONTEXT context);\n",
+         extern \"C\" void SecondUse(PTBS_HCONTEXT value, TBS_HCONTEXT context);\n",
     )
     .unwrap();
     let snapshot = aggregate_snapshot(&scratch, &[&common_api, &first, &second]);
     let reverse = aggregate_snapshot(&scratch, &[&second, &first, &common_api]);
     let common_partition =
         RootPartition::new("common", "Example.Common").with_library("CommonUse", "common.dll");
-    let first_partition =
-        RootPartition::new("first", "Example.First").with_library("FirstUse", "first.dll");
+    let first_partition = RootPartition::new("first", "Example.First")
+        .with_library("FirstUse", "first.dll")
+        .with_library("FirstRaw", "first.dll");
     let second_partition =
         RootPartition::new("second", "Example.Second").with_library("SecondUse", "second.dll");
     let policy = HeaderPartitionPolicy::new()
@@ -2438,11 +2441,19 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
     assert!(!first.contains("type PVOID"), "{first}");
     assert!(first.contains("type PSID = *mut void"), "{first}");
     assert!(first.contains("fn FirstUse(value: PSID)"), "{first}");
+    assert!(
+        first.contains("fn FirstRaw(value: *mut *mut void)"),
+        "{first}"
+    );
     let second = output(&partitions, "Example.Second");
     assert!(second.contains("type PVOID = *mut void"), "{second}");
+    assert!(
+        second.contains("type PTBS_HCONTEXT = *mut PVOID"),
+        "{second}"
+    );
     assert!(second.contains("type TBS_HCONTEXT = PVOID"), "{second}");
     assert!(
-        second.contains("fn SecondUse(value: *mut PVOID, context: TBS_HCONTEXT)"),
+        second.contains("fn SecondUse(value: PTBS_HCONTEXT, context: TBS_HCONTEXT)"),
         "{second}"
     );
 
@@ -2469,15 +2480,31 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
         index.expect("Example.First", "PSID").underlying_type(),
         Some(Type::PtrMut(Box::new(Type::Void), 1))
     );
+    let Item::Fn(first_raw) = index.expect_item("Example.First", "FirstRaw") else {
+        panic!("Example.First.FirstRaw was not emitted as a function");
+    };
+    assert_eq!(
+        first_raw.signature(&[]).types,
+        [Type::PtrMut(Box::new(Type::Void), 2)]
+    );
     let Item::Fn(second_use) = index.expect_item("Example.Second", "SecondUse") else {
         panic!("Example.Second.SecondUse was not emitted as a function");
     };
     assert_eq!(
         second_use.signature(&[]).types,
         [
-            Type::PtrMut(Box::new(Type::value_named("Example.Second", "PVOID")), 1),
+            Type::value_named("Example.Second", "PTBS_HCONTEXT"),
             Type::value_named("Example.Second", "TBS_HCONTEXT")
         ]
+    );
+    assert_eq!(
+        index
+            .expect("Example.Second", "PTBS_HCONTEXT")
+            .underlying_type(),
+        Some(Type::PtrMut(
+            Box::new(Type::value_named("Example.Second", "PVOID")),
+            1
+        ))
     );
     assert_eq!(
         index
@@ -2684,8 +2711,9 @@ fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
     std::fs::write(
         &tbs,
         "typedef void* PVOID;\n\
+         typedef PVOID* PTBS_HCONTEXT;\n\
          typedef PVOID TBS_HCONTEXT;\n\
-         extern \"C\" void TbsUse(PVOID* value, TBS_HCONTEXT context);\n",
+         extern \"C\" void TbsUse(PTBS_HCONTEXT value, TBS_HCONTEXT context);\n",
     )
     .unwrap();
     std::fs::write(&satellite, "extern \"C\" void SatelliteUse(PVOID value);\n").unwrap();
@@ -2732,6 +2760,10 @@ fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
 
     let tbs_rdl = output(&partitions, "Example.Tbs");
     assert!(tbs_rdl.contains("type PVOID = *mut void"), "{tbs_rdl}");
+    assert!(
+        tbs_rdl.contains("type PTBS_HCONTEXT = *mut PVOID"),
+        "{tbs_rdl}"
+    );
     assert!(tbs_rdl.contains("type TBS_HCONTEXT = PVOID"), "{tbs_rdl}");
     let satellite_rdl = output(&partitions, "Example.Satellite");
     assert!(!satellite_rdl.contains("type PVOID"), "{satellite_rdl}");
@@ -2754,6 +2786,15 @@ fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
     assert_eq!(
         satellite_use.signature(&[]).types,
         [Type::PtrMut(Box::new(Type::Void), 1)]
+    );
+    assert_eq!(
+        index
+            .expect("Example.Tbs", "PTBS_HCONTEXT")
+            .underlying_type(),
+        Some(Type::PtrMut(
+            Box::new(Type::value_named("Example.Tbs", "PVOID")),
+            1
+        ))
     );
     assert_eq!(
         index
