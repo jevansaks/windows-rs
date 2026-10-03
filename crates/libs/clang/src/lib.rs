@@ -2419,8 +2419,7 @@ impl Snapshot {
             scoped_names.insert((name, namespace), scoped);
         }
 
-        let mut declarations = BTreeMap::new();
-        let mut tu_declarations: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
+        let mut declarations = ScopedDeclarationIndex::new(&self.facts, &collisions);
         for fact in &self.facts {
             let Some(namespace) = fact_namespaces.get(&fact.origin) else {
                 continue;
@@ -2428,18 +2427,7 @@ impl Snapshot {
             let Some(scoped) = scoped_names.get(&(fact.name.clone(), namespace.clone())) else {
                 continue;
             };
-            declarations.insert(
-                (
-                    fact.origin.tu.clone(),
-                    fact.spelling.clone(),
-                    fact.name.clone(),
-                ),
-                scoped.clone(),
-            );
-            tu_declarations
-                .entry((fact.origin.tu.clone(), fact.name.clone()))
-                .or_default()
-                .insert(scoped.clone());
+            declarations.insert(fact, scoped.clone());
         }
 
         for fact in &mut self.facts {
@@ -2449,13 +2437,7 @@ impl Snapshot {
             {
                 fact.name.clone_from(scoped);
             }
-            rename_fact_types(
-                &mut fact.data,
-                &fact.origin.tu,
-                &declarations,
-                &tu_declarations,
-                &collisions,
-            );
+            rename_fact_types(&mut fact.data, &fact.origin.tu, &declarations, &collisions);
         }
         for constant in &mut self.constants {
             let original = constant.name.clone();
@@ -2487,7 +2469,6 @@ impl Snapshot {
                 &mut constant.ty,
                 &constant.root.tu,
                 &declarations,
-                &tu_declarations,
                 &collisions,
             );
         }
@@ -5713,19 +5694,54 @@ impl<'a> TypeProjection<'a> {
     }
 }
 
-fn scoped_declaration_name<'a>(
-    tu: &str,
-    declaration: &Location,
-    name: &str,
-    declarations: &'a BTreeMap<(String, Location, String), String>,
-    tu_declarations: &'a BTreeMap<(String, String), BTreeSet<String>>,
-) -> Option<&'a String> {
-    declarations
-        .get(&(tu.to_string(), declaration.clone(), name.to_string()))
-        .or_else(|| {
-            let names = tu_declarations.get(&(tu.to_string(), name.to_string()))?;
+struct ScopedDeclarationIndex {
+    exact: BTreeSet<(String, Location, String)>,
+    scoped: BTreeMap<(String, Location, String), String>,
+    by_tu_name: BTreeMap<(String, String), BTreeSet<String>>,
+}
+
+impl ScopedDeclarationIndex {
+    fn new(facts: &[Fact], collisions: &BTreeSet<String>) -> Self {
+        Self {
+            exact: facts
+                .iter()
+                .filter(|fact| collisions.contains(&fact.name))
+                .map(|fact| {
+                    (
+                        fact.origin.tu.clone(),
+                        fact.spelling.clone(),
+                        fact.name.clone(),
+                    )
+                })
+                .collect(),
+            scoped: BTreeMap::new(),
+            by_tu_name: BTreeMap::new(),
+        }
+    }
+
+    fn insert(&mut self, fact: &Fact, scoped: String) {
+        self.scoped.insert(
+            (
+                fact.origin.tu.clone(),
+                fact.spelling.clone(),
+                fact.name.clone(),
+            ),
+            scoped.clone(),
+        );
+        self.by_tu_name
+            .entry((fact.origin.tu.clone(), fact.name.clone()))
+            .or_default()
+            .insert(scoped);
+    }
+
+    fn get(&self, tu: &str, declaration: &Location, name: &str) -> Option<&String> {
+        let key = (tu.to_string(), declaration.clone(), name.to_string());
+        self.scoped.get(&key).or_else(|| {
+            (!self.exact.contains(&key)).then_some(())?;
+            let names = self.by_tu_name.get(&(tu.to_string(), name.to_string()))?;
             (names.len() == 1).then(|| names.first().unwrap())
         })
+    }
 }
 
 fn remap_fact_types(
@@ -5893,44 +5909,37 @@ fn remap_type_ref(
 fn rename_fact_types(
     data: &mut FactData,
     tu: &str,
-    declarations: &BTreeMap<(String, Location, String), String>,
-    tu_declarations: &BTreeMap<(String, String), BTreeSet<String>>,
+    declarations: &ScopedDeclarationIndex,
     collisions: &BTreeSet<String>,
 ) {
     match data {
         FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
             for param in params {
-                rename_type_ref(&mut param.ty, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(&mut param.ty, tu, declarations, collisions);
             }
-            rename_type_ref(result, tu, declarations, tu_declarations, collisions);
+            rename_type_ref(result, tu, declarations, collisions);
         }
         FactData::Interface { base, methods, .. } => {
             if let Some(base) = base {
-                rename_type_ref(base, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(base, tu, declarations, collisions);
             }
             for method in methods {
                 for param in &mut method.params {
-                    rename_type_ref(&mut param.ty, tu, declarations, tu_declarations, collisions);
+                    rename_type_ref(&mut param.ty, tu, declarations, collisions);
                 }
-                rename_type_ref(
-                    &mut method.result,
-                    tu,
-                    declarations,
-                    tu_declarations,
-                    collisions,
-                );
+                rename_type_ref(&mut method.result, tu, declarations, collisions);
             }
         }
         FactData::Record { base, fields, .. } => {
             if let Some(base) = base {
-                rename_type_ref(base, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(base, tu, declarations, collisions);
             }
             for field in fields {
-                rename_type_ref(&mut field.ty, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(&mut field.ty, tu, declarations, collisions);
             }
         }
         FactData::Typedef { target } => {
-            rename_type_ref(target, tu, declarations, tu_declarations, collisions);
+            rename_type_ref(target, tu, declarations, collisions);
         }
         _ => {}
     }
@@ -5939,8 +5948,7 @@ fn rename_fact_types(
 fn rename_type_ref(
     ty: &mut TypeRef,
     tu: &str,
-    declarations: &BTreeMap<(String, Location, String), String>,
-    tu_declarations: &BTreeMap<(String, String), BTreeSet<String>>,
+    declarations: &ScopedDeclarationIndex,
     collisions: &BTreeSet<String>,
 ) {
     match ty {
@@ -5948,9 +5956,7 @@ fn rename_type_ref(
             if !collisions.contains(name) {
                 return;
             }
-            if let Some(scoped) =
-                scoped_declaration_name(tu, declaration, name, declarations, tu_declarations)
-            {
+            if let Some(scoped) = declarations.get(tu, declaration, name) {
                 *name = scoped.clone();
             }
         }
@@ -5960,32 +5966,31 @@ fn rename_type_ref(
             args,
         } => {
             if collisions.contains(name)
-                && let Some(scoped) =
-                    scoped_declaration_name(tu, declaration, name, declarations, tu_declarations)
+                && let Some(scoped) = declarations.get(tu, declaration, name)
             {
                 *name = scoped.clone();
             }
             for arg in args {
-                rename_type_ref(arg, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(arg, tu, declarations, collisions);
             }
         }
         TypeRef::Pointer { target, .. }
         | TypeRef::Reference { target, .. }
         | TypeRef::Array { target, .. } => {
-            rename_type_ref(target, tu, declarations, tu_declarations, collisions);
+            rename_type_ref(target, tu, declarations, collisions);
         }
         TypeRef::FunctionPointer { params, result, .. } => {
             for param in params {
-                rename_type_ref(param, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(param, tu, declarations, collisions);
             }
-            rename_type_ref(result, tu, declarations, tu_declarations, collisions);
+            rename_type_ref(result, tu, declarations, collisions);
         }
         TypeRef::InlineRecord(record) => {
             if let Some(base) = &mut record.base {
-                rename_type_ref(base, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(base, tu, declarations, collisions);
             }
             for field in &mut record.fields {
-                rename_type_ref(&mut field.ty, tu, declarations, tu_declarations, collisions);
+                rename_type_ref(&mut field.ty, tu, declarations, collisions);
             }
         }
         _ => {}

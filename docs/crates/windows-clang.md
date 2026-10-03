@@ -223,6 +223,11 @@ selection behavior.
 
 Namespace collision scoping uses internal planner names only. External references and exclusions
 continue to match the public post-remap name, and owner diagnostics do not expose scoped names.
+Reference rewriting first matches the exact translation unit, public name, and spelling location.
+The single-scoped-candidate fallback for a translation unit is used only when the snapshot has no
+declaration at the referenced location. An exact included-only declaration therefore stays
+unscoped, so ordinary dependency projection can default-route or inline it even when later
+redeclarations of the same name have logical owners in that translation unit.
 Typedef variants are compared after following exact local typedef chains only for collision
 classification. If an explicitly owner-excluded declaration refers to several retained declarations
 that are all equivalent, its exact references keep the deterministic surviving public owner that

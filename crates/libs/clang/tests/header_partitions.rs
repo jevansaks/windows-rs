@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use windows_clang::{
-    EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, PartitionConflictReason,
-    PartitionItemKind, RdlPartition, RootPartition, Snapshot, TypeReference, TypeReferenceKind,
-    extract, extract_partitioned,
+    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities,
+    PartitionConflictReason, PartitionItemKind, RdlPartition, RootPartition, Snapshot, TypeRef,
+    TypeReference, TypeReferenceKind, extract, extract_partitioned,
 };
 use windows_metadata::{
     Type, Value,
@@ -2254,6 +2254,120 @@ fn aggregate_and_satellite_inputs_match_case_variant_selectors() {
             .values()
             .any(|rdl| rdl.contains("SATELLITE_VALUE"))
     );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn satellite_included_only_alias_is_not_retargeted_to_aggregate_owner() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("satellite-included-only-alias");
+    let base = scratch.join("base.h");
+    let iis = scratch.join("iis.h");
+    let msxml = scratch.join("msxml.h");
+    let satellite = scratch.join("ioapiset.h");
+    std::fs::write(&base, "typedef unsigned __int64 ULONG_PTR, *PULONG_PTR;\n").unwrap();
+    std::fs::write(&iis, "typedef unsigned __int64 ULONG_PTR, *PULONG_PTR;\n").unwrap();
+    std::fs::write(&msxml, "typedef unsigned __int64 ULONG_PTR, *PULONG_PTR;\n").unwrap();
+    std::fs::write(
+        &satellite,
+        "extern \"C\" void UseSatellitePointer(PULONG_PTR value);\n",
+    )
+    .unwrap();
+    let include = format!("-I{}", scratch.display());
+    let aggregate_source =
+        "#include \"base.h\"\n#include \"ioapiset.h\"\n#include \"iis.h\"\n#include \"msxml.h\"\n";
+    let satellite_source = "#include \"base.h\"\n#include \"ioapiset.h\"\n#include \"msxml.h\"\n";
+    let snapshot = extract(
+        [
+            Input::new("aggregate.cpp", aggregate_source)
+                .with_root_dirs([scratch.to_string_lossy().to_string()]),
+            Input::new("satellite.cpp", satellite_source)
+                .with_root_dirs([scratch.to_string_lossy().to_string()]),
+        ],
+        &[
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+            include.as_str(),
+        ],
+    )
+    .unwrap();
+    let function = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.origin.tu == "satellite.cpp" && fact.name == "UseSatellitePointer")
+        .unwrap();
+    let FactData::Function { params, .. } = &function.data else {
+        panic!("UseSatellitePointer was not extracted as a function");
+    };
+    let TypeRef::Named { declaration, .. } = &params[0].ty else {
+        panic!("UseSatellitePointer did not retain its PULONG_PTR reference");
+    };
+    assert_eq!(declaration.file, base.to_string_lossy().replace('\\', "/"));
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "aggregate.cpp",
+            "iis.h",
+            RootPartition::new("iis", "Example.Iis"),
+        )
+        .with_traversed_header_for_input(
+            "aggregate.cpp",
+            "msxml.h",
+            RootPartition::new("msxml", "Example.MsXml"),
+        )
+        .with_traversed_header_for_input(
+            "satellite.cpp",
+            "ioapiset.h",
+            RootPartition::new("satellite", "Example.Satellite")
+                .with_library("UseSatellitePointer", "satellite.dll"),
+        );
+    let references = BTreeMap::new();
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let options = EmitOptions::new("Example.Common", &references);
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+
+    for namespace in ["Example.Iis", "Example.MsXml"] {
+        assert!(
+            output(&partitions, namespace).contains("type PULONG_PTR = *mut u64"),
+            "{partitions:#?}"
+        );
+    }
+    assert!(
+        !partitions
+            .keys()
+            .any(|partition| partition.namespace == "Example.Common"),
+        "{partitions:#?}"
+    );
+    let satellite = output(&partitions, "Example.Satellite");
+    assert!(
+        satellite.contains("fn UseSatellitePointer(value: *mut u64)"),
+        "{satellite}"
+    );
+
+    let winmd = scratch.join("satellite-included-only-alias.winmd");
+    let mut compiler = windows_rdl::reader();
+    for rdl in partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler.reference_default().output(&winmd).write().unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    for namespace in ["Example.Iis", "Example.MsXml"] {
+        assert_eq!(
+            index.expect(namespace, "PULONG_PTR").underlying_type(),
+            Some(Type::PtrMut(Box::new(Type::U64), 1))
+        );
+    }
+    let Item::Fn(function) = index.expect_item("Example.Satellite", "UseSatellitePointer") else {
+        panic!("UseSatellitePointer was not emitted as a function");
+    };
+    let signature = function.signature(&[]);
+    assert_eq!(signature.return_type, Type::Void);
+    assert_eq!(signature.types, [Type::PtrMut(Box::new(Type::U64), 1)]);
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
