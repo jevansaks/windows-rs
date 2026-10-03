@@ -177,6 +177,154 @@ fn dependency_pointer_aliases_preserve_nested_constness() {
     std::fs::remove_dir_all(scratch).unwrap();
 }
 
+#[test]
+fn retained_canonical_aliases_follow_their_emitted_namespace() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-canonical-alias-routes-{}",
+        std::process::id()
+    ));
+    if scratch.exists() {
+        std::fs::remove_dir_all(&scratch).unwrap();
+    }
+    std::fs::create_dir_all(&scratch).unwrap();
+    let base = scratch.join("base.h");
+    let api = scratch.join("clusapi.h");
+    std::fs::write(&base, BASE_SOURCE).unwrap();
+    std::fs::write(
+        &api,
+        format!(
+            "#include \"{}\"\n\
+             typedef struct CLUSTER_BATCH_COMMAND {{\n\
+                 LPCWSTR wzName;\n\
+                 PCWSTR directName;\n\
+                 PCWSTR *nestedName;\n\
+             }} CLUSTER_BATCH_COMMAND;\n\
+             extern \"C\" void UseNames(\n\
+                 LPCWSTR legacyName,\n\
+                 PCWSTR directName,\n\
+                 PCWSTR *nestedName);\n",
+            base.to_string_lossy()
+        ),
+    )
+    .unwrap();
+
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", api.to_string_lossy()),
+        )
+        .with_roots([api.to_string_lossy().to_string()])],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = windows_clang::MetadataReferences::new([windows_metadata::reader::File::new(
+        windows_default::WINRT.to_vec(),
+    )
+    .unwrap()]);
+    let mut options = EmitOptions::new("Windows.Win32", references.types());
+    options.library = Some("test.dll");
+
+    let cross_policy = HeaderPartitionPolicy::new().with_traversed_header(
+        api.to_string_lossy(),
+        RootPartition::new("clustering", "Windows.Win32.Networking.Clustering"),
+    );
+    let cross_partitions = snapshot
+        .plan_header_partitions(&cross_policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let cross = cross_partitions.values().cloned().collect::<String>();
+    assert_eq!(cross.matches("type PCWSTR = *const u16;").count(), 1);
+    assert!(cross.contains("wzName: Windows::Win32::PCWSTR,"), "{cross}");
+    assert!(
+        cross.contains("directName: Windows::Win32::PCWSTR,"),
+        "{cross}"
+    );
+    assert!(
+        cross.contains("nestedName: *mut Windows::Win32::PCWSTR,"),
+        "{cross}"
+    );
+    assert!(
+        cross.contains(
+            "fn UseNames(legacyName: Windows::Win32::PCWSTR, directName: \
+             Windows::Win32::PCWSTR, nestedName: *mut Windows::Win32::PCWSTR)"
+        ),
+        "{cross}"
+    );
+    let cross_winmd = scratch.join("cross.winmd");
+    windows_rdl::reader()
+        .input_texts(cross_partitions.values())
+        .reference_default()
+        .output(&cross_winmd)
+        .write()
+        .unwrap();
+    assert_canonical_alias_metadata(
+        &windows_metadata::reader::Index::read(&cross_winmd).unwrap(),
+        "Windows.Win32.Networking.Clustering",
+    );
+
+    let same_policy = HeaderPartitionPolicy::new().with_traversed_header(
+        api.to_string_lossy(),
+        RootPartition::new("clustering", "Windows.Win32"),
+    );
+    let same_partitions = snapshot
+        .plan_header_partitions(&same_policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let same = same_partitions.values().cloned().collect::<String>();
+    assert_eq!(same.matches("type PCWSTR = *const u16;").count(), 1);
+    assert!(same.contains("wzName: PCWSTR,"), "{same}");
+    assert!(same.contains("directName: PCWSTR,"), "{same}");
+    assert!(same.contains("nestedName: *mut PCWSTR,"), "{same}");
+    assert!(
+        same.contains(
+            "fn UseNames(legacyName: PCWSTR, directName: PCWSTR, nestedName: *mut PCWSTR)"
+        ),
+        "{same}"
+    );
+    assert!(!same.contains("Windows::Win32::PCWSTR"), "{same}");
+    let same_winmd = scratch.join("same.winmd");
+    windows_rdl::reader()
+        .input_texts(same_partitions.values())
+        .reference_default()
+        .output(&same_winmd)
+        .write()
+        .unwrap();
+    assert_canonical_alias_metadata(
+        &windows_metadata::reader::Index::read(&same_winmd).unwrap(),
+        "Windows.Win32",
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+fn assert_canonical_alias_metadata(index: &windows_metadata::reader::Index, namespace: &str) {
+    let alias = Type::value_named("Windows.Win32", "PCWSTR");
+    let record = index.expect(namespace, "CLUSTER_BATCH_COMMAND");
+    let fields = record
+        .fields()
+        .map(|field| (field.name().to_string(), field.ty()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    assert_eq!(fields["wzName"], alias);
+    assert_eq!(fields["directName"], alias);
+    assert_eq!(fields["nestedName"], pointer_to_alias(false, "PCWSTR"));
+
+    let Item::Fn(function) = index.expect_item(namespace, "UseNames") else {
+        panic!("UseNames was not emitted as a function");
+    };
+    assert_eq!(
+        function.signature(&[]).types,
+        [
+            Type::value_named("Windows.Win32", "PCWSTR"),
+            Type::value_named("Windows.Win32", "PCWSTR"),
+            pointer_to_alias(false, "PCWSTR"),
+        ]
+    );
+}
+
 fn pointer_to_alias(outer_const: bool, name: &str) -> Type {
     let target = Box::new(Type::value_named("Windows.Win32", name));
     if outer_const {

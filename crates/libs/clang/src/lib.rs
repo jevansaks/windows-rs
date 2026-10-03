@@ -1533,29 +1533,25 @@ impl Snapshot {
         let target = self.timing_target.as_deref().unwrap_or("default");
         let emission_time = timing.then(std::time::Instant::now);
         let mut local_types = BTreeMap::new();
+        let mut routed_types = BTreeMap::new();
         if let Some(routes) = routes {
-            let type_namespaces: BTreeMap<_, _> = plan
-                .types
-                .iter()
-                .map(|planned| {
-                    (
-                        planned.name.as_str(),
-                        routes[&(planned.name.clone(), OutputKind::Type)]
-                            .namespace
-                            .as_str(),
-                    )
-                })
-                .collect();
+            for planned in &plan.types {
+                routed_types.insert(
+                    planned.name.clone(),
+                    routes[&(planned.name.clone(), OutputKind::Type)]
+                        .namespace
+                        .clone(),
+                );
+            }
             for fact in self.facts.iter().filter(|fact| is_type_fact(fact)) {
                 let emitted_name = plan
                     .type_names
                     .get(&fact.name)
                     .map_or(fact.name.as_str(), String::as_str);
-                let Some(namespace) = type_namespaces.get(emitted_name) else {
+                let Some(namespace) = routed_types.get(emitted_name) else {
                     continue;
                 };
-                if let Some(previous) =
-                    local_types.insert(fact.spelling.clone(), (*namespace).to_string())
+                if let Some(previous) = local_types.insert(fact.spelling.clone(), namespace.clone())
                     && previous != *namespace
                 {
                     return Err(Error(format!(
@@ -1634,6 +1630,7 @@ impl Snapshot {
                         &plan.interface_names,
                         &fact.origin.tu,
                         &local_types,
+                        &routed_types,
                         namespace,
                     );
                     write_callback(
@@ -1676,6 +1673,7 @@ impl Snapshot {
                         &plan.interface_names,
                         &fact.origin.tu,
                         &local_types,
+                        &routed_types,
                         namespace,
                     );
                     let item = write_named_record(
@@ -1715,6 +1713,7 @@ impl Snapshot {
                             &plan.interface_names,
                             &fact.origin.tu,
                             &local_types,
+                            &routed_types,
                             namespace,
                         )
                     )
@@ -1772,6 +1771,7 @@ impl Snapshot {
                         &plan.interface_names,
                         &fact.origin.tu,
                         &local_types,
+                        &routed_types,
                         namespace,
                     );
                     let item = write_named_record(
@@ -1807,6 +1807,7 @@ impl Snapshot {
                         &plan.interface_names,
                         &fact.origin.tu,
                         &local_types,
+                        &routed_types,
                         namespace,
                     );
                     write_interface(
@@ -1865,6 +1866,7 @@ impl Snapshot {
                 &plan.interface_names,
                 &function.origin.tu,
                 &local_types,
+                &routed_types,
                 namespace,
             );
             let callable = CallableTarget::Function(&function.origin);
@@ -1888,6 +1890,7 @@ impl Snapshot {
                         &plan.interface_names,
                         &function.origin.tu,
                         &local_types,
+                        &routed_types,
                         namespace,
                     )
                 )
@@ -4389,6 +4392,7 @@ impl Snapshot {
                             &BTreeSet::new(),
                             &fact.origin.tu,
                             &BTreeMap::new(),
+                            &BTreeMap::new(),
                             None,
                         ),
                     );
@@ -4878,6 +4882,7 @@ struct TypeProjection<'a> {
     interface_names: &'a BTreeSet<(String, String)>,
     tu: &'a str,
     local_types: &'a BTreeMap<Location, String>,
+    routed_types: &'a BTreeMap<String, String>,
     namespace: Option<&'a str>,
 }
 
@@ -4887,6 +4892,7 @@ impl<'a> TypeProjection<'a> {
         interface_names: &'a BTreeSet<(String, String)>,
         tu: &'a str,
         local_types: &'a BTreeMap<Location, String>,
+        routed_types: &'a BTreeMap<String, String>,
         namespace: Option<&'a str>,
     ) -> Self {
         Self {
@@ -4894,6 +4900,7 @@ impl<'a> TypeProjection<'a> {
             interface_names,
             tu,
             local_types,
+            routed_types,
             namespace,
         }
     }
@@ -4905,6 +4912,7 @@ impl<'a> TypeProjection<'a> {
             self.interface_names,
             self.tu,
             self.local_types,
+            self.routed_types,
             self.namespace,
         )
     }
@@ -7372,6 +7380,7 @@ fn write_params(
                     projection.interface_names,
                     projection.tu,
                     projection.local_types,
+                    projection.routed_types,
                     projection.namespace,
                 )
             ))
@@ -7536,16 +7545,18 @@ fn planned_param_type_name(
     interface_names: &BTreeSet<(String, String)>,
     tu: &str,
     local_types: &BTreeMap<Location, String>,
+    routed_types: &BTreeMap<String, String>,
     namespace: Option<&str>,
 ) -> String {
     if param.annotation.com_out_ptr {
         return "*mut *mut void".to_string();
     }
     if let Some(name) = parameter_string_name(param) {
-        return type_names
+        let name = type_names
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.to_string());
+        return qualify_routed_type(&name, routed_types, namespace);
     }
     planned_emitted_type_name(
         &param.ty,
@@ -7553,6 +7564,7 @@ fn planned_param_type_name(
         interface_names,
         tu,
         local_types,
+        routed_types,
         namespace,
     )
 }
@@ -7628,6 +7640,7 @@ fn planned_emitted_type_name(
     interface_names: &BTreeSet<(String, String)>,
     tu: &str,
     local_types: &BTreeMap<Location, String>,
+    routed_types: &BTreeMap<String, String>,
     namespace: Option<&str>,
 ) -> String {
     if matches!(ty, TypeRef::FunctionPointer { .. }) {
@@ -7639,7 +7652,16 @@ fn planned_emitted_type_name(
     if let TypeRef::Named { name, declaration } = ty
         && let Some(name) = type_names.get(name)
     {
-        return qualify_local_type(declaration, name, local_types, namespace);
+        return qualify_emitted_type(declaration, name, local_types, routed_types, namespace);
+    }
+    if let TypeRef::Named { name, .. } = ty
+        && let Some(name) = canonical_string_name(name)
+    {
+        let name = type_names
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string());
+        return qualify_routed_type(&name, routed_types, namespace);
     }
     if let TypeRef::Named { name, .. } = ty
         && let Some(name) = canonical_named_type(name)
@@ -7664,6 +7686,7 @@ fn planned_emitted_type_name(
                 interface_names,
                 tu,
                 local_types,
+                routed_types,
                 namespace,
             )
         );
@@ -7677,6 +7700,7 @@ fn planned_emitted_type_name(
                 interface_names,
                 tu,
                 local_types,
+                routed_types,
                 namespace,
             )
         );
@@ -7695,6 +7719,7 @@ fn planned_emitted_type_name(
                 interface_names,
                 tu,
                 local_types,
+                routed_types,
                 namespace,
             )
         );
@@ -7709,6 +7734,7 @@ fn planned_emitted_type_name(
                 interface_names,
                 tu,
                 local_types,
+                routed_types,
                 namespace,
             )
         );
@@ -8195,6 +8221,39 @@ fn qualify_local_type(
     namespace: Option<&str>,
 ) -> String {
     let Some(target_namespace) = local_types.get(declaration) else {
+        return rdl_ident(fallback_name);
+    };
+    if namespace == Some(target_namespace.as_str()) {
+        rdl_ident(fallback_name)
+    } else {
+        format!(
+            "{}::{}",
+            target_namespace.replace('.', "::"),
+            rdl_ident(fallback_name)
+        )
+    }
+}
+
+fn qualify_emitted_type(
+    declaration: &Location,
+    fallback_name: &str,
+    local_types: &BTreeMap<Location, String>,
+    routed_types: &BTreeMap<String, String>,
+    namespace: Option<&str>,
+) -> String {
+    if local_types.contains_key(declaration) {
+        qualify_local_type(declaration, fallback_name, local_types, namespace)
+    } else {
+        qualify_routed_type(fallback_name, routed_types, namespace)
+    }
+}
+
+fn qualify_routed_type(
+    fallback_name: &str,
+    routed_types: &BTreeMap<String, String>,
+    namespace: Option<&str>,
+) -> String {
+    let Some(target_namespace) = routed_types.get(fallback_name) else {
         return rdl_ident(fallback_name);
     };
     if namespace == Some(target_namespace.as_str()) {
