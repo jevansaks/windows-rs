@@ -209,17 +209,20 @@ planned declaration supplies the output partition and physical header, while eve
 available in an ambiguity report.
 
 When equivalent roots resolve to different namespaces, header planning keeps one public identity per
-namespace if each exact source declaration belongs to one effective namespace. Type references tied
-to an exact spelling location follow that declaration's scoped identity, so APIs from separate
+namespace if each exact source declaration belongs to one effective namespace. Ordinary declarations
+use their spelling location for this classification. Macro-generated declarations use their
+expansion location, so repeated invocations of one helper macro can coalesce within a destination
+and retain separate identities across destinations. Type references tied to an exact spelling
+location follow that declaration's scoped identity when the match is unique, so APIs from separate
 header families keep their own aliases. Duplicate GUID macro facts follow the same rule. Namespace
 authorities are applied before this classification, so declarations routed to one destination still
 coalesce under the semantic comparison above. When several physical declarations share one
 destination, a stable policy-and-source ordering selects its output partition independently of
 declaration order. For a colliding public name, a source declaration claimed by several namespaces
-or a reference tied to such an irreconcilable declaration remains a conflict rather than selecting a
-lexical owner across destinations. Genuinely unowned dependencies still use the default namespace.
-These rules apply to `HeaderPartitionPlan`; legacy partitioned emission keeps its existing owner
-selection behavior.
+or a reference tied to such an irreconcilable declaration remains a conflict rather than selecting
+a lexical owner across destinations. Genuinely unowned dependencies still use the default
+namespace. These rules apply to `HeaderPartitionPlan`; legacy partitioned emission keeps its
+existing owner selection behavior.
 
 Namespace collision scoping uses internal planner names only. External references and exclusions
 continue to match the public post-remap name, and owner diagnostics do not expose scoped names.
@@ -227,12 +230,21 @@ Reference rewriting first matches the exact translation unit, public name, and s
 The single-scoped-candidate fallback for a translation unit is used only when the snapshot has no
 declaration at the referenced location. An exact included-only declaration therefore stays
 unscoped, so ordinary dependency projection can default-route or inline it even when later
-redeclarations of the same name have logical owners in that translation unit.
+redeclarations of the same name have logical owners in that translation unit. Several scoped macro
+expansions may share one spelling key; the index retains all of them and rewrites a reference only
+when that exact key has one scoped identity.
 Typedef variants are compared after following exact local typedef chains only for collision
 classification. If an explicitly owner-excluded declaration refers to several retained declarations
 that are all equivalent, its exact references keep the deterministic surviving public owner that
 planning selected before namespace scoping. If any retained declaration differs, the normal
 owner-exclusion diagnostic remains.
+
+Canonical typedefs are not promoted to public identities merely because equivalent declarations
+have logical owners. If dependency closure retains a canonical raw-pointer alias such as `PVOID`
+for a nested pointer boundary, its route comes from the selected translation unit and exact spelling
+location rather than from equivalent canonical declarations that were projected away. Direct uses
+and unowned copies in other extraction inputs still project to the raw pointer and do not create
+nominal aliases in their logical or default namespaces.
 
 The extractor records direct `DECLARE_HANDLE(name)` macro invocations and validates the exact
 `name__ { int unused; }` plus `typedef name__ *name` expansion. When a header partition suppresses

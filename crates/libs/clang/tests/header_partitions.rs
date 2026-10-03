@@ -2371,3 +2371,377 @@ fn satellite_included_only_alias_is_not_retargeted_to_aggregate_owner() {
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
+
+#[test]
+fn canonical_pointer_aliases_keep_declaration_specific_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("canonical-pointer-routes");
+    let common_types = scratch.join("common_types.h");
+    let common_api = scratch.join("common_api.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(&common_types, "typedef void* PVOID;\n").unwrap();
+    std::fs::write(
+        &common_api,
+        format!(
+            "#include \"{}\"\n\
+             extern \"C\" void CommonUse(PVOID value);\n",
+            common_types.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &first,
+        "typedef void* PVOID;\n\
+         typedef PVOID PSID;\n\
+         extern \"C\" void FirstUse(PSID value);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "typedef void* PVOID;\n\
+         typedef PVOID TBS_HCONTEXT;\n\
+         extern \"C\" void SecondUse(PVOID* value, TBS_HCONTEXT context);\n",
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&common_api, &first, &second]);
+    let reverse = aggregate_snapshot(&scratch, &[&second, &first, &common_api]);
+    let common_partition =
+        RootPartition::new("common", "Example.Common").with_library("CommonUse", "common.dll");
+    let first_partition =
+        RootPartition::new("first", "Example.First").with_library("FirstUse", "first.dll");
+    let second_partition =
+        RootPartition::new("second", "Example.Second").with_library("SecondUse", "second.dll");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(common_api.to_string_lossy(), common_partition.clone())
+        .with_traversed_header(first.to_string_lossy(), first_partition.clone())
+        .with_traversed_header(second.to_string_lossy(), second_partition.clone());
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(second.to_string_lossy(), second_partition)
+        .with_traversed_header(first.to_string_lossy(), first_partition)
+        .with_traversed_header(common_api.to_string_lossy(), common_partition);
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy| {
+        let plan = snapshot
+            .plan_header_partitions(policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+    let partitions = emit(snapshot, &policy);
+    let reverse_partitions = emit(reverse, &reverse_policy);
+    assert_eq!(partitions, reverse_partitions);
+
+    let first = output(&partitions, "Example.First");
+    assert!(!first.contains("type PVOID"), "{first}");
+    assert!(first.contains("type PSID = *mut void"), "{first}");
+    assert!(first.contains("fn FirstUse(value: PSID)"), "{first}");
+    let second = output(&partitions, "Example.Second");
+    assert!(second.contains("type PVOID = *mut void"), "{second}");
+    assert!(second.contains("type TBS_HCONTEXT = PVOID"), "{second}");
+    assert!(
+        second.contains("fn SecondUse(value: *mut PVOID, context: TBS_HCONTEXT)"),
+        "{second}"
+    );
+
+    let winmd = scratch.join("canonical-pointer-routes.winmd");
+    let mut compiler = windows_rdl::reader();
+    for rdl in partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler.reference_default().output(&winmd).write().unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    assert!(!index.contains("Example.First", "PVOID"));
+    assert_eq!(
+        index.expect("Example.Second", "PVOID").underlying_type(),
+        Some(Type::PtrMut(Box::new(Type::Void), 1))
+    );
+    let Item::Fn(first_use) = index.expect_item("Example.First", "FirstUse") else {
+        panic!("Example.First.FirstUse was not emitted as a function");
+    };
+    assert_eq!(
+        first_use.signature(&[]).types,
+        [Type::value_named("Example.First", "PSID")]
+    );
+    assert_eq!(
+        index.expect("Example.First", "PSID").underlying_type(),
+        Some(Type::PtrMut(Box::new(Type::Void), 1))
+    );
+    let Item::Fn(second_use) = index.expect_item("Example.Second", "SecondUse") else {
+        panic!("Example.Second.SecondUse was not emitted as a function");
+    };
+    assert_eq!(
+        second_use.signature(&[]).types,
+        [
+            Type::PtrMut(Box::new(Type::value_named("Example.Second", "PVOID")), 1),
+            Type::value_named("Example.Second", "TBS_HCONTEXT")
+        ]
+    );
+    assert_eq!(
+        index
+            .expect("Example.Second", "TBS_HCONTEXT")
+            .underlying_type(),
+        Some(Type::value_named("Example.Second", "PVOID"))
+    );
+    let common = output(&partitions, "Example.Common");
+    assert!(!common.contains("type PVOID"), "{common}");
+    assert!(
+        common.contains("fn CommonUse(value: *mut void)"),
+        "{common}"
+    );
+    let Item::Fn(common_use) = index.expect_item("Example.Common", "CommonUse") else {
+        panic!("Example.Common.CommonUse was not emitted as a function");
+    };
+    assert_eq!(
+        common_use.signature(&[]).types,
+        [Type::PtrMut(Box::new(Type::Void), 1)]
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("included-canonical-pointer");
+    let tbs = scratch.join("tbs.h");
+    let satellite = scratch.join("satellite.h");
+    std::fs::write(
+        &tbs,
+        "typedef void* PVOID;\n\
+         typedef PVOID TBS_HCONTEXT;\n\
+         extern \"C\" void TbsUse(PVOID* value, TBS_HCONTEXT context);\n",
+    )
+    .unwrap();
+    std::fs::write(&satellite, "extern \"C\" void SatelliteUse(PVOID value);\n").unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "aggregate.cpp",
+                format!("#include \"{}\"\n", tbs.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "satellite.cpp",
+                format!(
+                    "#include \"{}\"\n#include \"{}\"\n",
+                    tbs.to_string_lossy(),
+                    satellite.to_string_lossy()
+                ),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "aggregate.cpp",
+            tbs.to_string_lossy(),
+            RootPartition::new("tbs", "Example.Tbs").with_library("TbsUse", "tbs.dll"),
+        )
+        .with_traversed_header_for_input(
+            "satellite.cpp",
+            satellite.to_string_lossy(),
+            RootPartition::new("satellite", "Example.Satellite")
+                .with_library("SatelliteUse", "satellite.dll"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+
+    let tbs_rdl = output(&partitions, "Example.Tbs");
+    assert!(tbs_rdl.contains("type PVOID = *mut void"), "{tbs_rdl}");
+    assert!(tbs_rdl.contains("type TBS_HCONTEXT = PVOID"), "{tbs_rdl}");
+    let satellite_rdl = output(&partitions, "Example.Satellite");
+    assert!(!satellite_rdl.contains("type PVOID"), "{satellite_rdl}");
+    assert!(
+        satellite_rdl.contains("fn SatelliteUse(value: *mut void)"),
+        "{satellite_rdl}"
+    );
+
+    let winmd = scratch.join("included-canonical-pointer.winmd");
+    let mut compiler = windows_rdl::reader();
+    for rdl in partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler.reference_default().output(&winmd).write().unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    assert!(!index.contains("Example.Satellite", "PVOID"));
+    let Item::Fn(satellite_use) = index.expect_item("Example.Satellite", "SatelliteUse") else {
+        panic!("Example.Satellite.SatelliteUse was not emitted as a function");
+    };
+    assert_eq!(
+        satellite_use.signature(&[]).types,
+        [Type::PtrMut(Box::new(Type::Void), 1)]
+    );
+    assert_eq!(
+        index
+            .expect("Example.Tbs", "TBS_HCONTEXT")
+            .underlying_type(),
+        Some(Type::value_named("Example.Tbs", "PVOID"))
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn macro_typedef_expansions_keep_declaration_specific_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("macro-typedef-routes");
+    let macros = scratch.join("macros.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    let other = scratch.join("other.h");
+    std::fs::write(
+        &macros,
+        "#pragma once\n\
+         #define C_ASSERT(e) typedef char __C_ASSERT__[(e) ? 1 : -1]\n",
+    )
+    .unwrap();
+    for header in [&first, &second, &other] {
+        std::fs::write(
+            header,
+            format!("#include \"{}\"\nC_ASSERT(1);\n", macros.to_string_lossy()),
+        )
+        .unwrap();
+    }
+    let forward = aggregate_snapshot(&scratch, &[&first, &second, &other]);
+    let assertions = forward
+        .facts()
+        .iter()
+        .filter(|fact| fact.name == "__C_ASSERT__")
+        .collect::<Vec<_>>();
+    assert_eq!(assertions.len(), 3, "{assertions:#?}");
+    assert!(
+        assertions
+            .iter()
+            .all(|fact| fact.spelling.file == macros.to_string_lossy().replace('\\', "/")),
+        "{assertions:#?}"
+    );
+    assert_eq!(
+        assertions
+            .iter()
+            .map(|fact| fact.expansion.file.as_str())
+            .collect::<BTreeSet<_>>()
+            .len(),
+        3,
+        "{assertions:#?}"
+    );
+    let reverse = aggregate_snapshot(&scratch, &[&other, &second, &first]);
+    let first_partition = RootPartition::new("first", "Example.Assert");
+    let second_partition = RootPartition::new("second", "Example.Assert");
+    let other_partition = RootPartition::new("other", "Example.Other");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(first.to_string_lossy(), first_partition.clone())
+        .with_traversed_header(second.to_string_lossy(), second_partition.clone())
+        .with_traversed_header(other.to_string_lossy(), other_partition.clone());
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(other.to_string_lossy(), other_partition)
+        .with_traversed_header(second.to_string_lossy(), second_partition)
+        .with_traversed_header(first.to_string_lossy(), first_partition);
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy| {
+        let plan = snapshot
+            .plan_header_partitions(policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+    let partitions = emit(forward, &policy);
+    let reverse_partitions = emit(reverse, &reverse_policy);
+
+    assert_eq!(partitions, reverse_partitions);
+    assert_eq!(partitions.len(), 2, "{partitions:#?}");
+    for namespace in ["Example.Assert", "Example.Other"] {
+        assert!(
+            output(&partitions, namespace).contains("type __C_ASSERT__ = [i8; 1]"),
+            "{partitions:#?}"
+        );
+    }
+    let winmd = scratch.join("macro-typedef-routes.winmd");
+    let mut compiler = windows_rdl::reader();
+    for rdl in partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler.reference_default().output(&winmd).write().unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    for namespace in ["Example.Assert", "Example.Other"] {
+        assert_eq!(
+            index.expect(namespace, "__C_ASSERT__").underlying_type(),
+            Some(Type::ArrayFixed(Box::new(Type::I8), 1))
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn macro_typedef_reference_with_multiple_routes_remains_diagnostic() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("macro-typedef-reference-conflict");
+    let macros = scratch.join("macros.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    let api = scratch.join("api.h");
+    std::fs::write(
+        &macros,
+        "#pragma once\n\
+         #define C_ASSERT(e) typedef char __C_ASSERT__[(e) ? 1 : -1]\n",
+    )
+    .unwrap();
+    for header in [&first, &second] {
+        std::fs::write(
+            header,
+            format!("#include \"{}\"\nC_ASSERT(1);\n", macros.to_string_lossy()),
+        )
+        .unwrap();
+    }
+    std::fs::write(
+        &api,
+        "extern \"C\" void UseAssertion(__C_ASSERT__* value);\n",
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&first, &second, &api]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header(
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        )
+        .with_traversed_header(
+            api.to_string_lossy(),
+            RootPartition::new("api", "Example.Api").with_library("UseAssertion", "example.dll"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let error = plan.audit(&options).unwrap_err().to_string();
+
+    assert!(
+        error.contains("unresolved local type `__C_ASSERT__`"),
+        "{error}"
+    );
+    assert!(
+        error.contains("header partition dependency closure found 1 blocker(s)"),
+        "{error}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}

@@ -1562,6 +1562,21 @@ impl Snapshot {
         let emission_time = timing.then(std::time::Instant::now);
         let mut local_types = BTreeMap::new();
         let mut routed_types = BTreeMap::new();
+        let mut retained_canonical_raw_pointers = RetainedCanonicalRawPointers::new();
+        if routes.is_some() {
+            for planned in &plan.types {
+                if canonical_raw_pointer_name(&planned.fact.name)
+                    && matches!(planned.fact.data, FactData::Typedef { .. })
+                {
+                    retained_canonical_raw_pointers
+                        .entry(planned.fact.origin.tu.clone())
+                        .or_default()
+                        .insert(planned.fact.spelling.clone());
+                }
+            }
+        }
+        let retained_canonical_raw_pointers =
+            routes.is_some().then_some(&retained_canonical_raw_pointers);
         if let Some(routes) = routes {
             for planned in &plan.types {
                 routed_types.insert(
@@ -1571,7 +1586,18 @@ impl Snapshot {
                         .clone(),
                 );
             }
+            let planned_type_origins: BTreeSet<_> = plan
+                .types
+                .iter()
+                .map(|planned| &planned.fact.origin)
+                .collect();
             for fact in self.facts.iter().filter(|fact| is_type_fact(fact)) {
+                if canonical_raw_pointer_name(&fact.name)
+                    && matches!(fact.data, FactData::Typedef { .. })
+                    && !planned_type_origins.contains(&fact.origin)
+                {
+                    continue;
+                }
                 let emitted_name = plan
                     .type_names
                     .get(&fact.name)
@@ -1579,8 +1605,10 @@ impl Snapshot {
                 let Some(namespace) = routed_types.get(emitted_name) else {
                     continue;
                 };
-                if let Some(previous) = local_types.insert(fact.spelling.clone(), namespace.clone())
-                    && previous != *namespace
+                if let Some(previous) = local_types.insert(
+                    partition_declaration_location(fact).clone(),
+                    namespace.clone(),
+                ) && previous != *namespace
                 {
                     return Err(Error(format!(
                         "local declaration `{}` has conflicting namespaces `{previous}` and `{namespace}`",
@@ -1611,7 +1639,7 @@ impl Snapshot {
                 };
                 if namespaces.len() == 1 {
                     local_types.insert(
-                        fact.spelling.clone(),
+                        partition_declaration_location(fact).clone(),
                         (*namespaces.first().unwrap()).to_string(),
                     );
                 }
@@ -1647,6 +1675,15 @@ impl Snapshot {
             let namespace = routes
                 .and_then(|routes| routes.get(&(planned.name.clone(), kind)))
                 .map(|owner| owner.namespace.as_str());
+            let projection = TypeProjection::new(
+                &plan.type_names,
+                &plan.interface_names,
+                &fact.origin.tu,
+                &local_types,
+                &routed_types,
+                retained_canonical_raw_pointers,
+                namespace,
+            );
             let item = match &fact.data {
                 FactData::Callback {
                     convention,
@@ -1659,6 +1696,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
+                        retained_canonical_raw_pointers,
                         namespace,
                     );
                     write_callback(
@@ -1702,6 +1740,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
+                        retained_canonical_raw_pointers,
                         namespace,
                     );
                     let item = write_named_record(
@@ -1735,15 +1774,7 @@ impl Snapshot {
                             "    ",
                         )?,
                         rdl_ident(output_name),
-                        planned_emitted_type_name(
-                            target,
-                            &plan.type_names,
-                            &plan.interface_names,
-                            &fact.origin.tu,
-                            &local_types,
-                            &routed_types,
-                            namespace,
-                        )
+                        planned_emitted_type_name(target, &projection)
                     )
                 }
                 FactData::Enum {
@@ -1800,6 +1831,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
+                        retained_canonical_raw_pointers,
                         namespace,
                     );
                     let item = write_named_record(
@@ -1836,6 +1868,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
+                        retained_canonical_raw_pointers,
                         namespace,
                     );
                     write_interface(
@@ -1895,6 +1928,7 @@ impl Snapshot {
                 &function.origin.tu,
                 &local_types,
                 &routed_types,
+                retained_canonical_raw_pointers,
                 namespace,
             );
             let callable = CallableTarget::Function(&function.origin);
@@ -1912,15 +1946,7 @@ impl Snapshot {
                         &self.annotations,
                         &AnnotationTarget::Return(function.origin.clone()),
                     ),)?,
-                    planned_emitted_type_name(
-                        result,
-                        &plan.type_names,
-                        &plan.interface_names,
-                        &function.origin.tu,
-                        &local_types,
-                        &routed_types,
-                        namespace,
-                    )
+                    planned_emitted_type_name(result, &projection)
                 )
             };
             let declaration_annotations = annotations_for(
@@ -1995,19 +2021,20 @@ impl Snapshot {
             let namespace = routes
                 .and_then(|routes| routes.get(&(constant.name.clone(), OutputKind::Value)))
                 .map(|owner| owner.namespace.as_str());
+            let projection = TypeProjection::new(
+                &plan.type_names,
+                &plan.interface_names,
+                &constant.root.tu,
+                &local_types,
+                &routed_types,
+                retained_canonical_raw_pointers,
+                namespace,
+            );
             let ty = if routes.is_some()
                 && !matches!(constant.value, Value::Utf8(_) | Value::Utf16(_))
             {
-                constant_type_name(
-                    &constant.ty,
-                    &plan.type_names,
-                    &plan.interface_names,
-                    &plan.pointer_interface_aliases,
-                    &constant.root.tu,
-                    &local_types,
-                    namespace,
-                )
-                .unwrap_or_else(|| planned.ty.clone())
+                constant_type_name(&constant.ty, &plan.pointer_interface_aliases, &projection)
+                    .unwrap_or_else(|| planned.ty.clone())
             } else {
                 planned.ty.clone()
             };
@@ -2265,7 +2292,7 @@ impl Snapshot {
                 for (namespace, facts) in &namespaces {
                     for fact in facts {
                         source_namespaces
-                            .entry(&fact.spelling)
+                            .entry(partition_declaration_location(fact))
                             .or_default()
                             .insert(namespace);
                     }
@@ -2309,7 +2336,10 @@ impl Snapshot {
         {
             if let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) {
                 source_namespaces
-                    .entry((fact.spelling.clone(), fact.name.clone()))
+                    .entry((
+                        partition_declaration_location(fact).clone(),
+                        fact.name.clone(),
+                    ))
                     .or_default()
                     .insert(namespace.clone());
             }
@@ -2332,8 +2362,10 @@ impl Snapshot {
                     .get(&fact.origin)
                     .cloned()
                     .or_else(|| {
-                        let namespaces =
-                            source_namespaces.get(&(fact.spelling.clone(), fact.name.clone()))?;
+                        let namespaces = source_namespaces.get(&(
+                            partition_declaration_location(fact).clone(),
+                            fact.name.clone(),
+                        ))?;
                         (namespaces.len() == 1).then(|| namespaces.first().unwrap().clone())
                     })
                     .or_else(|| {
@@ -2381,7 +2413,7 @@ impl Snapshot {
                         .min_by_key(|fact| {
                             (
                                 self.root_owners.get(&fact.origin).unwrap(),
-                                &fact.spelling,
+                                partition_declaration_location(fact),
                                 &fact.origin,
                             )
                         })
@@ -3164,15 +3196,21 @@ impl Snapshot {
         }
         let mut result = BTreeMap::new();
         for planned in &plan.types {
-            let mut claims = fact_claims
-                .get(&(
-                    &planned.fact.name,
-                    planned.fact.kind,
-                    planned.fact.definition,
-                    &planned.fact.data,
-                ))
-                .cloned()
-                .unwrap_or_default();
+            let canonical_typedef = canonical_named_type(&planned.fact.name).is_some()
+                && matches!(planned.fact.data, FactData::Typedef { .. });
+            let mut claims = if canonical_typedef {
+                BTreeSet::new()
+            } else {
+                fact_claims
+                    .get(&(
+                        &planned.fact.name,
+                        planned.fact.kind,
+                        planned.fact.definition,
+                        &planned.fact.data,
+                    ))
+                    .cloned()
+                    .unwrap_or_default()
+            };
             claims.extend(
                 source_fact_claims
                     .get(&(
@@ -4836,15 +4874,19 @@ impl Snapshot {
                     if !internal_alias_target_resolved(target, &internal_aliases) {
                         continue;
                     }
-                    let target_name = planned_emitted_type_name(
-                        target,
+                    let interface_names = BTreeSet::new();
+                    let local_types = BTreeMap::new();
+                    let routed_types = BTreeMap::new();
+                    let projection = TypeProjection::new(
                         &internal_type_names,
-                        &BTreeSet::new(),
+                        &interface_names,
                         &fact.origin.tu,
-                        &BTreeMap::new(),
-                        &BTreeMap::new(),
+                        &local_types,
+                        &routed_types,
+                        None,
                         None,
                     );
+                    let target_name = planned_emitted_type_name(target, &projection);
                     let target_name = type_names.get(&target_name).cloned().unwrap_or(target_name);
                     internal_type_names.insert((*name).to_string(), target_name);
                     internal_aliases.insert((*name).to_string());
@@ -5051,20 +5093,25 @@ impl Snapshot {
             type_names.insert(alias.clone(), target.clone());
         }
         types.retain(|planned| !pointer_interface_aliases.contains_key(&planned.fact.name));
+        let local_types = BTreeMap::new();
+        let routed_types = BTreeMap::new();
         let mut constants: Vec<_> = constants
             .into_iter()
             .filter_map(|constant| {
                 let ty = match &constant.value {
                     Value::Utf8(_) | Value::Utf16(_) => Some("String".to_string()),
-                    _ => constant_type_name(
-                        &constant.ty,
-                        &type_names,
-                        &interface_names,
-                        &pointer_interface_aliases,
-                        &constant.root.tu,
-                        &BTreeMap::new(),
-                        None,
-                    ),
+                    _ => {
+                        let projection = TypeProjection::new(
+                            &type_names,
+                            &interface_names,
+                            &constant.root.tu,
+                            &local_types,
+                            &routed_types,
+                            None,
+                            None,
+                        );
+                        constant_type_name(&constant.ty, &pointer_interface_aliases, &projection)
+                    }
                 }?;
                 Some(PlannedConstant { constant, ty })
             })
@@ -5653,12 +5700,15 @@ fn route_candidate_error(candidate: &RouteCandidate<'_>, reason: PartitionConfli
     }
 }
 
+type RetainedCanonicalRawPointers = BTreeMap<String, BTreeSet<Location>>;
+
 struct TypeProjection<'a> {
     type_names: &'a BTreeMap<String, String>,
     interface_names: &'a BTreeSet<(String, String)>,
     tu: &'a str,
     local_types: &'a BTreeMap<Location, String>,
     routed_types: &'a BTreeMap<String, String>,
+    retained_canonical_raw_pointers: Option<&'a RetainedCanonicalRawPointers>,
     namespace: Option<&'a str>,
 }
 
@@ -5669,6 +5719,7 @@ impl<'a> TypeProjection<'a> {
         tu: &'a str,
         local_types: &'a BTreeMap<Location, String>,
         routed_types: &'a BTreeMap<String, String>,
+        retained_canonical_raw_pointers: Option<&'a RetainedCanonicalRawPointers>,
         namespace: Option<&'a str>,
     ) -> Self {
         Self {
@@ -5677,26 +5728,19 @@ impl<'a> TypeProjection<'a> {
             tu,
             local_types,
             routed_types,
+            retained_canonical_raw_pointers,
             namespace,
         }
     }
 
     fn name(&self, ty: &TypeRef) -> String {
-        planned_emitted_type_name(
-            ty,
-            self.type_names,
-            self.interface_names,
-            self.tu,
-            self.local_types,
-            self.routed_types,
-            self.namespace,
-        )
+        planned_emitted_type_name(ty, self)
     }
 }
 
 struct ScopedDeclarationIndex {
     exact: BTreeSet<(String, Location, String)>,
-    scoped: BTreeMap<(String, Location, String), String>,
+    scoped: BTreeMap<(String, Location, String), BTreeSet<String>>,
     by_tu_name: BTreeMap<(String, String), BTreeSet<String>>,
 }
 
@@ -5720,14 +5764,14 @@ impl ScopedDeclarationIndex {
     }
 
     fn insert(&mut self, fact: &Fact, scoped: String) {
-        self.scoped.insert(
-            (
+        self.scoped
+            .entry((
                 fact.origin.tu.clone(),
                 fact.spelling.clone(),
                 fact.name.clone(),
-            ),
-            scoped.clone(),
-        );
+            ))
+            .or_default()
+            .insert(scoped.clone());
         self.by_tu_name
             .entry((fact.origin.tu.clone(), fact.name.clone()))
             .or_default()
@@ -5736,11 +5780,12 @@ impl ScopedDeclarationIndex {
 
     fn get(&self, tu: &str, declaration: &Location, name: &str) -> Option<&String> {
         let key = (tu.to_string(), declaration.clone(), name.to_string());
-        self.scoped.get(&key).or_else(|| {
-            (!self.exact.contains(&key)).then_some(())?;
-            let names = self.by_tu_name.get(&(tu.to_string(), name.to_string()))?;
-            (names.len() == 1).then(|| names.first().unwrap())
-        })
+        if let Some(names) = self.scoped.get(&key) {
+            return (names.len() == 1).then(|| names.first().unwrap());
+        }
+        (!self.exact.contains(&key)).then_some(())?;
+        let names = self.by_tu_name.get(&(tu.to_string(), name.to_string()))?;
+        (names.len() == 1).then(|| names.first().unwrap())
     }
 }
 
@@ -6040,6 +6085,14 @@ fn header_fact_owner_candidates(
         policy.named_owners(&fact.origin.tu, &fact.spelling.file, &fact.name)
     } else {
         candidates
+    }
+}
+
+fn partition_declaration_location(fact: &Fact) -> &Location {
+    if fact.expansion != fact.spelling {
+        &fact.expansion
+    } else {
+        &fact.spelling
     }
 }
 
@@ -7921,8 +7974,23 @@ fn is_pointer_alias_fact(
 }
 
 fn canonical_pointer_alias_name(name: &str) -> bool {
-    canonical_string_name(name).is_some()
-        || canonical_named_type(name).is_some_and(|target| target.starts_with('*'))
+    canonical_string_name(name).is_some() || canonical_raw_pointer_name(name)
+}
+
+fn canonical_raw_pointer_name(name: &str) -> bool {
+    canonical_named_type(name).is_some_and(|target| target.starts_with('*'))
+}
+
+fn canonical_raw_pointer_is_retained(
+    declarations: Option<&RetainedCanonicalRawPointers>,
+    tu: &str,
+    declaration: &Location,
+) -> bool {
+    declarations.is_none_or(|declarations| {
+        declarations
+            .get(tu)
+            .is_some_and(|locations| locations.contains(declaration))
+    })
 }
 
 fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
@@ -8238,15 +8306,7 @@ fn write_params(
                     annotations_for(annotations, &target),
                 )?,
                 rdl_ident(&param.name),
-                planned_param_type_name(
-                    param,
-                    projection.type_names,
-                    projection.interface_names,
-                    projection.tu,
-                    projection.local_types,
-                    projection.routed_types,
-                    projection.namespace,
-                )
+                planned_param_type_name(param, projection)
             ))
         })
         .collect()
@@ -8403,34 +8463,19 @@ fn rdl_uuid(guid: &str) -> String {
     )
 }
 
-fn planned_param_type_name(
-    param: &Parameter,
-    type_names: &BTreeMap<String, String>,
-    interface_names: &BTreeSet<(String, String)>,
-    tu: &str,
-    local_types: &BTreeMap<Location, String>,
-    routed_types: &BTreeMap<String, String>,
-    namespace: Option<&str>,
-) -> String {
+fn planned_param_type_name(param: &Parameter, projection: &TypeProjection<'_>) -> String {
     if param.annotation.com_out_ptr {
         return "*mut *mut void".to_string();
     }
     if let Some(name) = parameter_string_name(param) {
-        let name = type_names
+        let name = projection
+            .type_names
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.to_string());
-        return qualify_routed_type(&name, routed_types, namespace);
+        return qualify_routed_type(&name, projection.routed_types, projection.namespace);
     }
-    planned_emitted_type_name(
-        &param.ty,
-        type_names,
-        interface_names,
-        tu,
-        local_types,
-        routed_types,
-        namespace,
-    )
+    planned_emitted_type_name(&param.ty, projection)
 }
 
 fn emitted_pointer_is_mutable(
@@ -8498,15 +8543,7 @@ fn parameter_string_name(param: &Parameter) -> Option<&'static str> {
     }
 }
 
-fn planned_emitted_type_name(
-    ty: &TypeRef,
-    type_names: &BTreeMap<String, String>,
-    interface_names: &BTreeSet<(String, String)>,
-    tu: &str,
-    local_types: &BTreeMap<Location, String>,
-    routed_types: &BTreeMap<String, String>,
-    namespace: Option<&str>,
-) -> String {
+fn planned_emitted_type_name(ty: &TypeRef, projection: &TypeProjection<'_>) -> String {
     if matches!(ty, TypeRef::FunctionPointer { .. }) {
         return "*mut u8".to_string();
     }
@@ -8514,96 +8551,89 @@ fn planned_emitted_type_name(
         return format!("*{} void", if *mutable { "mut" } else { "const" });
     }
     if let TypeRef::Named { name, declaration } = ty
-        && let Some(name) = type_names.get(name)
+        && let Some(emitted_name) = projection.type_names.get(name)
+        && (!canonical_raw_pointer_name(name)
+            || canonical_raw_pointer_is_retained(
+                projection.retained_canonical_raw_pointers,
+                projection.tu,
+                declaration,
+            ))
     {
-        return qualify_emitted_type(declaration, name, local_types, routed_types, namespace);
+        return qualify_emitted_type(
+            declaration,
+            emitted_name,
+            projection.local_types,
+            projection.routed_types,
+            projection.namespace,
+        );
     }
     if let TypeRef::Named { name, .. } = ty
         && let Some(name) = canonical_string_name(name)
     {
-        let name = type_names
+        let name = projection
+            .type_names
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.to_string());
-        return qualify_routed_type(&name, routed_types, namespace);
+        return qualify_routed_type(&name, projection.routed_types, projection.namespace);
     }
     if let TypeRef::Named { name, .. } = ty
         && let Some(name) = canonical_named_type(name)
     {
-        return type_names
+        return projection
+            .type_names
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.to_string());
     }
     if let TypeRef::Reference { mutable, target } = ty {
         if let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target.as_ref()
-            && interface_names.contains(&(tu.to_string(), name.clone()))
+            && projection
+                .interface_names
+                .contains(&(projection.tu.to_string(), name.clone()))
         {
-            return planned_type_name(target, type_names, local_types, namespace);
+            return planned_type_name(
+                target,
+                projection.type_names,
+                projection.local_types,
+                projection.namespace,
+            );
         }
         return format!(
             "*{} {}",
             if *mutable { "mut" } else { "const" },
-            planned_emitted_type_name(
-                target,
-                type_names,
-                interface_names,
-                tu,
-                local_types,
-                routed_types,
-                namespace,
-            )
+            planned_emitted_type_name(target, projection)
         );
     }
     if let TypeRef::Array { target, len } = ty {
-        return format!(
-            "[{}; {len}]",
-            planned_emitted_type_name(
-                target,
-                type_names,
-                interface_names,
-                tu,
-                local_types,
-                routed_types,
-                namespace,
-            )
-        );
+        return format!("[{}; {len}]", planned_emitted_type_name(target, projection));
     }
     let (mutable, depth, target) = pointer_run(ty);
     if depth != 0
         && let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target
-        && interface_names.contains(&(tu.to_string(), name.clone()))
+        && projection
+            .interface_names
+            .contains(&(projection.tu.to_string(), name.clone()))
     {
         return format!(
             "{}{}",
             format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth - 1),
-            planned_emitted_type_name(
-                target,
-                type_names,
-                interface_names,
-                tu,
-                local_types,
-                routed_types,
-                namespace,
-            )
+            planned_emitted_type_name(target, projection)
         );
     }
     if depth != 0 {
         return format!(
             "{}{}",
             format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth),
-            planned_emitted_type_name(
-                target,
-                type_names,
-                interface_names,
-                tu,
-                local_types,
-                routed_types,
-                namespace,
-            )
+            planned_emitted_type_name(target, projection)
         );
     }
-    planned_type_name(ty, type_names, local_types, namespace)
+    planned_type_name(
+        ty,
+        projection.type_names,
+        projection.local_types,
+        projection.namespace,
+    )
 }
 
 fn internal_alias_target_resolved(ty: &TypeRef, aliases: &BTreeSet<String>) -> bool {
@@ -9148,12 +9178,8 @@ fn pointer_run(mut ty: &TypeRef) -> (bool, usize, &TypeRef) {
 
 fn constant_type_name(
     ty: &TypeRef,
-    type_names: &BTreeMap<String, String>,
-    interface_names: &BTreeSet<(String, String)>,
     pointer_interface_aliases: &BTreeMap<String, String>,
-    tu: &str,
-    local_types: &BTreeMap<Location, String>,
-    namespace: Option<&str>,
+    projection: &TypeProjection<'_>,
 ) -> Option<String> {
     let name = match ty {
         TypeRef::Scalar(Scalar::Bool) => "u32".to_string(),
@@ -9161,15 +9187,33 @@ fn constant_type_name(
             return None;
         }
         TypeRef::Named { name, .. } | TypeRef::Generic { name, .. }
-            if interface_names.contains(&(tu.to_string(), name.clone())) =>
+            if projection
+                .interface_names
+                .contains(&(projection.tu.to_string(), name.clone())) =>
         {
             return None;
         }
-        TypeRef::Named { name, .. } if type_names.contains_key(name) => {
-            planned_type_name(ty, type_names, local_types, namespace)
+        TypeRef::Named { name, .. } if projection.type_names.contains_key(name) => {
+            if canonical_raw_pointer_name(name) {
+                projection.name(ty)
+            } else {
+                planned_type_name(
+                    ty,
+                    projection.type_names,
+                    projection.local_types,
+                    projection.namespace,
+                )
+            }
         }
         TypeRef::Named { name, .. } => canonical_named_type(name).map_or_else(
-            || planned_type_name(ty, type_names, local_types, namespace),
+            || {
+                planned_type_name(
+                    ty,
+                    projection.type_names,
+                    projection.local_types,
+                    projection.namespace,
+                )
+            },
             str::to_string,
         ),
         TypeRef::Void
@@ -9177,7 +9221,12 @@ fn constant_type_name(
         | TypeRef::Generic { .. }
         | TypeRef::Array { .. }
         | TypeRef::InlineRecord(_) => return None,
-        _ => planned_type_name(ty, type_names, local_types, namespace),
+        _ => planned_type_name(
+            ty,
+            projection.type_names,
+            projection.local_types,
+            projection.namespace,
+        ),
     };
     Some(name)
 }
