@@ -934,6 +934,56 @@ fn excluded_dependency_reports_owner_diagnostic_without_panicking() {
 }
 
 #[test]
+fn excluded_dependency_owner_diagnostics_batch_all_blockers_and_referrers() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("excluded-dependency-batch");
+    let public = scratch.join("public.h");
+    std::fs::write(
+        &public,
+        "typedef struct ALPHA { int value; } ALPHA;\n\
+         typedef struct BETA { int value; } BETA;\n\
+         typedef struct SHARED_ROOT { ALPHA alpha; BETA beta; } SHARED_ROOT;\n\
+         typedef struct ALPHA_ROOT { ALPHA alpha; } ALPHA_ROOT;\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&public]);
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        public.to_string_lossy(),
+        RootPartition::new("public", "Example.Public")
+            .with_exclusion("ALPHA")
+            .with_exclusion("BETA"),
+    );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let first = plan.audit(&options).unwrap_err().to_string();
+    let second = plan.audit(&options).unwrap_err().to_string();
+    let emission = plan.emit_with_options(&options).unwrap_err().to_string();
+
+    assert_eq!(first, second);
+    assert_eq!(first, emission);
+    assert!(
+        first.starts_with("header partition owner validation found 2 blocker(s)"),
+        "{first}"
+    );
+    assert_eq!(first.matches("owner-excluded local type").count(), 2);
+    assert!(first.find("`ALPHA`").unwrap() < first.find("`BETA`").unwrap());
+    let alpha = &first[first.find("`ALPHA`").unwrap()..first.find("`BETA`").unwrap()];
+    assert!(alpha.contains("type `ALPHA_ROOT`"), "{alpha}");
+    assert!(alpha.contains("type `SHARED_ROOT`"), "{alpha}");
+    let beta = &first[first.find("`BETA`").unwrap()..];
+    assert!(beta.contains("type `SHARED_ROOT`"), "{beta}");
+    assert!(!beta.contains("type `ALPHA_ROOT`"), "{beta}");
+    assert!(first.ends_with("no RDL was emitted"), "{first}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn excluded_empty_forward_dependency_reports_owner_diagnostic() {
     helpers::ensure_libclang();
 

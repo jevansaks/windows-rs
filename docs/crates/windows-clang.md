@@ -227,6 +227,11 @@ location, name, and reason, then lists every selected root that reaches it throu
 dependency graph. No partial RDL is returned. Legacy single-namespace and partitioned emission keep
 their existing first-error behavior.
 
+After successful dependency closure, header planning also collects every required local type whose
+owner excluded it without retaining a public alias. That deterministic report lists the partition,
+namespace, declaration location, and every selected root that reaches each excluded type. Audit and
+emission return the same report, and emission produces no partial RDL.
+
 The closure report and the `plan-dependencies` timing line use these counters:
 
 | Counter | Meaning |

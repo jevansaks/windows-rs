@@ -3736,7 +3736,7 @@ impl Snapshot {
             phase_time = Some(std::time::Instant::now());
         }
 
-        let (facts_by_name, mut retained_pointer_aliases) = loop {
+        let (facts_by_name, mut retained_pointer_aliases, dependency_diagnostics) = loop {
             let mut facts = BTreeSet::new();
             let mut queue = vec![];
             let mut pointer_alias_candidates = BTreeSet::new();
@@ -4159,7 +4159,11 @@ impl Snapshot {
                 );
                 phase_time = Some(std::time::Instant::now());
             }
-            break (facts_by_name, retained_pointer_aliases);
+            break (
+                facts_by_name,
+                retained_pointer_aliases,
+                dependency_diagnostics,
+            );
         };
         loop {
             let retained_names: BTreeSet<_> = retained_pointer_aliases
@@ -4543,6 +4547,30 @@ impl Snapshot {
             .iter()
             .filter_map(|(source, target)| (source != target).then_some(target.as_str()))
             .collect();
+        if self.header_partition_policy {
+            let blockers: Vec<_> = facts_by_name
+                .iter()
+                .filter(|(name, _)| required.contains(**name))
+                .filter(|(name, _)| !internal_aliases.contains(**name))
+                .filter(|(name, _)| !alias_names.contains(*name))
+                .filter_map(|(_, fact)| {
+                    let name = type_names
+                        .get(fact.name.as_str())
+                        .map_or(fact.name.as_str(), String::as_str);
+                    (self.suppressed_type_origins.contains(&fact.origin)
+                        && name == fact.name
+                        && self.fact_authority_namespace(fact, &declarations).is_none())
+                    .then_some(*fact)
+                })
+                .collect();
+            if !blockers.is_empty() {
+                return Err(owner_exclusion_error(
+                    self,
+                    &dependency_diagnostics,
+                    &blockers,
+                ));
+            }
+        }
         let mut types: Vec<_> = facts_by_name
             .into_iter()
             .filter(|(name, _)| required.contains(*name))
@@ -4553,7 +4581,8 @@ impl Snapshot {
                     .get(fact.name.as_str())
                     .cloned()
                     .unwrap_or_else(|| fact.name.clone());
-                if self.suppressed_type_origins.contains(&fact.origin)
+                if !self.header_partition_policy
+                    && self.suppressed_type_origins.contains(&fact.origin)
                     && name == fact.name
                     && self.fact_authority_namespace(fact, &declarations).is_none()
                 {
@@ -7022,6 +7051,10 @@ impl<'a> DependencyClosureDiagnostics<'a> {
         roots
     }
 
+    fn referencing_fact_roots(&self, fact: &'a Fact) -> BTreeSet<DependencyRoot<'a>> {
+        self.referencing_roots(&HashSet::from([DependencyNode::Fact(&fact.origin)]))
+    }
+
     fn error(&self) -> Error {
         let mut result = format!(
             "header partition dependency closure found {} blocker(s)\n\
@@ -7075,6 +7108,62 @@ impl<'a> DependencyClosureDiagnostics<'a> {
         );
         Error(result)
     }
+}
+
+fn owner_exclusion_error(
+    snapshot: &Snapshot,
+    diagnostics: &DependencyClosureDiagnostics<'_>,
+    blockers: &[&Fact],
+) -> Error {
+    let mut result = format!(
+        "header partition owner validation found {} blocker(s)",
+        blockers.len()
+    );
+    for (index, fact) in blockers.iter().enumerate() {
+        if let Some(owner) = snapshot.root_owners.get(&fact.origin) {
+            write!(
+                result,
+                "\n{}. owner-excluded local type `{}` in partition `{}` namespace `{}` is \
+                 required without a retained public alias",
+                index + 1,
+                fact.name,
+                owner.partition,
+                owner.namespace,
+            )
+            .unwrap();
+        } else {
+            write!(
+                result,
+                "\n{}. owner-excluded local type `{}` in translation unit `{}` is required \
+                 without a retained public alias or logical owner",
+                index + 1,
+                fact.name,
+                fact.origin.tu,
+            )
+            .unwrap();
+        }
+        write!(
+            result,
+            "\n   declaration: {}:{}\n   referenced by:",
+            fact.spelling.file, fact.spelling.offset,
+        )
+        .unwrap();
+        let roots = diagnostics.referencing_fact_roots(fact);
+        if roots.is_empty() {
+            result.push_str("\n     - no selected root provenance");
+        } else {
+            for root in roots {
+                write!(
+                    result,
+                    "\n     - {} `{}` in translation unit `{}` at {}:{}",
+                    root.kind, root.name, root.tu, root.source.file, root.source.offset,
+                )
+                .unwrap();
+            }
+        }
+    }
+    result.push_str("\nno RDL was emitted");
+    Error(result)
 }
 
 fn collect_fact_pointer_alias_candidates<'a>(
