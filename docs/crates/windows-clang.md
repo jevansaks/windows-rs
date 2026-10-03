@@ -215,14 +215,18 @@ expansion location, so repeated invocations of one helper macro can coalesce wit
 and retain separate identities across destinations. Type references tied to an exact spelling
 location follow that declaration's scoped identity when the match is unique, so APIs from separate
 header families keep their own aliases. Duplicate GUID macro facts follow the same rule. Namespace
-authorities are applied before this classification, so declarations routed to one destination still
-coalesce under the semantic comparison above. When several physical declarations share one
-destination, a stable policy-and-source ordering selects its output partition independently of
-declaration order. For a colliding public name, a source declaration claimed by several namespaces
-or a reference tied to such an irreconcilable declaration remains a conflict rather than selecting
-a lexical owner across destinations. Genuinely unowned dependencies still use the default
-namespace. These rules apply to `HeaderPartitionPlan`; legacy partitioned emission keeps its
-existing owner selection behavior.
+qualification uses a separate spelling-location index because Clang type references carry
+declaration spelling provenance. A spelling location is indexed only when every retained route
+agrees on one namespace. This qualifies an included-only macro alias in the default namespace
+without selecting an owner when independent macro expansions resolve to different namespaces.
+Namespace authorities are applied before this classification, so declarations routed to one
+destination still coalesce under the semantic comparison above. When several physical declarations
+share one destination, a stable policy-and-source ordering selects its output partition
+independently of declaration order. For a colliding public name, a source declaration claimed by
+several namespaces or a reference tied to such an irreconcilable declaration remains a conflict
+rather than selecting a lexical owner across destinations. Unowned dependencies continue to use the
+default namespace. These rules apply to `HeaderPartitionPlan`; legacy partitioned emission keeps
+its existing owner selection behavior.
 
 Namespace collision scoping uses internal planner names only. External references and exclusions
 continue to match the public post-remap name, and owner diagnostics do not expose scoped names.

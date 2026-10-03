@@ -1578,6 +1578,7 @@ impl Snapshot {
         let retained_canonical_raw_pointers =
             routes.is_some().then_some(&retained_canonical_raw_pointers);
         if let Some(routes) = routes {
+            let mut local_type_namespaces: BTreeMap<Location, BTreeSet<String>> = BTreeMap::new();
             for planned in &plan.types {
                 routed_types.insert(
                     planned.name.clone(),
@@ -1605,16 +1606,10 @@ impl Snapshot {
                 let Some(namespace) = routed_types.get(emitted_name) else {
                     continue;
                 };
-                if let Some(previous) = local_types.insert(
-                    partition_declaration_location(fact).clone(),
-                    namespace.clone(),
-                ) && previous != *namespace
-                {
-                    return Err(Error(format!(
-                        "local declaration `{}` has conflicting namespaces `{previous}` and `{namespace}`",
-                        fact.name
-                    )));
-                }
+                local_type_namespaces
+                    .entry(fact.spelling.clone())
+                    .or_default()
+                    .insert(namespace.clone());
             }
             let mut uuid_namespaces: BTreeMap<(&str, &str), BTreeSet<&str>> = BTreeMap::new();
             for planned in &plan.types {
@@ -1638,12 +1633,18 @@ impl Snapshot {
                     continue;
                 };
                 if namespaces.len() == 1 {
-                    local_types.insert(
-                        partition_declaration_location(fact).clone(),
-                        (*namespaces.first().unwrap()).to_string(),
-                    );
+                    local_type_namespaces
+                        .entry(fact.spelling.clone())
+                        .or_default()
+                        .insert((*namespaces.first().unwrap()).to_string());
                 }
             }
+            local_types.extend(local_type_namespaces.into_iter().filter_map(
+                |(declaration, namespaces)| {
+                    (namespaces.len() == 1)
+                        .then(|| (declaration, namespaces.into_iter().next().unwrap()))
+                },
+            ));
         }
         if let Some(display_names) = display_names {
             for name in plan.type_names.values_mut() {

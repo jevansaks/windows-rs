@@ -2745,3 +2745,114 @@ fn macro_typedef_reference_with_multiple_routes_remains_diagnostic() {
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
+
+#[test]
+fn included_macro_handle_uses_default_namespace_qualification() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("included-macro-handle");
+    let macros = scratch.join("macros.h");
+    let handles = scratch.join("handles.h");
+    let graphics = scratch.join("graphics.h");
+    std::fs::write(
+        &macros,
+        "#pragma once\n\
+         #define DECLARE_HANDLE(name) \
+         struct HWND__ { int unused; }; typedef struct HWND__ *HWND\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &handles,
+        format!(
+            "#pragma once\n#include \"{}\"\nDECLARE_HANDLE(HWND);\n",
+            macros.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &graphics,
+        format!(
+            "#include \"{}\"\n\
+             struct TARGET_PROPERTIES {{ HWND hwnd; }};\n\
+             extern \"C\" HWND PassWindow(HWND window);\n",
+            handles.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&graphics]);
+    let hwnd = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "HWND")
+        .unwrap();
+    assert_eq!(
+        hwnd.spelling.file,
+        macros.to_string_lossy().replace('\\', "/")
+    );
+    assert_eq!(
+        hwnd.expansion.file,
+        handles.to_string_lossy().replace('\\', "/")
+    );
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        graphics.to_string_lossy(),
+        RootPartition::new("graphics", "Example.Graphics")
+            .with_library("PassWindow", "graphics.dll"),
+    );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+
+    let common = output(&partitions, "Example.Common");
+    assert!(common.contains("type HWND = *mut HWND__"), "{common}");
+    let graphics = output(&partitions, "Example.Graphics");
+    assert!(
+        graphics.contains("hwnd: Example::Common::HWND"),
+        "{graphics}"
+    );
+    assert!(
+        graphics.contains("fn PassWindow(window: Example::Common::HWND) -> Example::Common::HWND"),
+        "{graphics}"
+    );
+
+    let winmd = scratch.join("included-macro-handle.winmd");
+    let mut compiler = windows_rdl::reader();
+    for rdl in partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler.reference_default().output(&winmd).write().unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    assert_eq!(
+        index.expect("Example.Common", "HWND").underlying_type(),
+        Some(Type::PtrMut(
+            Box::new(Type::value_named("Example.Common", "HWND__")),
+            1
+        ))
+    );
+    assert_eq!(
+        index
+            .expect("Example.Graphics", "TARGET_PROPERTIES")
+            .fields()
+            .find(|field| field.name() == "hwnd")
+            .unwrap()
+            .ty(),
+        Type::value_named("Example.Common", "HWND")
+    );
+    let Item::Fn(pass_window) = index.expect_item("Example.Graphics", "PassWindow") else {
+        panic!("Example.Graphics.PassWindow was not emitted as a function");
+    };
+    let signature = pass_window.signature(&[]);
+    assert_eq!(
+        signature.return_type,
+        Type::value_named("Example.Common", "HWND")
+    );
+    assert_eq!(
+        signature.types,
+        [Type::value_named("Example.Common", "HWND")]
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
