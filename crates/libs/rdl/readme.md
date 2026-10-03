@@ -30,3 +30,11 @@ windows_rdl::writer()
     .write()
     .unwrap();
 ```
+
+`item_names(path, namespace)` returns names declared directly in one exact namespace.
+`qualified_item_names(path)` parses the file once and returns typed namespace/name identities for
+every namespace in the file.
+
+Use `writer().partition(map)` for metadata whose item names are unique in a flat namespace. Use
+`writer().partition_qualified(map)` when the same short name can occur in different namespaces.
+The flat and qualified partition modes cannot be combined on one writer.

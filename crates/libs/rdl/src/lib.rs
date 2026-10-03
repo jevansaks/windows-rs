@@ -25,6 +25,7 @@ pub use writer::Writer;
 
 /// The metadata namespace that owns the Win32 attribute vocabulary.
 pub(crate) const METADATA_NAMESPACE: &str = "Windows.Win32.Foundation.Metadata";
+const WIN32_NAMESPACE: &str = "Windows.Win32";
 
 /// Short RDL attribute spelling and the metadata attribute it maps to.
 pub(crate) struct PseudoAttr {
@@ -221,12 +222,36 @@ pub fn item_names(path: impl AsRef<Path>, namespace: &str) -> Result<Vec<String>
     reader::item_names(path, namespace)
 }
 
+/// A namespace-qualified RDL item identity.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct RdlItemName {
+    pub namespace: String,
+    pub name: String,
+}
+
+impl RdlItemName {
+    pub fn new(namespace: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            namespace: namespace.into(),
+            name: name.into(),
+        }
+    }
+}
+
+/// Parses one `.rdl` file and returns every namespace-qualified item it defines.
+pub fn qualified_item_names(path: impl AsRef<Path>) -> Result<Vec<RdlItemName>, Error> {
+    reader::qualified_item_names(path)
+}
+
 /// Creates a [`Writer`] that converts `.winmd` metadata into RDL.
 pub fn writer() -> Writer {
     Writer::new()
 }
 
 /// One architecture's RDL directory, compiled winmd, and architecture bitmask.
+///
+/// [`merge_arch_rdl`] uses the caller's input order when the same item appears in more than one
+/// RDL partition.
 pub struct ArchInput {
     pub rdl_dir: PathBuf,
     pub winmd: PathBuf,
@@ -234,6 +259,9 @@ pub struct ArchInput {
 }
 
 /// Arch-merges per-architecture scrapes and restores the per-header RDL partition.
+///
+/// Partition ownership uses namespace-qualified item identities. The first input containing an
+/// item supplies its partition, and files within each input directory are sorted before routing.
 pub fn merge_arch_rdl(
     inputs: &[ArchInput],
     seed: Option<&Path>,
@@ -281,31 +309,42 @@ pub fn merge_arch_rdl(
         .merge()
         .map_err(|e| writer_err!("arch-merge failed: {e}"))?;
 
-    // Recover item-name -> header-stem routing from the per-arch RDL partitions.
-    let mut map = HashMap::<String, String>::new();
+    // Recover qualified item -> header-stem routing from the per-arch RDL partitions.
+    let mut map = HashMap::<RdlItemName, String>::new();
     for input in inputs {
-        for entry in std::fs::read_dir(&input.rdl_dir)
+        let mut paths: Vec<_> = std::fs::read_dir(&input.rdl_dir)
             .map_err(|e| writer_err!("failed to read `{}`: {e}", input.rdl_dir.display()))?
             .flatten()
-        {
-            let path = entry.path();
-            if path.extension().is_none_or(|x| x != "rdl")
-                || path.file_name() == seed.as_ref().map(|(name, _, _)| name.as_os_str())
-            {
-                continue;
-            }
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("rdl"))
+                    && path.file_name() != seed.as_ref().map(|(name, _, _)| name.as_os_str())
+            })
+            .collect();
+        paths.sort();
+        for path in paths {
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            for name in reader::item_names(&path, "Windows.Win32")? {
-                map.entry(name).or_insert_with(|| stem.to_string());
+            for item in reader::qualified_item_names(&path)?
+                .into_iter()
+                .filter(|item| {
+                    item.namespace == WIN32_NAMESPACE
+                        || item
+                            .namespace
+                            .strip_prefix(WIN32_NAMESPACE)
+                            .is_some_and(|suffix| suffix.starts_with('.'))
+                })
+            {
+                map.entry(item).or_insert_with(|| stem.to_string());
             }
         }
     }
 
     writer()
         .input(&merged)
-        .partition(map)
+        .partition_qualified(map)
         .output(output_dir)
         .write()?;
 

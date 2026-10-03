@@ -31,6 +31,7 @@ pub struct Writer {
     output: PathBuf,
     split: bool,
     partition: Option<HashMap<String, String>>,
+    qualified_partition: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 impl Writer {
@@ -112,9 +113,27 @@ impl Writer {
         self
     }
 
-    /// Partitions output into one `<stem>.rdl` per defining header.
+    /// Partitions output into one `<stem>.rdl` per unqualified item name.
+    ///
+    /// This preserves the flat namespace behavior used by existing callers and cannot be combined
+    /// with [`Self::partition_qualified`].
     pub fn partition(&mut self, map: HashMap<String, String>) -> &mut Self {
         self.partition = Some(map);
+        self
+    }
+
+    /// Partitions output into one `<stem>.rdl` per namespace-qualified item.
+    ///
+    /// This cannot be combined with [`Self::partition`].
+    pub fn partition_qualified(&mut self, map: HashMap<RdlItemName, String>) -> &mut Self {
+        let mut qualified = HashMap::<String, HashMap<String, String>>::new();
+        for (item, stem) in map {
+            qualified
+                .entry(item.namespace)
+                .or_default()
+                .insert(item.name, stem);
+        }
+        self.qualified_partition = Some(qualified);
         self
     }
 
@@ -122,6 +141,11 @@ impl Writer {
     pub fn write(&self) -> Result<(), Error> {
         if self.output.as_os_str().is_empty() {
             return Err(Error::new("output is required", "", 0, 0));
+        }
+        if self.partition.is_some() && self.qualified_partition.is_some() {
+            return Err(writer_err!(
+                "partition and partition_qualified cannot be combined"
+            ));
         }
 
         let mut files = vec![];
@@ -152,7 +176,7 @@ impl Writer {
         let index = metadata::reader::Index::new(files);
         let rules = resolve_filter(&self.filter, &index);
 
-        if let Some(map) = &self.partition {
+        if self.partition.is_some() || self.qualified_partition.is_some() {
             if let Ok(entries) = std::fs::read_dir(&self.output) {
                 for entry in entries.flatten() {
                     let path = entry.path();
@@ -174,7 +198,12 @@ impl Writer {
                     if !item_included(&rules, namespace, name) {
                         continue;
                     }
-                    let Some(stem) = map.get(name) else {
+                    let stem = self
+                        .partition
+                        .as_ref()
+                        .and_then(|map| map.get(name))
+                        .or_else(|| self.qualified_partition.as_ref()?.get(namespace)?.get(name));
+                    let Some(stem) = stem else {
                         continue;
                     };
                     let layout = layouts.entry(stem.clone()).or_default();

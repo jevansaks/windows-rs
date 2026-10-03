@@ -44,9 +44,11 @@ the bundled standard metadata, or the path and byte reference methods for custom
 Writer inputs are definitions to render; `input_default` renders the bundled metadata.
 
 Writer filters accept namespace prefixes, qualified or unqualified names, and `!` exclusions.
-`split` writes one file per namespace. `partition` accepts an item-name -> file-stem map and writes
-one file per defining header. `item_names` reads the names declared under one namespace without
-compiling the file.
+`split` writes one file per namespace. `partition` accepts an unqualified item-name -> file-stem
+map for flat metadata. `partition_qualified` accepts typed namespace/name identities when short
+names can repeat across namespaces. The two partition modes cannot be combined. `item_names` reads
+the names declared directly under one exact namespace without compiling the file.
+`qualified_item_names` parses the file once and returns items from all namespaces.
 
 ## RDL syntax
 
@@ -228,8 +230,11 @@ into one winmd. A type with the same shape on every architecture is emitted once
 differs by architecture is split into per-architecture copies tagged `#[arch(X86|X64|Arm64)]`.
 
 The merge compares type structure through [`windows-metadata`](windows-metadata.md).
-`merge_arch_rdl` handles orchestration. It reads each architecture's RDL, runs the merge, and writes
-the combined output. `ArchInput` stores its RDL directory and winmd as `PathBuf`.
+`merge_arch_rdl` handles orchestration. It reads the `Windows.Win32` namespace and its descendants
+in each architecture's RDL, runs the merge, and writes the combined output with
+namespace-qualified partition keys. Caller input order defines partition precedence, files within
+each input directory are sorted, and the first route for an item wins. `ArchInput` stores its RDL
+directory and winmd as `PathBuf`.
 
 ### Published crates and namespace remap
 

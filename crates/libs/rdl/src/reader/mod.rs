@@ -293,6 +293,14 @@ impl Reader {
 
 /// Parses one `.rdl` file and returns the items it defines under `namespace`.
 pub(crate) fn item_names(path: impl AsRef<Path>, namespace: &str) -> Result<Vec<String>, Error> {
+    Ok(qualified_item_names(path)?
+        .into_iter()
+        .filter(|item| item.namespace == namespace)
+        .map(|item| item.name)
+        .collect())
+}
+
+pub(crate) fn qualified_item_names(path: impl AsRef<Path>) -> Result<Vec<RdlItemName>, Error> {
     let path = path.as_ref().to_path_buf();
     let input = expand_rdl_files(std::slice::from_ref(&path), &[])?;
     let mut index = Index::new();
@@ -302,10 +310,15 @@ pub(crate) fn item_names(path: impl AsRef<Path>, namespace: &str) -> Result<Vec<
         }
     }
     let mut names = vec![];
-    if let Some(ns) = index.namespaces.get(namespace) {
-        names.extend(ns.types.keys().cloned());
-        names.extend(ns.functions.keys().cloned());
-        names.extend(ns.constants.keys().cloned());
+    for (namespace, items) in index.namespaces {
+        names.extend(
+            items
+                .types
+                .into_keys()
+                .chain(items.functions.into_keys())
+                .chain(items.constants.into_keys())
+                .map(|name| RdlItemName::new(namespace.clone(), name)),
+        );
     }
     Ok(names)
 }
