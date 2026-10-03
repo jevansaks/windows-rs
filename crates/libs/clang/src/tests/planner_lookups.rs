@@ -5,6 +5,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         facts,
         constants: Vec::new(),
         included_files: Vec::new(),
+        declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
         root_owners: BTreeMap::new(),

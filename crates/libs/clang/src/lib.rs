@@ -1145,6 +1145,7 @@ pub struct Snapshot {
     facts: Vec<Fact>,
     constants: Vec<Constant>,
     included_files: Vec<IncludedFile>,
+    declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
     root_owners: BTreeMap<Origin, RootOwner>,
@@ -1161,6 +1162,12 @@ pub struct Snapshot {
     header_partition_policy: bool,
     header_authority_partition: Option<String>,
     timing_target: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DeclareHandle {
+    alias: Origin,
+    record: Origin,
 }
 
 struct DeclarationIndex<'a> {
@@ -1213,6 +1220,7 @@ impl PartialEq for Snapshot {
     fn eq(&self, other: &Self) -> bool {
         self.facts == other.facts
             && self.constants == other.constants
+            && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
             && self.declaration_guids == other.declaration_guids
             && self.root_owners == other.root_owners
@@ -2513,6 +2521,56 @@ impl Snapshot {
                 })
                 .is_none_or(|owner| !owner.exclusions.contains(&constant.name))
         });
+    }
+
+    fn project_suppressed_declare_handles(&mut self) {
+        let projections: Vec<_> = self
+            .declare_handles
+            .iter()
+            .filter(|handle| self.suppressed_type_origins.contains(&handle.record))
+            .filter(|handle| !self.suppressed_type_origins.contains(&handle.alias))
+            .filter_map(|handle| {
+                let record = self
+                    .facts
+                    .iter()
+                    .find(|fact| fact.origin == handle.record)?;
+                Some((
+                    handle.alias.clone(),
+                    record.name.clone(),
+                    record.spelling.clone(),
+                ))
+            })
+            .collect();
+        for (alias_origin, record_name, record_declaration) in projections {
+            let Some(alias) = self
+                .facts
+                .iter_mut()
+                .find(|fact| fact.origin == alias_origin)
+            else {
+                continue;
+            };
+            let handle_name = alias.name.clone();
+            let FactData::Typedef { target } = &mut alias.data else {
+                continue;
+            };
+            if !matches!(
+                target,
+                TypeRef::Pointer {
+                    mutable: true,
+                    target,
+                } if matches!(
+                    target.as_ref(),
+                    TypeRef::Named { name, declaration }
+                        if name == &record_name && declaration == &record_declaration
+                )
+            ) {
+                continue;
+            }
+            *target = TypeRef::OpaquePointer {
+                mutable: true,
+                tag: handle_name,
+            };
+        }
     }
 
     fn apply_partition_type_settings(&mut self) {
@@ -4734,8 +4792,9 @@ impl Snapshot {
 impl HeaderPartitionPlan {
     pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
         let timing = self.snapshot.timing_target.is_some();
-        let (snapshot, _, source_names) =
+        let (mut snapshot, _, source_names) =
             self.snapshot.clone().into_partitioned_planning_snapshot();
+        snapshot.project_suppressed_declare_handles();
         let plan = snapshot.plan(
             options.references,
             options.excluded_types.or(options.excluded),
@@ -4759,8 +4818,9 @@ impl HeaderPartitionPlan {
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let timing = self.snapshot.timing_target.is_some();
         let target = self.snapshot.timing_target.clone();
-        let (snapshot, display_names, source_names) =
+        let (mut snapshot, display_names, source_names) =
             self.snapshot.into_partitioned_planning_snapshot();
+        snapshot.project_suppressed_declare_handles();
         let plan = snapshot.plan(
             options.references,
             options.excluded_types.or(options.excluded),

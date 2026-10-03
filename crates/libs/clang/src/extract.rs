@@ -311,6 +311,7 @@ fn extract_impl(
         );
     }
     materialize_anonymous_callbacks(&mut facts);
+    let declare_handles = identify_declare_handles(&inputs, &facts, &extracted);
     facts.sort();
     for pair in facts.windows(2) {
         if pair[0].origin == pair[1].origin {
@@ -375,6 +376,7 @@ fn extract_impl(
         facts,
         constants,
         included_files,
+        declare_handles,
         annotations,
         declaration_guids,
         root_owners,
@@ -475,6 +477,121 @@ fn enum_override_value(value: &Value, repr: Scalar) -> Option<i64> {
         (Value::Unsigned(value), Scalar::U64) => Some(*value as i64),
         _ => None,
     }
+}
+
+fn identify_declare_handles(
+    inputs: &[Input],
+    facts: &[Fact],
+    extracted: &[Extracted<'_>],
+) -> Vec<DeclareHandle> {
+    if extracted
+        .iter()
+        .all(|extracted| extracted.declare_handle_expansions.is_empty())
+    {
+        return Vec::new();
+    }
+    let mut result = BTreeSet::new();
+    let mut facts_by_expansion: HashMap<(&str, &str, &Location), Vec<&Fact>> = HashMap::new();
+    for fact in facts {
+        facts_by_expansion
+            .entry((&fact.origin.tu, &fact.name, &fact.expansion))
+            .or_default()
+            .push(fact);
+    }
+    for (input, extracted) in inputs.iter().zip(extracted) {
+        let expansions: BTreeSet<_> = extracted.declare_handle_expansions.iter().collect();
+        for expansion in expansions {
+            let record_name = format!("{}__", expansion.name);
+            let aliases: Vec<_> = facts_by_expansion
+                .get(&(
+                    input.name.as_str(),
+                    expansion.name.as_str(),
+                    &expansion.location,
+                ))
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|fact| {
+                    matches!(
+                        &fact.data,
+                        FactData::Typedef {
+                            target: TypeRef::Pointer {
+                                mutable: true,
+                                target,
+                            },
+                        } if matches!(
+                            target.as_ref(),
+                            TypeRef::Named { name, .. } if name == &record_name
+                        )
+                    )
+                })
+                .collect();
+            let [alias] = aliases.as_slice() else {
+                continue;
+            };
+            let FactData::Typedef {
+                target:
+                    TypeRef::Pointer {
+                        target: alias_target,
+                        ..
+                    },
+            } = &alias.data
+            else {
+                unreachable!()
+            };
+            let TypeRef::Named {
+                declaration: record_declaration,
+                ..
+            } = alias_target.as_ref()
+            else {
+                unreachable!()
+            };
+            let records: Vec<_> = facts_by_expansion
+                .get(&(
+                    input.name.as_str(),
+                    record_name.as_str(),
+                    &expansion.location,
+                ))
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|fact| fact.spelling == *record_declaration)
+                .filter(|fact| {
+                    matches!(
+                        &fact.data,
+                        FactData::Record {
+                            base: None,
+                            fields,
+                            size: 4,
+                            align: 4,
+                            packing: None,
+                            alignment: None,
+                            union: false,
+                        } if fact.definition
+                            && matches!(
+                                fields.as_slice(),
+                                [Field {
+                                    name,
+                                    ty: TypeRef::Scalar(Scalar::I32),
+                                    offset: 0,
+                                    size: 4,
+                                    align: 4,
+                                    bit_width: None,
+                                }] if name == "unused"
+                            )
+                    )
+                })
+                .collect();
+            let [record] = records.as_slice() else {
+                continue;
+            };
+            result.insert(DeclareHandle {
+                alias: alias.origin.clone(),
+                record: record.origin.clone(),
+            });
+        }
+    }
+    result.into_iter().collect()
 }
 
 fn recover_midl_artifacts(inputs: &[Input], facts: &mut [Fact], constants: &mut Vec<Constant>) {
@@ -1252,6 +1369,7 @@ impl TranslationUnit {
             macros: &macros,
             pending_structs: vec![],
             pending_macros: vec![],
+            declare_handle_expansions: vec![],
             facts: &mut *output.facts,
             constants: &mut *output.constants,
             annotations: &mut *output.annotations,
@@ -1280,12 +1398,14 @@ impl TranslationUnit {
         });
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
+        let declare_handle_expansions = std::mem::take(&mut traversal.declare_handle_expansions);
         drop(traversal);
         Ok((
             Extracted {
                 macros,
                 pending_structs,
                 pending_macros,
+                declare_handle_expansions,
             },
             metrics,
         ))
@@ -1309,6 +1429,7 @@ struct Traversal<'a> {
     macros: &'a MacroDefinitions<'a>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
+    declare_handle_expansions: Vec<DeclareHandleExpansion>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
@@ -1328,6 +1449,13 @@ struct Extracted<'tu> {
     macros: MacroDefinitions<'tu>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
+    declare_handle_expansions: Vec<DeclareHandleExpansion>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DeclareHandleExpansion {
+    name: String,
+    location: Location,
 }
 
 impl Traversal<'_> {
@@ -1469,6 +1597,18 @@ fn extract_child(
         && let Some(source_name) = source_function_name(child, &name, traversal.macros)
     {
         name = source_name;
+    }
+    if kind == CXCursor_MacroExpansion
+        && name == "DECLARE_HANDLE"
+        && let Some(handle) = declare_handle_name(&cursor_tokens(child))
+        && let Some((_, expansion, _, _)) = cursor_locations(child)
+    {
+        traversal
+            .declare_handle_expansions
+            .push(DeclareHandleExpansion {
+                name: handle.to_string(),
+                location: expansion,
+            });
     }
     if kind == CXCursor_VarDecl
         && !name.is_empty()
@@ -3677,6 +3817,18 @@ fn cursor_tokens(cursor: CXCursor) -> Vec<(CXTokenKind, String)> {
         .collect();
     unsafe { clang_disposeTokens(tu, tokens, count) };
     result
+}
+
+fn declare_handle_name(tokens: &[(CXTokenKind, String)]) -> Option<&str> {
+    match tokens {
+        [
+            (CXToken_Identifier, macro_name),
+            (_, open),
+            (CXToken_Identifier, name),
+            (_, close),
+        ] if macro_name == "DECLARE_HANDLE" && open == "(" && close == ")" => Some(name),
+        _ => None,
+    }
 }
 
 fn tokens_before_method_name(

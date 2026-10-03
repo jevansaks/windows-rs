@@ -200,6 +200,13 @@ facts remain available for layout and dependency closure. If every projection is
 owners are retained so existing exclusion diagnostics and single-partition alias behavior remain
 unchanged.
 
+The extractor records direct `DECLARE_HANDLE(name)` macro invocations and validates the exact
+`name__ { int unused; }` plus `typedef name__ *name` expansion. When a header partition suppresses
+that precise private record origin but retains the public typedef, planning emits the public handle
+as a named native typedef over `*mut void`. Aliases and pointer aliases keep their authored names
+and pointer depth. A non-excluded handle, a lookalike declaration, or a different macro expansion
+keeps the existing record-backed representation. No cleanup or invalid-handle policy is inferred.
+
 Planning indexes declarations by exact translation unit, name, and spelling location for authority
 and typedef-projection lookups. Each bucket retains snapshot fact order, including duplicate
 declarations. The index is local to each planning or routing operation and is built after owner
@@ -413,6 +420,12 @@ MIDL compiler marker in the same physical header and an exact adjacent `NAME` al
 records used only to define an opaque pointer typedef are likewise represented by the public
 pointer alias. A generated declaration referenced directly by another ABI type keeps its generated
 name and layout.
+
+Windows `DECLARE_HANDLE` uses a private dummy record to make unrelated handles distinct in C++.
+Header-partition emission may replace that record dependency with `*mut void` only for an exact
+recorded macro expansion whose private record origin is excluded by its owner. The public handle
+remains a named typedef, so aliases such as a second handle name and pointer-to-handle typedefs
+retain their metadata identities. Other handles keep their record-backed output.
 
 When an active object-like macro shadows an enum member declared by the same header, the member
 takes the macro's effective value. This preserves the identifier that C callers see without
