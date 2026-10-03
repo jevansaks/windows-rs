@@ -258,12 +258,13 @@ and unowned copies in other extraction inputs still project to the raw pointer a
 nominal aliases in their logical or default namespaces.
 
 Equivalent canonical raw-pointer declarations are scoped only for exact declarations that need a
-nominal identity: another pointer typedef points through the declaration, or a pointer boundary
-changes mutability. Those namespaces retain the authored alias and exact references keep that
-identity. Direct uses and representable same-mutability function or field pointer chains keep the
-canonical projection behavior above. Function references participate only when the function passes
-the emission function selection and exclusion filters, so an unselected declaration cannot force a
-nominal alias into its header partition.
+nominal identity: another pointer typedef points through the declaration, a pointer boundary changes
+mutability, or a selected function reaches a named callback that directly uses the same declaration.
+Those namespaces retain the authored alias and exact references keep that identity. Standalone
+callbacks, direct uses, and other representable same-mutability function or field pointer chains
+keep the canonical projection behavior above. Function references participate only when the
+function passes the emission function selection and exclusion filters, so an unselected declaration
+cannot force a nominal alias into its header partition.
 
 The extractor records direct `DECLARE_HANDLE(name)` macro invocations and validates the exact
 `name__ { int unused; }` plus `typedef name__ *name` expansion. When a header partition suppresses

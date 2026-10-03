@@ -2770,6 +2770,144 @@ fn canonical_pointer_alias_dependency_keeps_the_consuming_partition_identity() {
 }
 
 #[test]
+fn included_canonical_pointer_alias_is_retained_by_owned_callback() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("included-canonical-pointer-callback");
+    let common = scratch.join("common.h");
+    let base = scratch.join("minwinbase.h");
+    let enclave = scratch.join("enclaveapi.h");
+    std::fs::write(&common, "#pragma once\ntypedef void* LPVOID;\n").unwrap();
+    std::fs::write(
+        &base,
+        format!(
+            "#pragma once\n\
+             #include \"{}\"\n\
+             typedef LPVOID (*PENCLAVE_ROUTINE)(LPVOID lpThreadParameter);\n\
+             typedef PENCLAVE_ROUTINE LPENCLAVE_ROUTINE;\n",
+            common.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &enclave,
+        format!(
+            "#pragma once\n\
+             #include \"{}\"\n\
+             extern \"C\" int CallEnclave(\n\
+                 LPENCLAVE_ROUTINE lpRoutine,\n\
+                 LPVOID lpParameter,\n\
+                 int fWaitForThread,\n\
+                 LPVOID* lpReturnValue);\n",
+            base.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&base, &enclave]);
+    let reverse = aggregate_snapshot(&scratch, &[&enclave, &base]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            base.to_string_lossy(),
+            RootPartition::new("base", "Example.SystemServices"),
+        )
+        .with_traversed_header(
+            enclave.to_string_lossy(),
+            RootPartition::new("enclave", "Example.Environment")
+                .with_library("CallEnclave", "enclave.dll"),
+        );
+    let references = BTreeMap::new();
+    let functions = BTreeSet::from(["CallEnclave".to_string()]);
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&functions);
+    let emit = |snapshot: Snapshot| {
+        let plan = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+    let partitions = emit(snapshot);
+    assert_eq!(partitions, emit(reverse));
+
+    let common = output(&partitions, "Example.Common");
+    assert!(
+        common.contains("type LPVOID = *mut void"),
+        "{partitions:#?}"
+    );
+    let base = output(&partitions, "Example.SystemServices");
+    assert!(
+        base.contains(
+            "fn PENCLAVE_ROUTINE(lpThreadParameter: Example::Common::LPVOID) -> \
+             Example::Common::LPVOID"
+        ),
+        "{partitions:#?}"
+    );
+    assert!(
+        base.contains("type LPENCLAVE_ROUTINE = PENCLAVE_ROUTINE"),
+        "{partitions:#?}"
+    );
+    let enclave = output(&partitions, "Example.Environment");
+    assert!(
+        enclave.contains(
+            "fn CallEnclave(lpRoutine: Example::SystemServices::LPENCLAVE_ROUTINE, \
+             lpParameter: Example::Common::LPVOID, fWaitForThread: i32, \
+             lpReturnValue: *mut Example::Common::LPVOID) -> i32"
+        ),
+        "{partitions:#?}"
+    );
+
+    let winmd = scratch.join("included-canonical-pointer-callback.winmd");
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    assert_eq!(
+        index.expect("Example.Common", "LPVOID").underlying_type(),
+        Some(Type::PtrMut(Box::new(Type::Void), 1))
+    );
+    let invoke = index
+        .expect("Example.SystemServices", "PENCLAVE_ROUTINE")
+        .methods()
+        .find(|method| method.name() == "Invoke")
+        .unwrap()
+        .signature(&[]);
+    assert_eq!(
+        invoke.types,
+        [Type::value_named("Example.Common", "LPVOID")]
+    );
+    assert_eq!(
+        invoke.return_type,
+        Type::value_named("Example.Common", "LPVOID")
+    );
+    assert_eq!(
+        index
+            .expect("Example.SystemServices", "LPENCLAVE_ROUTINE")
+            .underlying_type(),
+        Some(Type::class_named(
+            "Example.SystemServices",
+            "PENCLAVE_ROUTINE"
+        ))
+    );
+    let Item::Fn(call_enclave) = index.expect_item("Example.Environment", "CallEnclave") else {
+        panic!("Example.Environment.CallEnclave was not emitted as a function");
+    };
+    assert_eq!(
+        call_enclave.signature(&[]).types,
+        [
+            Type::value_named("Example.SystemServices", "LPENCLAVE_ROUTINE"),
+            Type::value_named("Example.Common", "LPVOID"),
+            Type::I32,
+            Type::PtrMut(Box::new(Type::value_named("Example.Common", "LPVOID")), 1),
+        ]
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
     helpers::ensure_libclang();
 

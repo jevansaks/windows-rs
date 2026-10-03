@@ -2282,12 +2282,23 @@ impl Snapshot {
             .collect();
         let retained_canonical_pointer_declarations = {
             let mut candidates = BTreeSet::new();
+            let callback_requirements = callback_dependency_pointer_alias_requirements(
+                &declarations,
+                self.facts.iter().filter(|fact| {
+                    matches!(fact.data, FactData::Function { .. })
+                        && pointer_alias_root_is_selected(fact, options)
+                }),
+            );
             for fact in self
                 .facts
                 .iter()
                 .filter(|fact| pointer_alias_root_is_selected(fact, options))
             {
-                collect_fact_pointer_alias_candidates(fact, &mut candidates);
+                collect_fact_pointer_alias_candidates(
+                    fact,
+                    &callback_requirements,
+                    &mut candidates,
+                );
             }
             candidates
                 .into_iter()
@@ -4214,6 +4225,10 @@ impl Snapshot {
             phase_time = Some(std::time::Instant::now());
         }
 
+        let callback_pointer_alias_requirements = callback_dependency_pointer_alias_requirements(
+            &declarations,
+            functions.iter().map(|function| function.fact),
+        );
         let (facts_by_name, mut retained_pointer_aliases, dependency_diagnostics) = loop {
             let mut facts = BTreeSet::new();
             let mut queue = vec![];
@@ -4231,7 +4246,11 @@ impl Snapshot {
                 let fact_node = DependencyNode::Fact(&root.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
                 if facts.insert(root.origin.clone()) {
-                    collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
+                    collect_fact_pointer_alias_candidates(
+                        root,
+                        &callback_pointer_alias_requirements,
+                        &mut pointer_alias_candidates,
+                    );
                     queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
                 }
             }
@@ -4244,7 +4263,11 @@ impl Snapshot {
                 );
                 let fact_node = DependencyNode::Fact(&root.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
-                collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
+                collect_fact_pointer_alias_candidates(
+                    root,
+                    &callback_pointer_alias_requirements,
+                    &mut pointer_alias_candidates,
+                );
                 queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
             }
             for constant in &constants {
@@ -4257,6 +4280,7 @@ impl Snapshot {
                 collect_pointer_alias_candidates(
                     &constant.ty,
                     constant.root.tu.as_str(),
+                    &callback_pointer_alias_requirements,
                     &mut pointer_alias_candidates,
                 );
                 queue.push((
@@ -4274,7 +4298,11 @@ impl Snapshot {
                 );
                 let fact_node = DependencyNode::Fact(&function.fact.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
-                collect_fact_pointer_alias_candidates(function.fact, &mut pointer_alias_candidates);
+                collect_fact_pointer_alias_candidates(
+                    function.fact,
+                    &callback_pointer_alias_requirements,
+                    &mut pointer_alias_candidates,
+                );
                 queue_function_edges(function.fact, fact_node, &mut queue);
             }
 
@@ -4328,6 +4356,7 @@ impl Snapshot {
                         if facts.insert(fact.origin.clone()) {
                             collect_fact_pointer_alias_candidates(
                                 fact,
+                                &callback_pointer_alias_requirements,
                                 &mut pointer_alias_candidates,
                             );
                             queue_type_edges(
@@ -4570,7 +4599,11 @@ impl Snapshot {
                 let fact_node = DependencyNode::Fact(&fact.origin);
                 dependency_diagnostics.add_edge(source, fact_node);
                 if facts.insert(fact.origin.clone()) {
-                    collect_fact_pointer_alias_candidates(fact, &mut pointer_alias_candidates);
+                    collect_fact_pointer_alias_candidates(
+                        fact,
+                        &callback_pointer_alias_requirements,
+                        &mut pointer_alias_candidates,
+                    );
                     queue_type_edges(fact, &self.projected_type_names, fact_node, &mut queue);
                 }
             }
@@ -7991,9 +8024,12 @@ fn owner_exclusion_error(
     Error(result)
 }
 
+type PointerAliasDeclarations<'a> = BTreeSet<(&'a str, &'a Location, &'a str)>;
+
 fn collect_fact_pointer_alias_candidates<'a>(
     fact: &'a Fact,
-    candidates: &mut BTreeSet<(&'a str, &'a Location, &'a str)>,
+    callback_requirements: &PointerAliasDeclarations<'_>,
+    candidates: &mut PointerAliasDeclarations<'a>,
 ) {
     let alias_typedef = matches!(
         fact.data,
@@ -8002,7 +8038,14 @@ fn collect_fact_pointer_alias_candidates<'a>(
         }
     );
     visit_fact_pointer_alias_references(fact, &mut |tu, declaration, name, parent_mutable| {
-        if pointer_alias_reference_is_retained(name, parent_mutable, alias_typedef) {
+        if pointer_alias_reference_is_retained(
+            tu,
+            declaration,
+            name,
+            parent_mutable,
+            alias_typedef,
+            callback_requirements,
+        ) {
             candidates.insert((tu, declaration, name));
         }
     });
@@ -8027,13 +8070,111 @@ fn pointer_alias_root_is_selected(fact: &Fact, options: &EmitOptions<'_>) -> boo
         .is_none_or(|functions| functions.contains(link_name))
 }
 
+fn callback_dependency_pointer_alias_requirements<'a>(
+    declarations: &DeclarationIndex<'a>,
+    functions: impl IntoIterator<Item = &'a Fact>,
+) -> PointerAliasDeclarations<'a> {
+    let mut requirements = BTreeSet::new();
+    let mut seen = BTreeSet::new();
+    for function in functions {
+        let FactData::Function { params, result, .. } = &function.data else {
+            continue;
+        };
+        collect_callback_dependency_pointer_aliases(
+            result,
+            function.origin.tu.as_str(),
+            declarations,
+            &mut seen,
+            &mut requirements,
+        );
+        for param in params {
+            collect_callback_dependency_pointer_aliases(
+                &param.ty,
+                function.origin.tu.as_str(),
+                declarations,
+                &mut seen,
+                &mut requirements,
+            );
+        }
+    }
+    requirements
+}
+
+fn collect_callback_dependency_pointer_aliases<'a>(
+    ty: &'a TypeRef,
+    tu: &'a str,
+    declarations: &DeclarationIndex<'a>,
+    seen: &mut BTreeSet<(String, String, Location)>,
+    requirements: &mut PointerAliasDeclarations<'a>,
+) {
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            let key = (tu.to_string(), name.clone(), declaration.clone());
+            if !seen.insert(key) {
+                return;
+            }
+            for fact in declarations.get(tu, name, declaration) {
+                match &fact.data {
+                    FactData::Callback { params, result, .. } => {
+                        let tu = fact.origin.tu.as_str();
+                        for ty in
+                            std::iter::once(result).chain(params.iter().map(|param| &param.ty))
+                        {
+                            if let TypeRef::Named { name, declaration } = ty
+                                && canonical_raw_pointer_name(name)
+                            {
+                                requirements.insert((tu, declaration, name));
+                            }
+                        }
+                    }
+                    FactData::Typedef { target } => collect_callback_dependency_pointer_aliases(
+                        target,
+                        fact.origin.tu.as_str(),
+                        declarations,
+                        seen,
+                        requirements,
+                    ),
+                    _ => {}
+                }
+            }
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => collect_callback_dependency_pointer_aliases(
+            target,
+            tu,
+            declarations,
+            seen,
+            requirements,
+        ),
+        TypeRef::Generic { args, .. } => {
+            for arg in args {
+                collect_callback_dependency_pointer_aliases(
+                    arg,
+                    tu,
+                    declarations,
+                    seen,
+                    requirements,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
 fn pointer_alias_reference_is_retained(
+    tu: &str,
+    declaration: &Location,
     name: &str,
     parent_mutable: bool,
     alias_typedef: bool,
+    callback_requirements: &PointerAliasDeclarations<'_>,
 ) -> bool {
-    canonical_raw_pointer_mutability(name)
-        .is_none_or(|alias_mutable| alias_typedef || alias_mutable != parent_mutable)
+    canonical_raw_pointer_mutability(name).is_none_or(|alias_mutable| {
+        alias_typedef
+            || alias_mutable != parent_mutable
+            || callback_requirements.contains(&(tu, declaration, name))
+    })
 }
 
 fn visit_fact_pointer_alias_references<'a, F>(fact: &'a Fact, visit: &mut F)
@@ -8077,14 +8218,22 @@ where
 fn collect_pointer_alias_candidates<'a>(
     ty: &'a TypeRef,
     tu: &'a str,
-    candidates: &mut BTreeSet<(&'a str, &'a Location, &'a str)>,
+    callback_requirements: &PointerAliasDeclarations<'_>,
+    candidates: &mut PointerAliasDeclarations<'a>,
 ) {
     visit_pointer_alias_references(
         ty,
         tu,
         None,
         &mut |tu, declaration, name, parent_mutable| {
-            if pointer_alias_reference_is_retained(name, parent_mutable, false) {
+            if pointer_alias_reference_is_retained(
+                tu,
+                declaration,
+                name,
+                parent_mutable,
+                false,
+                callback_requirements,
+            ) {
                 candidates.insert((tu, declaration, name));
             }
         },
