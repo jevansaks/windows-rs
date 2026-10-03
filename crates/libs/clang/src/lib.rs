@@ -1471,7 +1471,8 @@ impl Snapshot {
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let target = self.timing_target.clone();
-        let (snapshot, display_names, source_names) = self.into_partitioned_planning_snapshot();
+        let (snapshot, display_names, source_names) =
+            self.into_partitioned_planning_snapshot(options);
         let plan = snapshot.plan_partitioned(options, &display_names)?;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let routes = snapshot.resolve_partition_routes(candidates)?;
@@ -2260,6 +2261,7 @@ impl Snapshot {
 
     fn into_partitioned_planning_snapshot(
         mut self,
+        options: &EmitOptions<'_>,
     ) -> (Self, BTreeMap<String, String>, PlanningSourceNames) {
         let source_names = PlanningSourceNames::new(&self);
         self.apply_partition_type_settings();
@@ -2280,7 +2282,11 @@ impl Snapshot {
             .collect();
         let retained_canonical_pointer_declarations = {
             let mut candidates = BTreeSet::new();
-            for fact in self.facts.iter().filter(|fact| fact.root) {
+            for fact in self
+                .facts
+                .iter()
+                .filter(|fact| pointer_alias_root_is_selected(fact, options))
+            {
                 collect_fact_pointer_alias_candidates(fact, &mut candidates);
             }
             candidates
@@ -5306,8 +5312,10 @@ impl Snapshot {
 
 impl HeaderPartitionPlan {
     pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
-        let (mut snapshot, display_names, source_names) =
-            self.snapshot.clone().into_partitioned_planning_snapshot();
+        let (mut snapshot, display_names, source_names) = self
+            .snapshot
+            .clone()
+            .into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
         let plan = snapshot.plan_partitioned(options, &display_names)?;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
@@ -5324,7 +5332,7 @@ impl HeaderPartitionPlan {
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let target = self.snapshot.timing_target.clone();
         let (mut snapshot, display_names, source_names) =
-            self.snapshot.into_partitioned_planning_snapshot();
+            self.snapshot.into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
         let plan = snapshot.plan_partitioned(options, &display_names)?;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
@@ -7998,6 +8006,25 @@ fn collect_fact_pointer_alias_candidates<'a>(
             candidates.insert((tu, declaration, name));
         }
     });
+}
+
+fn pointer_alias_root_is_selected(fact: &Fact, options: &EmitOptions<'_>) -> bool {
+    if !fact.root {
+        return false;
+    }
+    let FactData::Function { link_name, .. } = &fact.data else {
+        return true;
+    };
+    if options
+        .excluded_functions
+        .or(options.excluded)
+        .is_some_and(|excluded| excluded.contains(&fact.name))
+    {
+        return false;
+    }
+    options
+        .functions
+        .is_none_or(|functions| functions.contains(link_name))
 }
 
 fn pointer_alias_reference_is_retained(

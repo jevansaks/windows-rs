@@ -2395,25 +2395,34 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
         &first,
         "typedef void* PVOID;\n\
          typedef PVOID PSID;\n\
+         typedef PVOID (ENCLAVE_TARGET_FUNCTION)(PVOID);\n\
+         typedef ENCLAVE_TARGET_FUNCTION (*PENCLAVE_TARGET_FUNCTION);\n\
+         typedef PENCLAVE_TARGET_FUNCTION LPENCLAVE_TARGET_FUNCTION;\n\
+         typedef void (*WORKERCALLBACKFUNC)(PVOID);\n\
+         typedef void (*APC_CALLBACK_FUNCTION)(unsigned long, PVOID, PVOID);\n\
          extern \"C\" void FirstUse(PSID value);\n\
-         extern \"C\" void FirstRaw(PVOID* value);\n",
+         extern \"C\" void FirstRaw(PVOID* value);\n\
+         extern \"C\" PVOID ReadPointer(PVOID const* source);\n",
     )
     .unwrap();
     std::fs::write(
         &second,
-        "typedef void* PVOID;\n\
-         typedef PVOID* PTBS_HCONTEXT;\n\
-         typedef PVOID TBS_HCONTEXT;\n\
+        "#define VOID void\n\
+         typedef VOID* PVOID;\n\
+         typedef PVOID TBS_HCONTEXT, *PTBS_HCONTEXT;\n\
          extern \"C\" void SecondUse(PTBS_HCONTEXT value, TBS_HCONTEXT context);\n",
     )
     .unwrap();
-    let snapshot = aggregate_snapshot(&scratch, &[&common_api, &first, &second]);
+    let snapshot = aggregate_snapshot(&scratch, &[&first, &second, &common_api]);
     let reverse = aggregate_snapshot(&scratch, &[&second, &first, &common_api]);
+    let selected_snapshot = snapshot.clone();
+    let selected_reverse = reverse.clone();
     let common_partition =
         RootPartition::new("common", "Example.Common").with_library("CommonUse", "common.dll");
     let first_partition = RootPartition::new("first", "Example.First")
         .with_library("FirstUse", "first.dll")
-        .with_library("FirstRaw", "first.dll");
+        .with_library("FirstRaw", "first.dll")
+        .with_library("ReadPointer", "first.dll");
     let second_partition =
         RootPartition::new("second", "Example.Second").with_library("SecondUse", "second.dll");
     let policy = HeaderPartitionPolicy::new()
@@ -2425,16 +2434,23 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
         .with_traversed_header(first.to_string_lossy(), first_partition)
         .with_traversed_header(common_api.to_string_lossy(), common_partition);
     let references = BTreeMap::new();
-    let options = EmitOptions::new("Example.Common", &references);
-    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy| {
+    let functions = BTreeSet::from([
+        "CommonUse".to_string(),
+        "FirstRaw".to_string(),
+        "FirstUse".to_string(),
+        "SecondUse".to_string(),
+    ]);
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&functions);
+    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy, options: &EmitOptions<'_>| {
         let plan = snapshot
             .plan_header_partitions(policy, &NamespaceAuthorities::new())
             .unwrap();
-        assert!(plan.audit(&options).unwrap().is_clean());
-        plan.emit_with_options(&options).unwrap()
+        assert!(plan.audit(options).unwrap().is_clean());
+        plan.emit_with_options(options).unwrap()
     };
-    let partitions = emit(snapshot, &policy);
-    let reverse_partitions = emit(reverse, &reverse_policy);
+    let partitions = emit(snapshot, &policy, &options);
+    let reverse_partitions = emit(reverse, &reverse_policy, &options);
     assert_eq!(partitions, reverse_partitions);
 
     let first = output(&partitions, "Example.First");
@@ -2524,6 +2540,58 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
     assert_eq!(
         common_use.signature(&[]).types,
         [Type::PtrMut(Box::new(Type::Void), 1)]
+    );
+
+    let selected_functions = functions
+        .iter()
+        .cloned()
+        .chain(["ReadPointer".to_string()])
+        .collect::<BTreeSet<_>>();
+    let mut selected_options = EmitOptions::new("Example.Common", &references);
+    selected_options.functions = Some(&selected_functions);
+    let selected_partitions = emit(selected_snapshot, &policy, &selected_options);
+    let selected_reverse_partitions = emit(selected_reverse, &reverse_policy, &selected_options);
+    assert_eq!(selected_partitions, selected_reverse_partitions);
+    let selected_first = output(&selected_partitions, "Example.First");
+    assert!(
+        selected_first.contains("type PVOID = *mut void"),
+        "{selected_first}"
+    );
+    assert!(
+        selected_first.contains("fn ReadPointer(source: *const PVOID) -> PVOID"),
+        "{selected_first}"
+    );
+    let selected_winmd = scratch.join("selected-canonical-pointer-routes.winmd");
+    let mut compiler = windows_rdl::reader();
+    for rdl in selected_partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler
+        .reference_default()
+        .output(&selected_winmd)
+        .write()
+        .unwrap();
+    let selected_index = windows_metadata::reader::Index::read(&selected_winmd).unwrap();
+    assert_eq!(
+        selected_index
+            .expect("Example.First", "PVOID")
+            .underlying_type(),
+        Some(Type::PtrMut(Box::new(Type::Void), 1))
+    );
+    let Item::Fn(read_pointer) = selected_index.expect_item("Example.First", "ReadPointer") else {
+        panic!("Example.First.ReadPointer was not emitted as a function");
+    };
+    let signature = read_pointer.signature(&[]);
+    assert_eq!(
+        signature.types,
+        [Type::PtrConst(
+            Box::new(Type::value_named("Example.First", "PVOID")),
+            1
+        )]
+    );
+    assert_eq!(
+        signature.return_type,
+        Type::value_named("Example.First", "PVOID")
     );
 
     std::fs::remove_dir_all(scratch).unwrap();
