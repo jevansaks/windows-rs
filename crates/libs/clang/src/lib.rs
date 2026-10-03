@@ -2278,6 +2278,18 @@ impl Snapshot {
                 Some((fact.origin.clone(), namespace.clone()))
             })
             .collect();
+        let nested_pointer_alias_declarations = {
+            let mut candidates = BTreeSet::new();
+            for fact in self.facts.iter().filter(|fact| fact.root) {
+                collect_fact_pointer_alias_candidates(fact, &mut candidates);
+            }
+            candidates
+                .into_iter()
+                .map(|(tu, declaration, name)| {
+                    (tu.to_string(), declaration.clone(), name.to_string())
+                })
+                .collect::<BTreeSet<_>>()
+        };
         let mut variants: BTreeMap<&str, BTreeMap<String, Vec<&Fact>>> = BTreeMap::new();
         for fact in self.facts.iter().filter(|fact| fact.root) {
             let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) else {
@@ -2297,8 +2309,18 @@ impl Snapshot {
                     .values()
                     .flatten()
                     .all(|fact| matches!(fact.data, FactData::Typedef { .. }));
+                let retained_canonical_pointer = canonical_raw_pointer_name(name)
+                    && namespaces.values().all(|facts| {
+                        facts.iter().any(|fact| {
+                            nested_pointer_alias_declarations.contains(&(
+                                fact.origin.tu.clone(),
+                                fact.spelling.clone(),
+                                fact.name.clone(),
+                            ))
+                        })
+                    });
                 let canonical_typedef = canonical_named_type(name).is_some() && all_typedefs;
-                if namespaces.len() <= 1 || canonical_typedef {
+                if namespaces.len() <= 1 || (canonical_typedef && !retained_canonical_pointer) {
                     return None;
                 }
                 let mut source_namespaces: BTreeMap<&Location, BTreeSet<&str>> = BTreeMap::new();

@@ -2503,6 +2503,178 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
 }
 
 #[test]
+fn canonical_pointer_alias_dependency_keeps_the_consuming_partition_identity() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("canonical-pointer-dependency-owner");
+    let corhdr = scratch.join("CorHdr.h");
+    let cor = scratch.join("cor.h");
+    let corprof = scratch.join("corprof.h");
+    std::fs::write(
+        &corhdr,
+        "#pragma once\n\
+         typedef unsigned char COR_SIGNATURE;\n\
+         typedef const COR_SIGNATURE* PCCOR_SIGNATURE;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &cor,
+        format!(
+            "#pragma once\n\
+             #include \"{}\"\n\
+             struct METADATA_MARKER {{ int value; }};\n\
+             extern \"C\" void GetMetadataSignature(PCCOR_SIGNATURE* ppvSig);\n",
+            corhdr.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &corprof,
+        format!(
+            "#pragma once\n\
+             #include \"{}\"\n\
+             typedef unsigned char BYTE;\n\
+             typedef const BYTE* LPCBYTE;\n\
+             typedef BYTE COR_SIGNATURE;\n\
+             typedef const COR_SIGNATURE* PCCOR_SIGNATURE;\n\
+             extern \"C\" void GetDynamicFunctionInfo(PCCOR_SIGNATURE* ppvSig);\n\
+             extern \"C\" void GetFunctionFromIP3(LPCBYTE ip);\n",
+            cor.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&corhdr, &cor, &corprof]);
+    let reverse = aggregate_snapshot(&scratch, &[&corprof, &cor, &corhdr]);
+    let profiling = RootPartition::new("profiling", "Example.ClrProfiling")
+        .with_library("GetDynamicFunctionInfo", "profiling.dll")
+        .with_library("GetFunctionFromIP3", "profiling.dll");
+    let profiling_only =
+        HeaderPartitionPolicy::new().with_traversed_header(corprof.to_string_lossy(), profiling);
+    let combined_policy = profiling_only
+        .clone()
+        .with_traversed_header(
+            corhdr.to_string_lossy(),
+            RootPartition::new("metadata", "Example.WinRT.Metadata"),
+        )
+        .with_traversed_header(
+            cor.to_string_lossy(),
+            RootPartition::new("metadata", "Example.WinRT.Metadata")
+                .with_library("GetMetadataSignature", "metadata.dll"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let emit = |snapshot: &Snapshot, policy: &HeaderPartitionPolicy| {
+        let plan = snapshot
+            .plan_header_partitions(policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+    let profiling_only = emit(&snapshot, &profiling_only);
+    let profiling_only_rdl = output(&profiling_only, "Example.ClrProfiling");
+    assert!(
+        profiling_only_rdl.contains("type PCCOR_SIGNATURE = *const u8"),
+        "{profiling_only:#?}"
+    );
+    assert!(
+        profiling_only_rdl.contains("type LPCBYTE = *const u8"),
+        "{profiling_only:#?}"
+    );
+    assert!(
+        profiling_only_rdl.contains("fn GetDynamicFunctionInfo(ppvSig: *mut PCCOR_SIGNATURE)"),
+        "{profiling_only:#?}"
+    );
+    assert!(
+        profiling_only_rdl.contains("fn GetFunctionFromIP3(ip: LPCBYTE)"),
+        "{profiling_only:#?}"
+    );
+
+    let combined = emit(&snapshot, &combined_policy);
+    assert_eq!(combined, emit(&reverse, &combined_policy));
+    let profiling_rdl = output(&combined, "Example.ClrProfiling");
+    let metadata_rdl = combined
+        .iter()
+        .filter(|(partition, _)| partition.namespace == "Example.WinRT.Metadata")
+        .map(|(_, rdl)| rdl.as_str())
+        .collect::<String>();
+    assert!(
+        profiling_rdl.contains("type PCCOR_SIGNATURE = *const u8"),
+        "{combined:#?}"
+    );
+    assert!(
+        metadata_rdl.contains("type PCCOR_SIGNATURE = *const u8"),
+        "{combined:#?}"
+    );
+    assert!(
+        metadata_rdl.contains("fn GetMetadataSignature(ppvSig: *mut PCCOR_SIGNATURE)"),
+        "{combined:#?}"
+    );
+    assert!(
+        profiling_rdl.contains("fn GetDynamicFunctionInfo(ppvSig: *mut PCCOR_SIGNATURE)"),
+        "{combined:#?}"
+    );
+    assert!(
+        profiling_rdl.contains("fn GetFunctionFromIP3(ip: LPCBYTE)"),
+        "{combined:#?}"
+    );
+
+    let winmd = scratch.join("canonical-pointer-dependency-owner.winmd");
+    windows_rdl::reader()
+        .input_texts(combined.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    for namespace in ["Example.ClrProfiling", "Example.WinRT.Metadata"] {
+        assert_eq!(
+            index.expect(namespace, "PCCOR_SIGNATURE").underlying_type(),
+            Some(Type::PtrConst(Box::new(Type::U8), 1))
+        );
+    }
+    assert_eq!(
+        index
+            .expect("Example.ClrProfiling", "LPCBYTE")
+            .underlying_type(),
+        Some(Type::PtrConst(Box::new(Type::U8), 1))
+    );
+    let Item::Fn(dynamic) = index.expect_item("Example.ClrProfiling", "GetDynamicFunctionInfo")
+    else {
+        panic!("GetDynamicFunctionInfo was not emitted as a function");
+    };
+    assert_eq!(
+        dynamic.signature(&[]).types,
+        [Type::PtrMut(
+            Box::new(Type::value_named("Example.ClrProfiling", "PCCOR_SIGNATURE")),
+            1
+        )]
+    );
+    let Item::Fn(from_ip) = index.expect_item("Example.ClrProfiling", "GetFunctionFromIP3") else {
+        panic!("GetFunctionFromIP3 was not emitted as a function");
+    };
+    assert_eq!(
+        from_ip.signature(&[]).types,
+        [Type::value_named("Example.ClrProfiling", "LPCBYTE")]
+    );
+    let Item::Fn(metadata) = index.expect_item("Example.WinRT.Metadata", "GetMetadataSignature")
+    else {
+        panic!("GetMetadataSignature was not emitted as a function");
+    };
+    assert_eq!(
+        metadata.signature(&[]).types,
+        [Type::PtrMut(
+            Box::new(Type::value_named(
+                "Example.WinRT.Metadata",
+                "PCCOR_SIGNATURE"
+            )),
+            1
+        )]
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
     helpers::ensure_libclang();
 
