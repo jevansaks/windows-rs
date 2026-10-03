@@ -3543,6 +3543,69 @@ fn assert_property_key(
 }
 
 #[test]
+fn duplicate_macro_constants_keep_first_input_partition() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("duplicate-macro-constants");
+    let avifmt = scratch.join("avifmt.h");
+    let vfw = scratch.join("vfw.h");
+    std::fs::write(
+        &avifmt,
+        "#define AVIIF_LIST 0x00000001L\n#define AVIIF_KEYFRAME 0x00000010L\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &vfw,
+        "#define AVIIF_LIST 0x00000001L\n\
+         #define AVIIF_KEYFRAME 0x00000010L\n\
+         extern \"C\" void AVIFileInit(void);\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "aggregate.cpp",
+                format!("#include \"{}\"\n", avifmt.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "vfw.cpp",
+                format!("#include \"{}\"\n", vfw.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            avifmt.to_string_lossy(),
+            RootPartition::new("avifmt", "Example.Media.DShow"),
+        )
+        .with_traversed_header(
+            vfw.to_string_lossy(),
+            RootPartition::new("vfw", "Example.Multimedia")
+                .with_library("AVIFileInit", "avifil32.dll"),
+        );
+    let partitions = snapshot
+        .emit_header_partitions_with_options(
+            &policy,
+            &EmitOptions::new("Example.Common", &BTreeMap::new()),
+        )
+        .unwrap();
+
+    let dshow = output(&partitions, "Example.Media.DShow");
+    let multimedia = output(&partitions, "Example.Multimedia");
+    assert!(dshow.contains("AVIIF_LIST"), "{partitions:#?}");
+    assert!(dshow.contains("AVIIF_KEYFRAME"), "{partitions:#?}");
+    assert!(!multimedia.contains("AVIIF_LIST"), "{partitions:#?}");
+    assert!(!multimedia.contains("AVIIF_KEYFRAME"), "{partitions:#?}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn property_key_type_with_multiple_routes_remains_diagnostic() {
     helpers::ensure_libclang();
 
