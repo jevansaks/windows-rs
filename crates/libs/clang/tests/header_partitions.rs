@@ -46,6 +46,49 @@ fn nonempty_references() -> BTreeMap<String, TypeReference> {
     )])
 }
 
+fn colliding_ntstatus_snapshot(name: &str) -> (PathBuf, Snapshot, HeaderPartitionPolicy) {
+    let scratch = scratch(name);
+    let kernel = scratch.join("kernel.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &kernel,
+        "typedef long NTSTATUS;\n\
+         extern \"C\" NTSTATUS KernelCall(void);\n",
+    )
+    .unwrap();
+    std::fs::write(&first, "typedef unsigned short NTSTATUS;\n").unwrap();
+    std::fs::write(&second, "typedef unsigned int NTSTATUS;\n").unwrap();
+    let include = |header: &Path| format!("#include \"{}\"\n", header.to_string_lossy());
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new("kernel.cpp", include(&kernel)).with_root_dirs(roots.clone()),
+            Input::new("first.cpp", include(&first)).with_root_dirs(roots.clone()),
+            Input::new("second.cpp", include(&second)).with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "kernel.cpp",
+            kernel.to_string_lossy(),
+            RootPartition::new("kernel", "Example.Kernel").with_exclusion("NTSTATUS"),
+        )
+        .with_traversed_header_for_input(
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header_for_input(
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        );
+    (scratch, snapshot, policy)
+}
+
 #[test]
 fn traversed_headers_select_roots_and_route_dependencies_to_default() {
     helpers::ensure_libclang();
@@ -929,6 +972,76 @@ fn excluded_dependency_reports_owner_diagnostic_without_panicking() {
         ),
         "{error}"
     );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn collision_scoped_excluded_type_resolves_by_public_reference_name() {
+    helpers::ensure_libclang();
+
+    let (scratch, snapshot, policy) = colliding_ntstatus_snapshot("colliding-ntstatus-reference");
+    let references = BTreeMap::from([(
+        "NTSTATUS".to_string(),
+        TypeReference::new(
+            "Windows.Win32.Foundation",
+            "NTSTATUS",
+            TypeReferenceKind::Type,
+        ),
+    )]);
+    let mut options = EmitOptions::new("Windows.Win32", &references);
+    options.library = Some("ntdll.dll");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let kernel = output(&partitions, "Example.Kernel");
+    let first = output(&partitions, "Example.First");
+    let second = output(&partitions, "Example.Second");
+
+    assert!(
+        kernel.contains("fn KernelCall() -> Windows::Win32::Foundation::NTSTATUS"),
+        "{kernel}"
+    );
+    assert!(!kernel.contains("type NTSTATUS ="), "{kernel}");
+    assert!(first.contains("type NTSTATUS = u16"), "{first}");
+    assert!(second.contains("type NTSTATUS = u32"), "{second}");
+    assert!(
+        !partitions.values().any(|rdl| rdl.contains("__partition_")),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn collision_scoped_excluded_type_without_reference_reports_public_name() {
+    helpers::ensure_libclang();
+
+    let (scratch, snapshot, policy) =
+        colliding_ntstatus_snapshot("colliding-ntstatus-missing-reference");
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Windows.Win32", &references);
+    options.library = Some("ntdll.dll");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let audit = plan.audit(&options).unwrap_err().to_string();
+    let emission = plan.emit_with_options(&options).unwrap_err().to_string();
+
+    assert_eq!(audit, emission);
+    assert!(
+        audit.contains(
+            "owner-excluded local type `NTSTATUS` in partition `kernel` namespace \
+             `Example.Kernel` is required without a retained public alias"
+        ),
+        "{audit}"
+    );
+    assert!(audit.contains("function `KernelCall`"), "{audit}");
+    assert!(!audit.contains("__partition_"), "{audit}");
+    assert!(audit.ends_with("no RDL was emitted"), "{audit}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }

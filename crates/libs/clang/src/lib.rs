@@ -1,6 +1,7 @@
 #![allow(non_upper_case_globals)]
 #![doc = include_str!("../readme.md")]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter, Write};
 
@@ -1466,17 +1467,9 @@ impl Snapshot {
         self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
-        let timing = self.timing_target.is_some();
         let target = self.timing_target.clone();
         let (snapshot, display_names, source_names) = self.into_partitioned_planning_snapshot();
-        let plan = snapshot.plan(
-            options.references,
-            options.excluded_types.or(options.excluded),
-            options.excluded_functions.or(options.excluded),
-            options.excluded_constants.or(options.excluded),
-            options.functions,
-            timing,
-        )?;
+        let plan = snapshot.plan_partitioned(options, &display_names)?;
         let candidates =
             snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
         let routes = snapshot.resolve_partition_routes(candidates)?;
@@ -1540,7 +1533,7 @@ impl Snapshot {
             options.excluded_functions.or(options.excluded),
             options.excluded_constants.or(options.excluded),
             options.functions,
-            timing,
+            None,
         )?;
         if timing {
             eprintln!(
@@ -3382,6 +3375,32 @@ impl Snapshot {
         Ok(owner)
     }
 
+    fn plan_partitioned(
+        &self,
+        options: &EmitOptions<'_>,
+        display_names: &BTreeMap<String, String>,
+    ) -> Result<Plan<'_>, Error> {
+        let references = scoped_planning_map(options.references, display_names);
+        let excluded_types =
+            scoped_planning_set(options.excluded_types.or(options.excluded), display_names);
+        let excluded_functions = scoped_planning_set(
+            options.excluded_functions.or(options.excluded),
+            display_names,
+        );
+        let excluded_constants = scoped_planning_set(
+            options.excluded_constants.or(options.excluded),
+            display_names,
+        );
+        self.plan(
+            references.as_ref(),
+            excluded_types.as_deref(),
+            excluded_functions.as_deref(),
+            excluded_constants.as_deref(),
+            options.functions,
+            Some(display_names),
+        )
+    }
+
     fn plan(
         &self,
         references: &BTreeMap<String, TypeReference>,
@@ -3389,8 +3408,9 @@ impl Snapshot {
         excluded_functions: Option<&BTreeSet<String>>,
         excluded_constants: Option<&BTreeSet<String>>,
         selected_functions: Option<&BTreeSet<String>>,
-        timing: bool,
+        display_names: Option<&BTreeMap<String, String>>,
     ) -> Result<Plan<'_>, Error> {
+        let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
         let mut phase_time = timing.then(std::time::Instant::now);
         #[derive(Default)]
@@ -4568,6 +4588,7 @@ impl Snapshot {
                     self,
                     &dependency_diagnostics,
                     &blockers,
+                    display_names,
                 ));
             }
         }
@@ -4820,18 +4841,10 @@ impl Snapshot {
 
 impl HeaderPartitionPlan {
     pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
-        let timing = self.snapshot.timing_target.is_some();
-        let (mut snapshot, _, source_names) =
+        let (mut snapshot, display_names, source_names) =
             self.snapshot.clone().into_partitioned_planning_snapshot();
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan(
-            options.references,
-            options.excluded_types.or(options.excluded),
-            options.excluded_functions.or(options.excluded),
-            options.excluded_constants.or(options.excluded),
-            options.functions,
-            timing,
-        )?;
+        let plan = snapshot.plan_partitioned(options, &display_names)?;
         let candidates =
             snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
         let mut conflicts = self.root_conflicts.clone();
@@ -4845,19 +4858,11 @@ impl HeaderPartitionPlan {
         self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
-        let timing = self.snapshot.timing_target.is_some();
         let target = self.snapshot.timing_target.clone();
         let (mut snapshot, display_names, source_names) =
             self.snapshot.into_partitioned_planning_snapshot();
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan(
-            options.references,
-            options.excluded_types.or(options.excluded),
-            options.excluded_functions.or(options.excluded),
-            options.excluded_constants.or(options.excluded),
-            options.functions,
-            timing,
-        )?;
+        let plan = snapshot.plan_partitioned(options, &display_names)?;
         let candidates =
             snapshot.partition_route_candidates(&plan, &source_names, options.namespace)?;
         let mut conflicts = self.root_conflicts;
@@ -4982,6 +4987,47 @@ impl PlanningSourceNames {
             .and_then(BTreeSet::first)
             .map_or(constant.name.as_str(), String::as_str)
     }
+}
+
+fn scoped_planning_map<'a, T: Clone>(
+    values: &'a BTreeMap<String, T>,
+    display_names: &BTreeMap<String, String>,
+) -> Cow<'a, BTreeMap<String, T>> {
+    if !display_names
+        .iter()
+        .any(|(internal, display)| !values.contains_key(internal) && values.contains_key(display))
+    {
+        return Cow::Borrowed(values);
+    }
+    let mut scoped = values.clone();
+    for (internal, display) in display_names {
+        if let Some(value) = values.get(display) {
+            scoped
+                .entry(internal.clone())
+                .or_insert_with(|| value.clone());
+        }
+    }
+    Cow::Owned(scoped)
+}
+
+fn scoped_planning_set<'a>(
+    values: Option<&'a BTreeSet<String>>,
+    display_names: &BTreeMap<String, String>,
+) -> Option<Cow<'a, BTreeSet<String>>> {
+    let values = values?;
+    if !display_names
+        .iter()
+        .any(|(internal, display)| !values.contains(internal) && values.contains(display))
+    {
+        return Some(Cow::Borrowed(values));
+    }
+    let mut scoped = values.clone();
+    for (internal, display) in display_names {
+        if values.contains(display) {
+            scoped.insert(internal.clone());
+        }
+    }
+    Some(Cow::Owned(scoped))
 }
 
 struct RouteCandidate {
@@ -7114,19 +7160,23 @@ fn owner_exclusion_error(
     snapshot: &Snapshot,
     diagnostics: &DependencyClosureDiagnostics<'_>,
     blockers: &[&Fact],
+    display_names: Option<&BTreeMap<String, String>>,
 ) -> Error {
     let mut result = format!(
         "header partition owner validation found {} blocker(s)",
         blockers.len()
     );
     for (index, fact) in blockers.iter().enumerate() {
+        let name = display_names
+            .and_then(|names| names.get(&fact.name))
+            .map_or(fact.name.as_str(), String::as_str);
         if let Some(owner) = snapshot.root_owners.get(&fact.origin) {
             write!(
                 result,
                 "\n{}. owner-excluded local type `{}` in partition `{}` namespace `{}` is \
                  required without a retained public alias",
                 index + 1,
-                fact.name,
+                name,
                 owner.partition,
                 owner.namespace,
             )
@@ -7137,7 +7187,7 @@ fn owner_exclusion_error(
                 "\n{}. owner-excluded local type `{}` in translation unit `{}` is required \
                  without a retained public alias or logical owner",
                 index + 1,
-                fact.name,
+                name,
                 fact.origin.tu,
             )
             .unwrap();
