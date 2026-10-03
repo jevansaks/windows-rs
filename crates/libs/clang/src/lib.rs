@@ -1158,6 +1158,7 @@ pub struct Snapshot {
     partition_exclusions: Vec<ExcludedPartitionDeclaration>,
     forced_flags: BTreeSet<Origin>,
     suppressed_type_origins: BTreeSet<Origin>,
+    projected_type_names: BTreeMap<Origin, String>,
     namespace_authorities: BTreeMap<String, String>,
     fact_namespace_authorities: BTreeMap<Origin, String>,
     constant_namespace_authorities: BTreeMap<(Origin, String), String>,
@@ -1232,6 +1233,7 @@ impl PartialEq for Snapshot {
             && self.partition_exclusions == other.partition_exclusions
             && self.forced_flags == other.forced_flags
             && self.suppressed_type_origins == other.suppressed_type_origins
+            && self.projected_type_names == other.projected_type_names
             && self.namespace_authorities == other.namespace_authorities
             && self.fact_namespace_authorities == other.fact_namespace_authorities
             && self.constant_namespace_authorities == other.constant_namespace_authorities
@@ -1725,11 +1727,21 @@ impl Snapshot {
                     )
                 }
                 FactData::PropertyKey { ty, guid, pid } => {
+                    let route_name = self
+                        .projected_type_names
+                        .get(&fact.origin)
+                        .map_or(*ty, String::as_str);
+                    let emitted_name = plan
+                        .type_names
+                        .get(route_name)
+                        .map_or(route_name, String::as_str);
+                    let ty =
+                        qualify_routed_type_as(route_name, emitted_name, &routed_types, namespace);
                     format!(
                         "    #[guid({})]\n    const {}: {} = {pid};\n",
                         rdl_uuid(guid),
                         rdl_ident(output_name),
-                        rdl_ident(ty)
+                        ty
                     )
                 }
                 FactData::Typedef {
@@ -2462,6 +2474,38 @@ impl Snapshot {
             };
             declarations.insert(fact, scoped.clone());
         }
+        let projected_scoped_names: BTreeMap<_, _> = self
+            .facts
+            .iter()
+            .filter_map(|fact| {
+                let FactData::PropertyKey { ty, .. } = &fact.data else {
+                    return None;
+                };
+                let projected = self
+                    .projected_type_names
+                    .get(&fact.origin)
+                    .map_or(*ty, String::as_str);
+                if !collisions.contains(projected) {
+                    return None;
+                }
+                let candidates: BTreeSet<_> = self
+                    .facts
+                    .iter()
+                    .filter(|candidate| {
+                        candidate.origin.tu == fact.origin.tu && candidate.name == projected
+                    })
+                    .filter_map(|candidate| {
+                        let namespace = fact_namespaces.get(&candidate.origin)?;
+                        scoped_names
+                            .get(&(projected.to_string(), namespace.clone()))
+                            .cloned()
+                    })
+                    .collect();
+                (candidates.len() == 1)
+                    .then(|| (fact.origin.clone(), candidates.into_iter().next().unwrap()))
+            })
+            .collect();
+        self.projected_type_names.extend(projected_scoped_names);
 
         for fact in &mut self.facts {
             let original = fact.name.clone();
@@ -2553,6 +2597,28 @@ impl Snapshot {
                 })
             })
             .collect();
+        let mut projected_remaps: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
+        for fact in &self.facts {
+            if let Some(target) = fact_remaps.get(&fact.origin) {
+                projected_remaps
+                    .entry((fact.origin.tu.clone(), fact.name.clone()))
+                    .or_default()
+                    .insert(target.clone());
+            }
+        }
+        for fact in &self.facts {
+            let FactData::PropertyKey { ty, .. } = &fact.data else {
+                continue;
+            };
+            let Some(targets) = projected_remaps.get(&(fact.origin.tu.clone(), (*ty).to_string()))
+            else {
+                continue;
+            };
+            if targets.len() == 1 {
+                self.projected_type_names
+                    .insert(fact.origin.clone(), targets.first().unwrap().clone());
+            }
+        }
         for fact in &mut self.facts {
             remap_fact_types(
                 &mut fact.data,
@@ -4116,7 +4182,7 @@ impl Snapshot {
                 dependency_diagnostics.add_edge(root_node, fact_node);
                 if facts.insert(root.origin.clone()) {
                     collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
-                    queue_type_edges(root, fact_node, &mut queue);
+                    queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
                 }
             }
             for root in &value_roots {
@@ -4129,7 +4195,7 @@ impl Snapshot {
                 let fact_node = DependencyNode::Fact(&root.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
                 collect_fact_pointer_alias_candidates(root, &mut pointer_alias_candidates);
-                queue_type_edges(root, fact_node, &mut queue);
+                queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
             }
             for constant in &constants {
                 let root_node = dependency_diagnostics.add_root(
@@ -4215,7 +4281,12 @@ impl Snapshot {
                                 fact,
                                 &mut pointer_alias_candidates,
                             );
-                            queue_type_edges(fact, fact_node, &mut queue);
+                            queue_type_edges(
+                                fact,
+                                &self.projected_type_names,
+                                fact_node,
+                                &mut queue,
+                            );
                         }
                         continue;
                     }
@@ -4451,7 +4522,7 @@ impl Snapshot {
                 dependency_diagnostics.add_edge(source, fact_node);
                 if facts.insert(fact.origin.clone()) {
                     collect_fact_pointer_alias_candidates(fact, &mut pointer_alias_candidates);
-                    queue_type_edges(fact, fact_node, &mut queue);
+                    queue_type_edges(fact, &self.projected_type_names, fact_node, &mut queue);
                 }
             }
 
@@ -7590,7 +7661,7 @@ fn validate_complete_layout(
 
 enum TypeEdge<'a> {
     Type(&'a TypeRef),
-    Projected(&'static str),
+    Projected(&'a str),
 }
 
 type PendingTypeEdge<'a> = (&'a str, TypeEdge<'a>, DependencyNode<'a>);
@@ -8025,6 +8096,7 @@ fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
 
 fn queue_type_edges<'a>(
     fact: &'a Fact,
+    projected_type_names: &'a BTreeMap<Origin, String>,
     source: DependencyNode<'a>,
     queue: &mut Vec<PendingTypeEdge<'a>>,
 ) {
@@ -8038,7 +8110,11 @@ fn queue_type_edges<'a>(
                 push(TypeEdge::Type(&param.ty));
             }
         }
-        FactData::PropertyKey { ty, .. } => push(TypeEdge::Projected(ty)),
+        FactData::PropertyKey { ty, .. } => push(TypeEdge::Projected(
+            projected_type_names
+                .get(&fact.origin)
+                .map_or(*ty, String::as_str),
+        )),
         FactData::Record { base, fields, .. } => {
             if let Some(base) = base {
                 push(TypeEdge::Type(base));
@@ -9148,7 +9224,16 @@ fn qualify_routed_type(
     routed_types: &BTreeMap<String, String>,
     namespace: Option<&str>,
 ) -> String {
-    let Some(target_namespace) = routed_types.get(fallback_name) else {
+    qualify_routed_type_as(fallback_name, fallback_name, routed_types, namespace)
+}
+
+fn qualify_routed_type_as(
+    route_name: &str,
+    fallback_name: &str,
+    routed_types: &BTreeMap<String, String>,
+    namespace: Option<&str>,
+) -> String {
+    let Some(target_namespace) = routed_types.get(route_name) else {
         return rdl_ident(fallback_name);
     };
     if namespace == Some(target_namespace.as_str()) {

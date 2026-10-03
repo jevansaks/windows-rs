@@ -16,6 +16,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         partition_exclusions: Vec::new(),
         forced_flags: BTreeSet::new(),
         suppressed_type_origins: BTreeSet::new(),
+        projected_type_names: BTreeMap::new(),
         namespace_authorities: BTreeMap::new(),
         fact_namespace_authorities: BTreeMap::new(),
         constant_namespace_authorities: BTreeMap::new(),

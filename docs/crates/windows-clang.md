@@ -237,6 +237,13 @@ unscoped, so ordinary dependency projection can default-route or inline it even 
 redeclarations of the same name have logical owners in that translation unit. Several scoped macro
 expansions may share one spelling key; the index retains all of them and rewrites a reference only
 when that exact key has one scoped identity.
+
+`DEFINE_PROPERTYKEY` and `DEFINE_DEVPROPKEY` facts carry a projected key type name rather than a
+Clang declaration location. Header planning tracks that name through remaps and collision scoping,
+uses it for dependency closure, and qualifies the emitted constant with the resolved type route.
+An included-only key type therefore uses the default namespace, while a separately owned key type
+uses its logical namespace. Multiple unresolved key-type routes remain dependency blockers.
+
 Typedef variants are compared after following exact local typedef chains only for collision
 classification. If an explicitly owner-excluded declaration refers to several retained declarations
 that are all equivalent, its exact references keep the deterministic surviving public owner that

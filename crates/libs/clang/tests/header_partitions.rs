@@ -2856,3 +2856,323 @@ fn included_macro_handle_uses_default_namespace_qualification() {
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
+
+#[test]
+fn property_key_types_follow_dependency_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("property-key-routes");
+    let guid = scratch.join("guid.h");
+    let devpropdef = scratch.join("devpropdef.h");
+    let wtypes = scratch.join("wtypes.h");
+    let display = scratch.join("ntddvdeo.h");
+    let discovery = scratch.join("functiondiscoverykeys.h");
+    std::fs::write(
+        &guid,
+        "#pragma once\n\
+         struct GUID {\n\
+             unsigned long Data1;\n\
+             unsigned short Data2;\n\
+             unsigned short Data3;\n\
+             unsigned char Data4[8];\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &devpropdef,
+        format!(
+            "#pragma once\n\
+             #include \"{}\"\n\
+             struct DEVPROPKEY {{ GUID fmtid; unsigned long pid; }};\n\
+             #define DEFINE_DEVPROPKEY(name, ...)\n",
+            guid.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &wtypes,
+        format!(
+            "#pragma once\n\
+             #include \"{}\"\n\
+             struct PROPERTYKEY {{ GUID fmtid; unsigned long pid; }};\n\
+             #define DEFINE_PROPERTYKEY(name, ...)\n",
+            guid.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &display,
+        format!(
+            "#include \"{}\"\n\
+             DEFINE_DEVPROPKEY(DEVPKEY_Device_ActivityId, 0xc50a3f10, 0xaa5c, 0x4247, \
+                 0xb8, 0x30, 0xd6, 0xa6, 0xf8, 0xea, 0xa3, 0x10, 4)\n",
+            devpropdef.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &discovery,
+        format!(
+            "#include \"{}\"\n\
+             DEFINE_PROPERTYKEY(PKEY_FunctionInstance, 0x08c0c253, 0xa154, 0x4746, \
+                 0x90, 0x05, 0x82, 0xde, 0x53, 0x17, 0x14, 0x8b, 1)\n",
+            wtypes.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&display, &discovery]);
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            guid.to_string_lossy(),
+            RootPartition::new("foundation", "Example.Foundation"),
+        )
+        .with_traversed_header(
+            devpropdef.to_string_lossy(),
+            RootPartition::new("properties", "Example.Devices.Properties"),
+        )
+        .with_traversed_header(
+            wtypes.to_string_lossy(),
+            RootPartition::new("system", "Example.System.SystemServices"),
+        )
+        .with_traversed_header(
+            display.to_string_lossy(),
+            RootPartition::new("display", "Example.Devices.Display"),
+        )
+        .with_traversed_header(
+            discovery.to_string_lossy(),
+            RootPartition::new("discovery", "Example.Devices.FunctionDiscovery"),
+        );
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+
+    let display_rdl = output(&partitions, "Example.Devices.Display");
+    assert!(
+        display_rdl.contains(
+            "const DEVPKEY_Device_ActivityId: Example::Devices::Properties::DEVPROPKEY = 4"
+        ),
+        "{display_rdl}"
+    );
+    let discovery_rdl = output(&partitions, "Example.Devices.FunctionDiscovery");
+    assert!(
+        discovery_rdl.contains(
+            "const PKEY_FunctionInstance: Example::System::SystemServices::PROPERTYKEY = 1"
+        ),
+        "{discovery_rdl}"
+    );
+
+    let default_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            display.to_string_lossy(),
+            RootPartition::new("display", "Example.Devices.Display"),
+        )
+        .with_traversed_header(
+            discovery.to_string_lossy(),
+            RootPartition::new("discovery", "Example.Devices.FunctionDiscovery"),
+        );
+    let default_partitions = snapshot
+        .plan_header_partitions(&default_policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    assert!(
+        output(&default_partitions, "Example.Devices.Display")
+            .contains("const DEVPKEY_Device_ActivityId: Example::Common::DEVPROPKEY = 4"),
+        "{default_partitions:#?}"
+    );
+    assert!(
+        output(&default_partitions, "Example.Devices.FunctionDiscovery")
+            .contains("const PKEY_FunctionInstance: Example::Common::PROPERTYKEY = 1"),
+        "{default_partitions:#?}"
+    );
+
+    let remap_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            guid.to_string_lossy(),
+            RootPartition::new("foundation", "Example.Foundation"),
+        )
+        .with_traversed_header(
+            devpropdef.to_string_lossy(),
+            RootPartition::new("properties", "Example.Devices.Properties")
+                .with_remap("DEVPROPKEY", "DEVICE_PROPERTY_KEY"),
+        )
+        .with_traversed_header(
+            wtypes.to_string_lossy(),
+            RootPartition::new("system", "Example.System.SystemServices")
+                .with_remap("PROPERTYKEY", "PROPERTY_KEY"),
+        )
+        .with_traversed_header(
+            display.to_string_lossy(),
+            RootPartition::new("display", "Example.Devices.Display"),
+        )
+        .with_traversed_header(
+            discovery.to_string_lossy(),
+            RootPartition::new("discovery", "Example.Devices.FunctionDiscovery"),
+        );
+    let remapped = snapshot
+        .plan_header_partitions(&remap_policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    assert!(
+        output(&remapped, "Example.Devices.Display").contains(
+            "const DEVPKEY_Device_ActivityId: \
+             Example::Devices::Properties::DEVICE_PROPERTY_KEY = 4"
+        ),
+        "{remapped:#?}"
+    );
+    assert!(
+        output(&remapped, "Example.Devices.FunctionDiscovery").contains(
+            "const PKEY_FunctionInstance: Example::System::SystemServices::PROPERTY_KEY = 1"
+        ),
+        "{remapped:#?}"
+    );
+
+    let winmd = scratch.join("property-key-routes.winmd");
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    for (namespace, name) in [
+        ("Example.Devices.Properties", "DEVPROPKEY"),
+        ("Example.System.SystemServices", "PROPERTYKEY"),
+    ] {
+        let fields = index
+            .expect(namespace, name)
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(
+            fields["fmtid"],
+            Type::value_named("Example.Foundation", "GUID")
+        );
+        assert_eq!(fields["pid"], Type::U32);
+    }
+    assert_property_key(
+        &index,
+        "Example.Devices.Display",
+        "DEVPKEY_Device_ActivityId",
+        "Example.Devices.Properties",
+        "DEVPROPKEY",
+        [
+            Value::U32(0xc50a3f10),
+            Value::U16(0xaa5c),
+            Value::U16(0x4247),
+            Value::U8(0xb8),
+            Value::U8(0x30),
+            Value::U8(0xd6),
+            Value::U8(0xa6),
+            Value::U8(0xf8),
+            Value::U8(0xea),
+            Value::U8(0xa3),
+            Value::U8(0x10),
+        ],
+        4,
+    );
+    assert_property_key(
+        &index,
+        "Example.Devices.FunctionDiscovery",
+        "PKEY_FunctionInstance",
+        "Example.System.SystemServices",
+        "PROPERTYKEY",
+        [
+            Value::U32(0x08c0c253),
+            Value::U16(0xa154),
+            Value::U16(0x4746),
+            Value::U8(0x90),
+            Value::U8(0x05),
+            Value::U8(0x82),
+            Value::U8(0xde),
+            Value::U8(0x53),
+            Value::U8(0x17),
+            Value::U8(0x14),
+            Value::U8(0x8b),
+        ],
+        1,
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+fn assert_property_key(
+    index: &windows_metadata::reader::Index,
+    namespace: &str,
+    name: &str,
+    type_namespace: &str,
+    type_name: &str,
+    guid: [Value; 11],
+    pid: u32,
+) {
+    let Item::Const(key) = index.expect_item(namespace, name) else {
+        panic!("{namespace}.{name} was not emitted as a constant");
+    };
+    assert_eq!(key.ty(), Type::value_named(type_namespace, type_name));
+    assert_eq!(key.constant().unwrap().value(), Value::U32(pid));
+    assert_eq!(
+        key.find_attribute("GuidAttribute").unwrap().value(),
+        guid.into_iter()
+            .map(|value| (String::new(), value))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn property_key_type_with_multiple_routes_remains_diagnostic() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("property-key-route-conflict");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    let display = scratch.join("display.h");
+    std::fs::write(&first, "typedef unsigned long DEVPROPKEY;\n").unwrap();
+    std::fs::write(&second, "typedef unsigned long DEVPROPKEY;\n").unwrap();
+    std::fs::write(
+        &display,
+        format!(
+            "#include \"{}\"\n\
+             #include \"{}\"\n\
+             #define DEFINE_DEVPROPKEY(name, ...)\n\
+             DEFINE_DEVPROPKEY(DEVPKEY_Test, 0x12345678, 0x1234, 0x5678, 0x90, 0xab, \
+                 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 3)\n",
+            first.to_string_lossy(),
+            second.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&display]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header(
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        )
+        .with_traversed_header(
+            display.to_string_lossy(),
+            RootPartition::new("display", "Example.Display"),
+        );
+    let references = BTreeMap::new();
+    let error = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .audit(&EmitOptions::new("Example.Common", &references))
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("header partition dependency closure found 1 blocker(s)"),
+        "{error}"
+    );
+    assert!(error.contains("`DEVPROPKEY`"), "{error}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
