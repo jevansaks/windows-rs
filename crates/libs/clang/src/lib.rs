@@ -3737,6 +3737,16 @@ impl Snapshot {
                             Err(error) => return Err(error),
                         };
                         dependency_diagnostics.resolve(reference);
+                        if self.header_partition_policy
+                            && canonical_string_name(name).is_some()
+                            && is_pointer_alias_fact(
+                                fact,
+                                &facts_by_declaration,
+                                &mut BTreeSet::new(),
+                            )
+                        {
+                            retained_pointer_aliases.insert(fact.name.as_str());
+                        }
                         let fact_node = DependencyNode::Fact(&fact.origin);
                         dependency_diagnostics.add_edge(source, fact_node);
                         if facts.insert(fact.origin.clone()) {
@@ -3782,9 +3792,19 @@ impl Snapshot {
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
+                let canonical_string = canonical_string_name(name);
+                if canonical_string.is_some_and(|canonical| {
+                    references.contains_key(canonical)
+                        && !root_names.contains(name)
+                        && !root_names.contains(canonical)
+                }) {
+                    dependency_diagnostics.resolve(reference);
+                    continue;
+                }
                 let pointer_alias_candidate =
                     pointer_alias_candidates.contains(&(tu, declaration, name.as_str()));
-                let retain_pointer_alias = self.header_partition_policy && pointer_alias_candidate;
+                let retain_pointer_alias = self.header_partition_policy
+                    && (pointer_alias_candidate || canonical_string.is_some());
                 if canonical_typedef_declarations.contains(&(tu, declaration))
                     && !(retain_pointer_alias && canonical_pointer_alias_name(name))
                 {
@@ -4054,6 +4074,12 @@ impl Snapshot {
                     let FactData::Typedef { target } = &fact.data else {
                         return None;
                     };
+                    if matches!(
+                        target,
+                        TypeRef::Named { name, .. } if canonical_string_name(name).is_some()
+                    ) {
+                        return None;
+                    }
                     type_ref_uses_alias(target, &retained_names).then_some(*name)
                 })
                 .collect();
@@ -4384,18 +4410,17 @@ impl Snapshot {
                     if !internal_alias_target_resolved(target, &internal_aliases) {
                         continue;
                     }
-                    internal_type_names.insert(
-                        (*name).to_string(),
-                        planned_emitted_type_name(
-                            target,
-                            &internal_type_names,
-                            &BTreeSet::new(),
-                            &fact.origin.tu,
-                            &BTreeMap::new(),
-                            &BTreeMap::new(),
-                            None,
-                        ),
+                    let target_name = planned_emitted_type_name(
+                        target,
+                        &internal_type_names,
+                        &BTreeSet::new(),
+                        &fact.origin.tu,
+                        &BTreeMap::new(),
+                        &BTreeMap::new(),
+                        None,
                     );
+                    let target_name = type_names.get(&target_name).cloned().unwrap_or(target_name);
+                    internal_type_names.insert((*name).to_string(), target_name);
                     internal_aliases.insert((*name).to_string());
                     added = true;
                 }

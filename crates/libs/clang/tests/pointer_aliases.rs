@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use windows_clang::{
     EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition, extract,
 };
@@ -27,6 +28,32 @@ extern "C" void PointerAliasParameters(
     PCWSTR const *constConst,
     LPCWSTR *legacyMutableConst,
     PPCWSTR aliasChain);
+"#;
+
+const TCHAR_BASE_SOURCE: &str = r#"
+typedef char CHAR;
+typedef unsigned short WCHAR;
+typedef CHAR *LPSTR, *PSTR;
+typedef const CHAR *LPCSTR, *PCSTR;
+typedef WCHAR *LPWSTR, *PWSTR;
+typedef const WCHAR *LPCWSTR, *PCWSTR;
+#ifdef UNICODE
+typedef LPWSTR LPTSTR;
+typedef LPCWSTR LPCTSTR;
+#else
+typedef LPSTR LPTSTR;
+typedef LPCSTR LPCTSTR;
+#endif
+"#;
+
+const TCHAR_API_SOURCE: &str = r#"
+typedef struct PROVIDER_NAME {
+    LPCTSTR value;
+    LPTSTR mutableValue;
+} PROVIDER_NAME;
+
+typedef void (*OPEN_PROVIDER)(LPCTSTR provider, LPTSTR mutableProvider);
+extern "C" void RegisterProvider(OPEN_PROVIDER callback);
 "#;
 
 #[test]
@@ -127,7 +154,7 @@ fn dependency_pointer_aliases_preserve_nested_constness() {
     let fields = record
         .fields()
         .map(|field| (field.name().to_string(), field.ty()))
-        .collect::<std::collections::BTreeMap<_, _>>();
+        .collect::<BTreeMap<_, _>>();
     assert_eq!(fields["mutableMutable"], pointer_to_alias(false, "PWSTR"));
     assert_eq!(fields["constMutable"], pointer_to_alias(true, "PWSTR"));
     assert_eq!(fields["mutableConst"], pointer_to_alias(false, "PCWSTR"));
@@ -301,13 +328,173 @@ fn retained_canonical_aliases_follow_their_emitted_namespace() {
     std::fs::remove_dir_all(scratch).unwrap();
 }
 
+#[test]
+fn direct_tchar_aliases_are_retained_or_resolved_from_metadata() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-direct-tchar-aliases-{}",
+        std::process::id()
+    ));
+    if scratch.exists() {
+        std::fs::remove_dir_all(&scratch).unwrap();
+    }
+    std::fs::create_dir_all(&scratch).unwrap();
+    let base = scratch.join("base.h");
+    let api = scratch.join("resapi.h");
+    std::fs::write(&base, TCHAR_BASE_SOURCE).unwrap();
+    std::fs::write(
+        &api,
+        format!(
+            "#include \"{}\"\n{TCHAR_API_SOURCE}",
+            base.to_string_lossy()
+        ),
+    )
+    .unwrap();
+
+    let external_winmd = scratch.join("external.winmd");
+    windows_rdl::reader()
+        .input_text(
+            "#[win32]\nmod External {\n    type PCSTR = *const i8;\n    type PSTR = *mut i8;\n    \
+             type PCWSTR = *const u16;\n    type PWSTR = *mut u16;\n}\n",
+        )
+        .output(&external_winmd)
+        .write()
+        .unwrap();
+    let external_references =
+        windows_clang::MetadataReferences::new([windows_metadata::reader::File::new(
+            std::fs::read(&external_winmd).unwrap(),
+        )
+        .unwrap()]);
+    let no_references = BTreeMap::new();
+
+    for (case, define, alias, mutable_alias, primitive) in [
+        ("ansi", None, "PCSTR", "PSTR", "i8"),
+        ("unicode", Some("-DUNICODE"), "PCWSTR", "PWSTR", "u16"),
+    ] {
+        let mut args = vec!["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+        if let Some(define) = define {
+            args.push(define);
+        }
+        let snapshot = extract(
+            [Input::new(
+                format!("aggregate-{case}.cpp"),
+                format!("#include \"{}\"\n", api.to_string_lossy()),
+            )
+            .with_roots([api.to_string_lossy().to_string()])],
+            &args,
+        )
+        .unwrap();
+        let policy = HeaderPartitionPolicy::new().with_traversed_header(
+            api.to_string_lossy(),
+            RootPartition::new("clustering", "Windows.Win32.Networking.Clustering"),
+        );
+
+        let mut local_options = EmitOptions::new("Windows.Win32", &no_references);
+        local_options.library = Some("test.dll");
+        let local_partitions = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap()
+            .emit_with_options(&local_options)
+            .unwrap();
+        let local = local_partitions.values().cloned().collect::<String>();
+        assert_eq!(
+            local
+                .matches(&format!("type {alias} = *const {primitive};"))
+                .count(),
+            1,
+            "{local}"
+        );
+        assert_eq!(
+            local
+                .matches(&format!("type {mutable_alias} = *mut {primitive};"))
+                .count(),
+            1,
+            "{local}"
+        );
+        assert!(
+            local.contains(&format!("value: Windows::Win32::{alias},")),
+            "{local}"
+        );
+        assert!(
+            local.contains(&format!("mutableValue: Windows::Win32::{mutable_alias},")),
+            "{local}"
+        );
+        assert!(
+            local.contains(&format!(
+                "extern \"C\" fn OPEN_PROVIDER(provider: Windows::Win32::{alias}, \
+                 mutableProvider: Windows::Win32::{mutable_alias})"
+            )),
+            "{local}"
+        );
+        let local_winmd = scratch.join(format!("{case}-local.winmd"));
+        windows_rdl::reader()
+            .input_texts(local_partitions.values())
+            .reference_default()
+            .output(&local_winmd)
+            .write()
+            .unwrap();
+        assert_tchar_alias_metadata(
+            &windows_metadata::reader::Index::read(&local_winmd).unwrap(),
+            "Windows.Win32",
+            alias,
+            mutable_alias,
+        );
+
+        let mut external_options = EmitOptions::new("Windows.Win32", external_references.types());
+        external_options.library = Some("test.dll");
+        let external_partitions = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap()
+            .emit_with_options(&external_options)
+            .unwrap();
+        let external = external_partitions.values().cloned().collect::<String>();
+        assert!(!external.contains(&format!("type {alias} =")), "{external}");
+        assert!(
+            !external.contains(&format!("type {mutable_alias} =")),
+            "{external}"
+        );
+        assert!(
+            external.contains(&format!("value: External::{alias},")),
+            "{external}"
+        );
+        assert!(
+            external.contains(&format!("mutableValue: External::{mutable_alias},")),
+            "{external}"
+        );
+        assert!(
+            external.contains(&format!(
+                "extern \"C\" fn OPEN_PROVIDER(provider: External::{alias}, \
+                 mutableProvider: External::{mutable_alias})"
+            )),
+            "{external}"
+        );
+        let external_output = scratch.join(format!("{case}-external.winmd"));
+        windows_rdl::reader()
+            .input_texts(external_partitions.values())
+            .reference(&external_winmd)
+            .reference_default()
+            .output(&external_output)
+            .write()
+            .unwrap();
+        assert_tchar_alias_metadata(
+            &windows_metadata::reader::Index::read(&external_output).unwrap(),
+            "External",
+            alias,
+            mutable_alias,
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
 fn assert_canonical_alias_metadata(index: &windows_metadata::reader::Index, namespace: &str) {
     let alias = Type::value_named("Windows.Win32", "PCWSTR");
     let record = index.expect(namespace, "CLUSTER_BATCH_COMMAND");
     let fields = record
         .fields()
         .map(|field| (field.name().to_string(), field.ty()))
-        .collect::<std::collections::BTreeMap<_, _>>();
+        .collect::<BTreeMap<_, _>>();
     assert_eq!(fields["wzName"], alias);
     assert_eq!(fields["directName"], alias);
     assert_eq!(fields["nestedName"], pointer_to_alias(false, "PCWSTR"));
@@ -322,6 +509,24 @@ fn assert_canonical_alias_metadata(index: &windows_metadata::reader::Index, name
             Type::value_named("Windows.Win32", "PCWSTR"),
             pointer_to_alias(false, "PCWSTR"),
         ]
+    );
+}
+
+fn assert_tchar_alias_metadata(
+    index: &windows_metadata::reader::Index,
+    alias_namespace: &str,
+    alias: &str,
+    mutable_alias: &str,
+) {
+    let fields = index
+        .expect("Windows.Win32.Networking.Clustering", "PROVIDER_NAME")
+        .fields()
+        .map(|field| (field.name().to_string(), field.ty()))
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(fields["value"], Type::value_named(alias_namespace, alias));
+    assert_eq!(
+        fields["mutableValue"],
+        Type::value_named(alias_namespace, mutable_alias)
     );
 }
 
