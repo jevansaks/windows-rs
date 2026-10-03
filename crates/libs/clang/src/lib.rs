@@ -1163,6 +1163,33 @@ pub struct Snapshot {
     timing_target: Option<String>,
 }
 
+struct DeclarationIndex<'a> {
+    facts: HashMap<(&'a str, &'a str, &'a Location), Vec<&'a Fact>>,
+}
+
+impl<'a> DeclarationIndex<'a> {
+    fn new(facts: &'a [Fact]) -> Self {
+        let mut result = Self {
+            facts: HashMap::with_capacity(facts.len()),
+        };
+        for fact in facts {
+            result
+                .facts
+                .entry((&fact.origin.tu, &fact.name, &fact.spelling))
+                .or_default()
+                .push(fact);
+        }
+        result
+    }
+
+    fn get<'b>(&'b self, tu: &'b str, name: &'b str, declaration: &'b Location) -> &'b [&'a Fact] {
+        self.facts
+            .get(&(tu, name, declaration))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HeaderPartitionPlan {
     snapshot: Snapshot,
@@ -2546,7 +2573,11 @@ impl Snapshot {
         }
     }
 
-    fn authority_candidates<'a>(&self, facts: &[&'a Fact]) -> Vec<&'a Fact> {
+    fn authority_candidates<'a>(
+        &self,
+        facts: &[&'a Fact],
+        declarations: &DeclarationIndex<'_>,
+    ) -> Vec<&'a Fact> {
         let owned_sources: BTreeSet<_> = facts
             .iter()
             .filter(|fact| self.root_owners.contains_key(&fact.origin))
@@ -2574,12 +2605,14 @@ impl Snapshot {
             .collect();
         let Some(namespace) = facts
             .iter()
-            .find_map(|fact| self.fact_authority_namespace(fact))
+            .find_map(|fact| self.fact_authority_namespace(fact, declarations))
         else {
             let projected: Vec<_> = facts
                 .iter()
                 .copied()
-                .filter(|fact| !self.type_projection_suppressed(fact, &mut BTreeSet::new()))
+                .filter(|fact| {
+                    !self.type_projection_suppressed(fact, declarations, &mut BTreeSet::new())
+                })
                 .collect();
             return if projected.is_empty() {
                 facts
@@ -2607,7 +2640,11 @@ impl Snapshot {
         }
     }
 
-    fn fact_authority_namespace<'a>(&'a self, fact: &'a Fact) -> Option<&'a String> {
+    fn fact_authority_namespace<'a>(
+        &'a self,
+        fact: &Fact,
+        declarations: &DeclarationIndex<'_>,
+    ) -> Option<&'a String> {
         self.fact_namespace_authorities
             .get(&fact.origin)
             .or_else(|| {
@@ -2617,13 +2654,9 @@ impl Snapshot {
                 else {
                     return None;
                 };
-                self.facts
+                declarations
+                    .get(&fact.origin.tu, name, declaration)
                     .iter()
-                    .filter(|target| {
-                        target.name == *name
-                            && target.origin.tu == fact.origin.tu
-                            && target.spelling == *declaration
-                    })
                     .find_map(|target| self.fact_namespace_authorities.get(&target.origin))
             })
     }
@@ -2631,6 +2664,7 @@ impl Snapshot {
     fn type_projection_suppressed(
         &self,
         fact: &Fact,
+        declarations: &DeclarationIndex<'_>,
         seen: &mut BTreeSet<(String, Location)>,
     ) -> bool {
         if self.suppressed_type_origins.contains(&fact.origin) {
@@ -2639,13 +2673,14 @@ impl Snapshot {
         let FactData::Typedef { target } = &fact.data else {
             return false;
         };
-        self.type_ref_projection_suppressed(target, &fact.origin.tu, seen)
+        self.type_ref_projection_suppressed(target, &fact.origin.tu, declarations, seen)
     }
 
     fn type_ref_projection_suppressed(
         &self,
         ty: &TypeRef,
         tu: &str,
+        declarations: &DeclarationIndex<'_>,
         seen: &mut BTreeSet<(String, Location)>,
     ) -> bool {
         match ty {
@@ -2653,17 +2688,15 @@ impl Snapshot {
                 if !seen.insert((tu.to_string(), declaration.clone())) {
                     return false;
                 }
-                self.facts
+                declarations
+                    .get(tu, name, declaration)
                     .iter()
-                    .filter(|fact| {
-                        fact.name == *name && fact.origin.tu == tu && fact.spelling == *declaration
-                    })
-                    .any(|fact| self.type_projection_suppressed(fact, seen))
+                    .any(|fact| self.type_projection_suppressed(fact, declarations, seen))
             }
             TypeRef::Pointer { target, .. }
             | TypeRef::Reference { target, .. }
             | TypeRef::Array { target, .. } => {
-                self.type_ref_projection_suppressed(target, tu, seen)
+                self.type_ref_projection_suppressed(target, tu, declarations, seen)
             }
             _ => false,
         }
@@ -2912,6 +2945,7 @@ impl Snapshot {
         source_names: &PlanningSourceNames,
         default_namespace: &str,
     ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate>, Error> {
+        let declarations = DeclarationIndex::new(&self.facts);
         let projection_suppression = self
             .header_partition_policy
             .then(|| self.route_projection_suppression());
@@ -2980,7 +3014,9 @@ impl Snapshot {
                     .flatten()
                     .cloned(),
             );
-            let namespace = self.fact_authority_namespace(planned.fact).cloned();
+            let namespace = self
+                .fact_authority_namespace(planned.fact, &declarations)
+                .cloned();
             self.add_authority_fallback(&mut owners, planned.fact, namespace.as_deref())?;
             let anchored = !owners.is_empty() || namespace.is_some();
             let key = (planned.name.clone(), OutputKind::Type);
@@ -3006,7 +3042,9 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
-            let namespace = self.fact_authority_namespace(planned.fact).cloned();
+            let namespace = self
+                .fact_authority_namespace(planned.fact, &declarations)
+                .cloned();
             self.add_authority_fallback(&mut owners, planned.fact, namespace.as_deref())?;
             let anchored = !owners.is_empty() || namespace.is_some();
             let key = (planned.name.clone(), OutputKind::Value);
@@ -3033,7 +3071,9 @@ impl Snapshot {
                 ))
                 .cloned()
                 .unwrap_or_default();
-            let namespace = self.fact_authority_namespace(function).cloned();
+            let namespace = self
+                .fact_authority_namespace(function, &declarations)
+                .cloned();
             self.add_authority_fallback(&mut owners, function, namespace.as_deref())?;
             let anchored = !owners.is_empty() || namespace.is_some();
             let key = (planned.name.clone(), OutputKind::Value);
@@ -3303,6 +3343,7 @@ impl Snapshot {
             constants: Vec<&'a Constant>,
         }
 
+        let declarations = DeclarationIndex::new(&self.facts);
         let facts_by_origin: HashMap<_, _> =
             self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
         let is_flat_root = |fact| is_flat_declaration(fact, &facts_by_origin, references, true);
@@ -3569,7 +3610,7 @@ impl Snapshot {
                             .iter()
                             .any(|fact| defines_local_type(name, fact)));
                 if !excluded {
-                    let authority = self.authority_candidates(&roots.types);
+                    let authority = self.authority_candidates(&roots.types, &declarations);
                     let root =
                         choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
                     let tagged = authority
@@ -3577,7 +3618,7 @@ impl Snapshot {
                         .any(|fact| self.root_owners.contains_key(&fact.origin));
                     let routed = authority
                         .iter()
-                        .any(|fact| self.fact_authority_namespace(fact).is_some());
+                        .any(|fact| self.fact_authority_namespace(fact, &declarations).is_some());
                     if tagged
                         || routed
                         || !matches!(root.data, FactData::Typedef { .. })
@@ -4043,7 +4084,7 @@ impl Snapshot {
 
             let mut facts_by_name = BTreeMap::new();
             for (name, choices) in grouped {
-                let authority = self.authority_candidates(&choices);
+                let authority = self.authority_candidates(&choices, &declarations);
                 let selected =
                     choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
                 facts_by_name.insert(name, selected);
@@ -4395,7 +4436,7 @@ impl Snapshot {
                         || internal_aliases.contains(*name)
                         || retained_pointer_aliases.contains(*name)
                         || references.contains_key(*name)
-                        || self.fact_authority_namespace(fact).is_some()
+                        || self.fact_authority_namespace(fact, &declarations).is_some()
                         || facts_index
                             .get(*name)
                             .into_iter()
@@ -4456,7 +4497,7 @@ impl Snapshot {
                     .unwrap_or_else(|| fact.name.clone());
                 if self.suppressed_type_origins.contains(&fact.origin)
                     && name == fact.name
-                    && self.fact_authority_namespace(fact).is_none()
+                    && self.fact_authority_namespace(fact, &declarations).is_none()
                 {
                     return if let Some(owner) = self.root_owners.get(&fact.origin) {
                         Err(Error(format!(
@@ -8425,6 +8466,8 @@ fn origin(origin: &Origin) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod planner_lookups;
 
     fn test_fact(
         local: u32,

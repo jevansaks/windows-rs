@@ -200,6 +200,11 @@ facts remain available for layout and dependency closure. If every projection is
 owners are retained so existing exclusion diagnostics and single-partition alias behavior remain
 unchanged.
 
+Planning indexes declarations by exact translation unit, name, and spelling location for authority
+and typedef-projection lookups. Each bucket retains snapshot fact order, including duplicate
+declarations. The index is local to each planning or routing operation and is built after owner
+settings and remaps have been applied.
+
 An authority-routed dependency uses the partition identity set by `with_authority_partition`; if
 none is set, its namespace is the deterministic fallback partition. Its header remains the
 physical declaration or expansion path rather than the aggregate translation-unit name.
@@ -483,6 +488,13 @@ setup:
 cargo test -p windows-clang
 cargo test -p test_clang
 ```
+
+The ignored `planner_lookup_scaling` unit test measures planning and partition emission with 1,000
+typedef roots and 8,000 or 32,000 unrelated facts. Run it with
+`cargo test -p windows-clang --release --lib planner_lookup_scaling -- --ignored --nocapture`.
+Set `WINDOWS_CLANG_LOOKUP_EVIDENCE` to an existing directory to save the ordered partition output
+and conflict diagnostic for byte-for-byte comparisons. This fixture does not parse headers or
+measure SDK extraction.
 
 The tests need a loadable compatible libclang. Repository CI obtains the pinned runtime with
 `cargo run -q -p tool-clang -- path` and exports `LIBCLANG_PATH` before running the workspace.
