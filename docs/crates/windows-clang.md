@@ -158,6 +158,15 @@ traversed-header declaration has an explicit owner and its link name is selected
 `EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
 change non-header emission.
 
+If a selected function reaches a non-POD native class, header planning can retain its field layout
+as a pointer-only dependency. The class must have public instance fields, no base classes, and no
+virtual methods or destructor. Constructors, non-virtual methods, and private copy operations are
+not emitted. The extracted fact remains unsupported until this selected dependency path is
+planned, so legacy and unselected emission keep their prior behavior. Pointer and reference uses
+are allowed; by-value uses through typedefs, arrays, callback signatures, or containing records
+fail preflight. Partition exclusions still take precedence and report the normal owner-excluded
+dependency diagnostic.
+
 Use `with_traversed_header_for_input(input, header, partition)` when one physical header is parsed
 in several extraction inputs with different compile definitions. The input selector matches
 `Fact::origin.tu` and limits which compile variant is a public root; it does not supply the logical

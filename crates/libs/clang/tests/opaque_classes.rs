@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use windows_clang::{
     EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities, RdlPartition,
@@ -337,6 +337,535 @@ fn definitions_and_by_value_validation_keep_existing_behavior() {
     );
 }
 
+#[test]
+fn selected_native_geometry_classes_emit_as_pointer_dependencies() {
+    helpers::ensure_libclang();
+
+    for target in ["x86_64-pc-windows-msvc", "i686-pc-windows-msvc"] {
+        let scratch = scratch(if target.starts_with("x86_64") {
+            "native-geometry-x64"
+        } else {
+            "native-geometry-x86"
+        });
+        let header = scratch.join("geometry.h");
+        std::fs::write(&header, native_geometry_source()).unwrap();
+        let snapshot = extract(
+            [Input::new(
+                "aggregate.cpp",
+                format!("#include \"{}\"\n", header.to_string_lossy()),
+            )
+            .with_roots([header.to_string_lossy().to_string()])],
+            &[
+                "-x",
+                "c++",
+                "-fms-extensions",
+                &format!("--target={target}"),
+            ],
+        )
+        .unwrap();
+        for name in [
+            "Point",
+            "Rect",
+            "Size",
+            "PointF",
+            "RectF",
+            "PathData",
+            "UnselectedData",
+        ] {
+            assert!(
+                snapshot.unsupported().any(|(fact, _)| fact.name == name),
+                "{name} did not retain its unsupported extracted fact for {target}"
+            );
+        }
+        let policy = HeaderPartitionPolicy::new().with_traversed_header(
+            header.to_string_lossy(),
+            RootPartition::new("gdiplus", "Windows.Win32.Graphics.GdiPlus")
+                .with_library("GdipUseGeometry", "gdiplus.dll"),
+        );
+        let references = references();
+        for name in ["Point", "Rect", "Size"] {
+            assert_eq!(
+                references.types().get(name).unwrap().namespace,
+                "Windows.Foundation"
+            );
+        }
+        let functions = BTreeSet::from(["GdipUseGeometry".to_string()]);
+        let mut options = EmitOptions::new("Windows.Win32", references.types());
+        options.functions = Some(&functions);
+        let plan = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        let partitions = plan.emit_with_options(&options).unwrap();
+        let rdl = output(&partitions, "Windows.Win32.Graphics.GdiPlus");
+
+        for (name, fields) in [
+            ("Point", ["X: i32", "Y: i32"].as_slice()),
+            (
+                "Rect",
+                ["X: i32", "Y: i32", "Width: i32", "Height: i32"].as_slice(),
+            ),
+            ("Size", ["Width: i32", "Height: i32"].as_slice()),
+            ("PointF", ["X: REAL", "Y: REAL"].as_slice()),
+            (
+                "RectF",
+                ["X: REAL", "Y: REAL", "Width: REAL", "Height: REAL"].as_slice(),
+            ),
+            (
+                "PathData",
+                ["Count: i32", "Points: *mut PointF", "Types: *mut u8"].as_slice(),
+            ),
+        ] {
+            assert!(rdl.contains(&format!("struct {name}")), "{rdl}");
+            for field in fields {
+                assert!(rdl.contains(field), "{rdl}");
+            }
+            assert!(rdl.contains("type REAL = f32"), "{rdl}");
+        }
+        for (alias, target) in [
+            ("GpPoint", "Point"),
+            ("GpRect", "Rect"),
+            ("GpSize", "Size"),
+            ("GpPointF", "PointF"),
+            ("GpRectF", "RectF"),
+            ("GpPathData", "PathData"),
+        ] {
+            assert!(rdl.contains(&format!("type {alias} = {target}")), "{rdl}");
+        }
+        for method in ["Equals", "Clone", "operator", "Unselected"] {
+            assert!(!rdl.contains(method), "{rdl}");
+        }
+        assert!(
+            rdl.contains(
+                "extern fn GdipUseGeometry(path: *mut void, point: *mut GpPoint, rect: *mut \
+                 GpRect, size: *mut GpSize, point_f: *mut GpPointF, rect_f: *mut GpRectF, data: \
+                 *mut GpPathData, external: *mut Windows::Foundation::Point)"
+            ),
+            "{rdl}"
+        );
+
+        let winmd = scratch.join("geometry.winmd");
+        windows_rdl::reader()
+            .input_texts(partitions.values())
+            .reference_default()
+            .output(&winmd)
+            .write()
+            .unwrap();
+        let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+        assert_eq!(
+            index
+                .expect("Windows.Win32.Graphics.GdiPlus", "REAL")
+                .underlying_type(),
+            Some(Type::F32)
+        );
+        for (alias, target) in [
+            ("GpPoint", "Point"),
+            ("GpRect", "Rect"),
+            ("GpSize", "Size"),
+            ("GpPointF", "PointF"),
+            ("GpRectF", "RectF"),
+            ("GpPathData", "PathData"),
+        ] {
+            assert_eq!(
+                index
+                    .expect("Windows.Win32.Graphics.GdiPlus", alias)
+                    .underlying_type(),
+                Some(Type::value_named("Windows.Win32.Graphics.GdiPlus", target))
+            );
+        }
+        let point_fields = index
+            .expect("Windows.Win32.Graphics.GdiPlus", "PointF")
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            point_fields,
+            [
+                (
+                    "X".to_string(),
+                    Type::value_named("Windows.Win32.Graphics.GdiPlus", "REAL")
+                ),
+                (
+                    "Y".to_string(),
+                    Type::value_named("Windows.Win32.Graphics.GdiPlus", "REAL")
+                ),
+            ]
+        );
+        let native_point_fields = index
+            .expect("Windows.Win32.Graphics.GdiPlus", "Point")
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            native_point_fields,
+            [("X".to_string(), Type::I32), ("Y".to_string(), Type::I32),]
+        );
+        let native_rect_fields = index
+            .expect("Windows.Win32.Graphics.GdiPlus", "Rect")
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            native_rect_fields,
+            [
+                ("X".to_string(), Type::I32),
+                ("Y".to_string(), Type::I32),
+                ("Width".to_string(), Type::I32),
+                ("Height".to_string(), Type::I32),
+            ]
+        );
+        let native_size_fields = index
+            .expect("Windows.Win32.Graphics.GdiPlus", "Size")
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            native_size_fields,
+            [
+                ("Width".to_string(), Type::I32),
+                ("Height".to_string(), Type::I32),
+            ]
+        );
+        let path_fields = index
+            .expect("Windows.Win32.Graphics.GdiPlus", "PathData")
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            path_fields,
+            [
+                ("Count".to_string(), Type::I32),
+                (
+                    "Points".to_string(),
+                    Type::PtrMut(
+                        Box::new(Type::value_named(
+                            "Windows.Win32.Graphics.GdiPlus",
+                            "PointF"
+                        )),
+                        1
+                    )
+                ),
+                ("Types".to_string(), Type::PtrMut(Box::new(Type::U8), 1)),
+            ]
+        );
+        let Item::Fn(function) =
+            index.expect_item("Windows.Win32.Graphics.GdiPlus", "GdipUseGeometry")
+        else {
+            panic!("GdipUseGeometry was not emitted as a function");
+        };
+        assert_eq!(function.calling_convention(), "system");
+        assert_eq!(
+            function.impl_map().unwrap().import_scope().name(),
+            "gdiplus.dll"
+        );
+        assert_eq!(
+            function.signature(&[]).types,
+            [
+                Type::PtrMut(Box::new(Type::Void), 1),
+                pointer_to_namespace("GpPoint"),
+                pointer_to_namespace("GpRect"),
+                pointer_to_namespace("GpSize"),
+                pointer_to_namespace("GpPointF"),
+                pointer_to_namespace("GpRectF"),
+                pointer_to_namespace("GpPathData"),
+                Type::PtrMut(
+                    Box::new(Type::value_named("Windows.Foundation", "Point")),
+                    1
+                ),
+            ]
+        );
+
+        std::fs::remove_dir_all(scratch).unwrap();
+    }
+}
+
+#[test]
+fn selected_native_geometry_classes_reject_by_value_abi() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("native-geometry-by-value");
+    let header = scratch.join("geometry.h");
+    std::fs::write(&header, native_geometry_source()).unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("gdiplus", "Windows.Win32.Graphics.GdiPlus"),
+    );
+    let references = references();
+
+    for (function, class) in [
+        ("GdipReturnPoint", "PointF"),
+        ("GdipTakeRect", "RectF"),
+        ("GdipTakeArray", "PointF"),
+        ("GdipUseArray", "PointF"),
+    ] {
+        let functions = BTreeSet::from([function.to_string()]);
+        let mut options = EmitOptions::new("Windows.Win32", references.types());
+        options.functions = Some(&functions);
+        options.library = Some("gdiplus.dll");
+        let error = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap()
+            .audit(&options)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!(
+                "pointer-only native class `{class}` is used by value"
+            )),
+            "{error}"
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn selected_native_geometry_classes_respect_owner_exclusions() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("native-geometry-exclusion");
+    let header = scratch.join("geometry.h");
+    std::fs::write(&header, native_geometry_source()).unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("gdiplus", "Windows.Win32.Graphics.GdiPlus").with_exclusion("PathData"),
+    );
+    let references = references();
+    let functions = BTreeSet::from(["GdipUseGeometry".to_string()]);
+    let mut options = EmitOptions::new("Windows.Win32", references.types());
+    options.functions = Some(&functions);
+    options.library = Some("gdiplus.dll");
+    let error = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .audit(&options)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains(
+            "owner-excluded local type `PathData` in partition `gdiplus` namespace \
+             `Windows.Win32.Graphics.GdiPlus` is required without a retained public alias"
+        ),
+        "{error}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn selected_private_and_virtual_classes_remain_nonrepresentable() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("native-geometry-negative");
+    let header = scratch.join("geometry.h");
+    std::fs::write(&header, native_geometry_source()).unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("gdiplus", "Windows.Win32.Graphics.GdiPlus"),
+    );
+    let references = references();
+    let functions = BTreeSet::from(["GdipUsePrivate".to_string(), "GdipUseVirtual".to_string()]);
+    let mut options = EmitOptions::new("Windows.Win32", references.types());
+    options.functions = Some(&functions);
+    options.library = Some("gdiplus.dll");
+    let error = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .audit(&options)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("header partition dependency closure found 2 blocker(s)"),
+        "{error}"
+    );
+    assert!(error.contains("`PrivateGeometry`"), "{error}");
+    assert!(error.contains("`VirtualGeometry`"), "{error}");
+    assert_eq!(
+        error
+            .matches("class is not a public data-only record")
+            .count(),
+        2,
+        "{error}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
 fn pointer_to(name: &str) -> Type {
     Type::PtrMut(Box::new(Type::value_named(OPENGL_NAMESPACE, name)), 1)
+}
+
+fn pointer_to_namespace(name: &str) -> Type {
+    Type::PtrMut(
+        Box::new(Type::value_named("Windows.Win32.Graphics.GdiPlus", name)),
+        1,
+    )
+}
+
+fn native_geometry_source() -> &'static str {
+    r#"
+        typedef unsigned char BYTE;
+        typedef int INT;
+        typedef float REAL;
+
+        namespace ABI { namespace Windows { namespace Foundation {
+            struct Point { float X; float Y; };
+        } } }
+
+        namespace Gdiplus {
+            class GpPath {};
+
+            class Point {
+            public:
+                Point();
+                Point(const Point& other);
+                INT X;
+                INT Y;
+            };
+
+            class Rect {
+            public:
+                Rect();
+                Rect(const Rect& other);
+                Rect Clone() const;
+                INT X;
+                INT Y;
+                INT Width;
+                INT Height;
+            };
+
+            class Size {
+            public:
+                Size();
+                Size(const Size& other);
+                INT Width;
+                INT Height;
+            };
+
+            class PointF {
+            public:
+                PointF();
+                PointF(const PointF& other);
+                PointF operator+(const PointF& other) const;
+                bool Equals(const PointF& other) const;
+                REAL X;
+                REAL Y;
+            };
+
+            class RectF {
+            public:
+                RectF();
+                RectF(const RectF& other);
+                RectF Clone() const;
+                REAL X;
+                REAL Y;
+                REAL Width;
+                REAL Height;
+            };
+
+            class PathData {
+            public:
+                PathData();
+                ~PathData();
+            private:
+                PathData(const PathData& other);
+                PathData& operator=(const PathData& other);
+            public:
+                INT Count;
+                PointF* Points;
+                BYTE* Types;
+            };
+
+            typedef Point GpPoint;
+            typedef Rect GpRect;
+            typedef Size GpSize;
+            typedef PointF GpPointF;
+            typedef RectF GpRectF;
+            typedef PathData GpPathData;
+            struct PointArray { GpPointF Values[2]; };
+
+            class UnselectedData {
+            public:
+                UnselectedData();
+                REAL Value;
+            };
+
+            class PrivateGeometry {
+                REAL Hidden;
+            public:
+                REAL Visible;
+            };
+            typedef PrivateGeometry GpPrivateGeometry;
+
+            class VirtualGeometry {
+            public:
+                virtual void Reset();
+                REAL Value;
+            };
+            typedef VirtualGeometry GpVirtualGeometry;
+
+            namespace DllExports {
+                extern "C" INT __stdcall GdipUseGeometry(
+                    GpPath* path,
+                    GpPoint* point,
+                    GpRect* rect,
+                    GpSize* size,
+                    GpPointF* point_f,
+                    GpRectF* rect_f,
+                    GpPathData* data,
+                    ABI::Windows::Foundation::Point* external);
+                extern "C" INT __stdcall GdipUseUnselected(UnselectedData* value);
+                extern "C" GpPointF __stdcall GdipReturnPoint();
+                extern "C" INT __stdcall GdipTakeRect(GpRectF value);
+                extern "C" INT __stdcall GdipTakeArray(PointArray value);
+                extern "C" INT __stdcall GdipUseArray(PointArray* value);
+                extern "C" INT __stdcall GdipUsePrivate(GpPrivateGeometry* value);
+                extern "C" INT __stdcall GdipUseVirtual(GpVirtualGeometry* value);
+            }
+        }
+    "#
 }

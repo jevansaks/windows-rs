@@ -167,6 +167,7 @@ fn extract_impl(
     let mut constants = vec![];
     let mut annotations = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
+    let mut pointer_only_class_layouts = BTreeMap::new();
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
@@ -177,6 +178,7 @@ fn extract_impl(
             constants: &mut constants,
             annotations: &mut annotations,
             declaration_guids: &mut declaration_guids,
+            pointer_only_class_layouts: &mut pointer_only_class_layouts,
         };
         let (result, metrics) =
             parsed
@@ -379,6 +381,7 @@ fn extract_impl(
         declare_handles,
         annotations,
         declaration_guids,
+        pointer_only_class_layouts,
         root_owners,
         constant_root_owners: BTreeMap::new(),
         root_partitions: owners,
@@ -1375,6 +1378,7 @@ impl TranslationUnit {
             constants: &mut *output.constants,
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
+            pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             error: None,
             validate_annotations,
         };
@@ -1435,6 +1439,7 @@ struct Traversal<'a> {
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     error: Option<Error>,
     validate_annotations: bool,
 }
@@ -1444,6 +1449,7 @@ struct ExtractionState<'a> {
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
 }
 
 struct Extracted<'tu> {
@@ -1749,6 +1755,14 @@ fn extract_child(
                     } else {
                         fact_data(child, fact_kind, traversal.macros)
                     };
+                    if fact_kind == FactKind::Class
+                        && matches!(data, FactData::Unsupported { .. })
+                        && let Some(layout) = pointer_only_class_layout(child, traversal.macros)
+                    {
+                        traversal
+                            .pointer_only_class_layouts
+                            .insert(origin.clone(), layout);
+                    }
                     let index = traversal.facts.len();
                     let declaration_guid = matches!(fact_kind, FactKind::Class | FactKind::Struct)
                         .then(|| cursor_uuid(child))
@@ -3319,6 +3333,55 @@ fn is_data_class(cursor: CXCursor) -> bool {
                     | CXCursor_FunctionTemplate
             )
         })
+}
+
+fn pointer_only_class_layout(cursor: CXCursor, macros: &MacroDefinitions) -> Option<FactData> {
+    let cursor = pointer_only_class_definition(cursor)?;
+    let mut record =
+        inline_record_with_pointer_class_layouts(cursor, false, Some(macros), true).ok()?;
+    name_indirect_inline_records(
+        &mut record,
+        cx_string(unsafe { clang_getCursorSpelling(cursor) }).trim_start_matches('_'),
+    );
+    Some(FactData::Record {
+        base: record.base,
+        fields: record.fields,
+        size: record.size,
+        align: record.align,
+        packing: record.packing,
+        alignment: record.alignment,
+        union: record.union,
+    })
+}
+
+fn pointer_only_class_definition(cursor: CXCursor) -> Option<CXCursor> {
+    let cursor = cursor_definition(cursor);
+    if unsafe { clang_isCursorDefinition(cursor) } == 0
+        || unsafe { clang_isPODType(clang_getCursorType(cursor)) } != 0
+    {
+        return None;
+    }
+    let children = cursor_children(cursor);
+    let fields: Vec<_> = children
+        .iter()
+        .copied()
+        .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_FieldDecl)
+        .collect();
+    if fields.is_empty()
+        || fields
+            .iter()
+            .any(|field| unsafe { clang_getCXXAccessSpecifier(*field) } != CX_CXXPublic)
+        || children.iter().any(|child| unsafe {
+            clang_getCursorKind(*child) == CXCursor_CXXBaseSpecifier
+                || (matches!(
+                    clang_getCursorKind(*child),
+                    CXCursor_CXXMethod | CXCursor_Destructor | CXCursor_ConversionFunction
+                ) && clang_CXXMethod_isVirtual(*child) != 0)
+        })
+    {
+        return None;
+    }
+    Some(cursor)
 }
 
 fn external_link_name(cursor: CXCursor) -> String {
@@ -5543,6 +5606,15 @@ fn inline_record(
     union: bool,
     macros: Option<&MacroDefinitions>,
 ) -> Result<InlineRecord, String> {
+    inline_record_with_pointer_class_layouts(cursor, union, macros, false)
+}
+
+fn inline_record_with_pointer_class_layouts(
+    cursor: CXCursor,
+    union: bool,
+    macros: Option<&MacroDefinitions>,
+    preserve_pointer_class_layouts: bool,
+) -> Result<InlineRecord, String> {
     let mut base = None;
     let mut base_count = 0;
     let mut fields: Vec<Field> = vec![];
@@ -5554,8 +5626,12 @@ fn inline_record(
                 return Err("record has unsupported inheritance".to_string());
             }
             let base_ty = unsafe { clang_getCursorType(child) };
-            let base_ref = type_ref(base_ty)
-                .ok_or_else(|| "record base has an unsupported type".to_string())?;
+            let base_ref = if preserve_pointer_class_layouts {
+                type_ref_preserving_pointer_class_layouts(base_ty)
+            } else {
+                type_ref(base_ty)
+            }
+            .ok_or_else(|| "record base has an unsupported type".to_string())?;
             let align = unsafe { clang_Type_getAlignOf(base_ty) };
             let size = unsafe { clang_Type_getSizeOf(base_ty) };
             if align <= 0 || size < 0 {
@@ -5583,7 +5659,12 @@ fn inline_record(
         } else if kind == CXCursor_FieldDecl {
             let name = cx_string(unsafe { clang_getCursorSpelling(child) });
             let field_ty = unsafe { clang_getCursorType(child) };
-            let mut ty = type_ref(field_ty).ok_or_else(|| {
+            let mut ty = if preserve_pointer_class_layouts {
+                type_ref_preserving_pointer_class_layouts(field_ty)
+            } else {
+                type_ref(field_ty)
+            }
+            .ok_or_else(|| {
                 format!(
                     "field `{name}` has unsupported type `{}`",
                     cx_string(unsafe { clang_getTypeSpelling(field_ty) })
@@ -5621,7 +5702,12 @@ fn inline_record(
         } else if matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
             && unsafe { clang_Cursor_isAnonymousRecordDecl(child) } != 0
         {
-            let nested = inline_record(child, kind == CXCursor_UnionDecl, macros)?;
+            let nested = inline_record_with_pointer_class_layouts(
+                child,
+                kind == CXCursor_UnionDecl,
+                macros,
+                preserve_pointer_class_layouts,
+            )?;
             let (promoted, relative) = promoted_members(&nested)
                 .into_iter()
                 .find_map(|(member, relative)| {
@@ -5760,6 +5846,46 @@ fn promoted_members(record: &InlineRecord) -> Vec<(&str, i64)> {
         }
     }
     result
+}
+
+fn type_ref_preserving_pointer_class_layouts(ty: CXType) -> Option<TypeRef> {
+    if ty.kind != CXType_Pointer {
+        return type_ref(ty);
+    }
+    let pointee = unsafe { clang_getPointeeType(ty) };
+    let canonical_pointee = unsafe { clang_getCanonicalType(pointee) };
+    if matches!(
+        canonical_pointee.kind,
+        CXType_FunctionProto | CXType_FunctionNoProto
+    ) {
+        return type_ref(ty);
+    }
+    let declaration = unsafe { clang_getTypeDeclaration(pointee) };
+    if unsafe { clang_Cursor_isNull(declaration) } == 0
+        && unsafe { clang_getCursorKind(declaration) } == CXCursor_ClassDecl
+        && !is_interface(declaration)
+        && cursor_uuid(declaration).is_none()
+        && unsafe { clang_isCursorDefinition(cursor_definition(declaration)) } != 0
+        && !is_data_class(declaration)
+    {
+        if let Some(definition) = pointer_only_class_definition(declaration) {
+            let name = cx_string(unsafe { clang_getCursorSpelling(definition) });
+            let (declaration, _, _, _) = cursor_locations(definition)?;
+            return Some(TypeRef::Pointer {
+                mutable: unsafe { clang_isConstQualifiedType(pointee) } == 0,
+                target: Box::new(TypeRef::Named { name, declaration }),
+            });
+        }
+        return Some(TypeRef::OpaquePointer {
+            mutable: unsafe { clang_isConstQualifiedType(pointee) } == 0,
+            tag: cx_string(unsafe { clang_getCursorSpelling(declaration) }),
+        });
+    }
+    let target = type_ref_preserving_pointer_class_layouts(pointee)?;
+    Some(TypeRef::Pointer {
+        mutable: unsafe { clang_isConstQualifiedType(pointee) } == 0,
+        target: Box::new(target),
+    })
 }
 
 fn type_ref(ty: CXType) -> Option<TypeRef> {

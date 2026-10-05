@@ -1150,6 +1150,7 @@ pub struct Snapshot {
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
+    pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     root_owners: BTreeMap<Origin, RootOwner>,
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
@@ -1226,6 +1227,7 @@ impl PartialEq for Snapshot {
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
             && self.declaration_guids == other.declaration_guids
+            && self.pointer_only_class_layouts == other.pointer_only_class_layouts
             && self.root_owners == other.root_owners
             && self.constant_root_owners == other.constant_root_owners
             && self.root_partitions == other.root_partitions
@@ -1595,10 +1597,32 @@ impl Snapshot {
                 .iter()
                 .map(|planned| &planned.fact.origin)
                 .collect();
+            let promoted_reference_names: BTreeSet<_> = plan
+                .types
+                .iter()
+                .filter(|planned| {
+                    self.pointer_only_class_layouts
+                        .contains_key(&planned.fact.origin)
+                })
+                .filter_map(|planned| {
+                    let name = display_names
+                        .and_then(|names| names.get(&planned.fact.name))
+                        .map_or(planned.fact.name.as_str(), String::as_str);
+                    options.references.contains_key(name).then_some(name)
+                })
+                .collect();
             for fact in self.facts.iter().filter(|fact| is_type_fact(fact)) {
                 if canonical_raw_pointer_name(&fact.name)
                     && matches!(fact.data, FactData::Typedef { .. })
                     && !planned_type_origins.contains(&fact.origin)
+                {
+                    continue;
+                }
+                let display_name = display_names
+                    .and_then(|names| names.get(&fact.name))
+                    .map_or(fact.name.as_str(), String::as_str);
+                if promoted_reference_names.contains(display_name)
+                    && !self.pointer_only_class_layouts.contains_key(&fact.origin)
                 {
                     continue;
                 }
@@ -1613,6 +1637,24 @@ impl Snapshot {
                     .entry(fact.spelling.clone())
                     .or_default()
                     .insert(namespace.clone());
+            }
+            for fact in self.facts.iter().filter(|fact| {
+                !self.pointer_only_class_layouts.contains_key(&fact.origin) && is_type_fact(fact)
+            }) {
+                let name = display_names
+                    .and_then(|names| names.get(&fact.name))
+                    .map_or(fact.name.as_str(), String::as_str);
+                if !promoted_reference_names.contains(name) {
+                    continue;
+                }
+                let reference = &options.references[name];
+                if reference.name != name {
+                    continue;
+                }
+                local_type_namespaces
+                    .entry(fact.spelling.clone())
+                    .or_default()
+                    .insert(reference.namespace.clone());
             }
             let mut uuid_namespaces: BTreeMap<(&str, &str), BTreeSet<&str>> = BTreeMap::new();
             for planned in &plan.types {
@@ -2263,6 +2305,7 @@ impl Snapshot {
         mut self,
         options: &EmitOptions<'_>,
     ) -> (Self, BTreeMap<String, String>, PlanningSourceNames) {
+        self.promote_selected_pointer_class_layouts(options);
         let source_names = PlanningSourceNames::new(&self);
         self.apply_partition_type_settings();
         self.apply_partition_exclusions();
@@ -2611,6 +2654,82 @@ impl Snapshot {
             );
         }
         (self, display_names, source_names)
+    }
+
+    fn promote_selected_pointer_class_layouts(&mut self, options: &EmitOptions<'_>) {
+        let Some(selected) = options.functions else {
+            return;
+        };
+        if !self.header_partition_policy || self.pointer_only_class_layouts.is_empty() {
+            return;
+        }
+
+        let mut queue = Vec::new();
+        for fact in self.facts.iter().filter(|fact| {
+            fact.root
+                && self.root_owners.contains_key(&fact.origin)
+                && pointer_alias_root_is_selected(fact, options)
+                && matches!(
+                    &fact.data,
+                    FactData::Function { link_name, .. } if selected.contains(link_name)
+                )
+        }) {
+            queue_fact_type_refs(&fact.data, &fact.origin.tu, &mut queue);
+        }
+
+        let declarations = DeclarationIndex::new(&self.facts);
+        let mut seen = BTreeSet::new();
+        let mut promoted = BTreeSet::new();
+        while let Some((tu, ty)) = queue.pop() {
+            match ty {
+                TypeRef::Pointer { target, .. }
+                | TypeRef::Reference { target, .. }
+                | TypeRef::Array { target, .. } => queue.push((tu, *target)),
+                TypeRef::FunctionPointer { params, result, .. } => {
+                    queue.push((tu.clone(), *result));
+                    queue.extend(params.into_iter().map(|param| (tu.clone(), param)));
+                }
+                TypeRef::Generic { args, .. } => {
+                    queue.extend(args.into_iter().map(|arg| (tu.clone(), arg)));
+                }
+                TypeRef::InlineRecord(record) => {
+                    if let Some(base) = record.base {
+                        queue.push((tu.clone(), base));
+                    }
+                    queue.extend(
+                        record
+                            .fields
+                            .into_iter()
+                            .map(|field| (tu.clone(), field.ty)),
+                    );
+                }
+                TypeRef::Named { name, declaration } => {
+                    if !seen.insert((tu.clone(), name.clone(), declaration.clone())) {
+                        continue;
+                    }
+                    for fact in declarations.get(&tu, &name, &declaration) {
+                        if let Some(layout) = self.pointer_only_class_layouts.get(&fact.origin)
+                            && promoted.insert(fact.origin.clone())
+                        {
+                            queue_fact_type_refs(layout, &fact.origin.tu, &mut queue);
+                        }
+                        queue_fact_type_refs(&fact.data, &fact.origin.tu, &mut queue);
+                    }
+                }
+                TypeRef::Void
+                | TypeRef::String
+                | TypeRef::Object
+                | TypeRef::Scalar(_)
+                | TypeRef::OpaquePointer { .. } => {}
+            }
+        }
+        drop(declarations);
+
+        for fact in &mut self.facts {
+            if promoted.contains(&fact.origin) {
+                fact.data = self.pointer_only_class_layouts[&fact.origin].clone();
+            }
+        }
     }
 
     fn apply_partition_remaps(&mut self) {
@@ -4044,6 +4163,15 @@ impl Snapshot {
                     .push(fact);
             }
         }
+        let promoted_pointer_class_declarations: HashSet<_> = self
+            .facts
+            .iter()
+            .filter(|fact| {
+                self.pointer_only_class_layouts.contains_key(&fact.origin)
+                    && matches!(fact.data, FactData::Record { .. })
+            })
+            .map(|fact| (fact.origin.tu.as_str(), &fact.spelling))
+            .collect();
         let canonical_typedef_declarations: HashSet<_> = self
             .facts
             .iter()
@@ -4411,7 +4539,12 @@ impl Snapshot {
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
-                if references.contains_key(name) && !root_names.contains(name) {
+                let promoted_pointer_class =
+                    promoted_pointer_class_declarations.contains(&(tu, declaration));
+                if references.contains_key(name)
+                    && !root_names.contains(name)
+                    && !promoted_pointer_class
+                {
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
@@ -4771,13 +4904,17 @@ impl Snapshot {
         let layout = LayoutContext {
             facts_index: &facts_index,
             planned_types: &facts_by_name,
+            pointer_only_class_layouts: &self.pointer_only_class_layouts,
+            display_names,
         };
         let validation_time = timing.then(std::time::Instant::now);
         for fact in facts_by_name.values() {
             validate_fact_layouts(fact, &layout, &mut safe_layouts, &mut validated_layouts)?;
+            validate_fact_value_abi(fact, &layout)?;
         }
         for fact in &value_roots {
             validate_fact_layouts(fact, &layout, &mut safe_layouts, &mut validated_layouts)?;
+            validate_fact_value_abi(fact, &layout)?;
         }
         if timing {
             eprintln!(
@@ -4793,6 +4930,7 @@ impl Snapshot {
                 &mut safe_layouts,
                 &mut validated_layouts,
             )?;
+            validate_fact_value_abi(function.fact, &layout)?;
         }
         if timing {
             eprintln!(
@@ -4810,6 +4948,12 @@ impl Snapshot {
                 &mut BTreeSet::new(),
                 &mut validated_layouts,
             )?;
+            validate_pointer_only_class_value(
+                &constant.ty,
+                &constant.root.tu,
+                &layout,
+                &mut BTreeSet::new(),
+            )?;
         }
         if timing {
             eprintln!(
@@ -4825,7 +4969,16 @@ impl Snapshot {
             phase_time = Some(std::time::Instant::now());
         }
 
-        let local_roots = root_names.clone();
+        let mut local_roots = root_names.clone();
+        local_roots.extend(
+            facts_by_name
+                .iter()
+                .filter(|(_, fact)| {
+                    self.pointer_only_class_layouts.contains_key(&fact.origin)
+                        && matches!(fact.data, FactData::Record { .. })
+                })
+                .map(|(name, _)| (*name).to_string()),
+        );
         let required: BTreeSet<String> = facts_by_name
             .keys()
             .map(|name| (*name).to_string())
@@ -7580,6 +7733,136 @@ fn underlying_enum_fact<'a>(
 struct LayoutContext<'a, 'facts> {
     facts_index: &'a HashMap<&'facts str, Vec<&'facts Fact>>,
     planned_types: &'a BTreeMap<&'facts str, &'facts Fact>,
+    pointer_only_class_layouts: &'a BTreeMap<Origin, FactData>,
+    display_names: Option<&'a BTreeMap<String, String>>,
+}
+
+fn validate_fact_value_abi(fact: &Fact, layout: &LayoutContext<'_, '_>) -> Result<(), Error> {
+    let validate =
+        |ty| validate_pointer_only_class_value(ty, &fact.origin.tu, layout, &mut BTreeSet::new());
+    match &fact.data {
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            validate(result)?;
+            for param in params {
+                validate(&param.ty)?;
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                validate(base)?;
+            }
+            for field in fields {
+                validate(&field.ty)?;
+            }
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                validate(base)?;
+            }
+            for method in methods {
+                validate(&method.result)?;
+                for param in &method.params {
+                    validate(&param.ty)?;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_pointer_only_class_value(
+    ty: &TypeRef,
+    tu: &str,
+    layout: &LayoutContext<'_, '_>,
+    seen: &mut BTreeSet<Origin>,
+) -> Result<(), Error> {
+    match ty {
+        TypeRef::Pointer { .. }
+        | TypeRef::Reference { .. }
+        | TypeRef::OpaquePointer { .. }
+        | TypeRef::Void
+        | TypeRef::String
+        | TypeRef::Object
+        | TypeRef::Scalar(_)
+        | TypeRef::Generic { .. } => Ok(()),
+        TypeRef::FunctionPointer { params, result, .. } => {
+            validate_pointer_only_class_value(result, tu, layout, seen)?;
+            for param in params {
+                validate_pointer_only_class_value(param, tu, layout, seen)?;
+            }
+            Ok(())
+        }
+        TypeRef::Array { target, .. } => {
+            validate_pointer_only_class_value(target, tu, layout, seen)
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &record.base {
+                validate_pointer_only_class_value(base, tu, layout, seen)?;
+            }
+            for field in &record.fields {
+                validate_pointer_only_class_value(&field.ty, tu, layout, seen)?;
+            }
+            Ok(())
+        }
+        TypeRef::Named { name, declaration } => {
+            let matches: Vec<_> = layout
+                .facts_index
+                .get(name.as_str())
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|fact| fact.origin.tu == tu && fact.spelling == *declaration)
+                .collect();
+            let fact = if matches
+                .iter()
+                .any(|fact| matches!(fact.data, FactData::Typedef { .. }))
+            {
+                choose_type_root(name, &matches, layout.facts_index)?
+            } else if let Some(fact) = layout.planned_types.get(name.as_str()).copied() {
+                fact
+            } else if !matches.is_empty() {
+                choose_type_root(name, &matches, layout.facts_index)?
+            } else {
+                return Ok(());
+            };
+            if layout.pointer_only_class_layouts.contains_key(&fact.origin) {
+                let name = layout
+                    .display_names
+                    .and_then(|names| names.get(&fact.name))
+                    .map_or(fact.name.as_str(), String::as_str);
+                return Err(Error(format!(
+                    "pointer-only native class `{}` is used by value in translation unit `{}`",
+                    name, fact.origin.tu
+                )));
+            }
+            if !seen.insert(fact.origin.clone()) {
+                return Ok(());
+            }
+            let result = match &fact.data {
+                FactData::Record { base, fields, .. } => {
+                    if let Some(base) = base {
+                        validate_pointer_only_class_value(base, &fact.origin.tu, layout, seen)?;
+                    }
+                    for field in fields {
+                        validate_pointer_only_class_value(
+                            &field.ty,
+                            &fact.origin.tu,
+                            layout,
+                            seen,
+                        )?;
+                    }
+                    Ok(())
+                }
+                FactData::Typedef { target } => {
+                    validate_pointer_only_class_value(target, &fact.origin.tu, layout, seen)
+                }
+                _ => Ok(()),
+            };
+            seen.remove(&fact.origin);
+            result
+        }
+    }
 }
 
 fn validate_fact_layouts(
@@ -8379,6 +8662,39 @@ fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
                     .any(|field| type_ref_uses_alias(&field.ty, aliases))
         }
         _ => false,
+    }
+}
+
+fn queue_fact_type_refs(data: &FactData, tu: &str, queue: &mut Vec<(String, TypeRef)>) {
+    let mut push = |ty: &TypeRef| queue.push((tu.to_string(), ty.clone()));
+    match data {
+        FactData::Typedef { target } => push(target),
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            push(result);
+            for param in params {
+                push(&param.ty);
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                push(base);
+            }
+            for field in fields {
+                push(&field.ty);
+            }
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                push(base);
+            }
+            for method in methods {
+                push(&method.result);
+                for param in &method.params {
+                    push(&param.ty);
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -9688,6 +10004,7 @@ fn origin(origin: &Origin) -> String {
 mod tests {
     use super::*;
 
+    mod native_class_layouts;
     mod planner_lookups;
 
     fn test_fact(
