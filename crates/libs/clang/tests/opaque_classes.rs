@@ -580,6 +580,136 @@ fn selected_native_geometry_classes_emit_as_pointer_dependencies() {
 }
 
 #[test]
+fn selected_native_class_and_owned_pod_same_name_keep_exact_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("native-class-owned-pod-same-name");
+    let geometry = scratch.join("geometry.h");
+    let pod = scratch.join("pod.h");
+    std::fs::write(&geometry, native_geometry_source()).unwrap();
+    std::fs::write(
+        &pod,
+        "namespace Foo {\n\
+             struct Point { short X; short Y; };\n\
+             namespace Exports {\n\
+                 extern \"C\" int __stdcall UseFooPoint(Point* point);\n\
+             }\n\
+         }\n",
+    )
+    .unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!(
+                "#include \"{}\"\n#include \"{}\"\n",
+                geometry.to_string_lossy(),
+                pod.to_string_lossy()
+            ),
+        )
+        .with_roots([
+            geometry.to_string_lossy().to_string(),
+            pod.to_string_lossy().to_string(),
+        ])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            geometry.to_string_lossy(),
+            RootPartition::new("gdiplus", "Windows.Win32.Graphics.GdiPlus")
+                .with_library("GdipUseGeometry", "gdiplus.dll"),
+        )
+        .with_traversed_header(
+            pod.to_string_lossy(),
+            RootPartition::new("foo", "Windows.Win32.Foo").with_library("UseFooPoint", "foo.dll"),
+        );
+    let references = references();
+    let functions = BTreeSet::from(["GdipUseGeometry".to_string(), "UseFooPoint".to_string()]);
+    let mut options = EmitOptions::new("Windows.Win32", references.types());
+    options.functions = Some(&functions);
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let gdiplus = output(&partitions, "Windows.Win32.Graphics.GdiPlus");
+    let foo = output(&partitions, "Windows.Win32.Foo");
+
+    assert!(gdiplus.contains("struct Point"), "{gdiplus}");
+    assert!(gdiplus.contains("type GpPoint = Point"), "{gdiplus}");
+    assert!(
+        gdiplus.contains("external: *mut Windows::Foundation::Point"),
+        "{gdiplus}"
+    );
+    assert!(foo.contains("struct Point"), "{foo}");
+    assert!(foo.contains("X: i16"), "{foo}");
+    assert!(foo.contains("Y: i16"), "{foo}");
+    assert!(
+        foo.contains("extern fn UseFooPoint(point: *mut Point)"),
+        "{foo}"
+    );
+    assert!(!foo.contains("Windows::Foundation::Point"), "{foo}");
+
+    let winmd = scratch.join("same-name.winmd");
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    let gdiplus_point = index
+        .expect("Windows.Win32.Graphics.GdiPlus", "Point")
+        .fields()
+        .map(|field| (field.name().to_string(), field.ty()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        gdiplus_point,
+        [("X".to_string(), Type::I32), ("Y".to_string(), Type::I32),]
+    );
+    let foo_point = index
+        .expect("Windows.Win32.Foo", "Point")
+        .fields()
+        .map(|field| (field.name().to_string(), field.ty()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        foo_point,
+        [("X".to_string(), Type::I16), ("Y".to_string(), Type::I16),]
+    );
+    let Item::Fn(use_foo) = index.expect_item("Windows.Win32.Foo", "UseFooPoint") else {
+        panic!("UseFooPoint was not emitted as a function");
+    };
+    assert_eq!(
+        use_foo.signature(&[]).types,
+        [Type::PtrMut(
+            Box::new(Type::value_named("Windows.Win32.Foo", "Point")),
+            1
+        )]
+    );
+    let Item::Fn(use_geometry) =
+        index.expect_item("Windows.Win32.Graphics.GdiPlus", "GdipUseGeometry")
+    else {
+        panic!("GdipUseGeometry was not emitted as a function");
+    };
+    let geometry_types = use_geometry.signature(&[]).types;
+    assert_eq!(geometry_types[1], pointer_to_namespace("GpPoint"));
+    assert_eq!(
+        geometry_types.last(),
+        Some(&Type::PtrMut(
+            Box::new(Type::value_named("Windows.Foundation", "Point")),
+            1
+        ))
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn selected_native_geometry_classes_reject_by_value_abi() {
     helpers::ensure_libclang();
 

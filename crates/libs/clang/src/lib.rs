@@ -1597,18 +1597,22 @@ impl Snapshot {
                 .iter()
                 .map(|planned| &planned.fact.origin)
                 .collect();
-            let promoted_reference_names: BTreeSet<_> = plan
+            let facts_by_origin: HashMap<_, _> =
+                self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+            let local_reference_names: BTreeSet<_> = plan
                 .types
                 .iter()
-                .filter(|planned| {
-                    self.pointer_only_class_layouts
-                        .contains_key(&planned.fact.origin)
-                })
                 .filter_map(|planned| {
                     let name = display_names
                         .and_then(|names| names.get(&planned.fact.name))
                         .map_or(planned.fact.name.as_str(), String::as_str);
-                    options.references.contains_key(name).then_some(name)
+                    (options.references.contains_key(name)
+                        && ((self
+                            .pointer_only_class_layouts
+                            .contains_key(&planned.fact.origin)
+                            && matches!(planned.fact.data, FactData::Record { .. }))
+                            || is_native_namespaced_declaration(planned.fact, &facts_by_origin)))
+                    .then_some(name)
                 })
                 .collect();
             for fact in self.facts.iter().filter(|fact| is_type_fact(fact)) {
@@ -1621,8 +1625,14 @@ impl Snapshot {
                 let display_name = display_names
                     .and_then(|names| names.get(&fact.name))
                     .map_or(fact.name.as_str(), String::as_str);
-                if promoted_reference_names.contains(display_name)
-                    && !self.pointer_only_class_layouts.contains_key(&fact.origin)
+                if local_reference_names.contains(display_name)
+                    && !planned_type_origins.contains(&fact.origin)
+                    && is_abi_reference_declaration_for_name(
+                        fact,
+                        &facts_by_origin,
+                        options.references,
+                        display_name,
+                    )
                 {
                     continue;
                 }
@@ -1638,13 +1648,22 @@ impl Snapshot {
                     .or_default()
                     .insert(namespace.clone());
             }
-            for fact in self.facts.iter().filter(|fact| {
-                !self.pointer_only_class_layouts.contains_key(&fact.origin) && is_type_fact(fact)
-            }) {
+            for fact in self
+                .facts
+                .iter()
+                .filter(|fact| !planned_type_origins.contains(&fact.origin) && is_type_fact(fact))
+            {
                 let name = display_names
                     .and_then(|names| names.get(&fact.name))
                     .map_or(fact.name.as_str(), String::as_str);
-                if !promoted_reference_names.contains(name) {
+                if !local_reference_names.contains(name)
+                    || !is_abi_reference_declaration_for_name(
+                        fact,
+                        &facts_by_origin,
+                        options.references,
+                        name,
+                    )
+                {
                     continue;
                 }
                 let reference = &options.references[name];
@@ -4163,15 +4182,6 @@ impl Snapshot {
                     .push(fact);
             }
         }
-        let promoted_pointer_class_declarations: HashSet<_> = self
-            .facts
-            .iter()
-            .filter(|fact| {
-                self.pointer_only_class_layouts.contains_key(&fact.origin)
-                    && matches!(fact.data, FactData::Record { .. })
-            })
-            .map(|fact| (fact.origin.tu.as_str(), &fact.spelling))
-            .collect();
         let canonical_typedef_declarations: HashSet<_> = self
             .facts
             .iter()
@@ -4539,11 +4549,25 @@ impl Snapshot {
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
-                let promoted_pointer_class =
-                    promoted_pointer_class_declarations.contains(&(tu, declaration));
+                let exact_local_dependency = self.header_partition_policy
+                    && facts_index
+                        .get(name.as_str())
+                        .into_iter()
+                        .chain(exact_dependency_facts_index.get(name.as_str()))
+                        .flatten()
+                        .copied()
+                        .any(|fact| {
+                            fact.origin.tu == tu
+                                && fact.spelling == *declaration
+                                && is_type_fact(fact)
+                                && !self.suppressed_type_origins.contains(&fact.origin)
+                                && ((self.pointer_only_class_layouts.contains_key(&fact.origin)
+                                    && matches!(fact.data, FactData::Record { .. }))
+                                    || is_native_namespaced_declaration(fact, &facts_by_origin))
+                        });
                 if references.contains_key(name)
                     && !root_names.contains(name)
-                    && !promoted_pointer_class
+                    && !exact_local_dependency
                 {
                     dependency_diagnostics.resolve(reference);
                     continue;
@@ -4973,9 +4997,11 @@ impl Snapshot {
         local_roots.extend(
             facts_by_name
                 .iter()
-                .filter(|(_, fact)| {
-                    self.pointer_only_class_layouts.contains_key(&fact.origin)
-                        && matches!(fact.data, FactData::Record { .. })
+                .filter(|(name, fact)| {
+                    (self.pointer_only_class_layouts.contains_key(&fact.origin)
+                        && matches!(fact.data, FactData::Record { .. }))
+                        || (references.contains_key(**name)
+                            && is_native_namespaced_declaration(fact, &facts_by_origin))
                 })
                 .map(|(name, _)| (*name).to_string()),
         );
@@ -6611,6 +6637,52 @@ fn is_flat_declaration(
         }
         Some(_) => false,
     }
+}
+
+fn is_abi_reference_declaration_for_name(
+    fact: &Fact,
+    facts_by_origin: &HashMap<&Origin, &Fact>,
+    references: &BTreeMap<String, TypeReference>,
+    name: &str,
+) -> bool {
+    let Some(reference) = references.get(name) else {
+        return false;
+    };
+    let mut namespaces = vec![];
+    let mut parent = fact.parent.as_ref();
+    while let Some(origin) = parent {
+        let Some(fact) = facts_by_origin.get(origin) else {
+            break;
+        };
+        if fact.kind == FactKind::Namespace {
+            namespaces.push(fact.name.as_str());
+        }
+        parent = fact.parent.as_ref();
+    }
+    namespaces.reverse();
+    namespaces.first().copied() == Some("ABI") && namespaces[1..].join(".") == reference.namespace
+}
+
+fn is_native_namespaced_declaration(
+    fact: &Fact,
+    facts_by_origin: &HashMap<&Origin, &Fact>,
+) -> bool {
+    let mut namespaces = vec![];
+    let mut parent = fact.parent.as_ref();
+    while let Some(origin) = parent {
+        let Some(fact) = facts_by_origin.get(origin) else {
+            break;
+        };
+        if fact.kind == FactKind::Namespace {
+            namespaces.push(fact.name.as_str());
+        }
+        parent = fact.parent.as_ref();
+    }
+    namespaces.reverse();
+    matches!(
+        namespaces.first().copied(),
+        Some(namespace) if namespace != "ABI" && namespace != "Windows"
+    )
 }
 
 fn defines_local_type(name: &str, fact: &Fact) -> bool {
