@@ -3992,7 +3992,20 @@ impl Snapshot {
             .facts
             .iter()
             .filter(|fact| {
-                fact.root && matches!(fact.data, FactData::Function { .. }) && is_flat_root(fact)
+                if !fact.root || !matches!(fact.data, FactData::Function { .. }) {
+                    return false;
+                }
+                if is_flat_root(fact) {
+                    return true;
+                }
+                self.header_partition_policy
+                    && self.root_owners.contains_key(&fact.origin)
+                    && selected_functions.is_some_and(|functions| {
+                        matches!(
+                            &fact.data,
+                            FactData::Function { link_name, .. } if functions.contains(link_name)
+                        )
+                    })
             })
             .filter(|fact| excluded_functions.is_none_or(|excluded| !excluded.contains(&fact.name)))
             .filter(|fact| {

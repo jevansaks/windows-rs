@@ -153,7 +153,10 @@ are not in the policy remain available for layout and type closure. If a referen
 needs emission, it is routed to the namespace in `EmitOptions`. An explicit traversed-header
 mapping or namespace authority takes precedence. Exact declaration-path dependencies may come from
 C++ namespaces that are not eligible as public roots; unrelated declarations from those headers
-remain excluded.
+remain excluded. A native free function in such a namespace becomes eligible only when its
+traversed-header declaration has an explicit owner and its link name is selected by
+`EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
+change non-header emission.
 
 Use `with_traversed_header_for_input(input, header, partition)` when one physical header is parsed
 in several extraction inputs with different compile definitions. The input selector matches

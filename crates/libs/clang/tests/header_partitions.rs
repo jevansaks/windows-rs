@@ -2193,6 +2193,223 @@ fn input_qualified_exclusions_filter_equivalent_alias_owners() {
 }
 
 #[test]
+fn selected_namespaced_native_functions_emit_from_traversed_headers() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("selected-namespaced-functions");
+    let dependency = scratch.join("dependency.h");
+    let public = scratch.join("public.h");
+    let external_winmd = scratch.join("external.winmd");
+    let output_winmd = scratch.join("output.winmd");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         namespace Support {\n\
+             struct ArcData { unsigned helper; };\n\
+             class HiddenSession {};\n\
+         }\n\
+         namespace ABI { namespace External { namespace Api {\n\
+             struct EXTERNAL_RECORD { int duplicate; };\n\
+         } } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &public,
+        format!(
+            "#pragma once\n\
+             #include \"{}\"\n\
+             #define W32M(text) __attribute__((annotate(text)))\n\
+             namespace Native {{\n\
+                 enum Status {{ Ok = 0, Failed = 1 }};\n\
+                 typedef Status NativeStatus;\n\
+                 enum FillMode {{ Alternate = 0, Winding = 1 }};\n\
+                 typedef FillMode NativeFillMode;\n\
+                 struct ArcData {{ float x; float y; }};\n\
+                 class Path {{}};\n\
+                 namespace Exports {{\n\
+                     extern \"C\" NativeStatus __stdcall AddPathArc(\n\
+                         Path* path,\n\
+                         ArcData* arc,\n\
+                         ABI::External::Api::EXTERNAL_RECORD* external);\n\
+                     W32M(\"win32metadata:import_library=annotated.dll\")\n\
+                     extern \"C\" NativeStatus __stdcall CreatePath(\n\
+                         NativeFillMode mode,\n\
+                         Path** path);\n\
+                     extern \"C\" NativeStatus __stdcall Unselected(ArcData* arc);\n\
+                 }}\n\
+             }}\n",
+            dependency.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    windows_rdl::reader()
+        .input_text(
+            "#[win32]\n\
+             mod External {\n\
+                 mod Api {\n\
+                     struct EXTERNAL_RECORD {\n\
+                         value: i32,\n\
+                     }\n\
+                 }\n\
+             }\n",
+        )
+        .output(&external_winmd)
+        .write()
+        .unwrap();
+    let references = windows_clang::MetadataReferences::new([windows_metadata::reader::File::new(
+        std::fs::read(&external_winmd).unwrap(),
+    )
+    .unwrap()]);
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", public.to_string_lossy()),
+        )
+        .with_roots([public.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=i686-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        snapshot
+            .facts()
+            .iter()
+            .filter(|fact| fact.name == "ArcData")
+            .count(),
+        2
+    );
+
+    let functions = BTreeSet::from(["AddPathArc".to_string(), "CreatePath".to_string()]);
+    let mut options = EmitOptions::new("Example.Common", references.types());
+    options.functions = Some(&functions);
+    let legacy = snapshot
+        .emit_with_options(&options)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        legacy.contains("selected function `AddPathArc` was not found"),
+        "{legacy}"
+    );
+
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        public.to_string_lossy(),
+        RootPartition::new("native", "Example.Native").with_library("AddPathArc", "mapped.dll"),
+    );
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let native = output(&partitions, "Example.Native");
+
+    assert!(native.contains("enum Status"), "{native}");
+    assert!(native.contains("type NativeStatus = Status"), "{native}");
+    assert!(native.contains("enum FillMode"), "{native}");
+    assert!(
+        native.contains("type NativeFillMode = FillMode"),
+        "{native}"
+    );
+    assert!(native.contains("struct ArcData"), "{native}");
+    assert!(native.contains("x: f32"), "{native}");
+    assert!(native.contains("y: f32"), "{native}");
+    assert!(!native.contains("helper"), "{native}");
+    assert!(!native.contains("HiddenSession"), "{native}");
+    assert!(!native.contains("EXTERNAL_RECORD {"), "{native}");
+    assert!(!native.contains("Unselected"), "{native}");
+    assert!(native.contains("#[library(\"mapped.dll\")]"), "{native}");
+    assert!(native.contains("#[library(\"annotated.dll\")]"), "{native}");
+    assert!(
+        native.contains(
+            "extern fn AddPathArc(path: *mut void, arc: *mut ArcData, external: *mut \
+             External::Api::EXTERNAL_RECORD) -> NativeStatus"
+        ),
+        "{native}"
+    );
+    assert!(
+        native.contains(
+            "extern fn CreatePath(mode: NativeFillMode, path: *mut *mut void) -> NativeStatus"
+        ),
+        "{native}"
+    );
+
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference(&external_winmd)
+        .reference_default()
+        .output(&output_winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&output_winmd).unwrap();
+    assert_eq!(
+        index
+            .expect("Example.Native", "NativeStatus")
+            .underlying_type(),
+        Some(Type::value_named("Example.Native", "Status"))
+    );
+    assert_eq!(
+        index
+            .expect("Example.Native", "NativeFillMode")
+            .underlying_type(),
+        Some(Type::value_named("Example.Native", "FillMode"))
+    );
+    let arc = index.expect("Example.Native", "ArcData");
+    assert_eq!(
+        arc.fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>(),
+        [("x".to_string(), Type::F32), ("y".to_string(), Type::F32)]
+    );
+    let Item::Fn(add_path_arc) = index.expect_item("Example.Native", "AddPathArc") else {
+        panic!("Example.Native.AddPathArc was not emitted as a function");
+    };
+    assert_eq!(add_path_arc.calling_convention(), "system");
+    assert_eq!(
+        add_path_arc.impl_map().unwrap().import_scope().name(),
+        "mapped.dll"
+    );
+    assert_eq!(
+        add_path_arc.signature(&[]).types,
+        [
+            Type::PtrMut(Box::new(Type::Void), 1),
+            Type::PtrMut(Box::new(Type::value_named("Example.Native", "ArcData")), 1),
+            Type::PtrMut(
+                Box::new(Type::value_named("External.Api", "EXTERNAL_RECORD")),
+                1
+            ),
+        ]
+    );
+    assert_eq!(
+        add_path_arc.signature(&[]).return_type,
+        Type::value_named("Example.Native", "NativeStatus")
+    );
+    let Item::Fn(create_path) = index.expect_item("Example.Native", "CreatePath") else {
+        panic!("Example.Native.CreatePath was not emitted as a function");
+    };
+    assert_eq!(create_path.calling_convention(), "system");
+    assert_eq!(
+        create_path.impl_map().unwrap().import_scope().name(),
+        "annotated.dll"
+    );
+    assert_eq!(
+        create_path.signature(&[]).types,
+        [
+            Type::value_named("Example.Native", "NativeFillMode"),
+            Type::PtrMut(Box::new(Type::Void), 2),
+        ]
+    );
+    assert_eq!(
+        create_path.signature(&[]).return_type,
+        Type::value_named("Example.Native", "NativeStatus")
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn aggregate_and_satellite_inputs_match_case_variant_selectors() {
     helpers::ensure_libclang();
 
