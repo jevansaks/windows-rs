@@ -2308,11 +2308,7 @@ impl Snapshot {
                 .collect::<BTreeSet<_>>()
         };
         let mut variants: BTreeMap<&str, BTreeMap<String, Vec<&Fact>>> = BTreeMap::new();
-        for fact in self
-            .facts
-            .iter()
-            .filter(|fact| fact.root && !matches!(fact.data, FactData::Macro { .. }))
-        {
+        for fact in self.facts.iter().filter(|fact| fact.root) {
             let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) else {
                 continue;
             };
