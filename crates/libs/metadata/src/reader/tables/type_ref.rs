@@ -18,4 +18,16 @@ impl<'a> TypeRef<'a> {
     pub fn namespace(&self) -> &'a str {
         self.str(2)
     }
+
+    /// Gets the logical type name, including the full enclosing TypeRef path.
+    pub fn qualified_name(&self) -> TypeName {
+        if let ResolutionScope::TypeRef(enclosing) = self.scope() {
+            let mut name = enclosing.qualified_name();
+            name.name.push('/');
+            name.name.push_str(self.name());
+            name
+        } else {
+            TypeName::named(self.namespace(), self.name())
+        }
+    }
 }

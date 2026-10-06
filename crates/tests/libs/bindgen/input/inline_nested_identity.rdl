@@ -1,0 +1,23 @@
+//! --filter Left Right
+#[win32]
+mod Left {
+    struct Outer {
+        tag: u32,
+        Anonymous: struct {
+            owner: *mut Outer,
+            Anonymous: union {
+                signed: i32,
+                unsigned: u32,
+            },
+        },
+    }
+}
+
+#[win32]
+mod Right {
+    struct Outer {
+        Anonymous: struct {
+            value: u64,
+        },
+    }
+}

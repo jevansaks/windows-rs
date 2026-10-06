@@ -638,6 +638,10 @@ impl File {
         0..self.tables[TypeDef::TABLE].len
     }
 
+    pub(crate) fn TypeRef(&self) -> std::ops::Range<usize> {
+        0..self.tables[TypeRef::TABLE].len
+    }
+
     pub(crate) fn NestedClass(&self) -> std::ops::Range<usize> {
         0..self.tables[NestedClass::TABLE].len
     }

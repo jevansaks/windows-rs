@@ -1007,6 +1007,7 @@ pub struct ParamAnnotation {
     pub com_out_ptr: bool,
     pub retval: bool,
     pub null_terminated: bool,
+    pub null_null_terminated: bool,
     pub size: Option<SalSize>,
     pub unsupported: Option<String>,
 }
@@ -9121,6 +9122,11 @@ fn param_attributes(
     }
     if annotation.optional && !metadata_annotations.contains(&Annotation::Optional) {
         result.push_str("#[opt] ");
+    }
+    if annotation.null_null_terminated
+        && !metadata_annotations.contains(&Annotation::NullNullTerminated)
+    {
+        result.push_str("#[null_null_terminated] ");
     }
     if annotation.retval {
         result.push_str("#[retval] ");

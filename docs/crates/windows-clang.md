@@ -374,6 +374,11 @@ optionality, size relationships, return-value markers, and interface-selection m
 not rewrite the declared C type. Explicit string and pointer typedefs therefore survive parameter
 annotations.
 
+`ParamAnnotation::null_terminated` records ordinary `_z_` string contracts.
+`ParamAnnotation::null_null_terminated` records the captured `_NullNull_terminated_` multistring
+contract and emits `#[null_null_terminated]`. The two flags are independent, and neither is
+inferred for an unannotated binary buffer.
+
 ### Win32 metadata annotations
 
 Headers can add metadata policy with Clang `annotate` attributes whose payload begins with

@@ -35,3 +35,7 @@ assert_eq!(fields[1].name(), "Y");
 assert_eq!(fields[0].ty(), Type::F32);
 assert_eq!(fields[1].ty(), Type::F32);
 ```
+
+`TypeDef::qualified_name` and `TypeRef::qualified_name` preserve nested identity as a root
+namespace plus a slash-separated enclosing path. The physical `namespace` and `name` accessors
+continue to return the exact row values.

@@ -5365,6 +5365,9 @@ fn parameter_annotation(cursor: CXCursor) -> ParamAnnotation {
         if sal_name.contains("_z_") || sal_name.ends_with("_z") {
             result.null_terminated = true;
         }
+        if annotation == "_NullNull_terminated_" {
+            result.null_null_terminated = true;
+        }
         if result.size.is_none()
             && (annotation.contains("_reads_")
                 || annotation.contains("_writes_")

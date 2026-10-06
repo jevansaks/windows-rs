@@ -6,6 +6,7 @@ pub struct Index {
     types: HashMap<String, HashMap<String, Vec<(usize, usize)>>>,
     items: HashMap<String, HashMap<String, Vec<RawItem>>>,
     nested: HashMap<(usize, usize), Vec<usize>>,
+    enclosing: HashMap<(usize, usize), usize>,
     architecture: i32,
 }
 
@@ -44,6 +45,7 @@ impl Index {
         // Build types first so `Apis` detection can inspect synthesized `TypeDef` values.
         let mut types: HashMap<String, HashMap<String, Vec<(usize, usize)>>> = HashMap::new();
         let mut nested: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+        let mut enclosing: HashMap<(usize, usize), usize> = HashMap::new();
 
         for (file_pos, file) in files.iter().enumerate() {
             for def_pos in file.TypeDef() {
@@ -67,6 +69,7 @@ impl Index {
                 let inner = file.usize(map, NestedClass::TABLE, 0) - 1;
                 let outer = file.usize(map, NestedClass::TABLE, 1) - 1;
                 nested.entry((file_pos, outer)).or_default().push(inner);
+                enclosing.insert((file_pos, inner), outer);
             }
         }
 
@@ -75,6 +78,7 @@ impl Index {
             types,
             items: HashMap::new(),
             nested,
+            enclosing,
             architecture,
         };
 
@@ -165,6 +169,18 @@ impl Index {
             .filter(|def| self.supports_architecture(*def))
     }
 
+    /// Iterates every `TypeRef` in the index.
+    pub fn type_refs(&self) -> impl Iterator<Item = TypeRef<'_>> + '_ {
+        self.files
+            .iter()
+            .enumerate()
+            .flat_map(move |(file, value)| {
+                value
+                    .TypeRef()
+                    .map(move |pos| TypeRef(Row::new(self, file, pos)))
+            })
+    }
+
     /// Iterates the `TypeDef`s matching `(namespace, name)`.
     pub fn get(&self, namespace: &str, name: &str) -> impl Iterator<Item = TypeDef<'_>> + '_ {
         self.types
@@ -237,6 +253,13 @@ impl Index {
                 })
             })
             .filter(|def| self.supports_architecture(*def))
+    }
+
+    /// Gets the type that directly encloses `ty`, if `ty` is nested.
+    pub fn enclosing(&self, ty: TypeDef) -> Option<TypeDef<'_>> {
+        self.enclosing
+            .get(&(ty.0.file, ty.0.pos))
+            .map(|pos| TypeDef(Row::new(self, ty.0.file, *pos)))
     }
 
     /// Depth-first walk of every type nested directly or transitively inside `ty`.

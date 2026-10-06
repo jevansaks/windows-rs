@@ -48,6 +48,11 @@ namespace, type, nested-type, and expanded Win32 `Apis` indexes. A zero architec
 all rows; `Index::new_for_architecture` selects neutral rows plus one of X86 (1), X64 (2), or Arm64
 (4).
 
+Nested TypeDefs and TypeRefs keep empty namespaces and leaf names in their physical rows.
+`TypeDef::qualified_name` and `TypeRef::qualified_name` reconstruct their logical identity as the
+root namespace plus a slash-separated enclosing path. `Index::enclosing` follows `NestedClass`
+ownership, while `Index::type_refs` exposes raw TypeRef rows and their resolution scopes.
+
 The writer API is lower-level. `writer::File` builds ECMA-335 rows and `into_stream` returns the
 finished bytes. Prefer [`windows-rdl`](windows-rdl.md) when a reviewable source format is useful;
 use the writer directly when a tool is copying or synthesizing table rows.
@@ -60,6 +65,8 @@ use the writer directly when a tool is copying or synthesizing table rows.
 | Read bytes already in memory | `reader::File::new` |
 | Query several files together | `reader::Index::new` |
 | Select one architecture | `reader::Index::new_for_architecture` |
+| Inspect raw TypeRef scopes | `reader::Index::type_refs` |
+| Find a nested TypeDef owner | `reader::Index::enclosing` |
 | Merge ordinary winmds | `merge().input(...).output(...).merge()` |
 | Merge per-architecture winmds | `merge().arch_input(path, bits)` |
 | Union compatible duplicate enums | `Merger::union_enums` |

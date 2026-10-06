@@ -84,6 +84,11 @@ mod Example {
 }
 ```
 
+Inline struct and union fields compile to nested TypeDefs with `NestedClass` ownership. References
+to those definitions use an enclosing TypeRef chain rather than a module-scoped leaf name. The
+writer follows the same chain when reconstructing inline records, so matching leaf names in
+different parents or namespaces do not alias.
+
 Most attributes name a metadata attribute type directly. Some attributes use short pseudo-attribute
 names. The reader expands those names to full metadata attributes. See `PSEUDO_ATTRS` in
 `windows-rdl`.

@@ -126,20 +126,28 @@ impl<'a> TypeDefOrRef<'a> {
         }
     }
 
+    pub fn qualified_name(&self) -> TypeName {
+        match self {
+            Self::TypeDef(row) => row.qualified_name(),
+            Self::TypeRef(row) => row.qualified_name(),
+            rest => panic!("{rest:?}"),
+        }
+    }
+
     pub fn ty(&self, generics: &[Type]) -> Type {
         if let Self::TypeSpec(def) = self {
             return def.ty(generics);
         }
 
         if let Self::TypeDef(def) = self {
-            let tn = TypeName::named(def.namespace(), def.name());
+            let tn = def.qualified_name();
             return match def.category() {
                 TypeCategory::Struct | TypeCategory::Enum => Type::ValueName(tn),
                 _ => Type::ClassName(tn),
             };
         }
 
-        Type::ClassName(TypeName::named(self.namespace(), self.name()))
+        Type::ClassName(self.qualified_name())
     }
 }
 

@@ -38,3 +38,6 @@ every namespace in the file.
 Use `writer().partition(map)` for metadata whose item names are unique in a flat namespace. Use
 `writer().partition_qualified(map)` when the same short name can occur in different namespaces.
 The flat and qualified partition modes cannot be combined on one writer.
+
+Inline structs and unions compile to nested TypeDefs. Their field signatures retain the full
+enclosing TypeRef chain, and the writer uses that identity when reconstructing inline RDL.

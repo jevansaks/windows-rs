@@ -384,9 +384,9 @@ impl Type {
                 };
 
                 if let Some(outer) = enclosing
-                    && ns.is_empty()
+                    && let Some(nested) = Self::resolve_nested_cpp_struct(outer, ns, n)
                 {
-                    return Self::CppStruct(outer.nested[n].clone());
+                    return Self::CppStruct(nested);
                 }
                 let mut bindgen_ty = reader.unwrap_type_name(ns, n);
                 if !tn.generics.is_empty() {
@@ -431,6 +431,33 @@ impl Type {
                 _ => Self::from_metadata_type(inner, enclosing, generics, reader),
             },
         }
+    }
+
+    fn resolve_nested_cpp_struct(
+        outer: &CppStruct,
+        namespace: &str,
+        name: &str,
+    ) -> Option<CppStruct> {
+        if namespace.is_empty() && !name.contains('/') {
+            return outer.nested.get(name).cloned();
+        }
+
+        let outer_name = outer.def.qualified_name();
+        if namespace != outer_name.namespace {
+            return None;
+        }
+
+        let relative = name
+            .strip_prefix(&outer_name.name)?
+            .strip_prefix('/')
+            .filter(|name| !name.is_empty())?;
+        let mut current = outer;
+
+        for segment in relative.split('/') {
+            current = current.nested.get(segment)?;
+        }
+
+        Some(current.clone())
     }
 
     pub fn to_const_type(&self) -> Self {

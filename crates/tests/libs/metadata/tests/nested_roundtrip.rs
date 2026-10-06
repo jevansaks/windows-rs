@@ -13,6 +13,69 @@ fn winmd(dir: &std::path::Path, name: &str, rdl: &str) -> String {
     out.to_string_lossy().into_owned()
 }
 
+fn type_ref<'a>(index: &'a reader::Index, namespace: &str, name: &str) -> reader::TypeRef<'a> {
+    index
+        .type_refs()
+        .find(|type_ref| {
+            let qualified = type_ref.qualified_name();
+            qualified.namespace == namespace && qualified.name == name
+        })
+        .unwrap_or_else(|| panic!("missing TypeRef {namespace}.{name}"))
+}
+
+fn assert_type_ref_chain(index: &reader::Index, namespace: &str, name: &str) {
+    let row = type_ref(index, namespace, name);
+    if let Some((parent, leaf)) = name.rsplit_once('/') {
+        assert_eq!(row.namespace(), "");
+        assert_eq!(row.name(), leaf);
+        let expected = type_ref(index, namespace, parent);
+        match row.scope() {
+            reader::ResolutionScope::TypeRef(actual) => assert_eq!(actual, expected),
+            scope => panic!("nested TypeRef {namespace}.{name} has scope {scope:?}"),
+        }
+    } else {
+        assert_eq!(row.namespace(), namespace);
+        assert_eq!(row.name(), name);
+        assert!(
+            matches!(row.scope(), reader::ResolutionScope::Module(_)),
+            "top-level TypeRef {namespace}.{name} must have module scope"
+        );
+    }
+}
+
+fn colliding_nested_winmd(path: &std::path::Path) {
+    let mut file = writer::File::new("colliding-nested");
+    let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+
+    for (namespace, outer_name, member) in [
+        ("Test", "First", "first"),
+        ("Test", "Second", "second"),
+        ("Other", "First", "other"),
+    ] {
+        let outer = file.TypeDef(
+            namespace,
+            outer_name,
+            value_type,
+            TypeAttributes::Public | TypeAttributes::SequentialLayout | TypeAttributes::Sealed,
+        );
+        file.Field(
+            "Anonymous",
+            &Type::value_named(namespace, &format!("{outer_name}/Anonymous")),
+            FieldAttributes::Public,
+        );
+        let nested = file.TypeDef(
+            "",
+            "Anonymous",
+            value_type,
+            TypeAttributes::NestedPublic | TypeAttributes::ExplicitLayout | TypeAttributes::Sealed,
+        );
+        file.NestedClass(nested, outer);
+        file.Field(member, &Type::I32, FieldAttributes::Public);
+    }
+
+    std::fs::write(path, file.into_stream()).unwrap();
+}
+
 /// `Outer` must decompose into a top-level type with one anonymous nested struct,
 /// which in turn contains one anonymous nested union, expressed as real
 /// `NestedClass` rows (nested types living in the empty namespace, `NestedPublic`).
@@ -25,6 +88,8 @@ fn assert_nested(index: &reader::Index) {
         !outer.flags().is_nested(),
         "top-level Outer must not be nested"
     );
+    assert_eq!(outer.qualified_name().namespace, "Test");
+    assert_eq!(outer.qualified_name().name, "Outer");
 
     let children: Vec<_> = index.nested(outer).collect();
     assert_eq!(
@@ -45,6 +110,8 @@ fn assert_nested(index: &reader::Index) {
         !child.flags().contains(TypeAttributes::ExplicitLayout),
         "the inner anonymous aggregate should be a struct (sequential layout)"
     );
+    assert_eq!(child.qualified_name().namespace, "Test");
+    assert_eq!(child.qualified_name().name, "Outer/Outer_2");
 
     let grandchildren: Vec<_> = index.nested(child).collect();
     assert_eq!(
@@ -58,6 +125,49 @@ fn assert_nested(index: &reader::Index) {
             .contains(TypeAttributes::ExplicitLayout),
         "the deepest anonymous aggregate should be a union (explicit layout)"
     );
+    assert_eq!(grandchildren[0].qualified_name().namespace, "Test");
+    assert_eq!(
+        grandchildren[0].qualified_name().name,
+        "Outer/Outer_2/Outer_2_2"
+    );
+
+    let outer_fields: Vec<_> = outer.fields().collect();
+    assert!(
+        matches!(
+            outer_fields[0].ty(),
+            Type::ValueName(tn) if &tn == ("Test", "Helper")
+        ),
+        "ordinary top-level references must remain top-level"
+    );
+    assert!(
+        matches!(
+            outer_fields[2].ty(),
+            Type::ValueName(tn) if &tn == ("Test", "Outer/Outer_2")
+        ),
+        "inline child must retain its full enclosing path"
+    );
+
+    let child_fields: Vec<_> = child.fields().collect();
+    assert!(
+        matches!(
+            child_fields[1].ty(),
+            Type::PtrMut(inner, 1)
+                if matches!(inner.as_ref(), Type::ValueName(tn) if tn == ("Test", "Outer"))
+        ),
+        "a nested record must retain an exact pointer back to its outer type"
+    );
+    assert!(
+        matches!(
+            child_fields[2].ty(),
+            Type::ValueName(tn) if &tn == ("Test", "Outer/Outer_2/Outer_2_2")
+        ),
+        "depth-two child must retain its full enclosing path"
+    );
+
+    assert_type_ref_chain(index, "Test", "Helper");
+    assert_type_ref_chain(index, "Test", "Outer");
+    assert_type_ref_chain(index, "Test", "Outer/Outer_2");
+    assert_type_ref_chain(index, "Test", "Outer/Outer_2/Outer_2_2");
 }
 
 /// Inline anonymous nested struct/union syntax must survive the whole pipeline:
@@ -70,9 +180,15 @@ fn nested_types_survive_rdl_merge_and_writer() {
     std::fs::create_dir_all(&dir).unwrap();
 
     let src = "#[win32] mod Test { \
+        struct Helper { value: i32 } \
         struct Outer { \
+            helper: Helper, \
             header: u32, \
-            Anonymous: struct { x: i32, Anonymous: union { a: i32, b: f32 } }, \
+            Anonymous: struct { \
+                x: i32, \
+                owner: *mut Outer, \
+                Anonymous: union { a: i32, b: f32 }, \
+            }, \
             tail: u16, \
         } \
     }";
@@ -116,6 +232,120 @@ fn nested_types_survive_rdl_merge_and_writer() {
         .unwrap();
     let roundtrip_index = reader::Index::read(roundtrip.to_string_lossy().as_ref()).unwrap();
     assert_nested(&roundtrip_index);
+}
+
+#[test]
+fn nested_type_refs_survive_namespace_remap() {
+    let dir = std::env::temp_dir().join("win_nested_remap");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let input = winmd(
+        &dir,
+        "input",
+        "#[win32] mod Flat { \
+            struct Outer { \
+                Anonymous: struct { owner: *mut Outer }, \
+            } \
+        }",
+    );
+    let output = dir.join("output.winmd");
+
+    remap()
+        .input(input)
+        .source("Flat")
+        .route("Outer", "Routed")
+        .fallback("Fallback")
+        .output(&output)
+        .remap()
+        .unwrap();
+
+    let index = reader::Index::read(output.to_string_lossy().as_ref()).unwrap();
+    let outer = index.get("Routed", "Outer").next().unwrap();
+    let child = index.nested(outer).next().unwrap();
+    assert_eq!(child.qualified_name().namespace, "Routed");
+    assert_eq!(child.qualified_name().name, "Outer/Outer_0");
+    assert!(
+        matches!(
+            outer.fields().next().unwrap().ty(),
+            Type::ValueName(tn) if &tn == ("Routed", "Outer/Outer_0")
+        ),
+        "the nested path must route with its outer type"
+    );
+    assert!(
+        matches!(
+            child.fields().next().unwrap().ty(),
+            Type::PtrMut(inner, 1)
+                if matches!(inner.as_ref(), Type::ValueName(tn) if tn == ("Routed", "Outer"))
+        ),
+        "the pointer back to the outer type must use the remapped namespace"
+    );
+    assert_type_ref_chain(&index, "Routed", "Outer");
+    assert_type_ref_chain(&index, "Routed", "Outer/Outer_0");
+}
+
+#[test]
+fn nested_type_ref_paths_disambiguate_matching_leaf_names() {
+    let dir = std::env::temp_dir().join("win_nested_collisions");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let path = winmd(
+        &dir,
+        "collisions",
+        "#[win32] mod Left { \
+            struct Outer { Anonymous: struct { left: i32 } } \
+        } \
+        #[win32] mod Right { \
+            struct Outer { Anonymous: struct { right: i32 } } \
+        }",
+    );
+    let index = reader::Index::read(path).unwrap();
+
+    for namespace in ["Left", "Right"] {
+        let outer = index.get(namespace, "Outer").next().unwrap();
+        let child = index.nested(outer).next().unwrap();
+        assert_eq!(child.name(), "Outer_0");
+        assert_eq!(child.qualified_name().namespace, namespace);
+        assert_eq!(child.qualified_name().name, "Outer/Outer_0");
+        assert_type_ref_chain(&index, namespace, "Outer");
+        assert_type_ref_chain(&index, namespace, "Outer/Outer_0");
+    }
+}
+
+#[test]
+fn nested_type_ref_paths_disambiguate_parents_and_namespaces() {
+    let dir = std::env::temp_dir().join("win_nested_parent_collisions");
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("input.winmd");
+    colliding_nested_winmd(&input);
+
+    let assert_collisions = |index: &reader::Index| {
+        for (namespace, outer_name) in [("Test", "First"), ("Test", "Second"), ("Other", "First")] {
+            let outer = index.get(namespace, outer_name).next().unwrap();
+            let child = index.nested(outer).next().unwrap();
+            let path = format!("{outer_name}/Anonymous");
+            assert_eq!(child.name(), "Anonymous");
+            assert_eq!(child.qualified_name().namespace, namespace);
+            assert_eq!(child.qualified_name().name, path);
+            assert!(
+                matches!(
+                    outer.fields().next().unwrap().ty(),
+                    Type::ValueName(tn)
+                        if tn.namespace == namespace && tn.name == path
+                ),
+                "{namespace}.{outer_name}"
+            );
+            assert_type_ref_chain(index, namespace, outer_name);
+            assert_type_ref_chain(index, namespace, &path);
+        }
+    };
+
+    let index = reader::Index::read(&input).unwrap();
+    assert_collisions(&index);
+
+    let merged = dir.join("merged.winmd");
+    merge().input(&input).output(&merged).merge().unwrap();
+    let merged_index = reader::Index::read(merged).unwrap();
+    assert_collisions(&merged_index);
 }
 
 /// The architecture of a nested type is always that of its enclosing type, so the

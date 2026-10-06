@@ -147,7 +147,7 @@ impl Remapper {
 
     fn remap_type_name(&self, tn: &TypeName) -> TypeName {
         TypeName {
-            namespace: self.target(&tn.namespace, &tn.name),
+            namespace: self.target(&tn.namespace, tn.name.split('/').next().unwrap_or(&tn.name)),
             name: tn.name.clone(),
             generics: tn.generics.iter().map(|g| self.remap_type(g)).collect(),
         }

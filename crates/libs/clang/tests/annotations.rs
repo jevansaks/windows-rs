@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use windows_clang::{EmitOptions, Input, extract};
+use windows_clang::{EmitOptions, FactData, Input, Snapshot, extract};
 use windows_metadata::HasAttributes;
 
 const METADATA_RDL: &str = include_str!("../../../../metadata/metadata.rdl");
@@ -15,6 +15,135 @@ fn attribute_strings<'a>(item: impl HasAttributes<'a>, name: &str) -> Vec<String
             value.clone()
         })
         .collect()
+}
+
+fn function_parameter<'a>(snapshot: &'a Snapshot, name: &str) -> &'a windows_clang::Parameter {
+    let fact = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == name)
+        .unwrap();
+    let FactData::Function { params, .. } = &fact.data else {
+        panic!("{name} was not extracted as a function");
+    };
+    &params[0]
+}
+
+#[test]
+fn captured_double_null_sal_remains_distinct() {
+    helpers::ensure_libclang();
+
+    let source = r#"
+        #define SAL(text) __attribute__((annotate(text)))
+        typedef void* HLOCAL;
+        typedef unsigned short WCHAR;
+
+        extern "C" void MultiString(
+            SAL("_Post_")
+            SAL("_NullNull_terminated_")
+            WCHAR* value);
+
+        extern "C" void SingleString(
+            SAL("_Out_z_")
+            WCHAR* value);
+
+        extern "C" void BinaryBuffer(WCHAR* value);
+
+        extern "C" void FreeOptional(
+            SAL("_Frees_ptr_opt_")
+            HLOCAL value);
+    "#;
+    let snapshot = extract(
+        [Input::new("captured-sal.hpp", source)],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    let multi = function_parameter(&snapshot, "MultiString");
+    assert!(multi.annotation.null_null_terminated);
+    assert!(!multi.annotation.null_terminated);
+
+    let single = function_parameter(&snapshot, "SingleString");
+    assert!(!single.annotation.null_null_terminated);
+    assert!(single.annotation.null_terminated);
+
+    let binary = function_parameter(&snapshot, "BinaryBuffer");
+    assert!(!binary.annotation.null_null_terminated);
+    assert!(!binary.annotation.null_terminated);
+
+    let free = function_parameter(&snapshot, "FreeOptional");
+    assert!(free.annotation.optional);
+    assert!(!free.annotation.input);
+    assert!(!free.annotation.output);
+
+    let rdl = snapshot
+        .emit_with_library("CapturedSal", "test.dll")
+        .unwrap();
+    assert!(
+        rdl.contains("MultiString(#[null_null_terminated] value:"),
+        "{rdl}"
+    );
+    assert!(
+        !rdl.contains("SingleString(#[null_null_terminated]"),
+        "{rdl}"
+    );
+    assert!(
+        !rdl.contains("BinaryBuffer(#[null_null_terminated]"),
+        "{rdl}"
+    );
+    assert!(rdl.contains("FreeOptional(#[opt] value:"), "{rdl}");
+
+    let output = std::env::temp_dir().join(format!(
+        "windows-clang-captured-sal-{}.winmd",
+        std::process::id()
+    ));
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_text(&rdl)
+        .output(&output)
+        .write()
+        .unwrap_or_else(|error| panic!("{error}\n{rdl}"));
+    let index = windows_metadata::reader::Index::read(&output).unwrap();
+
+    for (name, expected) in [
+        ("MultiString", true),
+        ("SingleString", false),
+        ("BinaryBuffer", false),
+    ] {
+        let windows_metadata::reader::Item::Fn(function) = index.expect_item("CapturedSal", name)
+        else {
+            panic!("{name} was not emitted as a function");
+        };
+        let parameter = function.params_by_sequence(1).unwrap().params()[0].unwrap();
+        assert_eq!(
+            parameter.has_attribute("NullNullTerminatedAttribute"),
+            expected,
+            "{name}"
+        );
+    }
+
+    let windows_metadata::reader::Item::Fn(free) = index.expect_item("CapturedSal", "FreeOptional")
+    else {
+        panic!("FreeOptional was not emitted as a function");
+    };
+    let parameter = free.params_by_sequence(1).unwrap().params()[0].unwrap();
+    assert!(
+        parameter
+            .flags()
+            .contains(windows_metadata::ParamAttributes::In)
+    );
+    assert!(
+        parameter
+            .flags()
+            .contains(windows_metadata::ParamAttributes::Optional)
+    );
+
+    std::fs::remove_file(output).unwrap();
 }
 
 #[test]

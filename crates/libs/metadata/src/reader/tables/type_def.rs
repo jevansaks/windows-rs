@@ -19,6 +19,18 @@ impl<'a> TypeDef<'a> {
         self.str(2)
     }
 
+    /// Gets the logical type name, including the full enclosing TypeDef path.
+    pub fn qualified_name(&self) -> TypeName {
+        if let Some(enclosing) = self.index().enclosing(*self) {
+            let mut name = enclosing.qualified_name();
+            name.name.push('/');
+            name.name.push_str(self.name());
+            name
+        } else {
+            TypeName::named(self.namespace(), self.name())
+        }
+    }
+
     pub fn extends(&self) -> Option<TypeDefOrRef<'a>> {
         if self.usize(3) == 0 {
             return None;

@@ -62,6 +62,8 @@ omitted if another unsuppressed projection can own that output.
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
 planning into RDL and WinMD attributes. Unknown, malformed, or misplaced annotations are errors.
+Captured SAL keeps ordinary NUL-terminated strings and double-NUL multistrings as separate
+parameter facts through `ParamAnnotation`.
 
 Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
 to stderr without changing the generated RDL.
