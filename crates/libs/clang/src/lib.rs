@@ -4236,9 +4236,25 @@ impl Snapshot {
         let declarations = DeclarationIndex::new(&self.facts);
         let facts_by_origin: HashMap<_, _> =
             self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
-        let is_flat_root = |fact| is_flat_declaration(fact, &facts_by_origin, references, true);
-        let is_flat_dependency =
-            |fact| is_flat_declaration(fact, &facts_by_origin, references, false);
+        let rooted_interface_iids: BTreeSet<_> = self
+            .facts
+            .iter()
+            .filter(|fact| fact.root && matches!(fact.data, FactData::Guid { .. }))
+            .filter_map(|fact| Some((fact.origin.tu.as_str(), fact.name.strip_prefix("IID_")?)))
+            .collect();
+        let is_identified_native_interface_root = |fact: &Fact| {
+            self.header_partition_policy
+                && fact.root
+                && is_identified_native_interface(fact, &facts_by_origin, &rooted_interface_iids)
+        };
+        let is_flat_root = |fact| {
+            is_flat_declaration(fact, &facts_by_origin, references, true)
+                || is_identified_native_interface_root(fact)
+        };
+        let is_flat_dependency = |fact| {
+            is_flat_declaration(fact, &facts_by_origin, references, false)
+                || is_identified_native_interface_root(fact)
+        };
         let interfaces: BTreeSet<_> = self
             .facts
             .iter()
@@ -6978,6 +6994,19 @@ fn is_native_namespaced_declaration(
         namespaces.first().copied(),
         Some(namespace) if namespace != "ABI" && namespace != "Windows"
     )
+}
+
+fn is_identified_native_interface(
+    fact: &Fact,
+    facts_by_origin: &HashMap<&Origin, &Fact>,
+    rooted_interface_iids: &BTreeSet<(&str, &str)>,
+) -> bool {
+    let FactData::Interface { guid, .. } = &fact.data else {
+        return false;
+    };
+    is_native_namespaced_declaration(fact, facts_by_origin)
+        && (guid.is_some()
+            || rooted_interface_iids.contains(&(fact.origin.tu.as_str(), fact.name.as_str())))
 }
 
 fn defines_local_type(name: &str, fact: &Fact) -> bool {

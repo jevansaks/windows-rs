@@ -7,7 +7,7 @@ use windows_clang::{
 };
 use windows_metadata::{
     Type, Value,
-    reader::{HasAttributes, Item},
+    reader::{HasAttributes, Item, TypeCategory},
 };
 
 const METADATA_RDL: &str = include_str!("../../../../metadata/metadata.rdl");
@@ -384,6 +384,327 @@ fn namespace_containers_do_not_enter_partition_symbol_collisions() {
     assert!(index.contains("Example.First", "GLOBAL_CONTROL"));
     assert!(!index.contains("Example.First", "HIDDEN_NATIVE"));
     assert!(!index.contains("Example.Second", "HIDDEN_NATIVE"));
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn identified_native_namespaced_interfaces_remain_public_roots() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("identified-native-namespaced-interfaces");
+    let support = scratch.join("support.h");
+    let gdiplus = scratch.join("gdiplus.h");
+    let printing = scratch.join("printing.h");
+    std::fs::write(
+        &support,
+        "#pragma once\n\
+         #define interface struct\n\
+         #define PURE = 0\n\
+         #define THIS\n\
+         #define THIS_\n\
+         #define STDMETHODCALLTYPE\n\
+         #define STDMETHOD(method) virtual HRESULT STDMETHODCALLTYPE method\n\
+         #define STDMETHOD_(type, method) virtual type STDMETHODCALLTYPE method\n\
+         #define DECLARE_INTERFACE_(iface, baseiface) \\\n\
+             interface __declspec(novtable) iface : public baseiface\n\
+         #define MIDL_INTERFACE(text) \\\n\
+             struct __declspec(uuid(text)) __declspec(novtable)\n\
+         #define DEFINE_GUID(name, ...)\n\
+         typedef long HRESULT;\n\
+         typedef unsigned int UINT;\n\
+         typedef unsigned long ULONG;\n\
+         #define VOID void\n\
+         struct GUID {\n\
+             unsigned long Data1;\n\
+             unsigned short Data2;\n\
+             unsigned short Data3;\n\
+             unsigned char Data4[8];\n\
+         };\n\
+         MIDL_INTERFACE(\"00000000-0000-0000-c000-000000000046\")\n\
+         IUnknown {\n\
+             STDMETHOD(QueryInterface)(const GUID& iid, void** object) PURE;\n\
+             STDMETHOD_(ULONG, AddRef)(THIS) PURE;\n\
+             STDMETHOD_(ULONG, Release)(THIS) PURE;\n\
+         };\n\
+         MIDL_INTERFACE(\"4a5031b1-1f3f-4db0-a462-4530ed8b0451\")\n\
+         IPrintAsyncNotifyChannel : public IUnknown {\n\
+             STDMETHOD(SendNotification)(void* data) PURE;\n\
+             STDMETHOD(CloseChannel)(void* data) PURE;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &gdiplus,
+        "#pragma once\n\
+         #include \"support.h\"\n\
+         namespace Gdiplus {\n\
+         DEFINE_GUID(CodecIImageBytes, 0x025d1823, 0x6c7d, 0x447b, 0xbb, 0xdb, 0xa3, \
+             0xcb, 0xc3, 0xdf, 0xa2, 0xfc)\n\
+         MIDL_INTERFACE(\"025D1823-6C7D-447B-BBDB-A3CBC3DFA2FC\")\n\
+         IImageBytes : public IUnknown {\n\
+             STDMETHOD(CountBytes)(UINT* count) PURE;\n\
+             STDMETHOD(LockBytes)(UINT count, ULONG offset, const VOID** bytes) PURE;\n\
+             STDMETHOD(UnlockBytes)(const VOID* bytes, UINT count, ULONG offset) PURE;\n\
+         };\n\
+         struct HIDDEN_GDIPLUS_HELPER { int value; };\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &printing,
+        "#pragma once\n\
+         #include \"support.h\"\n\
+         extern \"C\" {\n\
+         namespace NPrintAsyncNotifyProvider {\n\
+         DEFINE_GUID(IID_IPrintAsyncNotify, 0x532818f7, 0x921b, 0x4fb2, 0xbf, 0xf8, 0x2f, \
+             0x4f, 0xd5, 0x2e, 0xbe, 0xbf)\n\
+         DEFINE_GUID(IID_IBidiAsyncNotifyChannel, 0x532818f7, 0x921b, 0x4fb2, 0xbf, 0xf8, \
+             0x2f, 0x4f, 0xd5, 0x2e, 0xbe, 0xbf)\n\
+         DEFINE_GUID(IID_IPrintAsyncNotifyRegistration, 0x0f6f27b6, 0x6f86, 0x4591, \
+             0x92, 0x03, 0x64, 0xc3, 0xbf, 0xad, 0xed, 0xfe)\n\
+         DEFINE_GUID(IID_HelperContract, 0x11111111, 0x2222, 0x3333, 0x44, 0x55, 0x66, \
+             0x77, 0x88, 0x99, 0xaa, 0xbb)\n\
+         typedef interface IBidiAsyncNotifyChannel IBidiAsyncNotifyChannel;\n\
+         DECLARE_INTERFACE_(IPrintAsyncNotifyRegistration, IUnknown) {\n\
+             STDMETHOD(QueryInterface)(const GUID& iid, void** object) PURE;\n\
+             STDMETHOD_(ULONG, AddRef)(THIS) PURE;\n\
+             STDMETHOD_(ULONG, Release)(THIS) PURE;\n\
+             STDMETHOD(RegisterForNotifications)(THIS) PURE;\n\
+             STDMETHOD(UnregisterForNotifications)(THIS) PURE;\n\
+         };\n\
+         DECLARE_INTERFACE_(IPrintAsyncNotify, IUnknown) {\n\
+             STDMETHOD(QueryInterface)(const GUID& iid, void** object) PURE;\n\
+             STDMETHOD_(ULONG, AddRef)(THIS) PURE;\n\
+             STDMETHOD_(ULONG, Release)(THIS) PURE;\n\
+             STDMETHOD(CreatePrintAsyncNotifyChannel)(\n\
+                 ULONG reserved, void* notification_type, int user_filter,\n\
+                 int conversation_style, void* callback,\n\
+                 IPrintAsyncNotifyChannel** channel) PURE;\n\
+             STDMETHOD(CreatePrintAsyncNotifyRegistration)(\n\
+                 void* notification_type, int user_filter, int conversation_style,\n\
+                 void* callback, IPrintAsyncNotifyRegistration** registration) PURE;\n\
+         };\n\
+         DECLARE_INTERFACE_(IBidiAsyncNotifyChannel, IPrintAsyncNotifyChannel) {\n\
+             STDMETHOD(QueryInterface)(const GUID& iid, void** object) PURE;\n\
+             STDMETHOD_(ULONG, AddRef)(THIS) PURE;\n\
+             STDMETHOD_(ULONG, Release)(THIS) PURE;\n\
+             STDMETHOD(CreateNotificationChannel)(THIS) PURE;\n\
+             STDMETHOD(SendNotification)(void* data) PURE;\n\
+             STDMETHOD(CloseChannel)(void* data) PURE;\n\
+             STDMETHOD(GetPrintName)(void** name) PURE;\n\
+             STDMETHOD(GetChannelNotificationType)(void** notification_type) PURE;\n\
+             STDMETHOD(AsyncGetNotificationSendResponse)(void* data, void* cookie) PURE;\n\
+             STDMETHOD(AsyncCloseChannel)(void* data, void* cookie) PURE;\n\
+         };\n\
+         DECLARE_INTERFACE_(IUnidentifiedHelper, IUnknown) {\n\
+             STDMETHOD(QueryInterface)(const GUID& iid, void** object) PURE;\n\
+             STDMETHOD_(ULONG, AddRef)(THIS) PURE;\n\
+             STDMETHOD_(ULONG, Release)(THIS) PURE;\n\
+             STDMETHOD(HelperMethod)(THIS) PURE;\n\
+         };\n\
+         struct HIDDEN_PRINTING_HELPER { int value; };\n\
+         }\n\
+         }\n",
+    )
+    .unwrap();
+
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!(
+                "#include \"{}\"\n#include \"{}\"\n",
+                gdiplus.to_string_lossy(),
+                printing.to_string_lossy()
+            ),
+        )
+        .with_root_dirs([scratch.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    for (name, method_count, declared_guid) in [
+        (
+            "IImageBytes",
+            3,
+            Some("025d1823-6c7d-447b-bbdb-a3cbc3dfa2fc"),
+        ),
+        ("IBidiAsyncNotifyChannel", 5, None),
+        ("IPrintAsyncNotify", 2, None),
+        ("IPrintAsyncNotifyRegistration", 2, None),
+    ] {
+        let fact = snapshot
+            .facts()
+            .iter()
+            .find(|fact| {
+                fact.name == name
+                    && fact.definition
+                    && matches!(fact.data, FactData::Interface { .. })
+            })
+            .unwrap_or_else(|| panic!("{name} was not captured\n{}", snapshot.dump()));
+        let FactData::Interface { guid, methods, .. } = &fact.data else {
+            panic!("{name} was not captured as an interface: {fact:#?}");
+        };
+        assert_eq!(methods.len(), method_count, "{fact:#?}");
+        assert_eq!(guid.as_deref(), declared_guid, "{fact:#?}");
+    }
+    let guid_fact = |name| {
+        snapshot
+            .facts()
+            .iter()
+            .find_map(|fact| {
+                (fact.name == name)
+                    .then_some(&fact.data)
+                    .and_then(|data| match data {
+                        FactData::Guid { value } => Some(value.as_str()),
+                        _ => None,
+                    })
+            })
+            .unwrap_or_else(|| panic!("{name} was not captured\n{}", snapshot.dump()))
+    };
+    assert_eq!(
+        guid_fact("IID_IBidiAsyncNotifyChannel"),
+        guid_fact("IID_IPrintAsyncNotify")
+    );
+
+    let reference_types = nonempty_references();
+    let options = EmitOptions::new("Example.Legacy", &reference_types);
+    let legacy = snapshot.emit_with_options(&options).unwrap();
+    for name in [
+        "IImageBytes",
+        "IBidiAsyncNotifyChannel",
+        "IPrintAsyncNotify",
+        "IPrintAsyncNotifyRegistration",
+    ] {
+        assert!(!legacy.contains(&format!("interface {name}:")), "{legacy}");
+    }
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            support.to_string_lossy(),
+            RootPartition::new("printing", "Example.Printing"),
+        )
+        .with_traversed_header(
+            gdiplus.to_string_lossy(),
+            RootPartition::new("gdiplus", "Example.GdiPlus"),
+        )
+        .with_traversed_header(
+            printing.to_string_lossy(),
+            RootPartition::new("printing", "Example.Printing"),
+        );
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.clone().emit_with_options(&options).unwrap();
+    assert_eq!(
+        partitions,
+        plan.emit_with_options(&options).unwrap(),
+        "identified native interface planning is not deterministic"
+    );
+
+    let gdiplus_rdl = output(&partitions, "Example.GdiPlus");
+    assert!(
+        gdiplus_rdl.contains("interface IImageBytes: Example::Printing::IUnknown"),
+        "{gdiplus_rdl}"
+    );
+    for method in ["CountBytes", "LockBytes", "UnlockBytes"] {
+        assert!(
+            gdiplus_rdl.contains(&format!("fn {method}(")),
+            "{gdiplus_rdl}"
+        );
+    }
+    assert!(
+        gdiplus_rdl.contains("const CodecIImageBytes: GUID"),
+        "{gdiplus_rdl}"
+    );
+    assert!(!gdiplus_rdl.contains("HIDDEN_GDIPLUS_HELPER"));
+
+    let printing_rdl = output(&partitions, "Example.Printing");
+    for (name, base) in [
+        ("IBidiAsyncNotifyChannel", "IPrintAsyncNotifyChannel"),
+        ("IPrintAsyncNotify", "IUnknown"),
+        ("IPrintAsyncNotifyRegistration", "IUnknown"),
+    ] {
+        assert!(
+            printing_rdl.contains(&format!("interface {name}: {base}")),
+            "{printing_rdl}"
+        );
+    }
+    for method in [
+        "CreateNotificationChannel",
+        "GetPrintName",
+        "GetChannelNotificationType",
+        "AsyncGetNotificationSendResponse",
+        "AsyncCloseChannel",
+        "CreatePrintAsyncNotifyChannel",
+        "CreatePrintAsyncNotifyRegistration",
+        "RegisterForNotifications",
+        "UnregisterForNotifications",
+    ] {
+        assert!(
+            printing_rdl.contains(&format!("fn {method}(")),
+            "{printing_rdl}"
+        );
+    }
+    for name in [
+        "IID_IBidiAsyncNotifyChannel",
+        "IID_IPrintAsyncNotify",
+        "IID_IPrintAsyncNotifyRegistration",
+        "IUnidentifiedHelper",
+        "HIDDEN_PRINTING_HELPER",
+    ] {
+        assert!(!printing_rdl.contains(name), "{printing_rdl}");
+    }
+    assert!(
+        printing_rdl.contains("const IID_HelperContract: GUID"),
+        "{printing_rdl}"
+    );
+
+    let winmd = scratch.join("identified-native-namespaced-interfaces.winmd");
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    for (namespace, name, methods) in [
+        ("Example.GdiPlus", "IImageBytes", 3),
+        ("Example.Printing", "IBidiAsyncNotifyChannel", 5),
+        ("Example.Printing", "IPrintAsyncNotify", 2),
+        ("Example.Printing", "IPrintAsyncNotifyRegistration", 2),
+    ] {
+        let interface = index.expect(namespace, name);
+        assert_eq!(interface.category(), TypeCategory::Interface);
+        assert_eq!(interface.methods().len(), methods);
+    }
+    let bidi = index.expect("Example.Printing", "IBidiAsyncNotifyChannel");
+    assert_eq!(
+        bidi.interface_impls().next().unwrap().interface(&[]),
+        Type::class_named("Example.Printing", "IPrintAsyncNotifyChannel")
+    );
+    let print = index.expect("Example.Printing", "IPrintAsyncNotify");
+    let bidi_guid = bidi.find_attribute("GuidAttribute").unwrap().value();
+    let print_guid = print.find_attribute("GuidAttribute").unwrap().value();
+    assert_eq!(bidi_guid, print_guid);
+    assert_ne!(
+        bidi.methods()
+            .map(|method| method.name().to_string())
+            .collect::<Vec<_>>(),
+        print
+            .methods()
+            .map(|method| method.name().to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(!index.contains("Example.Printing", "IUnidentifiedHelper"));
+    assert!(!index.contains("Example.Printing", "HIDDEN_PRINTING_HELPER"));
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
