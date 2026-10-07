@@ -424,7 +424,8 @@ Compatible redeclarations union repeatable annotations. Singleton conflicts are 
 
 `native_opaque` is valueless and valid only on a named, non-COM C++ class definition without a
 UUID. Place the attribute after the `class` keyword and before the name. It is an extraction
-control and does not produce an RDL attribute.
+control and does not produce an RDL attribute. Clang-propagated copies on redeclarations are
+accepted, but spelling the marker on a forward declaration is an error.
 
 Unknown keys, missing or unexpected values, invalid declaration targets, unresolved symbolic
 sentinels, and missing associated-constant providers are extraction errors. A consumer that

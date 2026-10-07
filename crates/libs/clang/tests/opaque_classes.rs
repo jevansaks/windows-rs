@@ -352,6 +352,7 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
         &first_types,
         "#define W32M(text) __attribute__((annotate(text)))\n\
          class W32M(\"win32metadata:native_opaque\") NativeOpaque {};\n\
+         class NativeOpaque;\n\
          class AliasedOpaque;\n\
          class W32M(\"win32metadata:native_opaque\") NativeDerived : public NativeOpaque {\n\
          public:\n\
@@ -672,6 +673,11 @@ fn native_opaque_annotation_contract_and_by_value_uses_are_rejected() {
         (
             "forward",
             "class W32M(\"win32metadata:native_opaque\") NativeOpaque;",
+        ),
+        (
+            "forward_then_definition",
+            "class W32M(\"win32metadata:native_opaque\") NativeOpaque;\n\
+             class NativeOpaque {};",
         ),
     ] {
         let error = extract(

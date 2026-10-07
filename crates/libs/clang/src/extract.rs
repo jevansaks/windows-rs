@@ -4107,7 +4107,8 @@ fn validate_win32metadata_annotation(
             raw.key
         ))
     } else if !annotation_target_allowed(&raw.key, target_kind)
-        || (raw.key == "native_opaque" && !native_opaque_annotation_target_allowed(target))
+        || (raw.key == "native_opaque"
+            && !native_opaque_annotation_target_allowed(target, attribute))
         || (raw.key == "associated_enum"
             && target_kind == CXCursor_TypedefDecl
             && !typedef_is_callback(target))
@@ -4226,11 +4227,23 @@ fn typedef_is_callback(cursor: CXCursor) -> bool {
     annotation_result_type(cursor).is_some()
 }
 
-fn native_opaque_annotation_target_allowed(target: CXCursor) -> bool {
-    (unsafe { clang_isCursorDefinition(target) }) != 0
-        && !cx_string(unsafe { clang_getCursorSpelling(target) }).is_empty()
-        && !is_interface(target)
-        && cursor_uuid(target).is_none()
+fn native_opaque_annotation_target_allowed(target: CXCursor, attribute: CXCursor) -> bool {
+    let definition = cursor_definition(target);
+    if unsafe { clang_getCursorKind(definition) } != CXCursor_ClassDecl
+        || unsafe { clang_isCursorDefinition(definition) } == 0
+        || cx_string(unsafe { clang_getCursorSpelling(definition) }).is_empty()
+        || is_interface(definition)
+        || cursor_uuid(definition).is_some()
+    {
+        return false;
+    }
+    let Some((_, expansion, _, _)) = cursor_locations(attribute) else {
+        return false;
+    };
+    let Some((file, start, end)) = cursor_expansion_extent(definition) else {
+        return false;
+    };
+    expansion.file.eq_ignore_ascii_case(&file) && (start..end).contains(&expansion.offset)
 }
 
 fn annotation_error(cursor: CXCursor, message: &str) -> Error {
