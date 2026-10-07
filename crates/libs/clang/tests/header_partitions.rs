@@ -133,6 +133,260 @@ fn colliding_ntstatus_snapshot(name: &str) -> (PathBuf, Snapshot, HeaderPartitio
 }
 
 #[test]
+fn namespace_containers_do_not_enter_partition_symbol_collisions() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("namespace-container-collisions");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &first,
+        "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
+         #define CSTR_LESS_THAN 1\n\
+         #define FIRST_FLAG 4\n\
+         #pragma push_macro(\"CSTR_LESS_THAN\")\n\
+         #pragma push_macro(\"FIRST_FLAG\")\n\
+         #undef CSTR_LESS_THAN\n\
+         #undef FIRST_FLAG\n\
+         namespace Windows { namespace MetadataEnumValues {\n\
+             enum COMPARESTRING_RESULT : int { CSTR_LESS_THAN = 1 };\n\
+             typedef unsigned short FIRST_ALIAS;\n\
+             enum FIRST_FLAGS : unsigned long { FIRST_FLAG = 4 };\n\
+         } }\n\
+         namespace ABI { namespace FirstNative {\n\
+             struct Windows { int first; };\n\
+             struct FIRST_WINDOWS_HOLDER { Windows value; };\n\
+         } }\n\
+         struct GLOBAL_CONTROL { int value; };\n\
+         namespace NativeOnly { struct HIDDEN_NATIVE { int value; }; }\n\
+         W32M(\"win32metadata:associated_enum=COMPARESTRING_RESULT\")\n\
+         extern \"C\" int FirstCompare(void);\n\
+         #pragma pop_macro(\"FIRST_FLAG\")\n\
+         #pragma pop_macro(\"CSTR_LESS_THAN\")\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
+         #define SECOND_FLAG 8\n\
+         #pragma push_macro(\"SECOND_FLAG\")\n\
+         #undef SECOND_FLAG\n\
+         namespace Windows { namespace MetadataEnumValues {\n\
+             enum SECOND_FLAGS : unsigned long { SECOND_FLAG = 8 };\n\
+             typedef unsigned short SECOND_ALIAS;\n\
+         } }\n\
+         namespace ABI { namespace SecondNative {\n\
+             struct Windows { unsigned long long second; };\n\
+             struct SECOND_WINDOWS_HOLDER { Windows value; };\n\
+         } }\n\
+         W32M(\"win32metadata:associated_enum=SECOND_FLAGS\")\n\
+         extern \"C\" unsigned long SecondFlags(void);\n\
+         #pragma pop_macro(\"SECOND_FLAG\")\n",
+    )
+    .unwrap();
+
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!(
+                "#include \"{}\"\n#include \"{}\"\n",
+                first.to_string_lossy(),
+                second.to_string_lossy()
+            ),
+        )
+        .with_root_dirs([scratch.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    assert!(
+        !snapshot
+            .constants()
+            .iter()
+            .any(|constant| constant.name == "CSTR_LESS_THAN"),
+        "{}",
+        snapshot.dump()
+    );
+    for name in ["FIRST_FLAG", "SECOND_FLAG"] {
+        assert!(
+            snapshot
+                .constants()
+                .iter()
+                .any(|constant| constant.name == name),
+            "{name}\n{}",
+            snapshot.dump()
+        );
+    }
+
+    let references = windows_clang::MetadataReferences::new([windows_metadata::reader::File::new(
+        windows_default::WINRT.to_vec(),
+    )
+    .unwrap()]);
+    let focused_exclusions = BTreeSet::from([
+        "FIRST_WINDOWS_HOLDER".to_string(),
+        "SECOND_WINDOWS_HOLDER".to_string(),
+        "Windows".to_string(),
+    ]);
+    let mut focused_options = EmitOptions::new("Example.Focused", references.types());
+    focused_options.excluded_types = Some(&focused_exclusions);
+    focused_options.library = Some("test.dll");
+    let focused = snapshot
+        .emit_by_header_with_options(&focused_options)
+        .unwrap();
+    let focused_rdl = focused.values().cloned().collect::<String>();
+    for name in [
+        "COMPARESTRING_RESULT",
+        "FIRST_ALIAS",
+        "FIRST_FLAGS",
+        "SECOND_FLAGS",
+        "SECOND_ALIAS",
+    ] {
+        assert!(focused_rdl.contains(name), "{focused:#?}");
+    }
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header(
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        );
+    let mut options = EmitOptions::new("Example.Common", references.types());
+    options.library = Some("test.dll");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let first_rdl = output(&partitions, "Example.First");
+    let second_rdl = output(&partitions, "Example.Second");
+
+    for name in [
+        "COMPARESTRING_RESULT",
+        "FIRST_ALIAS",
+        "FIRST_FLAGS",
+        "FIRST_WINDOWS_HOLDER",
+        "GLOBAL_CONTROL",
+    ] {
+        assert!(first_rdl.contains(name), "{partitions:#?}");
+    }
+    for name in ["SECOND_ALIAS", "SECOND_FLAGS", "SECOND_WINDOWS_HOLDER"] {
+        assert!(second_rdl.contains(name), "{partitions:#?}");
+    }
+    assert!(
+        first_rdl.contains("#[associated_enum(\"COMPARESTRING_RESULT\")]"),
+        "{first_rdl}"
+    );
+    assert!(
+        second_rdl.contains("#[associated_enum(\"SECOND_FLAGS\")]"),
+        "{second_rdl}"
+    );
+    assert!(first_rdl.contains("CSTR_LESS_THAN = 1"), "{first_rdl}");
+    assert!(!first_rdl.contains("const CSTR_LESS_THAN"), "{first_rdl}");
+    assert!(
+        first_rdl.contains("const FIRST_FLAG: i32 = 4"),
+        "{first_rdl}"
+    );
+    assert!(
+        second_rdl.contains("const SECOND_FLAG: i32 = 8"),
+        "{second_rdl}"
+    );
+    assert!(
+        !partitions
+            .values()
+            .any(|rdl| rdl.contains("HIDDEN_NATIVE") || rdl.contains("__partition_")),
+        "{partitions:#?}"
+    );
+
+    let winmd = scratch.join("namespace-container-collisions.winmd");
+    windows_rdl::reader()
+        .input_text(include_str!("../../../../metadata/metadata.rdl"))
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+
+    let compare = index.expect("Example.First", "COMPARESTRING_RESULT");
+    assert_eq!(compare.underlying_type(), Some(Type::I32));
+    assert_eq!(
+        compare
+            .fields()
+            .find(|field| field.name() == "CSTR_LESS_THAN")
+            .unwrap()
+            .constant()
+            .unwrap()
+            .value(),
+        Value::I32(1)
+    );
+    assert_eq!(
+        index
+            .expect("Example.First", "FIRST_ALIAS")
+            .underlying_type(),
+        Some(Type::U16)
+    );
+    for (namespace, enum_name, member, value) in [
+        ("Example.First", "FIRST_FLAGS", "FIRST_FLAG", 4),
+        ("Example.Second", "SECOND_FLAGS", "SECOND_FLAG", 8),
+    ] {
+        let ty = index.expect(namespace, enum_name);
+        assert_eq!(ty.underlying_type(), Some(Type::U32));
+        assert_eq!(
+            ty.fields()
+                .find(|field| field.name() == member)
+                .unwrap()
+                .constant()
+                .unwrap()
+                .value(),
+            Value::U32(value)
+        );
+    }
+    assert_eq!(
+        index
+            .expect("Example.Second", "SECOND_ALIAS")
+            .underlying_type(),
+        Some(Type::U16)
+    );
+
+    for (namespace, holder, field, field_type) in [
+        ("Example.First", "FIRST_WINDOWS_HOLDER", "first", Type::I32),
+        (
+            "Example.Second",
+            "SECOND_WINDOWS_HOLDER",
+            "second",
+            Type::U64,
+        ),
+    ] {
+        let windows = index.expect(namespace, "Windows");
+        assert_eq!(
+            windows.fields().next().unwrap().ty(),
+            field_type,
+            "{namespace}.Windows.{field}"
+        );
+        let holder = index.expect(namespace, holder);
+        assert_eq!(
+            holder.fields().next().unwrap().ty(),
+            Type::value_named(namespace, "Windows")
+        );
+    }
+    assert!(index.contains("Example.First", "GLOBAL_CONTROL"));
+    assert!(!index.contains("Example.First", "HIDDEN_NATIVE"));
+    assert!(!index.contains("Example.Second", "HIDDEN_NATIVE"));
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn traversed_headers_select_roots_and_route_dependencies_to_default() {
     helpers::ensure_libclang();
 

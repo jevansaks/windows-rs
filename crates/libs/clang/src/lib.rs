@@ -2371,7 +2371,11 @@ impl Snapshot {
                 .collect::<BTreeSet<_>>()
         };
         let mut variants: BTreeMap<&str, BTreeMap<String, Vec<&Fact>>> = BTreeMap::new();
-        for fact in self.facts.iter().filter(|fact| fact.root) {
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| fact.root && partition_collision_symbol(fact))
+        {
             let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) else {
                 continue;
             };
@@ -2466,7 +2470,7 @@ impl Snapshot {
         for fact in self
             .facts
             .iter()
-            .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
             .filter(|fact| scoped_collision_fact(fact))
         {
             if let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) {
@@ -2482,7 +2486,7 @@ impl Snapshot {
         let rooted_collision_facts: BTreeMap<&str, Vec<&Fact>> = self
             .facts
             .iter()
-            .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
             .filter(|fact| scoped_collision_fact(fact))
             .filter(|fact| rooted_fact_namespaces.contains_key(&fact.origin))
             .fold(BTreeMap::new(), |mut facts, fact| {
@@ -2492,7 +2496,7 @@ impl Snapshot {
         let fact_namespaces: BTreeMap<_, _> = self
             .facts
             .iter()
-            .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
             .filter(|fact| scoped_collision_fact(fact))
             .filter_map(|fact| {
                 let namespace = rooted_fact_namespaces
@@ -2526,7 +2530,11 @@ impl Snapshot {
             .collect();
         if self.header_partition_policy {
             let mut namespace_facts: BTreeMap<(String, String), Vec<&Fact>> = BTreeMap::new();
-            for fact in self.facts.iter().filter(|fact| fact.root) {
+            for fact in self
+                .facts
+                .iter()
+                .filter(|fact| fact.root && partition_collision_symbol(fact))
+            {
                 let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) else {
                     continue;
                 };
@@ -2573,7 +2581,7 @@ impl Snapshot {
         for (index, (name, namespace)) in self
             .facts
             .iter()
-            .filter(|fact| collisions.contains(&fact.name))
+            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
             .filter_map(|fact| {
                 fact_namespaces
                     .get(&fact.origin)
@@ -6098,7 +6106,7 @@ impl ScopedDeclarationIndex {
         Self {
             exact: facts
                 .iter()
-                .filter(|fact| collisions.contains(&fact.name))
+                .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
                 .map(|fact| {
                     (
                         fact.origin.tu.clone(),
@@ -6136,6 +6144,10 @@ impl ScopedDeclarationIndex {
         let names = self.by_tu_name.get(&(tu.to_string(), name.to_string()))?;
         (names.len() == 1).then(|| names.first().unwrap())
     }
+}
+
+fn partition_collision_symbol(fact: &Fact) -> bool {
+    fact.kind != FactKind::Namespace
 }
 
 fn remap_fact_types(
