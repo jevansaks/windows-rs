@@ -4556,7 +4556,7 @@ fn merge_redeclaration_annotations(
     Ok(())
 }
 
-fn annotation_declarations_compatible(
+pub(super) fn annotation_declarations_compatible(
     left: &Fact,
     right: &Fact,
     facts: &HashMap<&Origin, &Fact>,

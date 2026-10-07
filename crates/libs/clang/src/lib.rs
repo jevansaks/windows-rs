@@ -2278,42 +2278,35 @@ impl Snapshot {
             .filter(|fact| fact.root)
             .map(|fact| fact.origin.clone())
             .collect();
-        let mut associated_enum_owners: BTreeMap<(String, String), BTreeSet<RootOwner>> =
+        let mut associated_enum_annotations: BTreeMap<String, BTreeSet<AnnotationTarget>> =
             BTreeMap::new();
         for (target, annotations) in &self.annotations {
-            let origin = target.origin();
-            if !retained_origins.contains(origin) {
-                continue;
-            }
-            let Some(owner) = self.root_owners.get(origin) else {
-                continue;
-            };
             for annotation in annotations {
                 if let Annotation::AssociatedEnum(name) = annotation {
-                    associated_enum_owners
-                        .entry((origin.tu.clone(), name.clone()))
+                    associated_enum_annotations
+                        .entry(name.clone())
                         .or_default()
-                        .insert(owner.clone());
+                        .insert(target.clone());
                 }
             }
         }
         let mut associated_enum_remaps = BTreeMap::new();
-        if !associated_enum_owners.is_empty() {
-            let requested_associated_enums: BTreeSet<_> = associated_enum_owners
-                .keys()
-                .map(|(tu, name)| (tu.as_str(), name.as_str()))
-                .collect();
+        if !associated_enum_annotations.is_empty() {
+            let facts_by_origin: HashMap<_, _> =
+                self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
             let facts_by_declaration: BTreeMap<_, _> = self
                 .facts
                 .iter()
                 .map(|fact| ((fact.origin.tu.clone(), fact.spelling.clone()), fact))
                 .collect();
+            let requested_associated_enums: BTreeSet<_> = associated_enum_annotations
+                .keys()
+                .map(String::as_str)
+                .collect();
             let mut associated_enum_providers: BTreeMap<(String, String), BTreeSet<Origin>> =
                 BTreeMap::new();
             for fact in &self.facts {
-                if !requested_associated_enums
-                    .contains(&(fact.origin.tu.as_str(), fact.name.as_str()))
-                {
+                if !requested_associated_enums.contains(fact.name.as_str()) {
                     continue;
                 }
                 let Some(enumeration) =
@@ -2327,18 +2320,71 @@ impl Snapshot {
                 providers.insert(fact.origin.clone());
                 providers.insert(enumeration.origin.clone());
             }
-            for ((tu, name), mut candidates) in associated_enum_owners {
-                let Some(providers) = associated_enum_providers.get(&(tu.clone(), name.clone()))
-                else {
-                    continue;
-                };
-                // An independently traversed provider keeps its existing route.
-                if providers
-                    .iter()
-                    .any(|origin| retained_origins.contains(origin))
-                {
-                    continue;
+            let mut associated_enum_routes: BTreeMap<
+                String,
+                (
+                    BTreeSet<Origin>,
+                    BTreeSet<RootOwner>,
+                    BTreeSet<AnnotationTarget>,
+                ),
+            > = BTreeMap::new();
+            for (name, targets) in &associated_enum_annotations {
+                for target in targets {
+                    let origin = target.origin();
+                    if !retained_origins.contains(origin) {
+                        continue;
+                    }
+                    let Some(owner) = self.root_owners.get(origin) else {
+                        continue;
+                    };
+                    let Some(fact) = facts_by_origin.get(origin) else {
+                        continue;
+                    };
+                    let target_slot = route_annotation_target(target).1;
+                    let mut source_tus = BTreeSet::new();
+                    let mut route_targets = BTreeSet::new();
+                    for candidate_target in targets {
+                        if route_annotation_target(candidate_target).1 != target_slot {
+                            continue;
+                        }
+                        let candidate_origin = candidate_target.origin();
+                        let Some(candidate) = facts_by_origin.get(candidate_origin) else {
+                            continue;
+                        };
+                        if extract::annotation_declarations_compatible(
+                            fact,
+                            candidate,
+                            &facts_by_origin,
+                        ) {
+                            source_tus.insert(candidate_origin.tu.clone());
+                            route_targets.insert(candidate_target.clone());
+                        }
+                    }
+                    let providers: BTreeSet<_> = source_tus
+                        .into_iter()
+                        .flat_map(|tu| {
+                            associated_enum_providers
+                                .get(&(tu, name.clone()))
+                                .into_iter()
+                                .flatten()
+                                .cloned()
+                        })
+                        .collect();
+                    // An independently traversed provider keeps its existing route.
+                    if providers.is_empty()
+                        || providers
+                            .iter()
+                            .any(|provider| retained_origins.contains(provider))
+                    {
+                        continue;
+                    }
+                    let route = associated_enum_routes.entry(name.clone()).or_default();
+                    route.0.extend(providers);
+                    route.1.insert(owner.clone());
+                    route.2.extend(route_targets);
                 }
+            }
+            for (name, (providers, mut candidates, targets)) in associated_enum_routes {
                 candidates.retain(|owner| !owner.exclusions.contains(&name));
                 if candidates.is_empty() {
                     continue;
@@ -2353,24 +2399,27 @@ impl Snapshot {
                 if let Some(conflict) = conflict {
                     conflicts.push(conflict);
                 }
-                if let Some(target) = owner.remaps.get(&name) {
-                    associated_enum_remaps.insert((tu, name), target.clone());
+                if let Some(remap) = owner.remaps.get(&name) {
+                    for target in targets {
+                        associated_enum_remaps.insert((target, name.clone()), remap.clone());
+                    }
                 }
                 for origin in providers {
-                    self.root_owners.insert(origin.clone(), owner.clone());
+                    self.root_owners.insert(origin, owner.clone());
                 }
             }
         }
         if !associated_enum_remaps.is_empty() {
             for (target, annotations) in &mut self.annotations {
-                let tu = &target.origin().tu;
                 for annotation in annotations {
                     let Annotation::AssociatedEnum(name) = annotation else {
                         continue;
                     };
-                    if let Some(target) = associated_enum_remaps.get(&(tu.clone(), name.clone())) {
-                        name.clone_from(target);
-                    }
+                    let Some(remap) = associated_enum_remaps.get(&(target.clone(), name.clone()))
+                    else {
+                        continue;
+                    };
+                    name.clone_from(remap);
                 }
             }
         }
@@ -4502,16 +4551,16 @@ impl Snapshot {
                 .annotations
                 .iter()
                 .filter(|(target, _)| selected_origins.contains(target.origin()))
-                .flat_map(|(target, annotations)| {
+                .flat_map(|(_, annotations)| {
                     annotations.iter().filter_map(move |annotation| {
                         let Annotation::AssociatedEnum(name) = annotation else {
                             return None;
                         };
-                        Some((target.origin().tu.clone(), name.clone()))
+                        Some(name.clone())
                     })
                 })
                 .collect();
-            for (tu, name) in associated_enums {
+            for name in associated_enums {
                 if root_names.contains(&name)
                     || (excluded_types.is_some_and(|excluded| excluded.contains(&name))
                         && !extended_reference_enums.contains(&name))
@@ -4525,8 +4574,7 @@ impl Snapshot {
                     .flatten()
                     .copied()
                     .filter(|fact| {
-                        fact.origin.tu == tu
-                            && self.root_owners.contains_key(&fact.origin)
+                        self.root_owners.contains_key(&fact.origin)
                             && !self.suppressed_type_origins.contains(&fact.origin)
                             && underlying_enum_fact(
                                 fact,

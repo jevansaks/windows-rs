@@ -58,7 +58,8 @@ clones the snapshot.
 Dependency declarations remain available for closure without becoming public roots. When
 equivalent compile variants exist, an owner whose typedef projection reaches an excluded type is
 omitted if another unsuppressed projection can own that output.
-An `associated_enum` annotation on a selected root adds its matching enum provider to closure.
+An `associated_enum` annotation on a selected root adds its matching enum provider from compatible
+redeclarations to closure, including redeclarations from another aggregate extraction input.
 Dependency-only providers inherit that root's owner settings; providers already owned by a
 traversed header keep their existing route.
 

@@ -603,6 +603,7 @@ fn associated_enums_from_included_headers_follow_the_annotated_root() {
     std::fs::write(
         &dependency,
         "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
          namespace Windows { namespace MetadataEnumValues {\n\
              enum [[clang::flag_enum]] DEPENDENCY_FLAGS : unsigned int {\n\
                  DEPENDENCY_NONE = 0u,\n\
@@ -615,14 +616,7 @@ fn associated_enums_from_included_headers_follow_the_annotated_root() {
              enum UNSELECTED_ENUM : unsigned int { UNSELECTED_VALUE = 1u };\n\
              enum INCLUDED_ONLY_ENUM : unsigned int { INCLUDED_ONLY_VALUE = 1u };\n\
          } }\n\
-         typedef unsigned INCLUDED_ONLY_ALIAS;\n",
-    )
-    .unwrap();
-    std::fs::write(
-        &public,
-        "#pragma once\n\
-         #define W32M(text) __attribute__((annotate(text)))\n\
-         #include \"dependency.h\"\n\
+         typedef unsigned INCLUDED_ONLY_ALIAS;\n\
          struct PUBLIC_ASSOCIATIONS {\n\
              W32M(\"win32metadata:associated_enum=DEPENDENCY_STATUS\") int status;\n\
          };\n\
@@ -632,9 +626,41 @@ fn associated_enums_from_included_headers_follow_the_annotated_root() {
              W32M(\"win32metadata:associated_enum=UNSELECTED_ENUM\") unsigned value);\n",
     )
     .unwrap();
+    std::fs::write(
+        &public,
+        "#pragma once\n\
+         struct PUBLIC_ASSOCIATIONS {\n\
+             int status;\n\
+         };\n\
+         extern \"C\" void UseDependencyFlags(unsigned flags);\n\
+         extern \"C\" void UseUnselectedEnum(unsigned value);\n",
+    )
+    .unwrap();
 
-    let snapshot = aggregate_snapshot(&scratch, &[&public]);
-    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "public.cpp",
+                format!("#include \"{}\"\n", public.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "dependency.cpp",
+                format!("#include \"{}\"\n", dependency.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "dependency-duplicate.cpp",
+                format!("#include \"{}\"\n", dependency.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new().with_traversed_header_for_input(
+        "public.cpp",
         public.to_string_lossy(),
         RootPartition::new("public", "Example.Public"),
     );
