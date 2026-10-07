@@ -457,6 +457,10 @@ typedef and remains `type BOOLEAN = u8`; references to it retain the `BOOLEAN` n
 the distinction between canonical language vocabulary and an API-authored typedef without treating
 arbitrary byte values as Rust booleans.
 
+Explicit null-terminated SAL on a direct character pointer selects the same string vocabulary after
+applying the existing scalar canonicalization to its pointee. For example, `_In_z_ const WCHAR *`
+becomes `PCWSTR`. Without the null-terminated fact, `WCHAR *` keeps its raw pointer shape.
+
 For example, the headers declare `PBYTE`, `PDWORD`, and `PORHKEY` in API signatures. RDL retains
 those names and separately records their representations:
 

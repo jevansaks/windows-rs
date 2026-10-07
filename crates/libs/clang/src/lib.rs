@@ -9531,11 +9531,17 @@ fn emitted_pointer_is_mutable(
 fn parameter_string_name(param: &Parameter) -> Option<&'static str> {
     match &param.ty {
         TypeRef::Pointer { mutable, target } if param.annotation.null_terminated => {
-            match (mutable, target.as_ref()) {
-                (false, TypeRef::Scalar(Scalar::I8 | Scalar::U8)) => Some("PCSTR"),
-                (true, TypeRef::Scalar(Scalar::I8 | Scalar::U8)) => Some("PSTR"),
-                (false, TypeRef::Scalar(Scalar::U16)) => Some("PCWSTR"),
-                (true, TypeRef::Scalar(Scalar::U16)) => Some("PWSTR"),
+            let shape = match target.as_ref() {
+                TypeRef::Scalar(Scalar::I8 | Scalar::U8) => "i8",
+                TypeRef::Scalar(Scalar::U16) => "u16",
+                TypeRef::Named { name, .. } => canonical_named_type(name)?,
+                _ => return None,
+            };
+            match (mutable, shape) {
+                (false, "i8" | "u8") => Some("PCSTR"),
+                (true, "i8" | "u8") => Some("PSTR"),
+                (false, "u16") => Some("PCWSTR"),
+                (true, "u16") => Some("PWSTR"),
                 _ => None,
             }
         }

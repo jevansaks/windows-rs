@@ -1,10 +1,33 @@
 use std::collections::BTreeMap;
 use windows_clang::{
-    Annotation, AnnotationTarget, EmitOptions, FactData, Input, Snapshot, extract,
+    Annotation, AnnotationTarget, EmitOptions, FactData, Input, Snapshot, TypeReference,
+    TypeReferenceKind, extract,
 };
-use windows_metadata::HasAttributes;
+use windows_metadata::{HasAttributes, Type as MetadataType};
 
 const METADATA_RDL: &str = include_str!("../../../../metadata/metadata.rdl");
+const STRING_TYPES_RDL: &str = r#"
+    #[win32]
+    mod Windows {
+        mod Win32 {
+            type PCWSTR = *const u16;
+            type PWSTR = *mut u16;
+        }
+    }
+"#;
+
+fn string_references() -> BTreeMap<String, TypeReference> {
+    BTreeMap::from([
+        (
+            "PCWSTR".to_string(),
+            TypeReference::new("Windows.Win32", "PCWSTR", TypeReferenceKind::Type),
+        ),
+        (
+            "PWSTR".to_string(),
+            TypeReference::new("Windows.Win32", "PWSTR", TypeReferenceKind::Type),
+        ),
+    ])
+}
 
 fn attribute_strings<'a>(item: impl HasAttributes<'a>, name: &str) -> Vec<String> {
     item.attributes()
@@ -83,15 +106,20 @@ fn captured_double_null_sal_remains_distinct() {
     assert!(!free.annotation.input);
     assert!(!free.annotation.output);
 
-    let rdl = snapshot
-        .emit_with_library("CapturedSal", "test.dll")
-        .unwrap();
+    let references = string_references();
+    let mut options = EmitOptions::new("CapturedSal", &references);
+    options.library = Some("test.dll");
+    let rdl = snapshot.emit_with_options(&options).unwrap();
     assert!(
         rdl.contains("MultiString(#[null_null_terminated] value:"),
         "{rdl}"
     );
     assert!(
         !rdl.contains("SingleString(#[null_null_terminated]"),
+        "{rdl}"
+    );
+    assert!(
+        rdl.contains("SingleString(#[out] value: Windows::Win32::PWSTR)"),
         "{rdl}"
     );
     assert!(
@@ -106,6 +134,7 @@ fn captured_double_null_sal_remains_distinct() {
     ));
     windows_rdl::reader()
         .input_text(METADATA_RDL)
+        .input_text(STRING_TYPES_RDL)
         .input_text(&rdl)
         .output(&output)
         .write()
@@ -143,6 +172,128 @@ fn captured_double_null_sal_remains_distinct() {
         parameter
             .flags()
             .contains(windows_metadata::ParamAttributes::Optional)
+    );
+
+    std::fs::remove_file(output).unwrap();
+}
+
+#[test]
+fn null_terminated_named_scalars_use_physical_string_types() {
+    helpers::ensure_libclang();
+
+    let source = r#"
+        #define SAL(text) __attribute__((annotate(text)))
+        typedef unsigned short WCHAR;
+        typedef unsigned long DWORD;
+
+        extern "C" void Strings(
+            SAL("_In_z_") const WCHAR* named_const,
+            SAL("_Out_z_") WCHAR* named_mut,
+            SAL("_In_z_") const unsigned short* direct_const,
+            SAL("_Out_z_") unsigned short* direct_mut,
+            const WCHAR* unterminated_const,
+            WCHAR* unterminated_mut,
+            SAL("_In_z_") const DWORD* noncharacter,
+            SAL("_In_opt_z_") const WCHAR* optional,
+            unsigned count,
+            SAL("_In_reads_or_z_(count)") const WCHAR* counted,
+            SAL("_Post_") SAL("_NullNull_terminated_") WCHAR* multi);
+    "#;
+    let snapshot = extract(
+        [Input::new("named-strings.hpp", source)],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let references = string_references();
+    let mut options = EmitOptions::new("NamedStrings", &references);
+    options.library = Some("test.dll");
+    let rdl = snapshot.emit_with_options(&options).unwrap();
+
+    for expected in [
+        "named_const: Windows::Win32::PCWSTR",
+        "#[out] named_mut: Windows::Win32::PWSTR",
+        "direct_const: Windows::Win32::PCWSTR",
+        "#[out] direct_mut: Windows::Win32::PWSTR",
+        "unterminated_const: *const u16",
+        "unterminated_mut: *mut u16",
+        "noncharacter: *const u32",
+        "#[opt] optional: Windows::Win32::PCWSTR",
+        "#[len_param(8)] counted: Windows::Win32::PCWSTR",
+        "#[null_null_terminated] multi: *mut u16",
+    ] {
+        assert!(rdl.contains(expected), "{expected}\n{rdl}");
+    }
+
+    let output = std::env::temp_dir().join(format!(
+        "windows-clang-named-strings-{}.winmd",
+        std::process::id()
+    ));
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_text(STRING_TYPES_RDL)
+        .input_text(&rdl)
+        .output(&output)
+        .write()
+        .unwrap_or_else(|error| panic!("{error}\n{rdl}"));
+    let index = windows_metadata::reader::Index::read(&output).unwrap();
+    let windows_metadata::reader::Item::Fn(function) = index.expect_item("NamedStrings", "Strings")
+    else {
+        panic!("Strings was not emitted as a function");
+    };
+    assert_eq!(
+        function.signature(&[]).types,
+        [
+            MetadataType::value_named("Windows.Win32", "PCWSTR"),
+            MetadataType::value_named("Windows.Win32", "PWSTR"),
+            MetadataType::value_named("Windows.Win32", "PCWSTR"),
+            MetadataType::value_named("Windows.Win32", "PWSTR"),
+            MetadataType::PtrConst(Box::new(MetadataType::U16), 1),
+            MetadataType::PtrMut(Box::new(MetadataType::U16), 1),
+            MetadataType::PtrConst(Box::new(MetadataType::U32), 1),
+            MetadataType::value_named("Windows.Win32", "PCWSTR"),
+            MetadataType::U32,
+            MetadataType::value_named("Windows.Win32", "PCWSTR"),
+            MetadataType::PtrMut(Box::new(MetadataType::U16), 1),
+        ]
+    );
+    let params = function.params_by_sequence(11).unwrap();
+    let params = params.params();
+    assert!(
+        params[1]
+            .unwrap()
+            .flags()
+            .contains(windows_metadata::ParamAttributes::Out)
+    );
+    assert!(
+        params[3]
+            .unwrap()
+            .flags()
+            .contains(windows_metadata::ParamAttributes::Out)
+    );
+    assert!(
+        params[7]
+            .unwrap()
+            .flags()
+            .contains(windows_metadata::ParamAttributes::Optional)
+    );
+    assert!(params[9].unwrap().has_attribute("NativeArrayInfoAttribute"));
+    assert!(
+        params[10]
+            .unwrap()
+            .has_attribute("NullNullTerminatedAttribute")
+    );
+    assert_eq!(
+        index.expect("Windows.Win32", "PCWSTR").underlying_type(),
+        Some(MetadataType::PtrConst(Box::new(MetadataType::U16), 1))
+    );
+    assert_eq!(
+        index.expect("Windows.Win32", "PWSTR").underlying_type(),
+        Some(MetadataType::PtrMut(Box::new(MetadataType::U16), 1))
     );
 
     std::fs::remove_file(output).unwrap();
