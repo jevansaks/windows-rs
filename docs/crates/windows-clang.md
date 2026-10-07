@@ -363,11 +363,19 @@ map of defining-header names to RDL partitions.
 | --- | --- |
 | `namespace` | RDL namespace. |
 | `library` / `libraries` | Default or per-function DLL mappings. |
+| `native_imports` | Per-linker-symbol DLL plus exact exported name or ordinal contracts. |
 | `references` | External types and enum members available to the projection. |
 | `excluded_types` | Types omitted from the local output. |
 | `excluded_functions` | Functions omitted from the local output. |
 | `excluded_constants` | Constants omitted from the local output. |
 | `functions` | Optional free-function allowlist. |
+
+`NativeImports` rejects two different contracts for one linker symbol. A contract may name an
+export or use `NativeImport::ordinal` to emit an ordinal entry point such as `#660`. If the same
+symbol also has a `library`, `libraries`, source annotation, or partition-library mapping, the DLL
+names must agree. The native entry point is independent of both the linker symbol and the projected
+metadata method name. Callers reading SDK libraries can preserve that distinction with
+`windows_rdl::implib::read_contracts`; data and const import objects are not function contracts.
 
 References are explicit `TypeReference` values classified as `Type`, `Interface`, or `Enum`.
 Referenced enum member names let an overlay emit an enum only when it adds members to the base.

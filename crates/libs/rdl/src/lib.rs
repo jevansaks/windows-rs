@@ -5,8 +5,8 @@ pub mod emit;
 mod error;
 /// Helpers for formatting generated RDL source.
 pub mod formatter;
-/// Reader for COFF import libraries (the SDK `.lib` archives), used to recover
-/// the function -> DLL mapping that headers do not carry.
+/// Reader for COFF import libraries (the SDK `.lib` archives), including DLL and native
+/// entry-point contracts that headers do not carry.
 pub mod implib;
 mod reader;
 mod writer;

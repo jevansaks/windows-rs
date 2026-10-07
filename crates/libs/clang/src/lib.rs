@@ -618,10 +618,128 @@ pub enum TypeReferenceKind {
     Type,
 }
 
+/// The entry point exported by a native DLL.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum NativeImportName {
+    Name(String),
+    Ordinal(u16),
+}
+
+/// A native function's DLL and exported entry point.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct NativeImport {
+    library: String,
+    name: NativeImportName,
+}
+
+impl NativeImport {
+    pub fn named(library: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            library: library.into(),
+            name: NativeImportName::Name(name.into()),
+        }
+    }
+
+    pub fn ordinal(library: impl Into<String>, ordinal: u16) -> Self {
+        Self {
+            library: library.into(),
+            name: NativeImportName::Ordinal(ordinal),
+        }
+    }
+
+    pub fn library(&self) -> &str {
+        &self.library
+    }
+
+    pub fn name(&self) -> &NativeImportName {
+        &self.name
+    }
+
+    fn metadata_name(&self) -> Cow<'_, str> {
+        match &self.name {
+            NativeImportName::Name(name) => Cow::Borrowed(name),
+            NativeImportName::Ordinal(ordinal) => Cow::Owned(format!("#{ordinal}")),
+        }
+    }
+}
+
+/// Native import contracts keyed by the C linker symbol used by a function fact.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct NativeImports {
+    imports: BTreeMap<String, NativeImport>,
+}
+
+impl NativeImports {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds one contract or accepts an exact duplicate.
+    ///
+    /// A linker symbol cannot silently select between different DLL entry points.
+    pub fn insert(
+        &mut self,
+        symbol: impl Into<String>,
+        import: NativeImport,
+    ) -> Result<&mut Self, Error> {
+        let symbol = symbol.into();
+        if symbol.is_empty() {
+            return Err(Error("native import symbol is empty".to_string()));
+        }
+        if import.library.is_empty() {
+            return Err(Error(format!(
+                "native import `{symbol}` has an empty library"
+            )));
+        }
+        if matches!(&import.name, NativeImportName::Name(name) if name.is_empty()) {
+            return Err(Error(format!(
+                "native import `{symbol}` has an empty entry-point name"
+            )));
+        }
+        if let Some(existing) = self.imports.get(&symbol)
+            && existing != &import
+        {
+            return Err(Error(format!(
+                "conflicting native import contracts for `{symbol}`: {} and {}",
+                format_native_import(existing),
+                format_native_import(&import)
+            )));
+        }
+        self.imports.insert(symbol, import);
+        Ok(self)
+    }
+
+    pub fn get(&self, symbol: &str) -> Option<&NativeImport> {
+        self.imports.get(symbol)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &NativeImport)> {
+        self.imports
+            .iter()
+            .map(|(symbol, import)| (symbol.as_str(), import))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.imports.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.imports.len()
+    }
+}
+
+fn format_native_import(import: &NativeImport) -> String {
+    match &import.name {
+        NativeImportName::Name(name) => format!("{}!{name}", import.library),
+        NativeImportName::Ordinal(ordinal) => format!("{}!#{ordinal}", import.library),
+    }
+}
+
 pub struct EmitOptions<'a> {
     pub namespace: &'a str,
     pub library: Option<&'a str>,
     pub libraries: Option<&'a BTreeMap<String, String>>,
+    pub native_imports: Option<&'a NativeImports>,
     pub references: &'a BTreeMap<String, TypeReference>,
     pub excluded: Option<&'a BTreeSet<String>>,
     pub excluded_types: Option<&'a BTreeSet<String>>,
@@ -636,6 +754,7 @@ impl<'a> EmitOptions<'a> {
             namespace,
             library: None,
             libraries: None,
+            native_imports: None,
             references,
             excluded: None,
             excluded_types: None,
@@ -1550,15 +1669,15 @@ impl Snapshot {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
         let plan_time = timing.then(std::time::Instant::now);
-        let plan = self.plan(
-            options.references,
-            options.excluded_types.or(options.excluded),
-            options.excluded_functions.or(options.excluded),
-            options.excluded_constants.or(options.excluded),
-            options.functions,
-            None,
-            None,
-        )?;
+        let plan = self.plan(PlanningOptions {
+            references: options.references,
+            excluded_types: options.excluded_types.or(options.excluded),
+            excluded_functions: options.excluded_functions.or(options.excluded),
+            excluded_constants: options.excluded_constants.or(options.excluded),
+            selected_functions: options.functions,
+            display_names: None,
+            source_names: None,
+        })?;
         if timing {
             eprintln!(
                 "windows-clang timing phase=planning target={target} facts={} constants={} types={} values={} functions={} output_constants={} elapsed_ms={:.3}",
@@ -2008,7 +2127,7 @@ impl Snapshot {
                 .and_then(|names| names.get(&planned.name))
                 .unwrap_or(&planned.name);
             let FactData::Function {
-                link_name,
+                link_name: _,
                 convention,
                 params,
                 result,
@@ -2057,21 +2176,8 @@ impl Snapshot {
             );
             let route =
                 routes.and_then(|routes| routes.get(&(planned.name.clone(), OutputKind::Value)));
-            let library = declaration_annotations
-                .iter()
-                .find_map(|annotation| match annotation {
-                    Annotation::ImportLibrary(library) => Some(library.as_str()),
-                    _ => None,
-                })
-                .or_else(|| {
-                    route.and_then(|owner| owner.libraries.get(link_name).map(String::as_str))
-                })
-                .or_else(|| {
-                    options
-                        .libraries
-                        .and_then(|libraries| libraries.get(link_name).map(String::as_str))
-                })
-                .or(options.library)
+            let native_import = self
+                .resolve_native_import(function, route, options)?
                 .ok_or_else(|| {
                     Error(format!(
                         "function `{}` requires an import library",
@@ -2080,7 +2186,9 @@ impl Snapshot {
                 })?;
             let abi = calling_convention(*convention);
             let set_last_error = declaration_annotations.contains(&Annotation::SetLastError);
-            let library = if planned.name == *link_name {
+            let import_name = native_import.metadata_name();
+            let library = native_import.library();
+            let library = if planned.name == import_name.as_ref() {
                 format!(
                     "#[library({library:?}{})]",
                     if set_last_error {
@@ -2091,7 +2199,7 @@ impl Snapshot {
                 )
             } else {
                 format!(
-                    "#[library({library:?}, import = {link_name:?}{})]",
+                    "#[library({library:?}, import = {import_name:?}{})]",
                     if set_last_error {
                         ", set_last_error"
                     } else {
@@ -3651,7 +3759,7 @@ impl Snapshot {
                     .cloned()
                     .unwrap_or_else(|| empty_annotations.clone());
                 let claim =
-                    self.fact_route_claim(fact, owner, annotations, &plan.flag_enums, options);
+                    self.fact_route_claim(fact, owner, annotations, &plan.flag_enums, options)?;
                 if !suppressed || !projected_fact_keys.contains(&fact_key) {
                     fact_claims
                         .entry(fact_key)
@@ -3853,7 +3961,7 @@ impl Snapshot {
                     annotations.clone(),
                     context.flag_enums,
                     context.options,
-                ));
+                )?);
             }
         }
         let preferred = self
@@ -3868,6 +3976,7 @@ impl Snapshot {
                     context.options,
                 )
             })
+            .transpose()?
             .filter(|claim| claims.contains(claim))
             .or_else(|| (claims.len() == 1).then(|| claims.first().unwrap().clone()));
         Ok(RouteCandidate {
@@ -3916,7 +4025,7 @@ impl Snapshot {
                 annotations,
                 context.flag_enums,
                 context.options,
-            );
+            )?;
             route.preferred = Some(claim.clone());
             route.claims.insert(claim);
         }
@@ -3948,6 +4057,52 @@ impl Snapshot {
             .collect()
     }
 
+    fn resolve_native_import(
+        &self,
+        fact: &Fact,
+        owner: Option<&RootOwner>,
+        options: &EmitOptions<'_>,
+    ) -> Result<Option<NativeImport>, Error> {
+        let FactData::Function { link_name, .. } = &fact.data else {
+            return Ok(None);
+        };
+        let configured_library = annotations_for(
+            &self.annotations,
+            &AnnotationTarget::Declaration(fact.origin.clone()),
+        )
+        .iter()
+        .find_map(|annotation| match annotation {
+            Annotation::ImportLibrary(library) => Some(library.as_str()),
+            _ => None,
+        })
+        .or_else(|| owner.and_then(|owner| owner.libraries.get(link_name).map(String::as_str)))
+        .or_else(|| {
+            options
+                .libraries
+                .and_then(|libraries| libraries.get(link_name).map(String::as_str))
+        })
+        .or(options.library);
+        let native_import = options
+            .native_imports
+            .and_then(|imports| imports.get(link_name));
+
+        if let Some(native_import) = native_import {
+            if let Some(configured_library) = configured_library
+                && !configured_library.eq_ignore_ascii_case(native_import.library())
+            {
+                return Err(Error(format!(
+                    "function `{}` has conflicting import libraries `{configured_library}` and \
+                     `{}` for linker symbol `{link_name}`",
+                    fact.name,
+                    native_import.library()
+                )));
+            }
+            Ok(Some(native_import.clone()))
+        } else {
+            Ok(configured_library.map(|library| NativeImport::named(library, link_name.clone())))
+        }
+    }
+
     fn fact_route_claim<'a>(
         &'a self,
         fact: &'a Fact,
@@ -3955,28 +4110,8 @@ impl Snapshot {
         annotations: Rc<RouteAnnotations>,
         flag_enums: &BTreeSet<(String, String)>,
         options: &EmitOptions<'_>,
-    ) -> RouteClaim<'a> {
-        let library = if let FactData::Function { link_name, .. } = &fact.data {
-            annotations_for(
-                &self.annotations,
-                &AnnotationTarget::Declaration(fact.origin.clone()),
-            )
-            .iter()
-            .find_map(|annotation| match annotation {
-                Annotation::ImportLibrary(library) => Some(library.clone()),
-                _ => None,
-            })
-            .or_else(|| owner.libraries.get(link_name).cloned())
-            .or_else(|| {
-                options
-                    .libraries
-                    .and_then(|libraries| libraries.get(link_name).cloned())
-            })
-            .or_else(|| options.library.map(str::to_string))
-        } else {
-            None
-        };
-        RouteClaim {
+    ) -> Result<RouteClaim<'a>, Error> {
+        Ok(RouteClaim {
             owner: owner.clone(),
             semantics: RouteSemantics {
                 item: RouteItemSemantics::Fact {
@@ -3987,9 +4122,9 @@ impl Snapshot {
                 annotations,
                 uuid: self.fact_uuid(fact),
                 flags: flag_enums.contains(&(fact.origin.tu.clone(), fact.name.clone())),
-                library,
+                native_import: self.resolve_native_import(fact, Some(owner), options)?,
             },
-        }
+        })
     }
 
     fn constant_route_claim<'a>(
@@ -4008,7 +4143,7 @@ impl Snapshot {
                 annotations,
                 uuid: None,
                 flags: false,
-                library: None,
+                native_import: None,
             },
         }
     }
@@ -4205,27 +4340,27 @@ impl Snapshot {
             options.excluded_constants.or(options.excluded),
             display_names,
         );
-        self.plan(
-            references.as_ref(),
-            excluded_types.as_deref(),
-            excluded_functions.as_deref(),
-            excluded_constants.as_deref(),
-            options.functions,
-            Some(display_names),
-            Some(source_names),
-        )
+        self.plan(PlanningOptions {
+            references: references.as_ref(),
+            excluded_types: excluded_types.as_deref(),
+            excluded_functions: excluded_functions.as_deref(),
+            excluded_constants: excluded_constants.as_deref(),
+            selected_functions: options.functions,
+            display_names: Some(display_names),
+            source_names: Some(source_names),
+        })
     }
 
-    fn plan(
-        &self,
-        references: &BTreeMap<String, TypeReference>,
-        excluded_types: Option<&BTreeSet<String>>,
-        excluded_functions: Option<&BTreeSet<String>>,
-        excluded_constants: Option<&BTreeSet<String>>,
-        selected_functions: Option<&BTreeSet<String>>,
-        display_names: Option<&BTreeMap<String, String>>,
-        source_names: Option<&PlanningSourceNames>,
-    ) -> Result<Plan<'_>, Error> {
+    fn plan(&self, options: PlanningOptions<'_>) -> Result<Plan<'_>, Error> {
+        let PlanningOptions {
+            references,
+            excluded_types,
+            excluded_functions,
+            excluded_constants,
+            selected_functions,
+            display_names,
+            source_names,
+        } = options;
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
         let mut phase_time = timing.then(std::time::Instant::now);
@@ -5980,6 +6115,16 @@ struct Plan<'a> {
     flag_enums: BTreeSet<(String, String)>,
 }
 
+struct PlanningOptions<'a> {
+    references: &'a BTreeMap<String, TypeReference>,
+    excluded_types: Option<&'a BTreeSet<String>>,
+    excluded_functions: Option<&'a BTreeSet<String>>,
+    excluded_constants: Option<&'a BTreeSet<String>>,
+    selected_functions: Option<&'a BTreeSet<String>>,
+    display_names: Option<&'a BTreeMap<String, String>>,
+    source_names: Option<&'a PlanningSourceNames>,
+}
+
 struct PlanningSourceNames {
     facts: BTreeMap<Origin, String>,
     constants: BTreeMap<(Origin, Origin, Location), BTreeSet<String>>,
@@ -6249,7 +6394,7 @@ struct RouteSemantics<'a> {
     annotations: Rc<RouteAnnotations>,
     uuid: Option<&'a str>,
     flags: bool,
-    library: Option<String>,
+    native_import: Option<NativeImport>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]

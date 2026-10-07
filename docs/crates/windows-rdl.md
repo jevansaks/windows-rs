@@ -151,6 +151,8 @@ C/C++ headers -- clang() --> .rdl -- reader() --> .winmd -- bindgen() --> bindin
 - Skip RDL when a suitable winmd already exists.
 - Use `windows-clang` to create RDL from headers; `tool-webview` demonstrates the full path.
 - Use `windows-metadata` for table-level inspection, merge, and namespace remapping.
+- Use `implib::read_contracts` when a generator must preserve a COFF short import's code/data kind
+  and ordinal or native name mode. `implib::read` retains the older symbol-to-DLL-only shape.
 - Use `writer().split()` to maintain namespace-partitioned reviewable metadata.
 - Use `merge_arch_rdl` only for generators that have per-architecture RDL directories and winmds.
   It merges structural differences and restores the defining-header partition.
@@ -187,6 +189,12 @@ writes canonical RDL.
 The `clang` path uses `clang-sys` to parse C or C++ translation units. It projects the declarations
 into the RDL syntax tree. The header path and hand-authored RDL path share the same lowering code.
 The `formatter` module pretty-prints generated RDL.
+
+The `implib` module reads the `IMPORT_OBJECT_HEADER` records in SDK COFF archives. Complete
+contracts keep the public linker symbol separate from the DLL entry point. Ordinal imports retain
+their numeric ordinal, `IMPORT_OBJECT_NAME` retains an exact symbol name, and
+`IMPORT_OBJECT_EXPORTAS` retains its explicit export string. `NAME_NO_PREFIX` and `NAME_UNDECORATE`
+remain typed modes rather than guessed exported names.
 
 ### Testing
 

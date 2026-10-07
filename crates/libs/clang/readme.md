@@ -33,6 +33,11 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+`EmitOptions::native_imports` accepts typed DLL entry-point contracts keyed by the native C linker
+symbol. It keeps an ordinal such as `#660` or an exact exported name separate from the projected
+metadata function name. The existing `library` and `libraries` options remain available for
+symbol-to-DLL-only callers.
+
 `Clang::parallelism` bounds concurrent parsing of original translation units. The lower-level
 `extract_with_options` and `extract_partitioned_with_options` functions accept the same setting
 through `ExtractionOptions`. Results, diagnostics, and inclusion records retain extraction input

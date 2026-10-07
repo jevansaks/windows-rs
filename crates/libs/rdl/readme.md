@@ -41,3 +41,7 @@ The flat and qualified partition modes cannot be combined on one writer.
 
 Inline structs and unions compile to nested TypeDefs. Their field signatures retain the full
 enclosing TypeRef chain, and the writer uses that identity when reconstructing inline RDL.
+
+`implib::read_contracts` reads COFF short-import records without collapsing the native linker
+symbol, DLL, import kind, and ordinal or name mode. The older `implib::read` symbol-to-DLL view
+remains available for callers that do not emit native entry-point metadata.
