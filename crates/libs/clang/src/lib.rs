@@ -9410,7 +9410,7 @@ fn write_params(
                 param_attributes(
                     param,
                     params,
-                    emitted_pointer_is_mutable(param, projection.interface_names, projection.tu),
+                    emitted_pointer_is_mutable(param, projection),
                     annotations_for(annotations, &target),
                 )?,
                 rdl_ident(&param.name),
@@ -9591,11 +9591,7 @@ fn planned_param_type_name(param: &Parameter, projection: &TypeProjection<'_>) -
     planned_emitted_type_name(&param.ty, projection)
 }
 
-fn emitted_pointer_is_mutable(
-    param: &Parameter,
-    interface_names: &BTreeSet<(String, String)>,
-    tu: &str,
-) -> bool {
+fn emitted_pointer_is_mutable(param: &Parameter, projection: &TypeProjection<'_>) -> bool {
     if param.annotation.com_out_ptr {
         return true;
     }
@@ -9609,7 +9605,9 @@ fn emitted_pointer_is_mutable(
                 && matches!(
                     target,
                     TypeRef::Named { name, .. } | TypeRef::Generic { name, .. }
-                        if interface_names.contains(&(tu.to_string(), name.clone()))
+                        if projection
+                            .interface_names
+                            .contains(&(projection.tu.to_string(), name.clone()))
                 )
             {
                 false
@@ -9621,12 +9619,21 @@ fn emitted_pointer_is_mutable(
             !matches!(
                 target.as_ref(),
                 TypeRef::Named { name, .. } | TypeRef::Generic { name, .. }
-                    if interface_names.contains(&(tu.to_string(), name.clone()))
+                    if projection
+                        .interface_names
+                        .contains(&(projection.tu.to_string(), name.clone()))
             ) && *mutable
         }
         TypeRef::FunctionPointer { .. } => true,
         TypeRef::OpaquePointer { mutable, .. } => *mutable,
-        TypeRef::Named { name, .. } if matches!(name.as_str(), "PVOID" | "LPVOID") => true,
+        TypeRef::Named { name, declaration } if matches!(name.as_str(), "PVOID" | "LPVOID") => {
+            !(projection.type_names.contains_key(name)
+                && canonical_raw_pointer_is_retained(
+                    projection.retained_canonical_raw_pointers,
+                    projection.tu,
+                    declaration,
+                ))
+        }
         _ => false,
     }
 }

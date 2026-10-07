@@ -10,6 +10,8 @@ use windows_metadata::{
     reader::{HasAttributes, Item},
 };
 
+const METADATA_RDL: &str = include_str!("../../../../metadata/metadata.rdl");
+
 fn scratch(name: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "windows-clang-header-partitions-{name}-{}",
@@ -4042,6 +4044,172 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
     assert_eq!(
         signature.return_type,
         Type::value_named("Example.First", "PVOID")
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn retained_canonical_pointer_output_sal_preserves_direction() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("retained-canonical-pointer-output-sal");
+    let foundation = scratch.join("foundation.h");
+    let memory = scratch.join("memoryapi.h");
+    std::fs::write(
+        &foundation,
+        "#pragma once\n\
+         typedef int BOOL;\n\
+         typedef void* HANDLE;\n\
+         typedef const void* LPCVOID;\n\
+         typedef void* LPVOID;\n\
+         typedef unsigned __int64 SIZE_T;\n\
+         extern \"C\" LPVOID PreserveLpvoid(LPVOID const* source);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &memory,
+        format!(
+            r#"#pragma once
+#define W32M(text) __attribute__((annotate(text)))
+#define _In_ W32M("_In_")
+#define _Out_opt_ W32M("_Out_opt_")
+#define _Out_writes_bytes_to_(s, c) W32M("_Out_writes_bytes_to_(" #s "," #c ")")
+#include "{}"
+extern "C" void InspectBuffer(_In_ LPVOID lpBuffer);
+extern "C" BOOL ReadProcessMemory(
+    _In_ HANDLE hProcess,
+    _In_ LPCVOID lpBaseAddress,
+    _Out_writes_bytes_to_(nSize, *lpNumberOfBytesRead) LPVOID lpBuffer,
+    _In_ SIZE_T nSize,
+    _Out_opt_ SIZE_T* lpNumberOfBytesRead);
+"#,
+            foundation.to_string_lossy()
+        ),
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&memory]);
+    let function = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "ReadProcessMemory")
+        .unwrap();
+    let FactData::Function { params, .. } = &function.data else {
+        panic!("ReadProcessMemory was not extracted as a function");
+    };
+    assert!(params[2].annotation.output);
+    assert_eq!(
+        params[2].annotation.size,
+        Some(windows_clang::SalSize {
+            bytes: true,
+            value: windows_clang::SalSizeValue::Parameter("nSize".to_string()),
+        })
+    );
+    assert!(!params[2].annotation.optional);
+    assert!(params[4].annotation.output);
+    assert!(params[4].annotation.optional);
+    assert!(params[4].annotation.size.is_none());
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            foundation.to_string_lossy(),
+            RootPartition::new("foundation", "Windows.Win32.Foundation")
+                .with_library("PreserveLpvoid", "foundation.dll"),
+        )
+        .with_traversed_header(
+            memory.to_string_lossy(),
+            RootPartition::new("memory", "Windows.Win32.System.Diagnostics.Debug")
+                .with_library("InspectBuffer", "KERNEL32.dll")
+                .with_library("ReadProcessMemory", "KERNEL32.dll"),
+        );
+    let functions = BTreeSet::from([
+        "InspectBuffer".to_string(),
+        "PreserveLpvoid".to_string(),
+        "ReadProcessMemory".to_string(),
+    ]);
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Windows.Win32", &references);
+    options.functions = Some(&functions);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let memory = output(&partitions, "Windows.Win32.System.Diagnostics.Debug");
+    assert!(
+        memory.contains("#[size_param(3)] #[out] lpBuffer: Windows::Win32::Foundation::LPVOID"),
+        "{memory}"
+    );
+    assert!(
+        memory.contains("#[opt] lpNumberOfBytesRead: *mut usize"),
+        "{memory}"
+    );
+    assert!(
+        memory.contains("fn InspectBuffer(lpBuffer: Windows::Win32::Foundation::LPVOID)"),
+        "{memory}"
+    );
+
+    let winmd = scratch.join("retained-canonical-pointer-output-sal.winmd");
+    let mut compiler = windows_rdl::reader();
+    compiler.input_text(METADATA_RDL);
+    for rdl in partitions.values() {
+        compiler.input_text(rdl);
+    }
+    compiler.output(&winmd).write().unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    let Item::Fn(function) = index.expect_item(
+        "Windows.Win32.System.Diagnostics.Debug",
+        "ReadProcessMemory",
+    ) else {
+        panic!("ReadProcessMemory was not emitted as a function");
+    };
+    let params = function.params_by_sequence(5).unwrap();
+    let [
+        Some(hprocess),
+        Some(base),
+        Some(buffer),
+        Some(size),
+        Some(bytes_read),
+    ] = params.params()
+    else {
+        panic!("ReadProcessMemory parameter metadata is incomplete");
+    };
+    assert_eq!(
+        hprocess.direction(),
+        windows_metadata::reader::ParamDirection::Input
+    );
+    assert_eq!(
+        base.direction(),
+        windows_metadata::reader::ParamDirection::Input
+    );
+    assert_eq!(
+        buffer.direction(),
+        windows_metadata::reader::ParamDirection::Output
+    );
+    assert_eq!(
+        buffer.buffer_relationship(),
+        Some(windows_metadata::reader::BufferRelationship::BytesParam(3))
+    );
+    assert!(!buffer.is_optional());
+    assert_eq!(
+        size.direction(),
+        windows_metadata::reader::ParamDirection::Input
+    );
+    assert_eq!(
+        bytes_read.direction(),
+        windows_metadata::reader::ParamDirection::Output
+    );
+    assert!(bytes_read.is_optional());
+    assert_eq!(bytes_read.buffer_relationship(), None);
+    let Item::Fn(inspect) =
+        index.expect_item("Windows.Win32.System.Diagnostics.Debug", "InspectBuffer")
+    else {
+        panic!("InspectBuffer was not emitted as a function");
+    };
+    assert_eq!(
+        inspect.params().next().unwrap().direction(),
+        windows_metadata::reader::ParamDirection::Input
     );
 
     std::fs::remove_dir_all(scratch).unwrap();
