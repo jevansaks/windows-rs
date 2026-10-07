@@ -66,6 +66,9 @@ traversed header keep their existing route.
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
 planning into RDL and WinMD attributes. Unknown, malformed, or misplaced annotations are errors.
+The valueless `native_opaque` marker may appear on a named C++ class definition. It preserves only
+the class's nominal identity as an empty type for pointer and reference use. Fields, methods, base
+classes, layout, and native inheritance are not projected, and any by-value use is an error.
 Captured SAL keeps ordinary NUL-terminated strings and double-NUL multistrings as separate
 parameter facts through `ParamAnnotation`.
 

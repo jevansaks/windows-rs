@@ -8142,14 +8142,22 @@ fn validate_pointer_only_class_value(
             } else {
                 return Ok(());
             };
-            if layout.pointer_only_class_layouts.contains_key(&fact.origin) {
+            if let Some(pointer_only_layout) = layout.pointer_only_class_layouts.get(&fact.origin) {
                 let name = layout
                     .display_names
                     .and_then(|names| names.get(&fact.name))
                     .map_or(fact.name.as_str(), String::as_str);
+                let kind = if matches!(
+                    pointer_only_layout,
+                    FactData::Record { fields, .. } if fields.is_empty()
+                ) {
+                    "native_opaque class"
+                } else {
+                    "pointer-only native class"
+                };
                 return Err(Error(format!(
-                    "pointer-only native class `{}` is used by value in translation unit `{}`",
-                    name, fact.origin.tu
+                    "{kind} `{name}` is used by value in translation unit `{}`",
+                    fact.origin.tu
                 )));
             }
             if !seen.insert(fact.origin.clone()) {
