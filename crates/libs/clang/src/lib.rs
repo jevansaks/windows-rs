@@ -2320,6 +2320,19 @@ impl Snapshot {
                 providers.insert(fact.origin.clone());
                 providers.insert(enumeration.origin.clone());
             }
+            let mut traversed_associated_enum_providers: BTreeMap<&str, Vec<&Fact>> =
+                BTreeMap::new();
+            for ((_, name), providers) in &associated_enum_providers {
+                traversed_associated_enum_providers
+                    .entry(name)
+                    .or_default()
+                    .extend(
+                        providers
+                            .iter()
+                            .filter(|origin| retained_origins.contains(origin))
+                            .map(|origin| facts_by_origin[origin]),
+                    );
+            }
             let mut associated_enum_routes: BTreeMap<
                 String,
                 (
@@ -2369,13 +2382,19 @@ impl Snapshot {
                                 .flatten()
                                 .cloned()
                         })
+                        .filter(|provider| {
+                            !traversed_associated_enum_providers
+                                .get(name.as_str())
+                                .is_some_and(|traversed| {
+                                    has_equivalent_source_provider(
+                                        facts_by_origin[provider],
+                                        traversed,
+                                    )
+                                })
+                        })
                         .collect();
-                    // An independently traversed provider keeps its existing route.
-                    if providers.is_empty()
-                        || providers
-                            .iter()
-                            .any(|provider| retained_origins.contains(provider))
-                    {
+                    // An equivalent provider traversed in any extraction input keeps its route.
+                    if providers.is_empty() {
                         continue;
                     }
                     let route = associated_enum_routes.entry(name.clone()).or_default();
@@ -2390,12 +2409,18 @@ impl Snapshot {
                     continue;
                 }
                 let namespace = self.namespace_authorities.get(&name).map(String::as_str);
-                let (owner, conflict) = resolve_header_owner(
+                let authority_resolves = namespace.is_some_and(|namespace| {
+                    equivalent_associated_enum_owner_policies(&name, &candidates, namespace)
+                });
+                let (owner, mut conflict) = resolve_header_owner(
                     &name,
                     Some(PartitionItemKind::Type),
                     candidates,
                     namespace,
                 )?;
+                if authority_resolves {
+                    conflict = None;
+                }
                 if let Some(conflict) = conflict {
                     conflicts.push(conflict);
                 }
@@ -6766,6 +6791,32 @@ fn same_owner_policy(left: &RootOwner, right: &RootOwner) -> bool {
         && left.exclude_empty_records == right.exclude_empty_records
 }
 
+fn equivalent_associated_enum_owner_policies(
+    name: &str,
+    owners: &BTreeSet<RootOwner>,
+    namespace: &str,
+) -> bool {
+    let matching: BTreeSet<_> = owners
+        .iter()
+        .filter(|owner| owner.namespace == namespace)
+        .collect();
+    let owners: Vec<_> = if matching.is_empty() {
+        owners.iter().collect()
+    } else {
+        matching.into_iter().collect()
+    };
+    let Some(first) = owners.first() else {
+        return false;
+    };
+    owners.iter().all(|owner| {
+        first.remaps.get(name) == owner.remaps.get(name)
+            && first.u32_types.contains(name) == owner.u32_types.contains(name)
+            && first.flags.contains(name) == owner.flags.contains(name)
+            && first.preserved_auto_function_pointer_levels.contains(name)
+                == owner.preserved_auto_function_pointer_levels.contains(name)
+    })
+}
+
 fn same_partition_owner(left: &RootOwner, right: &RootOwner) -> bool {
     left.partition == right.partition && left.namespace == right.namespace
 }
@@ -8011,6 +8062,58 @@ fn same_source_declaration(left: &Fact, right: &Fact) -> bool {
         && left.spelling == right.spelling
         && left.definition == right.definition
         && left.data == right.data
+}
+
+fn has_equivalent_source_provider(provider: &Fact, traversed: &[&Fact]) -> bool {
+    traversed.iter().any(|candidate| {
+        provider.kind == candidate.kind
+            && provider.name == candidate.name
+            && provider.spelling == candidate.spelling
+            && provider.definition == candidate.definition
+            && equivalent_associated_enum_provider_data(&provider.data, &candidate.data)
+    })
+}
+
+fn equivalent_associated_enum_provider_data(left: &FactData, right: &FactData) -> bool {
+    match (left, right) {
+        (
+            FactData::Enum {
+                repr: left_repr,
+                variants: left_variants,
+                fixed: left_fixed,
+                scoped: left_scoped,
+            },
+            FactData::Enum {
+                repr: right_repr,
+                variants: right_variants,
+                fixed: right_fixed,
+                scoped: right_scoped,
+            },
+        ) => {
+            left_repr == right_repr
+                && left_fixed == right_fixed
+                && left_scoped == right_scoped
+                && left_variants.len() == right_variants.len()
+                && left_variants
+                    .iter()
+                    .zip(right_variants)
+                    .all(|(left, right)| {
+                        left.name == right.name
+                            && equivalent_enum_value(left.value, right.value, *left_repr)
+                    })
+        }
+        _ => left == right,
+    }
+}
+
+fn equivalent_enum_value(left: i64, right: i64, repr: Scalar) -> bool {
+    match repr {
+        Scalar::U8 => left as u8 == right as u8,
+        Scalar::U16 => left as u16 == right as u16,
+        Scalar::U32 => left as u32 == right as u32,
+        Scalar::U64 => left as u64 == right as u64,
+        _ => left == right,
+    }
 }
 
 fn emittable_type<'a>(name: &str, fact: &'a Fact) -> Result<&'a Fact, Error> {
@@ -10441,6 +10544,87 @@ mod tests {
         let different_targets = vec![&first_record, &different_record];
         let different_index = HashMap::from([("_DCIENUMINPUT", different_targets)]);
         assert!(choose_type_root("DCIENUMINPUT", &[&first, &different], &different_index).is_err());
+    }
+
+    #[test]
+    fn traversed_provider_equivalence_uses_definition_shape_and_unsigned_width() {
+        let location = Location {
+            file: "shared.h".to_string(),
+            offset: 42,
+        };
+        let enumeration = |local, value, file: &str| {
+            test_fact(
+                local,
+                None,
+                FactKind::Enum,
+                "SHARED_ASSOCIATED",
+                Location {
+                    file: file.to_string(),
+                    ..location.clone()
+                },
+                FactData::Enum {
+                    repr: Scalar::U32,
+                    variants: vec![Variant {
+                        name: "SHARED_VALUE".to_string(),
+                        value,
+                    }],
+                    fixed: true,
+                    scoped: false,
+                },
+            )
+        };
+        let provider = enumeration(1, 2_147_483_648, "shared.h");
+        let equivalent = enumeration(2, -2_147_483_648, "shared.h");
+        let different_definition = enumeration(3, 2, "shared.h");
+        let different_header = enumeration(4, 1, "other.h");
+        let mut different_repr = equivalent.clone();
+        let FactData::Enum { repr, .. } = &mut different_repr.data else {
+            unreachable!();
+        };
+        *repr = Scalar::I32;
+        let alias_location = Location {
+            file: "shared.h".to_string(),
+            offset: 84,
+        };
+        let alias = |local| {
+            test_fact(
+                local,
+                None,
+                FactKind::Typedef,
+                "PUBLIC_ASSOCIATED",
+                alias_location.clone(),
+                FactData::Typedef {
+                    target: TypeRef::Named {
+                        name: "SHARED_ASSOCIATED".to_string(),
+                        declaration: location.clone(),
+                    },
+                },
+            )
+        };
+        let provider_alias = alias(5);
+        let equivalent_alias = alias(6);
+
+        assert!(has_equivalent_source_provider(&provider, &[&equivalent]));
+        assert!(!has_equivalent_source_provider(
+            &provider,
+            &[&different_definition]
+        ));
+        assert!(!has_equivalent_source_provider(
+            &provider,
+            &[&different_header]
+        ));
+        assert!(!has_equivalent_source_provider(
+            &provider,
+            &[&different_repr]
+        ));
+        assert!(has_equivalent_source_provider(
+            &equivalent_alias,
+            &[&provider_alias, &provider]
+        ));
+        assert!(!has_equivalent_source_provider(
+            &different_definition,
+            &[&provider_alias, &provider]
+        ));
     }
 
     #[test]

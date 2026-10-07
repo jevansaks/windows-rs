@@ -163,8 +163,15 @@ annotation-compatible redeclarations to dependency closure. Those redeclarations
 other extraction inputs in the aggregate snapshot. A provider that has no traversed-header owner
 inherits the annotated root's owner settings. Exclusions and namespace authority resolve multiple
 candidates; otherwise the audit reports the owner conflict. An inherited owner remap updates both
-the enum name and the annotation. Providers already owned by traversed headers keep their existing
-routes, and unrelated included declarations remain excluded.
+the enum name and the annotation. A provider already owned by a traversed header in any extraction
+input keeps that route when its physical source declaration and extracted definition match. A
+signed Clang presentation of an unsigned enum value is compared at the declared representation
+width, matching RDL emission. A same-name declaration from another header or with different
+definition data remains independent.
+When an exact or wildcard authority supplies a destination namespace for an otherwise unowned
+provider, unrelated owner settings do not create a conflict. A differing remap, integer override,
+flags setting, or pointer-level override for that enum still fails the audit. Unrelated included
+declarations remain excluded.
 
 If a selected function reaches a non-POD native class, header planning can retain its field layout
 as a pointer-only dependency. The class must have public instance fields, no base classes, and no

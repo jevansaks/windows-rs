@@ -918,6 +918,414 @@ fn associated_enum_owners_use_exclusions_authority_and_conflict_audit() {
 }
 
 #[test]
+fn associated_enum_dependencies_prefer_traversed_providers_across_inputs() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("associated-enum-traversed-providers");
+    let wincrypt = scratch.join("wincrypt.h");
+    let cfg = scratch.join("cfg.h");
+    let winnt = scratch.join("winnt.h");
+    let oaidl = scratch.join("oaidl.h");
+    let cert_enc = scratch.join("CertEnc.h");
+    let mssip = scratch.join("mssip.h");
+    let cfgmgr32 = scratch.join("cfgmgr32.h");
+    let cryptuiapi = scratch.join("cryptuiapi.h");
+    let clusapi = scratch.join("clusapi.h");
+    let dbg_model = scratch.join("DbgModel.h");
+    let msdasql = scratch.join("msdasql_interfaces.h");
+    std::fs::write(
+        &wincrypt,
+        "#pragma once\n\
+         enum CERT_ALT_NAME : int { CERT_ALT_NAME_OTHER = 1 };\n\
+         enum [[clang::flag_enum]] CERT_QUERY_ENCODING_TYPE : unsigned int {\n\
+             CERT_QUERY_ENCODING_TYPE_ASN = 1u,\n\
+         };\n\
+         enum CERT_RDN_ATTR_VALUE_TYPE : int { CERT_RDN_ANY_TYPE = 0 };\n\
+         enum [[clang::flag_enum]] CRYPT_KEY_FLAGS : unsigned int {\n\
+             CRYPT_EXPORTABLE = 1u,\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &cfg,
+        "#pragma once\n\
+         enum [[clang::flag_enum]] CM_DEVNODE_STATUS_FLAGS : unsigned int {\n\
+             DN_ROOT_ENUMERATED = 1u,\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &winnt,
+        "#pragma once\n\
+         enum [[clang::flag_enum]] OBJECT_SECURITY_INFORMATION : unsigned int {\n\
+             OWNER_SECURITY_INFORMATION = 1u,\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &oaidl,
+        "#pragma once\n\
+         enum VARENUM : unsigned short { VT_EMPTY = 0, VT_I4 = 3 };\n",
+    )
+    .unwrap();
+    let associated_header = |include: &str, root: &str, fields: &[(&str, &str)]| -> String {
+        let fields = fields
+            .iter()
+            .map(|(field, name)| {
+                format!("    W32M(\"win32metadata:associated_enum={name}\") unsigned {field};\n")
+            })
+            .collect::<String>();
+        format!(
+            "#pragma once\n\
+                 #define W32M(text) __attribute__((annotate(text)))\n\
+                 #include \"{include}\"\n\
+                 struct {root} {{\n\
+                 {fields}\
+                 }};\n"
+        )
+    };
+    std::fs::write(
+        &cert_enc,
+        associated_header(
+            "wincrypt.h",
+            "CERTIFICATE_ROOT",
+            &[
+                ("alt_name", "CERT_ALT_NAME"),
+                ("rdn_type", "CERT_RDN_ATTR_VALUE_TYPE"),
+            ],
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &mssip,
+        associated_header(
+            "wincrypt.h",
+            "SIP_ROOT",
+            &[("encoding", "CERT_QUERY_ENCODING_TYPE")],
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &cfgmgr32,
+        associated_header(
+            "cfg.h",
+            "DEVINST_ROOT",
+            &[("status", "CM_DEVNODE_STATUS_FLAGS")],
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &cryptuiapi,
+        associated_header(
+            "wincrypt.h",
+            "CRYPTOGRAPHY_UI_ROOT",
+            &[("flags", "CRYPT_KEY_FLAGS")],
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &clusapi,
+        associated_header(
+            "winnt.h",
+            "CLUSTER_ROOT",
+            &[("security", "OBJECT_SECURITY_INFORMATION")],
+        ),
+    )
+    .unwrap();
+    let variant_header = |root: &str| {
+        format!(
+            "#pragma once\n\
+             #define W32M(text) __attribute__((annotate(text)))\n\
+             #include \"oaidl.h\"\n\
+             struct {root} {{\n\
+                 W32M(\"win32metadata:associated_enum=VARENUM\") unsigned short value;\n\
+             }};\n"
+        )
+    };
+    std::fs::write(&dbg_model, variant_header("DEBUG_ROOT")).unwrap();
+    std::fs::write(&msdasql, variant_header("SEARCH_ROOT")).unwrap();
+
+    let include = |header: &Path| format!("#include \"{}\"\n", header.to_string_lossy());
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new("crypto.cpp", include(&wincrypt)).with_root_dirs(roots.clone()),
+            Input::new("certificates.cpp", include(&cert_enc)).with_root_dirs(roots.clone()),
+            Input::new("sip.cpp", include(&mssip)).with_root_dirs(roots.clone()),
+            Input::new("devinst-provider.cpp", include(&cfg)).with_root_dirs(roots.clone()),
+            Input::new("devinst-consumer.cpp", include(&cfgmgr32)).with_root_dirs(roots.clone()),
+            Input::new("cryptography-ui.cpp", include(&cryptuiapi)).with_root_dirs(roots.clone()),
+            Input::new("system-services.cpp", include(&winnt)).with_root_dirs(roots.clone()),
+            Input::new("clustering.cpp", include(&clusapi)).with_root_dirs(roots.clone()),
+            Input::new("debug.cpp", include(&dbg_model)).with_root_dirs(roots.clone()),
+            Input::new("search.cpp", include(&msdasql)).with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let crypto = RootPartition::new(
+        "Security.Cryptography",
+        "Windows.Win32.Security.Cryptography",
+    );
+    let devinst = RootPartition::new(
+        "DevInst",
+        "Windows.Win32.Devices.DeviceAndDriverInstallation",
+    );
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input("crypto.cpp", wincrypt.to_string_lossy(), crypto)
+        .with_traversed_header_for_input(
+            "certificates.cpp",
+            cert_enc.to_string_lossy(),
+            RootPartition::new(
+                "Certificates",
+                "Windows.Win32.Security.Cryptography.Certificates",
+            ),
+        )
+        .with_traversed_header_for_input(
+            "sip.cpp",
+            mssip.to_string_lossy(),
+            RootPartition::new(
+                "Security.Cryptography.Sip",
+                "Windows.Win32.Security.Cryptography.Sip",
+            ),
+        )
+        .with_traversed_header_for_input(
+            "devinst-provider.cpp",
+            cfg.to_string_lossy(),
+            devinst.clone(),
+        )
+        .with_traversed_header_for_input(
+            "devinst-consumer.cpp",
+            cfgmgr32.to_string_lossy(),
+            devinst,
+        )
+        .with_traversed_header_for_input(
+            "cryptography-ui.cpp",
+            cryptuiapi.to_string_lossy(),
+            RootPartition::new(
+                "Security.Cryptography.UI",
+                "Windows.Win32.Security.Cryptography.UI",
+            ),
+        )
+        .with_traversed_header_for_input(
+            "system-services.cpp",
+            winnt.to_string_lossy(),
+            RootPartition::new("Backup", "Windows.Win32.System.SystemServices"),
+        )
+        .with_traversed_header_for_input(
+            "clustering.cpp",
+            clusapi.to_string_lossy(),
+            RootPartition::new("MsCs", "Windows.Win32.Networking.Clustering"),
+        )
+        .with_traversed_header_for_input(
+            "debug.cpp",
+            dbg_model.to_string_lossy(),
+            RootPartition::new(
+                "Debug.Extensions",
+                "Windows.Win32.System.Diagnostics.Debug.Extensions",
+            )
+            .with_exclusion("PDEBUG_ENTENSION_KNOWNSTRUCT"),
+        )
+        .with_traversed_header_for_input(
+            "search.cpp",
+            msdasql.to_string_lossy(),
+            RootPartition::new("Search", "Windows.Win32.System.Search")
+                .with_exclusion("PROGID_DataShapeProvider")
+                .with_exclusion("PROGID_DataShapeProvider_Version"),
+        );
+    let authorities =
+        NamespaceAuthorities::new().with_exact("VARENUM", "Windows.Win32.System.Variant");
+    let references = nonempty_references();
+    let options = EmitOptions::new("Windows.Win32", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let cryptography = output(&partitions, "Windows.Win32.Security.Cryptography");
+    for name in [
+        "CERT_ALT_NAME",
+        "CERT_QUERY_ENCODING_TYPE",
+        "CERT_RDN_ATTR_VALUE_TYPE",
+        "CRYPT_KEY_FLAGS",
+    ] {
+        assert!(
+            cryptography.contains(&format!("enum {name}")),
+            "{cryptography}"
+        );
+    }
+    let devinst = output(
+        &partitions,
+        "Windows.Win32.Devices.DeviceAndDriverInstallation",
+    );
+    assert!(
+        devinst.contains("enum CM_DEVNODE_STATUS_FLAGS"),
+        "{devinst}"
+    );
+    let system_services = output(&partitions, "Windows.Win32.System.SystemServices");
+    assert!(
+        system_services.contains("enum OBJECT_SECURITY_INFORMATION"),
+        "{system_services}"
+    );
+    let variant = output(&partitions, "Windows.Win32.System.Variant");
+    assert!(variant.contains("enum VARENUM"), "{variant}");
+    assert_eq!(
+        partitions
+            .values()
+            .map(|rdl| rdl.matches("enum VARENUM").count())
+            .sum::<usize>(),
+        1,
+        "{partitions:#?}"
+    );
+    for namespace in [
+        "Windows.Win32.Security.Cryptography.Certificates",
+        "Windows.Win32.Security.Cryptography.Sip",
+        "Windows.Win32.Security.Cryptography.UI",
+        "Windows.Win32.Networking.Clustering",
+        "Windows.Win32.System.Diagnostics.Debug.Extensions",
+        "Windows.Win32.System.Search",
+    ] {
+        let output = output(&partitions, namespace);
+        assert!(
+            ![
+                "CERT_ALT_NAME",
+                "CERT_QUERY_ENCODING_TYPE",
+                "CERT_RDN_ATTR_VALUE_TYPE",
+                "CRYPT_KEY_FLAGS",
+                "OBJECT_SECURITY_INFORMATION",
+                "VARENUM",
+            ]
+            .iter()
+            .any(|name| output.contains(&format!("enum {name}"))),
+            "{namespace}: {output}"
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn associated_enum_authority_resolves_equivalent_dependency_owners() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("associated-enum-authority");
+    let dependency = scratch.join("oaidl.h");
+    let debug = scratch.join("DbgModel.h");
+    let search = scratch.join("msdasql_interfaces.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         enum VARENUM : unsigned short { VT_EMPTY = 0, VT_I4 = 3 };\n",
+    )
+    .unwrap();
+    let associated_header = |root: &str| {
+        format!(
+            "#pragma once\n\
+             #define W32M(text) __attribute__((annotate(text)))\n\
+             #include \"oaidl.h\"\n\
+             struct {root} {{\n\
+                 W32M(\"win32metadata:associated_enum=VARENUM\") unsigned short value;\n\
+             }};\n"
+        )
+    };
+    std::fs::write(&debug, associated_header("DEBUG_ROOT")).unwrap();
+    std::fs::write(&search, associated_header("SEARCH_ROOT")).unwrap();
+
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "debug.cpp",
+                format!("#include \"{}\"\n", debug.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "search.cpp",
+                format!("#include \"{}\"\n", search.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let debug_owner = RootPartition::new(
+        "Debug.Extensions",
+        "Windows.Win32.System.Diagnostics.Debug.Extensions",
+    )
+    .with_exclusion("PDEBUG_ENTENSION_KNOWNSTRUCT");
+    let search_owner = RootPartition::new("Search", "Windows.Win32.System.Search")
+        .with_exclusion("PROGID_DataShapeProvider")
+        .with_exclusion("PROGID_DataShapeProvider_Version");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input("debug.cpp", debug.to_string_lossy(), debug_owner.clone())
+        .with_traversed_header_for_input(
+            "search.cpp",
+            search.to_string_lossy(),
+            search_owner.clone(),
+        );
+    let authorities =
+        NamespaceAuthorities::new().with_exact("VARENUM", "Windows.Win32.System.Variant");
+    let references = nonempty_references();
+    let options = EmitOptions::new("Windows.Win32", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let variant = output(&partitions, "Windows.Win32.System.Variant");
+    assert!(variant.contains("enum VARENUM"), "{variant}");
+    assert_eq!(
+        partitions
+            .values()
+            .map(|rdl| rdl.matches("enum VARENUM").count())
+            .sum::<usize>(),
+        1,
+        "{partitions:#?}"
+    );
+
+    for (label, conflicting_owner) in [
+        (
+            "remap",
+            debug_owner.clone().with_remap("VARENUM", "VARIANT_KIND"),
+        ),
+        ("u32", debug_owner.clone().with_u32_type("VARENUM")),
+        ("flags", debug_owner.clone().with_flags("VARENUM")),
+        (
+            "pointer-level",
+            debug_owner.with_preserved_auto_function_pointer_level("VARENUM"),
+        ),
+    ] {
+        let conflicting_policy = HeaderPartitionPolicy::new()
+            .with_traversed_header_for_input(
+                "debug.cpp",
+                debug.to_string_lossy(),
+                conflicting_owner,
+            )
+            .with_traversed_header_for_input(
+                "search.cpp",
+                search.to_string_lossy(),
+                search_owner.clone(),
+            );
+        let conflicting = snapshot
+            .plan_header_partitions(&conflicting_policy, &authorities)
+            .unwrap()
+            .audit(&options)
+            .unwrap();
+        assert_eq!(conflicting.conflicts().len(), 1, "{label}: {conflicting}");
+        assert_eq!(conflicting.conflicts()[0].name, "VARENUM", "{label}");
+        assert_eq!(
+            conflicting.conflicts()[0].reason,
+            PartitionConflictReason::AmbiguousRootCandidates,
+            "{label}"
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn associated_enum_dependencies_do_not_collapse_owned_same_leaf_types() {
     helpers::ensure_libclang();
 
