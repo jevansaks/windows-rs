@@ -1295,6 +1295,19 @@ impl TranslationUnit {
         result
     }
 
+    fn has_error_diagnostics(&self) -> bool {
+        let count = unsafe { clang_getNumDiagnostics(self.0) };
+        for index in 0..count {
+            let diagnostic = unsafe { clang_getDiagnostic(self.0, index) };
+            let is_error = unsafe { clang_getDiagnosticSeverity(diagnostic) } >= CXDiagnostic_Error;
+            unsafe { clang_disposeDiagnostic(diagnostic) };
+            if is_error {
+                return true;
+            }
+        }
+        false
+    }
+
     fn included_files(&self, input: &str) -> Vec<IncludedFile> {
         struct Visit {
             paths: Vec<String>,
@@ -2850,6 +2863,10 @@ fn evaluate_probe(
     names: &[String],
 ) -> Result<(Vec<Evaluated>, HashSet<String>), Error> {
     let tu = TranslationUnit::parse_probe(index, input, &probe_source(names), args)?;
+    // KeepGoing may produce evaluable cursors for a recovered prefix of an invalid expression.
+    if tu.has_error_diagnostics() {
+        return Ok((vec![], HashSet::new()));
+    }
     Ok(evaluate_parsed_probe(&tu, input))
 }
 
@@ -2910,8 +2927,8 @@ fn probe_source(names: &[String]) -> String {
     for name in names {
         probe.push_str(&format!(
             "#ifdef {name}\n\
-             constexpr auto __clang_eval_{name} = ({name});\n\
-             constexpr __int64 __clang_bits_{name} = \
+             const auto __clang_eval_{name} = ({name});\n\
+             const __int64 __clang_bits_{name} = \
                  (__int64)((__INTPTR_TYPE__)({name}));\n\
              enum {{ __clang_count_{name} = __WINDOWS_CLANG_NARG({name}) }};\n\
              #endif\n"

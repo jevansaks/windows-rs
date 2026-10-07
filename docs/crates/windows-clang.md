@@ -577,6 +577,13 @@ interface-pointer alias that is projected as the interface itself, constants dec
 typedef are omitted because ECMA metadata cannot encode an interface-valued constant. An explicit
 pointer to the same interface remains a pointer and is emitted.
 
+Object-like macro probes accept a value only when Clang parses the complete generated expression
+without an error diagnostic. `KeepGoing` may otherwise expose an evaluable cursor for the valid
+prefix of a malformed macro. A failed batch is retried through the existing recovery, isolation,
+and singleton tiers so one invalid macro does not suppress neighboring valid constants. The probe
+uses `const` declarations rather than `constexpr`, which preserves integer-valued pointer casts
+while syntax errors still reject the malformed macro.
+
 ### Bit-field member scraping
 
 RDL and WinMD cannot encode C bit-field syntax directly. A consecutive run of bit fields is emitted
