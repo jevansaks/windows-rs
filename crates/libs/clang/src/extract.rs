@@ -168,6 +168,7 @@ fn extract_impl(
     let mut annotations = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
     let mut pointer_only_class_layouts = BTreeMap::new();
+    let mut clang_flag_enums = BTreeSet::new();
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
@@ -179,6 +180,7 @@ fn extract_impl(
             annotations: &mut annotations,
             declaration_guids: &mut declaration_guids,
             pointer_only_class_layouts: &mut pointer_only_class_layouts,
+            clang_flag_enums: &mut clang_flag_enums,
         };
         let (result, metrics) =
             parsed
@@ -382,6 +384,7 @@ fn extract_impl(
         annotations,
         declaration_guids,
         pointer_only_class_layouts,
+        clang_flag_enums,
         root_owners,
         constant_root_owners: BTreeMap::new(),
         root_partitions: owners,
@@ -1379,6 +1382,7 @@ impl TranslationUnit {
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
+            clang_flag_enums: &mut *output.clang_flag_enums,
             error: None,
             validate_annotations,
         };
@@ -1440,6 +1444,7 @@ struct Traversal<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
+    clang_flag_enums: &'a mut BTreeSet<Origin>,
     error: Option<Error>,
     validate_annotations: bool,
 }
@@ -1450,6 +1455,7 @@ struct ExtractionState<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
+    clang_flag_enums: &'a mut BTreeSet<Origin>,
 }
 
 struct Extracted<'tu> {
@@ -1711,6 +1717,7 @@ fn extract_child(
         fact_kind(kind)
     };
     if let Some(fact_kind) = fact_kind {
+        let clang_flag_enum = fact_kind == FactKind::Enum && enum_has_flag_attribute(child);
         let anonymous_record = matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
             && unsafe { clang_Cursor_isAnonymous(child) } != 0;
         if !name.is_empty() && !anonymous_record {
@@ -1722,6 +1729,9 @@ fn extract_child(
             {
                 child_parent = Some(origin.clone());
                 repeated = true;
+                if clang_flag_enum {
+                    traversal.clang_flag_enums.insert(origin.clone());
+                }
             } else if let Some((spelling, expansion, _, system)) = cursor_locations(child) {
                 let main_file = spelling.file == traversal.tu;
                 let root = is_root_path(
@@ -1780,6 +1790,9 @@ fn extract_child(
                         system,
                         data,
                     });
+                    if clang_flag_enum {
+                        traversal.clang_flag_enums.insert(origin.clone());
+                    }
                     if let Some(guid) = declaration_guid {
                         traversal.declaration_guids.insert(origin.clone(), guid);
                     }
@@ -1814,6 +1827,12 @@ fn has_win32metadata_annotation(cursor: CXCursor) -> bool {
         (unsafe { clang_getCursorKind(child) }) == CXCursor_AnnotateAttr
             && cx_string(unsafe { clang_getCursorSpelling(child) }).starts_with("win32metadata:")
     })
+}
+
+fn enum_has_flag_attribute(cursor: CXCursor) -> bool {
+    cursor_children(cursor)
+        .into_iter()
+        .any(|child| unsafe { clang_getCursorKind(child) } == CXCursor_FlagEnum)
 }
 
 fn materialize_anonymous_callbacks(facts: &mut Vec<Fact>) {

@@ -387,6 +387,159 @@ fn namespace_containers_do_not_enter_partition_symbol_collisions() {
 }
 
 #[test]
+fn clang_flag_enum_preserves_partition_ownership_and_representation() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("clang-flag-enum");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &first,
+        "namespace Windows { namespace FirstNative {\n\
+             enum [[clang::flag_enum]] SHARED_FLAGS : int {\n\
+                 FIRST_ZERO = 0,\n\
+                 FIRST_ONE = 1,\n\
+                 FIRST_NEGATIVE = -1,\n\
+                 FIRST_HIGH_BIT = (-2147483647 - 1),\n\
+             };\n\
+             enum SHARED_PLAIN : int {\n\
+                 FIRST_PLAIN_ZERO = 0,\n\
+                 FIRST_PLAIN_NEGATIVE = -1,\n\
+             };\n\
+         } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "namespace Windows { namespace SecondNative {\n\
+             enum [[clang::flag_enum]] SHARED_FLAGS : unsigned int {\n\
+                 SECOND_ZERO = 0u,\n\
+                 SECOND_ONE = 1u,\n\
+                 SECOND_HIGH_BIT = 0x80000000u,\n\
+                 SECOND_ALL = 0xffffffffu,\n\
+             };\n\
+             enum SHARED_PLAIN : unsigned int {\n\
+                 SECOND_PLAIN_ZERO = 0u,\n\
+                 SECOND_PLAIN_HIGH_BIT = 0x80000000u,\n\
+             };\n\
+         } }\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&first, &second]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header(
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        );
+    let references = windows_clang::MetadataReferences::new([windows_metadata::reader::File::new(
+        windows_default::WINRT.to_vec(),
+    )
+    .unwrap()]);
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Example.Common", references.types()))
+        .unwrap();
+    let first_rdl = output(&partitions, "Example.First");
+    let second_rdl = output(&partitions, "Example.Second");
+
+    assert!(
+        first_rdl.contains("#[repr(i32)]\n        #[flags]\n        enum SHARED_FLAGS"),
+        "{partitions:#?}"
+    );
+    assert!(
+        first_rdl.contains("FIRST_NEGATIVE = -1")
+            && first_rdl.contains("FIRST_HIGH_BIT = -2147483648"),
+        "{first_rdl}"
+    );
+    assert!(
+        first_rdl.contains("#[repr(i32)]\n        enum SHARED_PLAIN")
+            && !first_rdl.contains("#[flags]\n        enum SHARED_PLAIN"),
+        "{first_rdl}"
+    );
+    assert!(
+        second_rdl.contains("#[repr(u32)]\n        #[flags]\n        enum SHARED_FLAGS"),
+        "{partitions:#?}"
+    );
+    assert!(
+        second_rdl.contains("SECOND_HIGH_BIT = 2147483648")
+            && second_rdl.contains("SECOND_ALL = 4294967295"),
+        "{second_rdl}"
+    );
+    assert!(
+        second_rdl.contains("#[repr(u32)]\n        enum SHARED_PLAIN")
+            && !second_rdl.contains("#[flags]\n        enum SHARED_PLAIN"),
+        "{second_rdl}"
+    );
+
+    let winmd = scratch.join("clang-flag-enum.winmd");
+    windows_rdl::reader()
+        .input_text(include_str!("../../../../metadata/metadata.rdl"))
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+
+    for (namespace, expected_type, values) in [
+        (
+            "Example.First",
+            Type::I32,
+            [
+                ("FIRST_ZERO", Value::I32(0)),
+                ("FIRST_ONE", Value::I32(1)),
+                ("FIRST_NEGATIVE", Value::I32(-1)),
+                ("FIRST_HIGH_BIT", Value::I32(i32::MIN)),
+            ],
+        ),
+        (
+            "Example.Second",
+            Type::U32,
+            [
+                ("SECOND_ZERO", Value::U32(0)),
+                ("SECOND_ONE", Value::U32(1)),
+                ("SECOND_HIGH_BIT", Value::U32(0x8000_0000)),
+                ("SECOND_ALL", Value::U32(u32::MAX)),
+            ],
+        ),
+    ] {
+        let flags = index.expect(namespace, "SHARED_FLAGS");
+        assert_eq!(flags.underlying_type(), Some(expected_type.clone()));
+        assert!(flags.attributes().any(|attribute| {
+            attribute.name() == "FlagsAttribute"
+                && attribute.ctor().parent().namespace() == "System"
+        }));
+        for (name, value) in values {
+            assert_eq!(
+                flags
+                    .fields()
+                    .find(|field| field.name() == name)
+                    .unwrap()
+                    .constant()
+                    .unwrap()
+                    .value(),
+                value
+            );
+        }
+
+        let plain = index.expect(namespace, "SHARED_PLAIN");
+        assert_eq!(plain.underlying_type(), Some(expected_type));
+        assert!(!plain.attributes().any(|attribute| {
+            attribute.name() == "FlagsAttribute"
+                && attribute.ctor().parent().namespace() == "System"
+        }));
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn traversed_headers_select_roots_and_route_dependencies_to_default() {
     helpers::ensure_libclang();
 

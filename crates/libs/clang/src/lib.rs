@@ -1152,6 +1152,7 @@ pub struct Snapshot {
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
+    clang_flag_enums: BTreeSet<Origin>,
     root_owners: BTreeMap<Origin, RootOwner>,
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
@@ -1229,6 +1230,7 @@ impl PartialEq for Snapshot {
             && self.annotations == other.annotations
             && self.declaration_guids == other.declaration_guids
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
+            && self.clang_flag_enums == other.clang_flag_enums
             && self.root_owners == other.root_owners
             && self.constant_root_owners == other.constant_root_owners
             && self.root_partitions == other.root_partitions
@@ -1859,10 +1861,18 @@ impl Snapshot {
                     scoped,
                     ..
                 } => {
-                    let flags = plan
+                    let source_flags = self.clang_flag_enums.contains(&fact.origin);
+                    let coerced_flags = plan
                         .flag_enums
                         .contains(&(fact.origin.tu.clone(), planned.name.clone()));
-                    let repr = if flags { unsigned_scalar(*repr) } else { *repr };
+                    let flags = source_flags || coerced_flags;
+                    // Source attributes preserve the declared representation. Macro and policy
+                    // flags retain their existing same-width unsigned projection.
+                    let repr = if coerced_flags {
+                        unsigned_scalar(*repr)
+                    } else {
+                        *repr
+                    };
                     let mut item = format!(
                         "{}    #[repr({})]\n{}{}    enum {} {{\n",
                         annotation_lines(
