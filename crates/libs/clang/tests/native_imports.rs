@@ -43,6 +43,7 @@ fn coff_import_contracts_reach_physical_impl_maps() {
     ]);
     let contracts = windows_rdl::implib::read_contracts(&archive).unwrap();
     assert_eq!(contracts.len(), 4);
+    assert!(contracts.iter().all(|contract| contract.machine == 0x8664));
 
     let mut imports = NativeImports::new();
     let mut libraries = BTreeMap::new();

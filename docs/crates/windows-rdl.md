@@ -151,8 +151,9 @@ C/C++ headers -- clang() --> .rdl -- reader() --> .winmd -- bindgen() --> bindin
 - Skip RDL when a suitable winmd already exists.
 - Use `windows-clang` to create RDL from headers; `tool-webview` demonstrates the full path.
 - Use `windows-metadata` for table-level inspection, merge, and namespace remapping.
-- Use `implib::read_contracts` when a generator must preserve a COFF short import's code/data kind
-  and ordinal or native name mode. `implib::read` retains the older symbol-to-DLL-only shape.
+- Use `implib::read_contracts` when a generator must preserve a COFF short import's raw machine
+  value, code/data kind, and ordinal or native name mode. `implib::read` retains the older
+  symbol-to-DLL-only shape.
 - Use `writer().split()` to maintain namespace-partitioned reviewable metadata.
 - Use `merge_arch_rdl` only for generators that have per-architecture RDL directories and winmds.
   It merges structural differences and restores the defining-header partition.
@@ -191,10 +192,14 @@ into the RDL syntax tree. The header path and hand-authored RDL path share the s
 The `formatter` module pretty-prints generated RDL.
 
 The `implib` module reads the `IMPORT_OBJECT_HEADER` records in SDK COFF archives. Complete
-contracts keep the public linker symbol separate from the DLL entry point. Ordinal imports retain
-their numeric ordinal, `IMPORT_OBJECT_NAME` retains an exact symbol name, and
-`IMPORT_OBJECT_EXPORTAS` retains its explicit export string. `NAME_NO_PREFIX` and `NAME_UNDECORATE`
-remain typed modes rather than guessed exported names.
+contracts keep the public linker symbol separate from the DLL entry point and preserve the raw
+`IMAGE_FILE_MACHINE_*` value for caller-side architecture checks. Ordinal imports retain their
+numeric ordinal, `IMPORT_OBJECT_NAME` retains an exact symbol name, and
+`IMPORT_OBJECT_EXPORTAS` retains its explicit export string. `NAME_NO_PREFIX` and
+`NAME_UNDECORATE` remain typed modes rather than guessed exported names. Contract parsing requires
+complete archive member headers and NUL-terminated short-import names. It skips anonymous and
+BigObj records by their nonzero header version even though they share the short-import signature.
+The older `implib::read` entry point keeps its permissive final-name and archive-tail behavior.
 
 ### Testing
 

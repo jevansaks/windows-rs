@@ -32,6 +32,8 @@ pub enum ImportName {
 pub struct ImportContract {
     pub symbol: String,
     pub dll: String,
+    /// Raw `IMAGE_FILE_MACHINE_*` value from the short-import header.
+    pub machine: u16,
     pub import_type: ImportType,
     pub import_name: ImportName,
 }
@@ -41,13 +43,15 @@ const MEMBER_HEADER_LEN: usize = 60;
 /// `IMPORT_OBJECT_HEADER` short-import signature.
 const IMPORT_SIGNATURE: &[u8] = &[0x00, 0x00, 0xFF, 0xFF];
 const IMPORT_HEADER_LEN: usize = 20;
+const VERSION_OFFSET: usize = 4;
+const MACHINE_OFFSET: usize = 6;
 const SIZE_OF_DATA_OFFSET: usize = 12;
 const ORDINAL_OR_HINT_OFFSET: usize = 16;
 const TYPE_INFO_OFFSET: usize = 18;
 
 /// Parses every short-import member, preserving archive order and duplicates.
 pub fn read(bytes: &[u8]) -> Result<Vec<Import>, Error> {
-    read_archive(bytes, |data| {
+    read_archive(bytes, false, |data| {
         let mut parts = short_import_strings(data)?.split(|&b| b == 0);
         Ok(Import {
             symbol: next_string(&mut parts, "symbol")?,
@@ -57,12 +61,15 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Import>, Error> {
 }
 
 /// Parses every complete short-import contract, preserving archive order and duplicates.
+///
+/// Unlike [`read`], this rejects incomplete archive tails and unterminated name data.
 pub fn read_contracts(bytes: &[u8]) -> Result<Vec<ImportContract>, Error> {
-    read_archive(bytes, parse_short_import)
+    read_archive(bytes, true, parse_short_import)
 }
 
 fn read_archive<T>(
     bytes: &[u8],
+    strict: bool,
     parse: impl Fn(&[u8]) -> Result<T, Error>,
 ) -> Result<Vec<T>, Error> {
     if bytes.len() < ARCHIVE_MAGIC.len() || &bytes[..ARCHIVE_MAGIC.len()] != ARCHIVE_MAGIC {
@@ -72,7 +79,16 @@ fn read_archive<T>(
     let mut imports = vec![];
     let mut pos = ARCHIVE_MAGIC.len();
 
-    while pos + MEMBER_HEADER_LEN <= bytes.len() {
+    loop {
+        if pos >= bytes.len() {
+            break;
+        }
+        if bytes.len() - pos < MEMBER_HEADER_LEN {
+            if strict {
+                return Err(err("truncated archive member header"));
+            }
+            break;
+        }
         let header = &bytes[pos..pos + MEMBER_HEADER_LEN];
 
         // The end marker guards against a misaligned archive walk.
@@ -90,21 +106,34 @@ fn read_archive<T>(
         let data = &bytes[data_start..data_end];
 
         // Skip archive bookkeeping members.
-        if name != b"/" && name != b"//" && data.starts_with(IMPORT_SIGNATURE) {
+        if name != b"/" && name != b"//" && is_short_import(data) {
             imports.push(parse(data)?);
         }
 
         pos = data_end + (size & 1);
+        if strict && pos > bytes.len() {
+            return Err(err("archive member is missing its padding byte"));
+        }
     }
 
     Ok(imports)
 }
 
 fn parse_short_import(data: &[u8]) -> Result<ImportContract, Error> {
-    let mut parts = short_import_strings(data)?.split(|&b| b == 0);
+    let strings = short_import_strings(data)?;
+    if strings.last() != Some(&0) {
+        return Err(err("short import names are not NUL-terminated"));
+    }
+    let mut parts = strings.split(|&b| b == 0);
     let symbol = next_string(&mut parts, "symbol")?;
     let dll = next_string(&mut parts, "DLL")?;
 
+    let machine = u16::from_le_bytes(
+        data.get(MACHINE_OFFSET..MACHINE_OFFSET + 2)
+            .ok_or_else(|| err("short import member is shorter than its header"))?
+            .try_into()
+            .unwrap(),
+    );
     let ordinal_or_hint = u16::from_le_bytes(
         data.get(ORDINAL_OR_HINT_OFFSET..ORDINAL_OR_HINT_OFFSET + 2)
             .ok_or_else(|| err("short import member is shorter than its header"))?
@@ -135,9 +164,20 @@ fn parse_short_import(data: &[u8]) -> Result<ImportContract, Error> {
     Ok(ImportContract {
         symbol,
         dll,
+        machine,
         import_type,
         import_name,
     })
+}
+
+fn is_short_import(data: &[u8]) -> bool {
+    if !data.starts_with(IMPORT_SIGNATURE) {
+        return false;
+    }
+
+    // Anonymous and BigObj headers share Sig1/Sig2 but use a nonzero Version.
+    data.get(VERSION_OFFSET..VERSION_OFFSET + 2)
+        .is_none_or(|version| version == [0, 0])
 }
 
 fn short_import_strings(data: &[u8]) -> Result<&[u8], Error> {
@@ -148,7 +188,10 @@ fn short_import_strings(data: &[u8]) -> Result<&[u8], Error> {
             .unwrap(),
     ) as usize;
 
-    data.get(IMPORT_HEADER_LEN..IMPORT_HEADER_LEN + size_of_data)
+    let end = IMPORT_HEADER_LEN
+        .checked_add(size_of_data)
+        .ok_or_else(|| err("short import names extend past member data"))?;
+    data.get(IMPORT_HEADER_LEN..end)
         .ok_or_else(|| err("short import names extend past member data"))
 }
 
@@ -224,36 +267,42 @@ mod tests {
                 ImportContract {
                     symbol: "FileIconInit".to_string(),
                     dll: "shell32.dll".to_string(),
+                    machine: 0x8664,
                     import_type: ImportType::Code,
                     import_name: ImportName::Ordinal(660),
                 },
                 ImportContract {
                     symbol: "NamedApi".to_string(),
                     dll: "named.dll".to_string(),
+                    machine: 0x8664,
                     import_type: ImportType::Code,
                     import_name: ImportName::Name,
                 },
                 ImportContract {
                     symbol: "DataApi".to_string(),
                     dll: "data.dll".to_string(),
+                    machine: 0x8664,
                     import_type: ImportType::Data,
                     import_name: ImportName::Ordinal(12),
                 },
                 ImportContract {
                     symbol: "DecoratedApi".to_string(),
                     dll: "export.dll".to_string(),
+                    machine: 0x8664,
                     import_type: ImportType::Code,
                     import_name: ImportName::ExportAs("ExportedApi".to_string()),
                 },
                 ImportContract {
                     symbol: "_NoPrefixApi".to_string(),
                     dll: "prefix.dll".to_string(),
+                    machine: 0x8664,
                     import_type: ImportType::Code,
                     import_name: ImportName::NameNoPrefix,
                 },
                 ImportContract {
                     symbol: "_RouterControl@4".to_string(),
                     dll: "router.dll".to_string(),
+                    machine: 0x8664,
                     import_type: ImportType::Code,
                     import_name: ImportName::NameUndecorate,
                 },
@@ -288,6 +337,18 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn contracts_preserve_raw_machine_values() {
+        let mut x86 = short_import("X86Api", "x86.dll", ImportType::Code, 1, 1, None);
+        x86[MACHINE_OFFSET..MACHINE_OFFSET + 2].copy_from_slice(&0x014Cu16.to_le_bytes());
+        let mut arm64 = short_import("Arm64Api", "arm64.dll", ImportType::Code, 1, 2, None);
+        arm64[MACHINE_OFFSET..MACHINE_OFFSET + 2].copy_from_slice(&0xAA64u16.to_le_bytes());
+
+        let contracts = read_contracts(&archive([x86, arm64])).unwrap();
+        assert_eq!(contracts[0].machine, 0x014C);
+        assert_eq!(contracts[1].machine, 0xAA64);
     }
 
     #[test]
@@ -338,6 +399,78 @@ mod tests {
         );
     }
 
+    #[test]
+    fn contracts_require_terminal_nul() {
+        let dll = archive([without_terminal_nul(short_import(
+            "NamedApi",
+            "named.dll",
+            ImportType::Code,
+            1,
+            7,
+            None,
+        ))]);
+        assert_eq!(read(&dll).unwrap()[0].dll, "named.dll");
+        assert!(
+            read_contracts(&dll)
+                .unwrap_err()
+                .to_string()
+                .contains("short import names are not NUL-terminated")
+        );
+
+        let export = archive([without_terminal_nul(short_import(
+            "DecoratedApi",
+            "export.dll",
+            ImportType::Code,
+            4,
+            3,
+            Some("ExportedApi"),
+        ))]);
+        assert_eq!(read(&export).unwrap()[0].dll, "export.dll");
+        assert!(
+            read_contracts(&export)
+                .unwrap_err()
+                .to_string()
+                .contains("short import names are not NUL-terminated")
+        );
+    }
+
+    #[test]
+    fn contracts_reject_a_truncated_final_member_header() {
+        let mut archive = archive([short_import(
+            "NamedApi",
+            "named.dll",
+            ImportType::Code,
+            1,
+            7,
+            None,
+        )]);
+        archive.extend_from_slice(b"partial archive header");
+
+        assert_eq!(read(&archive).unwrap().len(), 1);
+        assert!(
+            read_contracts(&archive)
+                .unwrap_err()
+                .to_string()
+                .contains("truncated archive member header")
+        );
+    }
+
+    #[test]
+    fn anonymous_objects_are_not_short_imports() {
+        let archive = archive([
+            anonymous_object(1, 32),
+            short_import("NamedApi", "named.dll", ImportType::Code, 1, 7, None),
+            anonymous_object(2, 56),
+        ]);
+
+        let imports = read(&archive).unwrap();
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].symbol, "NamedApi");
+        let contracts = read_contracts(&archive).unwrap();
+        assert_eq!(contracts.len(), 1);
+        assert_eq!(contracts[0].symbol, "NamedApi");
+    }
+
     fn archive<const N: usize>(members: [Vec<u8>; N]) -> Vec<u8> {
         let mut result = ARCHIVE_MAGIC.to_vec();
         for (index, member) in members.into_iter().enumerate() {
@@ -383,6 +516,21 @@ mod tests {
         result.extend_from_slice(&ordinal_or_hint.to_le_bytes());
         result.extend_from_slice(&(import_type | name_type << 2).to_le_bytes());
         result.extend_from_slice(&strings);
+        result
+    }
+
+    fn without_terminal_nul(mut import: Vec<u8>) -> Vec<u8> {
+        assert_eq!(import.pop(), Some(0));
+        let size = (import.len() - IMPORT_HEADER_LEN) as u32;
+        import[SIZE_OF_DATA_OFFSET..SIZE_OF_DATA_OFFSET + 4].copy_from_slice(&size.to_le_bytes());
+        import
+    }
+
+    fn anonymous_object(version: u16, len: usize) -> Vec<u8> {
+        let mut result = vec![0, 0, 0xFF, 0xFF];
+        result.extend_from_slice(&version.to_le_bytes());
+        result.extend_from_slice(&0x8664u16.to_le_bytes());
+        result.resize(len, 0);
         result
     }
 }

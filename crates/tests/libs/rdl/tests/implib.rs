@@ -144,6 +144,7 @@ fn reads_real_kernel32_lib() {
 
     let bytes = std::fs::read(&lib).unwrap();
     let imports = implib::read(&bytes).unwrap();
+    let contracts = implib::read_contracts(&bytes).unwrap();
 
     assert!(
         imports.len() > 100,
@@ -155,6 +156,11 @@ fn reads_real_kernel32_lib() {
         .find(|i| i.symbol == "CreateFileW")
         .expect("CreateFileW should be exported by kernel32.lib");
     assert!(create_file.dll.eq_ignore_ascii_case("kernel32.dll"));
+    let create_file = contracts
+        .iter()
+        .find(|i| i.symbol == "CreateFileW")
+        .expect("CreateFileW should have a complete import contract");
+    assert_eq!(create_file.machine, 0x8664);
 }
 
 #[cfg(windows)]
