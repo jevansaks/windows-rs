@@ -1493,7 +1493,7 @@ impl Snapshot {
         let target = self.timing_target.clone();
         let (snapshot, display_names, source_names) =
             self.into_partitioned_planning_snapshot(options);
-        let plan = snapshot.plan_partitioned(options, &display_names)?;
+        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let routes = snapshot.resolve_partition_routes(candidates)?;
         snapshot.format_partitioned_plan(plan, options, &routes, &display_names, target.as_deref())
@@ -1556,6 +1556,7 @@ impl Snapshot {
             options.excluded_functions.or(options.excluded),
             options.excluded_constants.or(options.excluded),
             options.functions,
+            None,
             None,
         )?;
         if timing {
@@ -4191,6 +4192,7 @@ impl Snapshot {
         &self,
         options: &EmitOptions<'_>,
         display_names: &BTreeMap<String, String>,
+        source_names: &PlanningSourceNames,
     ) -> Result<Plan<'_>, Error> {
         let references = scoped_planning_map(options.references, display_names);
         let excluded_types =
@@ -4210,6 +4212,7 @@ impl Snapshot {
             excluded_constants.as_deref(),
             options.functions,
             Some(display_names),
+            Some(source_names),
         )
     }
 
@@ -4221,6 +4224,7 @@ impl Snapshot {
         excluded_constants: Option<&BTreeSet<String>>,
         selected_functions: Option<&BTreeSet<String>>,
         display_names: Option<&BTreeMap<String, String>>,
+        source_names: Option<&PlanningSourceNames>,
     ) -> Result<Plan<'_>, Error> {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
@@ -4236,16 +4240,61 @@ impl Snapshot {
         let declarations = DeclarationIndex::new(&self.facts);
         let facts_by_origin: HashMap<_, _> =
             self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+        let source_fact_name = |fact: &Fact| {
+            source_names.map_or_else(
+                || fact.name.clone(),
+                |names| names.fact_name(fact).to_string(),
+            )
+        };
+        let mut interface_names_by_source_identity = BTreeMap::new();
+        let mut interface_names_by_source_name = BTreeMap::new();
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| matches!(fact.data, FactData::Interface { .. }))
+        {
+            let source_name = source_fact_name(fact);
+            interface_names_by_source_identity
+                .entry((fact.origin.tu.clone(), source_name.clone()))
+                .or_insert_with(BTreeSet::new)
+                .insert(fact.name.clone());
+            interface_names_by_source_name
+                .entry(source_name)
+                .or_insert_with(BTreeSet::new)
+                .insert(fact.name.clone());
+        }
+        let associated_interface_name = |fact: &Fact| {
+            let source_name = source_fact_name(fact);
+            let interface = source_name.strip_prefix("IID_")?;
+            if let Some(names) = interface_names_by_source_identity
+                .get(&(fact.origin.tu.clone(), interface.to_string()))
+                && names.len() == 1
+            {
+                return names.first().cloned();
+            }
+            let names = interface_names_by_source_name.get(interface)?;
+            (names.len() == 1).then(|| names.first().unwrap().clone())
+        };
         let rooted_interface_iids: BTreeSet<_> = self
             .facts
             .iter()
             .filter(|fact| fact.root && matches!(fact.data, FactData::Guid { .. }))
-            .filter_map(|fact| Some((fact.origin.tu.as_str(), fact.name.strip_prefix("IID_")?)))
+            .filter_map(|fact| {
+                Some((
+                    fact.origin.tu.clone(),
+                    source_fact_name(fact).strip_prefix("IID_")?.to_string(),
+                ))
+            })
             .collect();
         let is_identified_native_interface_root = |fact: &Fact| {
             self.header_partition_policy
                 && fact.root
-                && is_identified_native_interface(fact, &facts_by_origin, &rooted_interface_iids)
+                && is_identified_native_interface(
+                    fact,
+                    &source_fact_name(fact),
+                    &facts_by_origin,
+                    &rooted_interface_iids,
+                )
         };
         let is_flat_root = |fact| {
             is_flat_declaration(fact, &facts_by_origin, references, true)
@@ -4287,20 +4336,26 @@ impl Snapshot {
         for fact in self.facts.iter().filter(|fact| {
             fact.root && matches!(fact.data, FactData::Guid { .. }) && is_flat_root(fact)
         }) {
-            let Some(interface) = fact.name.strip_prefix("IID_") else {
+            let source_name = source_fact_name(fact);
+            let Some(source_interface) = source_name.strip_prefix("IID_") else {
                 continue;
             };
-            if !interfaces.contains(interface) || declared_interface_guids.contains_key(interface) {
+            let Some(interface) = associated_interface_name(fact) else {
+                continue;
+            };
+            if !interfaces.contains(interface.as_str())
+                || declared_interface_guids.contains_key(interface.as_str())
+            {
                 continue;
             }
             let FactData::Guid { value } = &fact.data else {
                 unreachable!()
             };
-            if let Some(previous) = interface_guids.insert(interface.to_string(), value.clone())
+            if let Some(previous) = interface_guids.insert(interface, value.clone())
                 && previous != *value
             {
                 return Err(Error(format!(
-                    "interface `{interface}` has conflicting IID declarations"
+                    "interface `{source_interface}` has conflicting IID declarations"
                 )));
             }
         }
@@ -4320,23 +4375,27 @@ impl Snapshot {
             .iter()
             .filter(|fact| fact.root && is_root_fact(fact) && is_flat_root(fact))
             .filter(|fact| {
-                let Some(interface) = fact.name.strip_prefix("IID_") else {
+                let source_name = source_fact_name(fact);
+                let Some(source_interface) = source_name.strip_prefix("IID_") else {
                     return true;
                 };
                 let FactData::Guid { value } = &fact.data else {
                     return true;
                 };
                 if references
-                    .get(interface)
+                    .get(source_interface)
                     .is_some_and(|reference| reference.kind == TypeReferenceKind::Interface)
                 {
                     return false;
                 }
-                if !interfaces.contains(interface) {
+                let Some(interface) = associated_interface_name(fact) else {
+                    return true;
+                };
+                if !interfaces.contains(interface.as_str()) {
                     return true;
                 }
                 declared_interface_guids
-                    .get(interface)
+                    .get(interface.as_str())
                     .is_some_and(|declared| *declared != value)
             })
         {
@@ -5823,7 +5882,7 @@ impl HeaderPartitionPlan {
             .clone()
             .into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan_partitioned(options, &display_names)?;
+        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let mut conflicts = self.root_conflicts.clone();
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
@@ -5840,7 +5899,7 @@ impl HeaderPartitionPlan {
         let (mut snapshot, display_names, source_names) =
             self.snapshot.into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan_partitioned(options, &display_names)?;
+        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let mut conflicts = self.root_conflicts;
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
@@ -6998,15 +7057,16 @@ fn is_native_namespaced_declaration(
 
 fn is_identified_native_interface(
     fact: &Fact,
+    source_name: &str,
     facts_by_origin: &HashMap<&Origin, &Fact>,
-    rooted_interface_iids: &BTreeSet<(&str, &str)>,
+    rooted_interface_iids: &BTreeSet<(String, String)>,
 ) -> bool {
     let FactData::Interface { guid, .. } = &fact.data else {
         return false;
     };
     is_native_namespaced_declaration(fact, facts_by_origin)
         && (guid.is_some()
-            || rooted_interface_iids.contains(&(fact.origin.tu.as_str(), fact.name.as_str())))
+            || rooted_interface_iids.contains(&(fact.origin.tu.clone(), source_name.to_string())))
 }
 
 fn defines_local_type(name: &str, fact: &Fact) -> bool {

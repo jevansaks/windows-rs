@@ -710,6 +710,255 @@ fn identified_native_namespaced_interfaces_remain_public_roots() {
 }
 
 #[test]
+fn colliding_identified_native_interfaces_retain_provider_iids() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("colliding-identified-native-interfaces");
+    let support = scratch.join("support.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    let unrelated = scratch.join("unrelated.h");
+    std::fs::write(
+        &support,
+        "#pragma once\n\
+         #define interface struct\n\
+         #define PURE = 0\n\
+         #define STDMETHODCALLTYPE\n\
+         #define STDMETHOD(method) virtual HRESULT STDMETHODCALLTYPE method\n\
+         #define DECLARE_INTERFACE_(iface, baseiface) \\\n\
+             interface __declspec(novtable) iface : public baseiface\n\
+         #define MIDL_INTERFACE(text) \\\n\
+             struct __declspec(uuid(text)) __declspec(novtable)\n\
+         #define DEFINE_GUID(name, ...)\n\
+         typedef long HRESULT;\n\
+         typedef unsigned long ULONG;\n\
+         struct GUID {\n\
+             unsigned long Data1;\n\
+             unsigned short Data2;\n\
+             unsigned short Data3;\n\
+             unsigned char Data4[8];\n\
+         };\n\
+         MIDL_INTERFACE(\"00000000-0000-0000-c000-000000000046\")\n\
+         IUnknown {\n\
+             STDMETHOD(QueryInterface)(const GUID& iid, void** object) PURE;\n\
+             virtual ULONG STDMETHODCALLTYPE AddRef() PURE;\n\
+             virtual ULONG STDMETHODCALLTYPE Release() PURE;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &first,
+        "#pragma once\n\
+         #include \"support.h\"\n\
+         extern \"C\" {\n\
+         namespace FirstProvider {\n\
+         DEFINE_GUID(IID_IFoo, 0x11111111, 0x1111, 0x1111, 0x11, 0x12, 0x13, 0x14, \
+             0x15, 0x16, 0x17, 0x18)\n\
+         DECLARE_INTERFACE_(IFoo, IUnknown) {\n\
+             STDMETHOD(FirstMethod)() PURE;\n\
+         };\n\
+         }\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#pragma once\n\
+         #include \"support.h\"\n\
+         extern \"C\" {\n\
+         namespace SecondProvider {\n\
+         DEFINE_GUID(IID_IFoo, 0x22222222, 0x2222, 0x2222, 0x21, 0x22, 0x23, 0x24, \
+             0x25, 0x26, 0x27, 0x28)\n\
+         DECLARE_INTERFACE_(IFoo, IUnknown) {\n\
+             STDMETHOD(SecondMethod)() PURE;\n\
+             STDMETHOD(SecondValue)() PURE;\n\
+         };\n\
+         }\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &unrelated,
+        "#pragma once\n\
+         #include \"support.h\"\n\
+         extern \"C\" {\n\
+         namespace UnrelatedProvider {\n\
+         DEFINE_GUID(IID_IFoo, 0x99999999, 0x9999, 0x9999, 0x91, 0x92, 0x93, 0x94, \
+             0x95, 0x96, 0x97, 0x98)\n\
+         }\n\
+         }\n",
+    )
+    .unwrap();
+
+    let input = |name: &str, header: &Path| {
+        Input::new(name, format!("#include \"{}\"\n", header.to_string_lossy()))
+            .with_root_dirs([scratch.to_string_lossy().to_string()])
+    };
+    let snapshot = extract(
+        [
+            input("first.cpp", &first),
+            input("second.cpp", &second),
+            input("unrelated.cpp", &unrelated),
+        ],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let common = RootPartition::new("common", "Example.Common");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input("first.cpp", support.to_string_lossy(), common.clone())
+        .with_traversed_header_for_input("second.cpp", support.to_string_lossy(), common.clone())
+        .with_traversed_header_for_input("unrelated.cpp", support.to_string_lossy(), common)
+        .with_traversed_header_for_input(
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header_for_input(
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        )
+        .with_traversed_header_for_input(
+            "unrelated.cpp",
+            unrelated.to_string_lossy(),
+            RootPartition::new("unrelated", "Example.Unrelated"),
+        );
+    let references = nonempty_references();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+
+    let first_rdl = output(&partitions, "Example.First");
+    assert!(first_rdl.contains("interface IFoo:"), "{partitions:#?}");
+    assert!(first_rdl.contains("fn FirstMethod("), "{first_rdl}");
+    assert!(!first_rdl.contains("SecondMethod"), "{first_rdl}");
+    assert!(!first_rdl.contains("const IID_IFoo:"), "{first_rdl}");
+
+    let second_rdl = output(&partitions, "Example.Second");
+    assert!(second_rdl.contains("interface IFoo:"), "{partitions:#?}");
+    assert!(second_rdl.contains("fn SecondMethod("), "{second_rdl}");
+    assert!(second_rdl.contains("fn SecondValue("), "{second_rdl}");
+    assert!(!second_rdl.contains("FirstMethod"), "{second_rdl}");
+    assert!(!second_rdl.contains("const IID_IFoo:"), "{second_rdl}");
+
+    let unrelated_rdl = output(&partitions, "Example.Unrelated");
+    assert!(
+        unrelated_rdl.contains("const IID_IFoo: GUID"),
+        "{unrelated_rdl}"
+    );
+    assert!(
+        !unrelated_rdl.contains("interface IFoo:"),
+        "{unrelated_rdl}"
+    );
+    assert!(
+        partitions.values().all(|rdl| !rdl.contains("__partition_")),
+        "{partitions:#?}"
+    );
+
+    let winmd = scratch.join("colliding-identified-native-interfaces.winmd");
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    let expected = [
+        (
+            "Example.First",
+            ["FirstMethod"].as_slice(),
+            [
+                Value::U32(0x11111111),
+                Value::U16(0x1111),
+                Value::U16(0x1111),
+                Value::U8(0x11),
+                Value::U8(0x12),
+                Value::U8(0x13),
+                Value::U8(0x14),
+                Value::U8(0x15),
+                Value::U8(0x16),
+                Value::U8(0x17),
+                Value::U8(0x18),
+            ],
+        ),
+        (
+            "Example.Second",
+            ["SecondMethod", "SecondValue"].as_slice(),
+            [
+                Value::U32(0x22222222),
+                Value::U16(0x2222),
+                Value::U16(0x2222),
+                Value::U8(0x21),
+                Value::U8(0x22),
+                Value::U8(0x23),
+                Value::U8(0x24),
+                Value::U8(0x25),
+                Value::U8(0x26),
+                Value::U8(0x27),
+                Value::U8(0x28),
+            ],
+        ),
+    ];
+    for (namespace, methods, guid) in expected {
+        let interface = index.expect(namespace, "IFoo");
+        assert_eq!(interface.category(), TypeCategory::Interface);
+        assert_eq!(
+            interface
+                .methods()
+                .map(|method| method.name().to_string())
+                .collect::<Vec<_>>(),
+            methods
+        );
+        assert_eq!(
+            interface.interface_impls().next().unwrap().interface(&[]),
+            Type::class_named("Example.Common", "IUnknown")
+        );
+        assert_eq!(
+            interface.find_attribute("GuidAttribute").unwrap().value(),
+            guid.into_iter()
+                .map(|value| (String::new(), value))
+                .collect::<Vec<_>>()
+        );
+    }
+    let Item::Const(unrelated_iid) = index.expect_item("Example.Unrelated", "IID_IFoo") else {
+        panic!("unrelated IID_IFoo was not retained as a constant");
+    };
+    assert_eq!(
+        unrelated_iid
+            .find_attribute("GuidAttribute")
+            .unwrap()
+            .value(),
+        [
+            Value::U32(0x99999999),
+            Value::U16(0x9999),
+            Value::U16(0x9999),
+            Value::U8(0x91),
+            Value::U8(0x92),
+            Value::U8(0x93),
+            Value::U8(0x94),
+            Value::U8(0x95),
+            Value::U8(0x96),
+            Value::U8(0x97),
+            Value::U8(0x98),
+        ]
+        .into_iter()
+        .map(|value| (String::new(), value))
+        .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn clang_flag_enum_preserves_partition_ownership_and_representation() {
     helpers::ensure_libclang();
 
