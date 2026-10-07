@@ -9150,7 +9150,7 @@ fn param_attributes(
     {
         result.push_str("#[null_null_terminated] ");
     }
-    if annotation.retval {
+    if annotation.retval && !metadata_annotations.contains(&Annotation::Retval) {
         result.push_str("#[retval] ");
     }
     result.push_str(&annotation_inline(metadata_annotations)?);

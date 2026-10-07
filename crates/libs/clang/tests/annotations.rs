@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
-use windows_clang::{EmitOptions, FactData, Input, Snapshot, extract};
+use windows_clang::{
+    Annotation, AnnotationTarget, EmitOptions, FactData, Input, Snapshot, extract,
+};
 use windows_metadata::HasAttributes;
 
 const METADATA_RDL: &str = include_str!("../../../../metadata/metadata.rdl");
@@ -142,6 +144,142 @@ fn captured_double_null_sal_remains_distinct() {
             .flags()
             .contains(windows_metadata::ParamAttributes::Optional)
     );
+
+    std::fs::remove_file(output).unwrap();
+}
+
+#[test]
+fn duplicate_retval_sources_emit_one_attribute() {
+    helpers::ensure_libclang();
+
+    let source = r#"
+        #define W32M(text) __attribute__((annotate(text)))
+        #define _Out_retval_ \
+            W32M("win32metadata:out") W32M("win32metadata:retval")
+
+        struct
+            __declspec(uuid("12345678-1234-1234-1234-123456789abc"))
+            IRetvalSources {
+            virtual /* [propget] */ int get_Both(
+                /* [out][retval] */ _Out_retval_ int* value) = 0;
+            virtual /* [propget] */ int get_MidlOnly(
+                /* [out][retval] */ int* value) = 0;
+            virtual /* [propget] */ int get_SalOnly(
+                _Out_retval_ int* value) = 0;
+            virtual /* [propget] */ int get_Plain(
+                /* [out] */ int* value) = 0;
+        };
+    "#;
+    let snapshot = extract(
+        [Input::new("retval-sources.hpp", source)],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    let interface = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "IRetvalSources")
+        .unwrap();
+    let FactData::Interface { methods, .. } = &interface.data else {
+        panic!("IRetvalSources was not extracted as an interface");
+    };
+    assert_eq!(methods.len(), 4);
+    for (method_index, method) in methods.iter().enumerate() {
+        let comment_retval = method.params[0].annotation.retval;
+        let metadata_retval = snapshot
+            .annotations()
+            .get(&AnnotationTarget::MethodParameter {
+                declaration: interface.origin.clone(),
+                method: method_index,
+                parameter: 0,
+            })
+            .is_some_and(|annotations| annotations.contains(&Annotation::Retval));
+        let expected = match method.name.as_str() {
+            "get_Both" => (true, true),
+            "get_MidlOnly" => (true, false),
+            "get_SalOnly" => (false, true),
+            "get_Plain" => (false, false),
+            name => panic!("unexpected method {name}"),
+        };
+        assert_eq!(
+            (comment_retval, metadata_retval),
+            expected,
+            "{}",
+            method.name
+        );
+    }
+
+    let rdl = snapshot
+        .emit_with_library("RetvalSources", "test.dll")
+        .unwrap();
+    for (name, expected) in [
+        ("get_Both", 1),
+        ("get_MidlOnly", 1),
+        ("get_SalOnly", 1),
+        ("get_Plain", 0),
+    ] {
+        let method = rdl
+            .lines()
+            .find(|line| line.contains(&format!("fn {name}(")))
+            .unwrap();
+        assert!(method.contains("#[special]"), "{method}");
+        assert_eq!(method.matches("#[retval]").count(), expected, "{method}");
+    }
+
+    let output = std::env::temp_dir().join(format!(
+        "windows-clang-retval-sources-{}.winmd",
+        std::process::id()
+    ));
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_text(&rdl)
+        .output(&output)
+        .write()
+        .unwrap_or_else(|error| panic!("{error}\n{rdl}"));
+    let index = windows_metadata::reader::Index::read(&output).unwrap();
+    let interface = index.expect("RetvalSources", "IRetvalSources");
+    for (name, expected) in [
+        ("get_Both", 1),
+        ("get_MidlOnly", 1),
+        ("get_SalOnly", 1),
+        ("get_Plain", 0),
+    ] {
+        let method = interface
+            .methods()
+            .find(|method| method.name() == name)
+            .unwrap();
+        let parameter = method.params_by_sequence(1).unwrap().params()[0].unwrap();
+        assert_eq!(
+            parameter
+                .attributes()
+                .filter(|attribute| attribute.name() == "RetValAttribute")
+                .count(),
+            expected,
+            "{name}"
+        );
+        if expected == 1 {
+            assert!(parameter.is_retval_attribute(), "{name}");
+        } else {
+            assert!(!parameter.is_retval_attribute(), "{name}");
+        }
+        assert_eq!(
+            parameter.direction(),
+            windows_metadata::reader::ParamDirection::Output,
+            "{name}"
+        );
+        assert!(
+            method
+                .flags()
+                .contains(windows_metadata::MethodAttributes::SpecialName),
+            "{name}"
+        );
+    }
 
     std::fs::remove_file(output).unwrap();
 }
