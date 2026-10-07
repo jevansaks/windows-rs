@@ -594,6 +594,398 @@ fn traversed_headers_select_roots_and_route_dependencies_to_default() {
 }
 
 #[test]
+fn associated_enums_from_included_headers_follow_the_annotated_root() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("associated-enum-dependency");
+    let dependency = scratch.join("dependency.h");
+    let public = scratch.join("public.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         namespace Windows { namespace MetadataEnumValues {\n\
+             enum [[clang::flag_enum]] DEPENDENCY_FLAGS : unsigned int {\n\
+                 DEPENDENCY_NONE = 0u,\n\
+                 DEPENDENCY_HIGH = 0x80000000u,\n\
+             };\n\
+             typedef enum _DEPENDENCY_STATUS : int {\n\
+                 DEPENDENCY_FAILED = -1,\n\
+                 DEPENDENCY_OK = 0,\n\
+             } DEPENDENCY_STATUS;\n\
+             enum UNSELECTED_ENUM : unsigned int { UNSELECTED_VALUE = 1u };\n\
+             enum INCLUDED_ONLY_ENUM : unsigned int { INCLUDED_ONLY_VALUE = 1u };\n\
+         } }\n\
+         typedef unsigned INCLUDED_ONLY_ALIAS;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &public,
+        "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
+         #include \"dependency.h\"\n\
+         struct PUBLIC_ASSOCIATIONS {\n\
+             W32M(\"win32metadata:associated_enum=DEPENDENCY_STATUS\") int status;\n\
+         };\n\
+         extern \"C\" void UseDependencyFlags(\n\
+             W32M(\"win32metadata:associated_enum=DEPENDENCY_FLAGS\") unsigned flags);\n\
+         extern \"C\" void UseUnselectedEnum(\n\
+             W32M(\"win32metadata:associated_enum=UNSELECTED_ENUM\") unsigned value);\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&public]);
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        public.to_string_lossy(),
+        RootPartition::new("public", "Example.Public"),
+    );
+    let references = nonempty_references();
+    let selected_functions = BTreeSet::from(["UseDependencyFlags".to_string()]);
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&selected_functions);
+    options.library = Some("test.dll");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let public_rdl = output(&partitions, "Example.Public");
+
+    assert!(
+        public_rdl.contains("struct PUBLIC_ASSOCIATIONS"),
+        "{public_rdl}"
+    );
+    assert!(
+        public_rdl.contains("fn UseDependencyFlags("),
+        "{public_rdl}"
+    );
+    assert!(
+        public_rdl.contains("#[associated_enum(\"DEPENDENCY_FLAGS\")]"),
+        "{public_rdl}"
+    );
+    assert!(
+        public_rdl.contains("#[associated_enum(\"DEPENDENCY_STATUS\")]"),
+        "{public_rdl}"
+    );
+    assert!(
+        public_rdl.contains("#[repr(u32)]\n        #[flags]\n        enum DEPENDENCY_FLAGS"),
+        "{partitions:#?}"
+    );
+    assert!(
+        public_rdl.contains("DEPENDENCY_HIGH = 2147483648"),
+        "{public_rdl}"
+    );
+    assert!(
+        public_rdl.contains("#[repr(i32)]\n        enum DEPENDENCY_STATUS"),
+        "{partitions:#?}"
+    );
+    assert!(
+        public_rdl.contains("DEPENDENCY_FAILED = -1"),
+        "{public_rdl}"
+    );
+    assert!(
+        !partitions.values().any(|rdl| {
+            rdl.contains("UNSELECTED_ENUM")
+                || rdl.contains("UseUnselectedEnum")
+                || rdl.contains("INCLUDED_ONLY_ENUM")
+                || rdl.contains("INCLUDED_ONLY_ALIAS")
+        }),
+        "{partitions:#?}"
+    );
+    assert!(
+        !partitions
+            .keys()
+            .any(|partition| partition.namespace == "Example.Common"),
+        "{partitions:#?}"
+    );
+
+    let legacy = extract(
+        [Input::new(
+            "legacy.cpp",
+            format!("#include \"{}\"\n", public.to_string_lossy()),
+        )
+        .with_roots([public.to_string_lossy().to_string()])],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap()
+    .emit_with_options(&options)
+    .unwrap();
+    assert!(
+        legacy.contains("struct PUBLIC_ASSOCIATIONS") && legacy.contains("fn UseDependencyFlags("),
+        "{legacy}"
+    );
+    assert!(
+        !legacy.contains("enum DEPENDENCY_FLAGS")
+            && !legacy.contains("enum DEPENDENCY_STATUS")
+            && !legacy.contains("enum UNSELECTED_ENUM"),
+        "{legacy}"
+    );
+
+    let winmd = scratch.join("associated-enum-dependency.winmd");
+    windows_rdl::reader()
+        .input_text(include_str!("../../../../metadata/metadata.rdl"))
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+
+    let flags = index.expect("Example.Public", "DEPENDENCY_FLAGS");
+    assert_eq!(flags.underlying_type(), Some(Type::U32));
+    assert!(flags.attributes().any(|attribute| {
+        attribute.name() == "FlagsAttribute" && attribute.ctor().parent().namespace() == "System"
+    }));
+    assert_eq!(
+        flags
+            .fields()
+            .find(|field| field.name() == "DEPENDENCY_HIGH")
+            .unwrap()
+            .constant()
+            .unwrap()
+            .value(),
+        Value::U32(0x8000_0000)
+    );
+
+    let status = index.expect("Example.Public", "DEPENDENCY_STATUS");
+    assert_eq!(status.underlying_type(), Some(Type::I32));
+    assert!(!status.attributes().any(|attribute| {
+        attribute.name() == "FlagsAttribute" && attribute.ctor().parent().namespace() == "System"
+    }));
+    assert_eq!(
+        status
+            .fields()
+            .find(|field| field.name() == "DEPENDENCY_FAILED")
+            .unwrap()
+            .constant()
+            .unwrap()
+            .value(),
+        Value::I32(-1)
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn associated_enum_owners_use_exclusions_authority_and_conflict_audit() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("associated-enum-owners");
+    let dependency = scratch.join("dependency.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         enum SHARED_ASSOCIATED : unsigned int { SHARED_ASSOCIATED_VALUE = 1u };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &first,
+        "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
+         #include \"dependency.h\"\n\
+         struct FIRST_ROOT {\n\
+             W32M(\"win32metadata:associated_enum=SHARED_ASSOCIATED\") unsigned value;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
+         #include \"dependency.h\"\n\
+         struct SECOND_ROOT {\n\
+             W32M(\"win32metadata:associated_enum=SHARED_ASSOCIATED\") unsigned value;\n\
+         };\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&first, &second]);
+    let first_owner = RootPartition::new("first", "Example.First");
+    let second_owner = RootPartition::new("second", "Example.Second")
+        .with_remap("SHARED_ASSOCIATED", "SHARED_RENAMED")
+        .with_flags("SHARED_ASSOCIATED");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(first.to_string_lossy(), first_owner.clone())
+        .with_traversed_header(second.to_string_lossy(), second_owner.clone());
+    let reverse = HeaderPartitionPolicy::new()
+        .with_traversed_header(second.to_string_lossy(), second_owner.clone())
+        .with_traversed_header(first.to_string_lossy(), first_owner.clone());
+    let references = nonempty_references();
+    let options = EmitOptions::new("Example.Common", &references);
+
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let audit = plan.audit(&options).unwrap();
+    let reverse_audit = snapshot
+        .plan_header_partitions(&reverse, &NamespaceAuthorities::new())
+        .unwrap()
+        .audit(&options)
+        .unwrap();
+    assert_eq!(audit, reverse_audit);
+    assert_eq!(audit.conflicts().len(), 1, "{audit}");
+    assert_eq!(audit.conflicts()[0].name, "SHARED_ASSOCIATED");
+    assert_eq!(
+        audit.conflicts()[0].reason,
+        PartitionConflictReason::AmbiguousRootCandidates
+    );
+    assert_eq!(audit.conflicts()[0].owners.len(), 2);
+    assert!(plan.emit_with_options(&options).is_err());
+
+    let excluded_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            first.to_string_lossy(),
+            first_owner.with_exclusion("SHARED_ASSOCIATED"),
+        )
+        .with_traversed_header(second.to_string_lossy(), second_owner);
+    let excluded = snapshot
+        .plan_header_partitions(&excluded_policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(excluded.audit(&options).unwrap().is_clean());
+    let excluded = excluded.emit_with_options(&options).unwrap();
+    assert!(
+        output(&excluded, "Example.Second").contains("#[flags]\n        enum SHARED_RENAMED"),
+        "{excluded:#?}"
+    );
+    assert!(
+        !output(&excluded, "Example.First").contains("enum SHARED_ASSOCIATED"),
+        "{excluded:#?}"
+    );
+    assert!(
+        excluded
+            .values()
+            .all(|rdl| !rdl.contains("associated_enum(\"SHARED_ASSOCIATED\")")),
+        "{excluded:#?}"
+    );
+    assert!(
+        excluded
+            .values()
+            .filter(|rdl| rdl.contains("struct FIRST_ROOT") || rdl.contains("struct SECOND_ROOT"))
+            .all(|rdl| rdl.contains("associated_enum(\"SHARED_RENAMED\")")),
+        "{excluded:#?}"
+    );
+
+    let authorities = NamespaceAuthorities::new().with_exact("SHARED_ASSOCIATED", "Example.Second");
+    let authoritative = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+    assert!(authoritative.audit(&options).unwrap().is_clean());
+    let authoritative = authoritative.emit_with_options(&options).unwrap();
+    assert!(
+        output(&authoritative, "Example.Second").contains("#[flags]\n        enum SHARED_RENAMED"),
+        "{authoritative:#?}"
+    );
+    assert!(
+        !output(&authoritative, "Example.First").contains("enum SHARED_ASSOCIATED"),
+        "{authoritative:#?}"
+    );
+
+    let reverse_authoritative = snapshot
+        .plan_header_partitions(&reverse, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    assert_eq!(authoritative, reverse_authoritative);
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn associated_enum_dependencies_do_not_collapse_owned_same_leaf_types() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("associated-enum-same-leaf");
+    let first_enum = scratch.join("first-enum.h");
+    let second_enum = scratch.join("second-enum.h");
+    let first_api = scratch.join("first-api.h");
+    let second_api = scratch.join("second-api.h");
+    std::fs::write(
+        &first_enum,
+        "#pragma once\n\
+         namespace Windows { namespace FirstNative {\n\
+             enum SHARED_ASSOCIATED : int { FIRST_ASSOCIATED_VALUE = -1 };\n\
+         } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second_enum,
+        "#pragma once\n\
+         namespace Windows { namespace SecondNative {\n\
+             enum SHARED_ASSOCIATED : unsigned int { SECOND_ASSOCIATED_VALUE = 1u };\n\
+         } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &first_api,
+        "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
+         #include \"first-enum.h\"\n\
+         struct FIRST_ASSOCIATED_ROOT {\n\
+             W32M(\"win32metadata:associated_enum=SHARED_ASSOCIATED\") int value;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second_api,
+        "#pragma once\n\
+         #define W32M(text) __attribute__((annotate(text)))\n\
+         #include \"second-enum.h\"\n\
+         struct SECOND_ASSOCIATED_ROOT {\n\
+             W32M(\"win32metadata:associated_enum=SHARED_ASSOCIATED\") unsigned value;\n\
+         };\n",
+    )
+    .unwrap();
+
+    let snapshot = aggregate_snapshot(&scratch, &[&first_api, &second_api]);
+    let first_owner = RootPartition::new("first", "Example.First");
+    let second_owner = RootPartition::new("second", "Example.Second");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(first_enum.to_string_lossy(), first_owner.clone())
+        .with_traversed_header(first_api.to_string_lossy(), first_owner)
+        .with_traversed_header(second_enum.to_string_lossy(), second_owner.clone())
+        .with_traversed_header(second_api.to_string_lossy(), second_owner);
+    let references = nonempty_references();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let first = partitions
+        .iter()
+        .filter(|(partition, _)| partition.namespace == "Example.First")
+        .map(|(_, rdl)| rdl.as_str())
+        .collect::<String>();
+    let second = partitions
+        .iter()
+        .filter(|(partition, _)| partition.namespace == "Example.Second")
+        .map(|(_, rdl)| rdl.as_str())
+        .collect::<String>();
+
+    assert!(first.contains("enum SHARED_ASSOCIATED"), "{first}");
+    assert!(first.contains("FIRST_ASSOCIATED_VALUE = -1"), "{first}");
+    assert!(first.contains("struct FIRST_ASSOCIATED_ROOT"), "{first}");
+    assert!(
+        first.contains("#[associated_enum(\"SHARED_ASSOCIATED\")]"),
+        "{first}"
+    );
+    assert!(second.contains("enum SHARED_ASSOCIATED"), "{second}");
+    assert!(second.contains("SECOND_ASSOCIATED_VALUE = 1"), "{second}");
+    assert!(second.contains("struct SECOND_ASSOCIATED_ROOT"), "{second}");
+    assert!(
+        second.contains("#[associated_enum(\"SHARED_ASSOCIATED\")]"),
+        "{second}"
+    );
+    assert!(
+        !partitions.values().any(|rdl| rdl.contains("__partition_")),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn namespaced_exact_dependency_uses_default_namespace() {
     helpers::ensure_libclang();
 

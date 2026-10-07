@@ -901,6 +901,21 @@ pub enum AnnotationTarget {
     },
 }
 
+impl AnnotationTarget {
+    fn origin(&self) -> &Origin {
+        match self {
+            Self::Declaration(origin) | Self::Return(origin) => origin,
+            Self::Parameter { declaration, .. }
+            | Self::Field { declaration, .. }
+            | Self::NestedField { declaration, .. }
+            | Self::Variant { declaration, .. }
+            | Self::Method { declaration, .. }
+            | Self::MethodReturn { declaration, .. }
+            | Self::MethodParameter { declaration, .. } => declaration,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Scalar {
     Bool,
@@ -2263,6 +2278,103 @@ impl Snapshot {
             .filter(|fact| fact.root)
             .map(|fact| fact.origin.clone())
             .collect();
+        let mut associated_enum_owners: BTreeMap<(String, String), BTreeSet<RootOwner>> =
+            BTreeMap::new();
+        for (target, annotations) in &self.annotations {
+            let origin = target.origin();
+            if !retained_origins.contains(origin) {
+                continue;
+            }
+            let Some(owner) = self.root_owners.get(origin) else {
+                continue;
+            };
+            for annotation in annotations {
+                if let Annotation::AssociatedEnum(name) = annotation {
+                    associated_enum_owners
+                        .entry((origin.tu.clone(), name.clone()))
+                        .or_default()
+                        .insert(owner.clone());
+                }
+            }
+        }
+        let mut associated_enum_remaps = BTreeMap::new();
+        if !associated_enum_owners.is_empty() {
+            let requested_associated_enums: BTreeSet<_> = associated_enum_owners
+                .keys()
+                .map(|(tu, name)| (tu.as_str(), name.as_str()))
+                .collect();
+            let facts_by_declaration: BTreeMap<_, _> = self
+                .facts
+                .iter()
+                .map(|fact| ((fact.origin.tu.clone(), fact.spelling.clone()), fact))
+                .collect();
+            let mut associated_enum_providers: BTreeMap<(String, String), BTreeSet<Origin>> =
+                BTreeMap::new();
+            for fact in &self.facts {
+                if !requested_associated_enums
+                    .contains(&(fact.origin.tu.as_str(), fact.name.as_str()))
+                {
+                    continue;
+                }
+                let Some(enumeration) =
+                    underlying_enum_fact(fact, &facts_by_declaration, &mut BTreeSet::new())
+                else {
+                    continue;
+                };
+                let providers = associated_enum_providers
+                    .entry((fact.origin.tu.clone(), fact.name.clone()))
+                    .or_default();
+                providers.insert(fact.origin.clone());
+                providers.insert(enumeration.origin.clone());
+            }
+            for ((tu, name), mut candidates) in associated_enum_owners {
+                let Some(providers) = associated_enum_providers.get(&(tu.clone(), name.clone()))
+                else {
+                    continue;
+                };
+                // An independently traversed provider keeps its existing route.
+                if providers
+                    .iter()
+                    .any(|origin| retained_origins.contains(origin))
+                {
+                    continue;
+                }
+                candidates.retain(|owner| !owner.exclusions.contains(&name));
+                if candidates.is_empty() {
+                    continue;
+                }
+                let namespace = self.namespace_authorities.get(&name).map(String::as_str);
+                let (owner, conflict) = resolve_header_owner(
+                    &name,
+                    Some(PartitionItemKind::Type),
+                    candidates,
+                    namespace,
+                )?;
+                if let Some(conflict) = conflict {
+                    conflicts.push(conflict);
+                }
+                if let Some(target) = owner.remaps.get(&name) {
+                    associated_enum_remaps.insert((tu, name), target.clone());
+                }
+                for origin in providers {
+                    self.root_owners.insert(origin.clone(), owner.clone());
+                }
+            }
+        }
+        if !associated_enum_remaps.is_empty() {
+            for (target, annotations) in &mut self.annotations {
+                let tu = &target.origin().tu;
+                for annotation in annotations {
+                    let Annotation::AssociatedEnum(name) = annotation else {
+                        continue;
+                    };
+                    if let Some(target) = associated_enum_remaps.get(&(tu.clone(), name.clone())) {
+                        name.clone_from(target);
+                    }
+                }
+            }
+        }
+
         for (target, annotations) in &self.annotations {
             let AnnotationTarget::Declaration(origin) = target else {
                 continue;
@@ -4371,6 +4483,67 @@ impl Snapshot {
             }
             if let Some(constant) = constant {
                 constants.push(constant);
+            }
+        }
+        if self.header_partition_policy {
+            // Associated enum names are semantic type dependencies of selected roots.
+            let selected_origins: BTreeSet<_> = type_roots
+                .iter()
+                .chain(value_roots.iter())
+                .map(|fact| fact.origin.clone())
+                .chain(
+                    functions
+                        .iter()
+                        .map(|function| function.fact.origin.clone()),
+                )
+                .chain(constants.iter().map(|constant| constant.root.clone()))
+                .collect();
+            let associated_enums: BTreeSet<_> = self
+                .annotations
+                .iter()
+                .filter(|(target, _)| selected_origins.contains(target.origin()))
+                .flat_map(|(target, annotations)| {
+                    annotations.iter().filter_map(move |annotation| {
+                        let Annotation::AssociatedEnum(name) = annotation else {
+                            return None;
+                        };
+                        Some((target.origin().tu.clone(), name.clone()))
+                    })
+                })
+                .collect();
+            for (tu, name) in associated_enums {
+                if root_names.contains(&name)
+                    || (excluded_types.is_some_and(|excluded| excluded.contains(&name))
+                        && !extended_reference_enums.contains(&name))
+                {
+                    continue;
+                }
+                let matches: Vec<_> = facts_index
+                    .get(name.as_str())
+                    .into_iter()
+                    .chain(exact_dependency_facts_index.get(name.as_str()))
+                    .flatten()
+                    .copied()
+                    .filter(|fact| {
+                        fact.origin.tu == tu
+                            && self.root_owners.contains_key(&fact.origin)
+                            && !self.suppressed_type_origins.contains(&fact.origin)
+                            && underlying_enum_fact(
+                                fact,
+                                &facts_by_declaration,
+                                &mut BTreeSet::new(),
+                            )
+                            .is_some()
+                    })
+                    .collect();
+                if matches.is_empty() {
+                    continue;
+                }
+                let authority = self.authority_candidates(&matches, &declarations);
+                let root =
+                    choose_type_root_cached(&name, &authority, &facts_index, &mut shape_cache)?;
+                root_names.insert(name);
+                type_roots.push(root);
             }
         }
         if let Some(selected) = selected_functions {

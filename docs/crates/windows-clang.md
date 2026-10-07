@@ -158,6 +158,13 @@ traversed-header declaration has an explicit owner and its link name is selected
 `EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
 change non-header emission.
 
+An `associated_enum` annotation on a selected root adds the matching enum provider from the same
+extraction input to dependency closure. A provider that has no traversed-header owner inherits the
+annotated root's owner settings. Exclusions and namespace authority resolve multiple candidates;
+otherwise the audit reports the owner conflict. An inherited owner remap updates both the enum name
+and the annotation. Providers already owned by traversed headers keep their existing routes, and
+unrelated included declarations remain excluded.
+
 If a selected function reaches a non-POD native class, header planning can retain its field layout
 as a pointer-only dependency. The class must have public instance fields, no base classes, and no
 virtual methods or destructor. Constructors, non-virtual methods, and private copy operations are

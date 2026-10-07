@@ -58,6 +58,9 @@ clones the snapshot.
 Dependency declarations remain available for closure without becoming public roots. When
 equivalent compile variants exist, an owner whose typedef projection reaches an excluded type is
 omitted if another unsuppressed projection can own that output.
+An `associated_enum` annotation on a selected root adds its matching enum provider to closure.
+Dependency-only providers inherit that root's owner settings; providers already owned by a
+traversed header keep their existing route.
 
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
