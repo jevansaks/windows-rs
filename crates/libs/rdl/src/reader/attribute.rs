@@ -70,7 +70,7 @@ impl Encoder<'_> {
             &[],
         )?;
 
-        if self.namespace == METADATA_NAMESPACE && item.name == "SupportedOSPlatformAttribute" {
+        if is_metadata_namespace(self.namespace) && item.name == "SupportedOSPlatformAttribute" {
             self.encode_supported_os_attribute_usage(attr_type);
         }
 

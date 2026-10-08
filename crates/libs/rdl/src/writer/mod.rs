@@ -407,7 +407,7 @@ fn write_type_def_items(
     if item.category() == metadata::reader::TypeCategory::Struct {
         // Native typedefs round-trip as `type NAME = TYPE;`.
         if item.attributes().any(|attr| {
-            attr.namespace() == METADATA_NAMESPACE && attr.name() == "NativeTypedefAttribute"
+            is_metadata_namespace(attr.namespace()) && attr.name() == "NativeTypedefAttribute"
         }) {
             let name = write_ident(item.name());
             let field = item
@@ -657,7 +657,7 @@ fn write_custom_attributes_except<'a>(
         .filter(|attr| {
             !(namespace_starts_with(attr.namespace(), "System")
                 || exclude.contains(&attr.name())
-                || (attr.namespace() == METADATA_NAMESPACE
+                || (is_metadata_namespace(attr.namespace())
                     && attr.name() == "NativeTypedefAttribute"))
         })
         .map(|attr| {
@@ -665,7 +665,7 @@ fn write_custom_attributes_except<'a>(
             let values = attr.value();
 
             // Naturalized metadata attributes render as short RDL spellings when possible.
-            let pseudo = if attr_ns == METADATA_NAMESPACE {
+            let pseudo = if is_metadata_namespace(attr_ns) {
                 let arg_names: Vec<String> = values.iter().map(|(n, _)| n.clone()).collect();
                 pseudo_for_metadata(attr.name(), &arg_names)
             } else {

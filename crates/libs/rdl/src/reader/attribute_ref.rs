@@ -474,28 +474,45 @@ impl Encoder<'_> {
         pseudo: &PseudoAttr,
         attr: &syn::Attribute,
     ) -> Result<(), Error> {
+        let info = self.find_pseudo_attribute_type(attr, pseudo)?;
         let attr_ref = if matches!(attr.meta, syn::Meta::Path(_)) {
             AttributeRef {
-                type_name: metadata::TypeName::named(METADATA_NAMESPACE, pseudo.metadata),
+                type_name: info.map_or_else(
+                    || metadata::TypeName::named(METADATA_NAMESPACE, pseudo.metadata),
+                    |info| info.type_name,
+                ),
                 args: vec![],
             }
         } else {
-            self.resolve_pseudo_attr_ref(attr, pseudo)?
+            let info = info.ok_or_else(|| self.error(attr, "pseudo-attribute type not found"))?;
+            self.resolve_pseudo_attr_ref(attr, pseudo, info)?
         };
         self.encode_named_attribute(target, &attr_ref);
         Ok(())
+    }
+
+    fn find_pseudo_attribute_type(
+        &self,
+        attr: &syn::Attribute,
+        pseudo: &PseudoAttr,
+    ) -> Result<Option<AttributeInfo>, Error> {
+        let mut matches = METADATA_NAMESPACES.iter().filter_map(|namespace| {
+            self.find_in_reference(namespace, pseudo.metadata)
+                .or_else(|| self.find_in_index(namespace, pseudo.metadata))
+        });
+        let info = matches.next();
+        if matches.next().is_some() {
+            return self.err(attr, "pseudo-attribute type is ambiguous");
+        }
+        Ok(info)
     }
 
     fn resolve_pseudo_attr_ref(
         &self,
         attr: &syn::Attribute,
         pseudo: &PseudoAttr,
+        info: AttributeInfo,
     ) -> Result<AttributeRef, Error> {
-        let info = self
-            .find_in_reference(METADATA_NAMESPACE, pseudo.metadata)
-            .or_else(|| self.find_in_index(METADATA_NAMESPACE, pseudo.metadata))
-            .ok_or_else(|| self.error(attr, "pseudo-attribute type not found"))?;
-
         let raw_args: Vec<syn::Expr> = match &attr.meta {
             syn::Meta::Path(_) => vec![],
             syn::Meta::List(_) => attr

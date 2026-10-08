@@ -219,7 +219,7 @@ fn collect_bitfield_members(item: &metadata::reader::Field) -> Vec<(String, u32,
     let mut members: Vec<(String, u32, u32)> = item
         .attributes()
         .filter(|attr| {
-            attr.namespace() == METADATA_NAMESPACE && attr.name() == "NativeBitfieldAttribute"
+            is_metadata_namespace(attr.namespace()) && attr.name() == "NativeBitfieldAttribute"
         })
         .filter_map(|attr| {
             let values = attr.value();
