@@ -647,6 +647,14 @@ than one matching `TypeDef`.
 GUID, property-key, and coclass facts are also planned as values. They honor constant exclusions
 while their referenced types still participate in dependency closure.
 
+Constant-qualified global variables are extracted when their initializer is representable without
+executing native code. Scalar variables retain the declared integer width and signedness. A direct
+single string literal assigned to a constant character array emits a string constant with ANSI or
+UTF-16 encoding, and a direct 11-part initializer for a `GUID`, `IID`, `CLSID`, or `FMTID` alias
+uses the existing GUID value projection. Mutable variables, local or member variables, pointer
+variables, dynamic or unresolved initializers, wrapped strings, and composed string literals are
+not promoted to constants.
+
 Native NaN and infinity constants are omitted because RDL and ECMA metadata cannot represent them.
 This includes `f64` values that become non-finite when narrowed to their declared `f32` type.
 Integer-valued pointer constants remain supported. If a typedef chain resolves to an

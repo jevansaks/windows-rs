@@ -60,6 +60,10 @@ toolchain resource directories while retaining those files in inclusion provenan
 translation unit, including headers that produced no extracted fact or constant. Records retain
 the corresponding `Input::name` identity and have deterministic per-input ordering.
 
+Extraction includes representable constant-qualified global scalar variables, direct character
+array string literals, and direct GUID aggregate literals. Mutable, pointer, local, member,
+dynamic, unresolved, wrapped-string, and composed-string declarations remain excluded.
+
 An aggregate translation unit can be routed after extraction with `HeaderPartitionPolicy` and
 `Snapshot::into_header_partition_plan`. This consuming path moves the extracted snapshot into the
 plan and avoids retaining a cloned copy during planning. `Snapshot::plan_header_partitions` remains

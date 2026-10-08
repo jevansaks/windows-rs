@@ -1874,12 +1874,10 @@ fn extract_child(
         && !name.is_empty()
         && let Some((spelling, _, _, _)) = cursor_locations(child)
         && traversal.is_root(&spelling.file)
+        && variable_is_global(child)
     {
         let ty = unsafe { clang_getCursorType(child) };
-        if unsafe { clang_isConstQualifiedType(ty) } != 0
-            && let Some(scalar @ (Scalar::F32 | Scalar::F64)) = scalar(ty)
-            && let Some(value) = evaluate_float(child, scalar)
-        {
+        if let Some((ty, value)) = evaluate_variable_constant(child, ty) {
             let origin = Origin {
                 tu: traversal.tu.to_string(),
                 local,
@@ -1896,7 +1894,7 @@ fn extract_child(
                 definition: origin.clone(),
                 spelling,
                 name: name.clone(),
-                ty: TypeRef::Scalar(scalar),
+                ty,
                 value,
             });
             insert_annotations(
@@ -1958,6 +1956,11 @@ fn extract_child(
             name = key_name;
             FactKind::Guid
         })
+    } else if kind == CXCursor_VarDecl
+        && variable_is_global(child)
+        && variable_guid(child).is_some()
+    {
+        Some(FactKind::Guid)
     } else if anonymous_enum {
         None
     } else {
@@ -3376,6 +3379,86 @@ fn evaluate_integer(cursor: CXCursor) -> Option<(u64, i64)> {
     }
 }
 
+fn evaluate_variable_constant(cursor: CXCursor, ty: CXType) -> Option<(TypeRef, Value)> {
+    if unsafe { clang_isConstQualifiedType(ty) } != 0
+        && let Some(value_scalar) = scalar(ty)
+    {
+        let value = if matches!(value_scalar, Scalar::F32 | Scalar::F64) {
+            evaluate_float(cursor, value_scalar)?
+        } else {
+            let (unsigned, signed) = evaluate_integer(cursor)?;
+            if matches!(
+                value_scalar,
+                Scalar::Bool | Scalar::U8 | Scalar::U16 | Scalar::U32 | Scalar::U64
+            ) {
+                Value::Unsigned(unsigned)
+            } else {
+                Value::Signed(signed)
+            }
+        };
+        return Some((type_ref(ty)?, value));
+    }
+
+    let canonical = unsafe { clang_getCanonicalType(ty) };
+    if !matches!(
+        canonical.kind,
+        CXType_ConstantArray | CXType_IncompleteArray
+    ) {
+        return None;
+    }
+    let element = unsafe { clang_getArrayElementType(canonical) };
+    if unsafe { clang_isConstQualifiedType(element) } == 0 && !variable_has_const_qualifier(cursor)
+    {
+        return None;
+    }
+    let tokens = cursor_tokens(cursor);
+    let equals = tokens
+        .iter()
+        .position(|(kind, token)| *kind == CXToken_Punctuation && token == "=")?;
+    let initializer: Vec<_> = tokens[equals + 1..]
+        .iter()
+        .filter(|(kind, token)| !(*kind == CXToken_Punctuation && token == ";"))
+        .collect();
+    let [(CXToken_Literal, literal)] = initializer.as_slice() else {
+        return None;
+    };
+    let (wide, inner) = string_literal(literal)?;
+    let (target, value) = match (scalar(element)?, wide) {
+        (Scalar::I8 | Scalar::U8, false) => (
+            TypeRef::Scalar(Scalar::I8),
+            Value::Utf8(decode_c_string(inner, false)?),
+        ),
+        (Scalar::U16, true) => (
+            TypeRef::Scalar(Scalar::U16),
+            Value::Utf16(decode_c_string(inner, true)?),
+        ),
+        _ => return None,
+    };
+    Some((
+        TypeRef::Pointer {
+            mutable: false,
+            target: Box::new(target),
+        },
+        value,
+    ))
+}
+
+fn variable_is_global(cursor: CXCursor) -> bool {
+    let parent = unsafe { clang_getCursorSemanticParent(cursor) };
+    matches!(
+        unsafe { clang_getCursorKind(parent) },
+        CXCursor_TranslationUnit | CXCursor_Namespace | CXCursor_LinkageSpec
+    )
+}
+
+fn variable_has_const_qualifier(cursor: CXCursor) -> bool {
+    let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
+    cursor_tokens(cursor)
+        .into_iter()
+        .take_while(|(_, token)| token != &name)
+        .any(|(_, token)| matches!(token.as_str(), "const" | "constexpr"))
+}
+
 fn evaluate_float(cursor: CXCursor, scalar: Scalar) -> Option<Value> {
     unsafe {
         let result = clang_Cursor_Evaluate(cursor);
@@ -3546,6 +3629,14 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
             }
         }
         FactKind::Guid => {
+            if unsafe { clang_getCursorKind(cursor) } == CXCursor_VarDecl {
+                return variable_guid(cursor).map_or_else(
+                    || FactData::Unsupported {
+                        reason: "GUID variable has an unsupported initializer".to_string(),
+                    },
+                    |value| FactData::Guid { value },
+                );
+            }
             let tokens = cursor_tokens(cursor);
             let macro_name = tokens
                 .first()
@@ -4045,6 +4136,47 @@ fn parse_property_key_tokens(tokens: &[(CXTokenKind, String)]) -> Option<(String
         return None;
     }
     Some((name, format_guid(&values[..11])?, values[11] as u32))
+}
+
+fn variable_guid(cursor: CXCursor) -> Option<String> {
+    let ty = unsafe { clang_getCursorType(cursor) };
+    if unsafe { clang_isConstQualifiedType(ty) } == 0 || !is_guid_type(ty) {
+        return None;
+    }
+    let tokens = cursor_tokens(cursor);
+    let equals = tokens
+        .iter()
+        .position(|(kind, token)| *kind == CXToken_Punctuation && token == "=")?;
+    let initializer = &tokens[equals + 1..];
+    if initializer.iter().any(|(kind, token)| {
+        *kind != CXToken_Literal
+            && !(*kind == CXToken_Punctuation && matches!(token.as_str(), "{" | "}" | "," | ";"))
+    }) {
+        return None;
+    }
+    let values = initializer
+        .iter()
+        .filter(|(kind, _)| *kind == CXToken_Literal)
+        .map(|(_, token)| parse_c_integer(token))
+        .collect::<Option<Vec<_>>>()?;
+    format_guid(&values)
+}
+
+fn is_guid_type(mut ty: CXType) -> bool {
+    loop {
+        let declaration = unsafe { clang_getTypeDeclaration(ty) };
+        if unsafe { clang_Cursor_isNull(declaration) } != 0 {
+            return false;
+        }
+        let name = cx_string(unsafe { clang_getCursorSpelling(declaration) });
+        if matches!(name.as_str(), "GUID" | "IID" | "CLSID" | "FMTID" | "_GUID") {
+            return true;
+        }
+        if unsafe { clang_getCursorKind(declaration) } != CXCursor_TypedefDecl {
+            return false;
+        }
+        ty = unsafe { clang_getTypedefDeclUnderlyingType(declaration) };
+    }
 }
 
 fn parse_c_integer(value: &str) -> Option<u64> {
