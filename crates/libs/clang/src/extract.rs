@@ -496,8 +496,7 @@ fn apply_macro_enum_overrides(
             continue;
         };
         let value = if constant.spelling.offset < *enum_offset {
-            macro_before_enum_matches(constant, *repr, *enum_value, &scalar_aliases, &enum_reprs)
-                .then_some(None)
+            macro_before_enum_matches(constant, *repr, *enum_value, &scalar_aliases).then_some(None)
         } else {
             macro_after_enum_value(constant, *repr, &scalar_aliases, &enum_reprs).map(Some)
         };
@@ -541,10 +540,8 @@ fn macro_before_enum_matches(
     repr: Scalar,
     variant_value: i64,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
-    enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
 ) -> bool {
-    let Some(source) =
-        macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases, enum_reprs)
+    let Some(source) = macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases, None)
     else {
         return false;
     };
@@ -563,7 +560,12 @@ fn macro_after_enum_value(
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
     enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
 ) -> Option<i64> {
-    let source = macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases, enum_reprs)?;
+    let source = macro_scalar_type(
+        &constant.ty,
+        &constant.root.tu,
+        scalar_aliases,
+        Some(enum_reprs),
+    )?;
     scalar_value(source, &constant.value)?;
     enum_override_value(&constant.value, repr)
 }
@@ -572,13 +574,13 @@ fn macro_scalar_type(
     ty: &TypeRef,
     tu: &str,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
-    enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
+    enum_reprs: Option<&HashMap<(&str, &str, &Location), Scalar>>,
 ) -> Option<Scalar> {
     fn resolve(
         ty: &TypeRef,
         tu: &str,
         scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
-        enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
+        enum_reprs: Option<&HashMap<(&str, &str, &Location), Scalar>>,
         seen: &mut HashSet<Location>,
     ) -> Option<Scalar> {
         match ty {
@@ -588,7 +590,7 @@ fn macro_scalar_type(
                 if let Some(target) = scalar_aliases.get(&key) {
                     resolve(target, tu, scalar_aliases, enum_reprs, seen)
                 } else {
-                    enum_reprs.get(&key).copied()
+                    enum_reprs.and_then(|enum_reprs| enum_reprs.get(&key).copied())
                 }
             }
             _ => None,
