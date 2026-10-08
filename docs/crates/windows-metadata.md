@@ -124,8 +124,9 @@ Its bit values match the metadata attribute: 1 for X86, 2 for X64, and 4 for Arm
 The collapse-or-split decision is structural, driven by `type_sig()` - a hash of everything that can
 legitimately differ between architectures:
 
-- **fields** - name, type, and constant value (so an enum whose members hold different per-arch
-  values splits instead of silently dropping the divergent values);
+- **fields** - name, type, constant value, and `FieldLayout` offset presence and value (so an enum
+  whose members hold different per-arch values splits instead of silently dropping the divergent
+  values, and an absent offset remains distinct from an explicit zero offset);
 - **method signatures** - Win32 callbacks and WinRT delegates have no fields and diverge *only* in
   their `Invoke` signature, so a fields-only signature would wrongly collapse arch-divergent
   callbacks into one untagged copy;
@@ -147,6 +148,12 @@ one native-sized signature. It becomes arch-neutral when present on every merged
 otherwise it keeps its subset arch tag. This handles SDK declarations such as `FARPROC`, whose
 return is spelled `INT_PTR` on 64-bit but legacy `int` on x86. A plain `i32`/`i64` pair does not
 qualify: the explicit native-sized spelling is required as semantic evidence.
+
+Present `FieldLayout` rows are copied to the merged field. External TypeRefs retain the source
+AssemblyRef version, flags, public key or token, name, culture, and hash. A local TypeDef with the
+same qualified name takes precedence because the merged assembly defines that type. If no local
+definition exists and inputs name different assemblies for the same qualified type, the merge
+returns an error instead of choosing one reference.
 
 The merge is deterministic: it stages through `BTreeMap`s and insertion-ordered `Vec`s, with no
 `HashMap` reaching the output.
@@ -199,9 +206,11 @@ Notable invariants in the ECMA-335 tables:
 
 Run `cargo test -p windows-metadata`; see also the workspace test crates. The arch-merge
 collapse/split rules are pinned by `arch_roundtrip.rs` (divergent fields, callbacks, forced
-alignment, enum constant values, subset-present divergence) and `merge.rs` (native-sized callback
-reconciliation). `method_params.rs` authors metadata directly with `writer::File` and covers dense,
-absent, return, sparse, out-of-order, duplicate, and out-of-range parameter rows. It also covers all
-four raw directions and verifies that optional, reserved, retval, and count attributes remain
-independent facts. `remap.rs` covers explicit and fallback namespace routing, singular/plural
-builder methods, missing outputs, and invalid inputs.
+alignment, enum constant values, subset-present divergence), `merge_layout.rs` (offset-only
+variants and absent-versus-zero offsets), and `merge.rs` (native-sized callback reconciliation,
+external AssemblyRef identity, local reference precedence, and reference conflicts).
+`method_params.rs` authors metadata directly with `writer::File` and covers dense, absent, return,
+sparse, out-of-order, duplicate, and out-of-range parameter rows. It also covers all four raw
+directions and verifies that optional, reserved, retval, and count attributes remain independent
+facts. `remap.rs` covers explicit and fallback namespace routing, singular/plural builder methods,
+missing outputs, and invalid inputs.
