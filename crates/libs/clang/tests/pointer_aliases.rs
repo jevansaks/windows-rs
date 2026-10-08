@@ -604,6 +604,90 @@ fn canonical_pointer_alias_identity_requires_equivalent_source_declarations() {
 }
 
 #[test]
+fn canonical_pointer_alias_identity_requires_matching_native_scope() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-scoped-canonical-alias-{}",
+        std::process::id()
+    ));
+    if scratch.exists() {
+        std::fs::remove_dir_all(&scratch).unwrap();
+    }
+    std::fs::create_dir_all(&scratch).unwrap();
+    let common = scratch.join("common.h");
+    let foundation = scratch.join("foundation.h");
+    let consumer = scratch.join("consumer.h");
+    std::fs::write(&common, "typedef void *LPVOID;\n").unwrap();
+    std::fs::write(&foundation, "typedef A::LPVOID *PFOUNDATION_POINTER;\n").unwrap();
+    std::fs::write(&consumer, "typedef B::LPVOID CONSUMER_POINTER;\n").unwrap();
+    let include = |header: &std::path::Path| format!("#include \"{}\"\n", header.to_string_lossy());
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "foundation.cpp",
+                format!(
+                    "namespace A {{\n{}}}\n{}",
+                    include(&common),
+                    include(&foundation)
+                ),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "consumer.cpp",
+                format!(
+                    "namespace B {{\n{}}}\n{}",
+                    include(&common),
+                    include(&consumer)
+                ),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    assert_eq!(fact_parent_name(&snapshot, "foundation.cpp", "LPVOID"), "A");
+    assert_eq!(fact_parent_name(&snapshot, "consumer.cpp", "LPVOID"), "B");
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "foundation.cpp",
+            common.to_string_lossy(),
+            RootPartition::new("foundation", "Example.Foundation"),
+        )
+        .with_traversed_header_for_input(
+            "foundation.cpp",
+            foundation.to_string_lossy(),
+            RootPartition::new("foundation", "Example.Foundation"),
+        )
+        .with_traversed_header_for_input(
+            "consumer.cpp",
+            consumer.to_string_lossy(),
+            RootPartition::new("consumer", "Example.Consumer"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let consumer_rdl = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Consumer")
+        .unwrap()
+        .1;
+    assert!(
+        consumer_rdl.contains("type CONSUMER_POINTER = *mut void;"),
+        "{consumer_rdl}"
+    );
+    assert!(!consumer_rdl.contains("Example::Foundation::LPVOID"));
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn direct_tchar_aliases_are_retained_or_resolved_from_metadata() {
     helpers::ensure_libclang();
 
@@ -831,4 +915,19 @@ fn named_alias_target<'a>(
         panic!("{alias} did not retain a named alias target");
     };
     (name, declaration)
+}
+
+fn fact_parent_name<'a>(snapshot: &'a Snapshot, translation_unit: &str, name: &str) -> &'a str {
+    let fact = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.origin.tu == translation_unit && fact.name == name)
+        .unwrap();
+    let parent = fact.parent.as_ref().unwrap();
+    &snapshot
+        .facts()
+        .iter()
+        .find(|fact| &fact.origin == parent)
+        .unwrap()
+        .name
 }

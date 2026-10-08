@@ -292,10 +292,13 @@ Canonical typedefs are not promoted to public identities merely because equivale
 have logical owners. If dependency closure retains a canonical raw-pointer alias such as `PVOID`
 for a nested pointer boundary, its route comes from the selected declaration. A direct typedef in
 another extraction input may preserve that nominal target when its local canonical alias has the
-same physical spelling location and identical extracted declaration data. This source-identity
-bridge does not promote the other copy or change its owner. Direct non-typedef uses, declarations
-from another physical header, and raw pointers still project to the raw pointer and do not create
-nominal aliases in their logical or default namespaces.
+same physical spelling location, identical extracted declaration data, matching native parent
+qualification, and the same semantic annotations. Emission builds one exact
+`(input, name, spelling) -> declarations` typedef index and requires every declaration in the
+matching bucket to satisfy those rules. This source-identity bridge does not promote the other copy
+or change its owner. Direct non-typedef uses, declarations from another physical header, and raw
+pointers still project to the raw pointer and do not create nominal aliases in their logical or
+default namespaces.
 
 Equivalent canonical raw-pointer declarations are scoped only for exact declarations that need a
 nominal identity: another pointer typedef points through the declaration, a pointer boundary changes
