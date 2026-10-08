@@ -376,8 +376,15 @@ routes, and formats once, avoiding repeated planning for SDK-scale snapshots. Us
 `HeaderPartitionPlan::audit` only for report-only callers that will not emit the same plan.
 Calling `audit` before `emit_with_options` repeats planning and clones the snapshot.
 Calling `retained_function_source_identities` first caches the transformed snapshot. A later audit
-or consuming emission with the same references, exclusions, and function allowlist reuses that
-snapshot instead of cloning and applying the partition transformations again.
+or consuming emission reuses that snapshot only when the owned contents of the function selection
+and effective function exclusions match. The effective exclusions are `excluded_functions`, falling
+back to `excluded`. If `into_partitioned_planning_snapshot` starts consuming another `EmitOptions`
+input, its owned contents must be added to `PartitionTransformOptions`.
+
+Every retained-identity query, audit, and consuming emission still plans and audits the current
+options. References and type or constant exclusions are read during that planning, while library
+mappings and native import contracts are read during the route audit. They are not part of the
+transformed-snapshot cache key.
 
 Header-plan dependency closure collects independent missing, ambiguous, and unsupported dependency
 edges before returning an error. The report groups each blocker by translation unit, declaration
