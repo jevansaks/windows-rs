@@ -91,9 +91,11 @@ fn write_source(path: &Path) {
             #pragma push_macro("ALIAS_VALUE")
             #undef ALIAS_VALUE
             enum TargetFlags : unsigned {
-                ALIAS_VALUE = 64
+                ALIAS_VALUE = 64,
+                LATE_ALIAS = 128
             };
             #pragma pop_macro("ALIAS_VALUE")
+            #define LATE_ALIAS SourceFlags::v
 
             #define NAMESPACE_VALUE 64U
             #pragma push_macro("NAMESPACE_VALUE")
@@ -255,18 +257,20 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
     );
     let references = BTreeMap::new();
     let options = EmitOptions::new("Example", &references);
-    let alias_value = snapshot
-        .constants()
-        .iter()
-        .find(|constant| constant.name == "ALIAS_VALUE")
-        .unwrap();
-    assert!(
-        matches!(
-            &alias_value.ty,
-            windows_clang::TypeRef::Named { name, .. } if name == "SourceFlags"
-        ),
-        "{alias_value:#?}"
-    );
+    for name in ["ALIAS_VALUE", "LATE_ALIAS"] {
+        let constant = snapshot
+            .constants()
+            .iter()
+            .find(|constant| constant.name == name)
+            .unwrap();
+        assert!(
+            matches!(
+                &constant.ty,
+                windows_clang::TypeRef::Named { name, .. } if name == "SourceFlags"
+            ),
+            "{constant:#?}"
+        );
+    }
     for name in ["HANDLE_NEGATIVE", "LATE_HANDLE"] {
         let constant = snapshot
             .constants()
@@ -300,10 +304,17 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
         "{rdl}"
     );
     assert!(
-        rdl.contains("enum TargetFlags {\n            ALIAS_VALUE = 64,\n        }"),
+        rdl.contains(
+            "enum TargetFlags {\n            ALIAS_VALUE = 64,\n            LATE_ALIAS = 128,\n        }"
+        ),
         "{rdl}"
     );
-    assert!(rdl.contains("const ALIAS_VALUE: SourceFlags = 64"), "{rdl}");
+    for name in ["ALIAS_VALUE", "LATE_ALIAS"] {
+        assert!(
+            rdl.contains(&format!("const {name}: SourceFlags = 64")),
+            "{rdl}"
+        );
+    }
     for name in [
         "SCOPED_VALUE",
         "NAMESPACE_VALUE",
@@ -377,14 +388,17 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
         enum_value(&index, namespace, "TargetFlags", "ALIAS_VALUE"),
         Value::U32(64)
     );
-    let Item::Const(alias_value) = index.expect_item(namespace, "ALIAS_VALUE") else {
-        panic!("{namespace}.ALIAS_VALUE was not emitted as a constant");
-    };
     assert_eq!(
-        alias_value.ty(),
-        Type::value_named(namespace, "SourceFlags")
+        enum_value(&index, namespace, "TargetFlags", "LATE_ALIAS"),
+        Value::U32(128)
     );
-    assert_eq!(alias_value.constant().unwrap().value(), Value::U32(64));
+    for name in ["ALIAS_VALUE", "LATE_ALIAS"] {
+        let Item::Const(constant) = index.expect_item(namespace, name) else {
+            panic!("{namespace}.{name} was not emitted as a constant");
+        };
+        assert_eq!(constant.ty(), Type::value_named(namespace, "SourceFlags"));
+        assert_eq!(constant.constant().unwrap().value(), Value::U32(64));
+    }
     assert_eq!(
         enum_value(&index, namespace, "DIFFERENT_FLAGS", "DIFFERENT_VALUE"),
         Value::U32(128)
@@ -424,6 +438,7 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
     for name in [
         "SCOPED_VALUE",
         "ALIAS_VALUE",
+        "LATE_ALIAS",
         "NAMESPACE_VALUE",
         "AMBIGUOUS_VALUE",
         "DIFFERENT_VALUE",
