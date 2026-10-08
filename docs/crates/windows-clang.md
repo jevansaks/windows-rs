@@ -581,10 +581,11 @@ pointer to the same interface remains a pointer and is emitted.
 
 Object-like macro probes accept a value only when Clang parses the complete generated expression
 without an error diagnostic. `KeepGoing` may otherwise expose an evaluable cursor for the valid
-prefix of a malformed macro. A failed batch is retried through the existing recovery, isolation,
-and singleton tiers so one invalid macro does not suppress neighboring valid constants. The probe
-uses `const` declarations rather than `constexpr`, which preserves integer-valued pointer casts
-while syntax errors still reject the malformed macro.
+prefix of a malformed macro. Error locations in generated declarations reject only the associated
+macro, while diagnostics already accepted from the original translation unit do not invalidate
+the synthetic probe. An error that cannot be localized still uses the recovery, isolation, and
+singleton tiers. The probe uses `const` declarations rather than `constexpr`, which preserves
+integer-valued pointer casts while syntax errors still reject the malformed macro.
 
 ### Bit-field member scraping
 

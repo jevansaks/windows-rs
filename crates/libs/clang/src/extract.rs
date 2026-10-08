@@ -225,7 +225,7 @@ fn extract_impl(
     let mut probe_candidates = 0;
     let mut synthetic_tus = 0;
     let mut retry_tus = 0;
-    for (input, extracted) in inputs.iter().zip(&extracted) {
+    for ((input, parsed), extracted) in inputs.iter().zip(&translation_units).zip(&extracted) {
         let local_arguments = input_arguments.get(&input.name);
         let probe_arguments: Vec<_> = args
             .iter()
@@ -237,7 +237,10 @@ fn extract_impl(
             input,
             &probe_arguments,
             &facts,
-            &extracted.macros,
+            &ConstantSources {
+                macros: &extracted.macros,
+                translation_unit: &parsed.translation_unit,
+            },
             &associated_constants,
             timing,
         )?;
@@ -1195,6 +1198,20 @@ struct ProbeMetrics {
     elapsed_ms: f64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ErrorDiagnostic {
+    spelling: String,
+    file: String,
+    line: u32,
+    column: u32,
+    offset: u32,
+}
+
+struct ConstantSources<'a, 'tu> {
+    macros: &'a MacroDefinitions<'tu>,
+    translation_unit: &'a TranslationUnit,
+}
+
 impl TranslationUnit {
     fn parse(index: &Index, input: &Input, args: &[&str]) -> Result<Self, Error> {
         let name = CString::new(input.name.as_str())
@@ -1295,17 +1312,41 @@ impl TranslationUnit {
         result
     }
 
-    fn has_error_diagnostics(&self) -> bool {
+    fn error_diagnostics(&self) -> Vec<ErrorDiagnostic> {
+        let mut result = vec![];
         let count = unsafe { clang_getNumDiagnostics(self.0) };
         for index in 0..count {
             let diagnostic = unsafe { clang_getDiagnostic(self.0, index) };
-            let is_error = unsafe { clang_getDiagnosticSeverity(diagnostic) } >= CXDiagnostic_Error;
-            unsafe { clang_disposeDiagnostic(diagnostic) };
-            if is_error {
-                return true;
+            if unsafe { clang_getDiagnosticSeverity(diagnostic) } >= CXDiagnostic_Error {
+                let location = unsafe { clang_getDiagnosticLocation(diagnostic) };
+                let mut file = std::ptr::null_mut();
+                let mut line = 0;
+                let mut column = 0;
+                let mut offset = 0;
+                unsafe {
+                    clang_getExpansionLocation(
+                        location,
+                        &mut file,
+                        &mut line,
+                        &mut column,
+                        &mut offset,
+                    );
+                }
+                result.push(ErrorDiagnostic {
+                    spelling: cx_string(unsafe { clang_getDiagnosticSpelling(diagnostic) }),
+                    file: if file.is_null() {
+                        String::new()
+                    } else {
+                        normalize_name(&cx_string(unsafe { clang_getFileName(file) }))
+                    },
+                    line,
+                    column,
+                    offset,
+                });
             }
+            unsafe { clang_disposeDiagnostic(diagnostic) };
         }
-        false
+        result
     }
 
     fn included_files(&self, input: &str) -> Vec<IncludedFile> {
@@ -2402,7 +2443,7 @@ fn evaluate_constants(
     input: &Input,
     args: &[&str],
     facts: &[Fact],
-    macros: &MacroDefinitions,
+    sources: &ConstantSources<'_, '_>,
     selected: &BTreeSet<String>,
     timing: bool,
 ) -> Result<(Vec<Constant>, Option<ProbeMetrics>), Error> {
@@ -2410,6 +2451,7 @@ fn evaluate_constants(
     const RECOVERY_CHUNK: usize = 512;
     const ISOLATION_CHUNK: usize = 16;
 
+    let macros = sources.macros;
     let probe_time = timing.then(std::time::Instant::now);
     let mut strings = BTreeMap::new();
     let mut roots = BTreeMap::new();
@@ -2475,6 +2517,7 @@ fn evaluate_constants(
             .is_some_and(|(_, function_like)| !function_like)
     });
     let names: Vec<_> = candidates.keys().cloned().collect();
+    let source_diagnostics = sources.translation_unit.error_diagnostics();
     let available_parallelism = std::thread::available_parallelism().map_or(1, usize::from);
     let workers = available_parallelism.min(4);
     if names.is_empty() {
@@ -2512,7 +2555,8 @@ fn evaluate_constants(
             let mut evaluated = vec![];
             let mut reached = HashSet::new();
             for batch in batches.iter().skip(worker).step_by(worker_count) {
-                let (batch_evaluated, batch_reached) = evaluate_probe(index, input, args, batch)?;
+                let (batch_evaluated, batch_reached) =
+                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -2537,7 +2581,8 @@ fn evaluate_constants(
             let mut evaluated = vec![];
             let mut reached = HashSet::new();
             for batch in recovery_batches.iter().skip(worker).step_by(worker_count) {
-                let (batch_evaluated, batch_reached) = evaluate_probe(index, input, args, batch)?;
+                let (batch_evaluated, batch_reached) =
+                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -2562,7 +2607,8 @@ fn evaluate_constants(
             let mut evaluated = vec![];
             let mut reached = HashSet::new();
             for batch in isolation_batches.iter().skip(worker).step_by(worker_count) {
-                let (batch_evaluated, batch_reached) = evaluate_probe(index, input, args, batch)?;
+                let (batch_evaluated, batch_reached) =
+                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -2586,7 +2632,14 @@ fn evaluate_constants(
     let singleton_workers = workers.min(fallback_batches.len());
     let fallback_results =
         run_probe_workers(workers, fallback_batches.len(), |index, worker, _| {
-            evaluate_singleton_probes(index, input, args, fallback_batches[worker], &reached)
+            evaluate_singleton_probes(
+                index,
+                input,
+                args,
+                fallback_batches[worker],
+                &reached,
+                &source_diagnostics,
+            )
         })?;
     for fallback in fallback_results {
         evaluated.extend(fallback);
@@ -2861,13 +2914,49 @@ fn evaluate_probe(
     input: &Input,
     args: &[&str],
     names: &[String],
+    source_diagnostics: &[ErrorDiagnostic],
 ) -> Result<(Vec<Evaluated>, HashSet<String>), Error> {
-    let tu = TranslationUnit::parse_probe(index, input, &probe_source(names), args)?;
+    let probe = probe_source(names);
+    let tu = TranslationUnit::parse_probe(index, input, &probe.source, args)?;
+    let synthetic_name = normalize_name(&format!("{}.__clang_eval.cpp", input.name));
+    let input_name = normalize_name(&input.name);
+    let probe_offset = input.source.len() + 1;
+    let mut rejected = HashSet::new();
+    let mut unlocalized = false;
+    for diagnostic in tu.error_diagnostics() {
+        // The original translation unit already accepted these diagnostics.
+        if source_diagnostics
+            .iter()
+            .any(|source| same_source_diagnostic(&diagnostic, source, &input_name, &synthetic_name))
+        {
+            continue;
+        }
+        let Some(relative) = (diagnostic.file == synthetic_name)
+            .then_some(diagnostic.offset as usize)
+            .and_then(|offset| offset.checked_sub(probe_offset))
+        else {
+            unlocalized = true;
+            continue;
+        };
+        let index = probe.ranges.partition_point(|range| range.end <= relative);
+        if !probe
+            .ranges
+            .get(index)
+            .is_some_and(|range| range.contains(&relative))
+        {
+            unlocalized = true;
+            continue;
+        }
+        rejected.insert(names[index].clone());
+    }
     // KeepGoing may produce evaluable cursors for a recovered prefix of an invalid expression.
-    if tu.has_error_diagnostics() {
+    if unlocalized {
         return Ok((vec![], HashSet::new()));
     }
-    Ok(evaluate_parsed_probe(&tu, input))
+    let (mut evaluated, mut reached) = evaluate_parsed_probe(&tu, input);
+    evaluated.retain(|value| !rejected.contains(&value.name));
+    reached.extend(rejected);
+    Ok((evaluated, reached))
 }
 
 fn evaluate_singleton_probes(
@@ -2876,14 +2965,43 @@ fn evaluate_singleton_probes(
     args: &[&str],
     names: &[String],
     reached: &HashSet<String>,
+    source_diagnostics: &[ErrorDiagnostic],
 ) -> Result<Vec<Evaluated>, Error> {
     let mut evaluated = vec![];
     for name in names {
         if !reached.contains(name.as_str()) {
-            evaluated.extend(evaluate_probe(index, input, args, std::slice::from_ref(name))?.0);
+            evaluated.extend(
+                evaluate_probe(
+                    index,
+                    input,
+                    args,
+                    std::slice::from_ref(name),
+                    source_diagnostics,
+                )?
+                .0,
+            );
         }
     }
     Ok(evaluated)
+}
+
+fn same_source_diagnostic(
+    probe: &ErrorDiagnostic,
+    source: &ErrorDiagnostic,
+    input_name: &str,
+    synthetic_name: &str,
+) -> bool {
+    if probe.spelling != source.spelling {
+        return false;
+    }
+    if probe.file == source.file {
+        return probe.line == source.line && probe.column == source.column;
+    }
+    probe.file == synthetic_name
+        && source.file == input_name
+        && probe.offset == source.offset
+        && probe.line == source.line
+        && probe.column == source.column
 }
 
 fn defined_macros(
@@ -2919,22 +3037,31 @@ fn defined_macros(
     Ok(result)
 }
 
-fn probe_source(names: &[String]) -> String {
-    let mut probe = String::from(
+struct ProbeSource {
+    source: String,
+    ranges: Vec<std::ops::Range<usize>>,
+}
+
+fn probe_source(names: &[String]) -> ProbeSource {
+    let mut source = String::from(
         "#define __WINDOWS_CLANG_NARG(...) __WINDOWS_CLANG_NARG_(__VA_ARGS__,2,1,0)\n\
          #define __WINDOWS_CLANG_NARG_(_1,_2,N,...) N\n",
     );
+    let mut ranges = Vec::with_capacity(names.len());
     for name in names {
-        probe.push_str(&format!(
-            "#ifdef {name}\n\
-             const auto __clang_eval_{name} = ({name});\n\
+        source.push_str(&format!("#ifdef {name}\n"));
+        // Directive and EOF diagnostics may be parser fallout from an earlier macro.
+        let start = source.len();
+        source.push_str(&format!(
+            "const auto __clang_eval_{name} = ({name});\n\
              const __int64 __clang_bits_{name} = \
                  (__int64)((__INTPTR_TYPE__)({name}));\n\
-             enum {{ __clang_count_{name} = __WINDOWS_CLANG_NARG({name}) }};\n\
-             #endif\n"
+             enum {{ __clang_count_{name} = __WINDOWS_CLANG_NARG({name}) }};\n"
         ));
+        ranges.push(start..source.len());
+        source.push_str("#endif\n");
     }
-    probe
+    ProbeSource { source, ranges }
 }
 
 fn evaluate_parsed_probe(tu: &TranslationUnit, input: &Input) -> (Vec<Evaluated>, HashSet<String>) {
