@@ -3887,7 +3887,7 @@ impl Snapshot {
     }
 
     fn rebind_canonical_typedef_owners(&mut self) -> Vec<PartitionConflict> {
-        let annotations = self.route_annotation_signatures();
+        let annotations = self.source_annotation_signatures();
         let canonical_typedefs = CanonicalTypedefIndex::new(
             &self.facts,
             &self.canonical_typedef_origins,
@@ -5120,7 +5120,7 @@ impl Snapshot {
             CanonicalTypedefIndex::new(
                 &self.facts,
                 &self.canonical_typedef_origins,
-                &self.route_annotation_signatures(),
+                &self.source_annotation_signatures(),
                 Some(&self.root_owners),
             )
         } else {
