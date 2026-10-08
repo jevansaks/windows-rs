@@ -3284,7 +3284,7 @@ fn wildcard_authority_collapses_equivalent_logical_routes() {
 }
 
 #[test]
-fn compatible_function_redeclarations_use_input_order_and_namespace_authority() {
+fn function_redeclarations_use_input_order_and_namespace_authority() {
     helpers::ensure_libclang();
 
     let scratch = scratch("compatible-function-input-order");
@@ -4029,59 +4029,66 @@ fn distinct_function_link_names_remain_independent_aliases() {
 fn function_redeclaration_route_claims_still_report_library_conflicts() {
     helpers::ensure_libclang();
 
-    let cases = [(
-        "parameter",
-        "extern \"C\" int Shared(unsigned first_value);\n",
-        "extern \"C\" long long Shared(unsigned second_value);\n",
-    )];
-    for (case, first_declaration, second_declaration) in cases {
-        let scratch = scratch(&format!("ordered-function-library-conflict-{case}"));
-        let first = scratch.join("first.h");
-        let second = scratch.join("second.h");
-        std::fs::write(&first, first_declaration).unwrap();
-        std::fs::write(&second, second_declaration).unwrap();
-        let roots = [scratch.to_string_lossy().to_string()];
-        let snapshot = extract(
-            [
-                Input::new(
-                    "first.cpp",
-                    format!("#include \"{}\"\n", first.to_string_lossy()),
-                )
-                .with_root_dirs(roots.clone()),
-                Input::new(
-                    "second.cpp",
-                    format!("#include \"{}\"\n", second.to_string_lossy()),
-                )
-                .with_root_dirs(roots),
-            ],
-            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
-        )
+    let scratch = scratch("ordered-function-library-annotation-conflict");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &first,
+        "#define W32M(text) __attribute__((annotate(text)))\n\
+         W32M(\"win32metadata:import_library=first.dll\")\n\
+         extern \"C\" int Shared(unsigned first_value);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#define W32M(text) __attribute__((annotate(text)))\n\
+         W32M(\"win32metadata:import_library=second.dll\")\n\
+         extern \"C\" long long Shared(unsigned second_value);\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.Public"),
+        &second,
+        RootPartition::new("second", "Example.Public"),
+    );
+    let references = BTreeMap::new();
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
         .unwrap();
-        let policy = duplicate_declaration_policy(
-            &first,
-            RootPartition::new("first", "Example.Public").with_library("Shared", "first.dll"),
-            &second,
-            RootPartition::new("second", "Example.Public").with_library("Shared", "second.dll"),
-        );
-        let references = BTreeMap::new();
-        let plan = snapshot
-            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
-            .unwrap();
-        let audit = plan
-            .audit(&EmitOptions::new("Example.Common", &references))
-            .unwrap();
-        assert_eq!(audit.conflicts().len(), 1, "{audit}");
-        assert_eq!(audit.conflicts()[0].name, "Shared");
-        assert_eq!(
-            audit.conflicts()[0].reason,
-            PartitionConflictReason::AmbiguousOwners
-        );
-        std::fs::remove_dir_all(scratch).unwrap();
-    }
+    let audit = plan
+        .audit(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+
+    assert_eq!(audit.conflicts().len(), 1, "{audit}");
+    assert_eq!(audit.conflicts()[0].name, "Shared");
+    assert_eq!(
+        audit.conflicts()[0].reason,
+        PartitionConflictReason::AmbiguousOwners
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
 }
 
 #[test]
-fn compatible_function_redeclarations_preserve_library_conflicts() {
+fn function_redeclarations_preserve_library_conflicts() {
     helpers::ensure_libclang();
 
     let scratch = scratch("compatible-function-library-conflict");

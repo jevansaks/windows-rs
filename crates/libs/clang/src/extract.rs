@@ -211,7 +211,16 @@ fn extract_impl(
         extracted.push(result);
     }
     let source_annotations = annotations.clone();
-    let function_annotations = source_annotations.clone();
+    let function_origins: HashSet<_> = facts
+        .iter()
+        .filter(|fact| fact.kind == FactKind::Function)
+        .map(|fact| &fact.origin)
+        .collect();
+    let function_annotations = source_annotations
+        .iter()
+        .filter(|(target, _)| function_origins.contains(annotation_target_origin(target)))
+        .map(|(target, annotations)| (target.clone(), annotations.clone()))
+        .collect();
     merge_redeclaration_annotations(&facts, &mut annotations)?;
     let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
@@ -2044,11 +2053,17 @@ fn extract_child(
                     if let Some(guid) = declaration_guid {
                         traversal.declaration_guids.insert(origin.clone(), guid);
                     }
+                    let annotation_source_range = function_annotation_source_range(
+                        &traversal.facts[index],
+                        &traversal.facts[..index],
+                        child,
+                    );
                     if let Err(error) = collect_fact_annotations(
                         child,
                         fact_kind,
                         &origin,
                         traversal.macros,
+                        annotation_source_range.as_ref(),
                         traversal.annotations,
                     ) {
                         traversal.error = Some(error);
@@ -3682,7 +3697,7 @@ fn native_opaque_class_definition(cursor: CXCursor) -> Option<CXCursor> {
         || unsafe { clang_isCursorDefinition(definition) } == 0
         || is_interface(definition)
         || cursor_uuid(definition).is_some()
-        || !expanded_raw_annotations(definition)
+        || !expanded_raw_annotations(definition, None)
             .iter()
             .any(|annotation| annotation.key == "native_opaque" && annotation.value.is_none())
     {
@@ -4609,10 +4624,27 @@ fn parse_raw_annotation(spelling: &str) -> Option<RawAnnotation> {
     })
 }
 
-fn expanded_raw_annotations(cursor: CXCursor) -> Vec<RawAnnotation> {
+struct AnnotationSourceRange<'a> {
+    file: &'a str,
+    start: u32,
+    end: u32,
+}
+
+fn expanded_raw_annotations(
+    cursor: CXCursor,
+    source_range: Option<&AnnotationSourceRange<'_>>,
+) -> Vec<RawAnnotation> {
     let mut result = vec![];
     for child in cursor_children(cursor) {
         if unsafe { clang_getCursorKind(child) } != CXCursor_AnnotateAttr {
+            continue;
+        }
+        if let Some(source_range) = source_range
+            && !cursor_locations(child).is_some_and(|(_, expansion, _, _)| {
+                expansion.file.eq_ignore_ascii_case(source_range.file)
+                    && (source_range.start..source_range.end).contains(&expansion.offset)
+            })
+        {
             continue;
         }
         let spelling = cx_string(unsafe { clang_getCursorSpelling(child) });
@@ -4651,9 +4683,17 @@ fn annotation_values(
     cursor: CXCursor,
     macros: &MacroDefinitions,
 ) -> Result<Vec<Annotation>, Error> {
+    annotation_values_in_range(cursor, macros, None)
+}
+
+fn annotation_values_in_range(
+    cursor: CXCursor,
+    macros: &MacroDefinitions,
+    source_range: Option<&AnnotationSourceRange<'_>>,
+) -> Result<Vec<Annotation>, Error> {
     let before = macros.cursor_order(cursor).unwrap_or(usize::MAX);
     let location = cursor_locations(cursor).map(|(spelling, _, _, _)| spelling);
-    expanded_raw_annotations(cursor)
+    expanded_raw_annotations(cursor, source_range)
         .into_iter()
         .filter_map(|mut raw| {
             if raw.key == "invalid_handle"
@@ -4722,14 +4762,56 @@ fn annotation_value(raw: RawAnnotation) -> Option<Annotation> {
     })
 }
 
+fn function_annotation_source_range<'a>(
+    fact: &'a Fact,
+    previous: &[Fact],
+    cursor: CXCursor,
+) -> Option<AnnotationSourceRange<'a>> {
+    let FactData::Function { link_name, .. } = &fact.data else {
+        return None;
+    };
+    let (file, _, end) = cursor_expansion_extent(cursor)?;
+    if !file.eq_ignore_ascii_case(&fact.expansion.file) {
+        return None;
+    }
+    // Libclang includes inherited annotate attributes on redeclaration cursors.
+    let start = previous
+        .iter()
+        .filter(|candidate| {
+            candidate.origin.tu == fact.origin.tu
+                && candidate.name == fact.name
+                && candidate
+                    .expansion
+                    .file
+                    .eq_ignore_ascii_case(&fact.expansion.file)
+                && candidate.expansion.offset < fact.expansion.offset
+                && matches!(
+                    &candidate.data,
+                    FactData::Function {
+                        link_name: candidate_link_name,
+                        ..
+                    } if candidate_link_name == link_name
+                )
+        })
+        .map(|candidate| candidate.expansion.offset)
+        .max()
+        .unwrap_or(0);
+    Some(AnnotationSourceRange {
+        file: &fact.expansion.file,
+        start,
+        end,
+    })
+}
+
 fn collect_fact_annotations(
     cursor: CXCursor,
     kind: FactKind,
     origin: &Origin,
     macros: &MacroDefinitions,
+    source_range: Option<&AnnotationSourceRange<'_>>,
     annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
 ) -> Result<(), Error> {
-    let direct = annotation_values(cursor, macros)?;
+    let direct = annotation_values_in_range(cursor, macros, source_range)?;
     let callback = kind == FactKind::Typedef && typedef_is_callback(cursor);
     let (declaration, result): (Vec<_>, Vec<_>) = direct.into_iter().partition(|annotation| {
         !matches!(
@@ -4766,7 +4848,7 @@ fn collect_fact_annotations(
                     declaration: origin.clone(),
                     index,
                 },
-                annotation_values(parameter, macros)?,
+                annotation_values_in_range(parameter, macros, source_range)?,
             );
         }
     }
@@ -4914,6 +4996,7 @@ fn merge_redeclaration_annotations(
     let annotated_keys: BTreeSet<_> = annotations
         .keys()
         .filter_map(|target| facts_by_origin.get(annotation_target_origin(target)))
+        .filter(|fact| fact.kind != FactKind::Function)
         .map(|fact| (fact.kind, fact.name.as_str()))
         .collect();
     let mut candidates: BTreeMap<(FactKind, &str), Vec<&Fact>> = BTreeMap::new();

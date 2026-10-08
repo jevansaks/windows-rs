@@ -1477,7 +1477,7 @@ fn namespace_authority_routes_untagged_transitive_type() {
 }
 
 #[test]
-fn identical_midl_helper_functions_coalesce_across_headers() {
+fn midl_helper_functions_use_input_order_across_headers() {
     helpers::ensure_libclang();
 
     let scratch =
@@ -1533,16 +1533,16 @@ fn identical_midl_helper_functions_coalesce_across_headers() {
     assert_eq!(marshal.matches("fn BSTR_UserFree").count(), 1, "{marshal}");
     assert_eq!(marshal.matches("fn BSTR_UserSize").count(), 1, "{marshal}");
 
-    let ambiguous = extract_partitioned(
+    let differing = extract_partitioned(
         [
             Input::new(
                 "first.h",
-                "extern \"C\" void BSTR_UserFree(unsigned long *flags, void **value);\n",
+                "extern \"C\" void BSTR_UserFree(unsigned long *flags, void **first_value);\n",
             )
             .partitioned("first-input"),
             Input::new(
                 "second.h",
-                "extern \"C\" void BSTR_UserFree(unsigned long *flags, unsigned **value);\n",
+                "extern \"C\" void BSTR_UserFree(unsigned long *flags, unsigned **second_value);\n",
             )
             .partitioned("second-input"),
         ],
@@ -1553,13 +1553,26 @@ fn identical_midl_helper_functions_coalesce_across_headers() {
         &options,
         &NamespaceAuthorities::new().with_exact("BSTR_UserFree", "Example.System.Com.Marshal"),
     )
-    .unwrap_err();
+    .unwrap();
+    let marshal = differing
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.System.Com.Marshal")
+        .unwrap()
+        .1;
+    let function = marshal
+        .lines()
+        .find(|line| line.contains(" fn BSTR_UserFree("))
+        .unwrap();
 
+    assert!(function.contains("first_value"), "{marshal}");
+    assert!(!function.contains("second_value"), "{marshal}");
     assert!(
-        ambiguous
-            .to_string()
-            .contains("ambiguous function root `BSTR_UserFree`"),
-        "{ambiguous}"
+        marshal.contains("declaration selected=true input=\"first.h\""),
+        "{marshal}"
+    );
+    assert!(
+        marshal.contains("declaration selected=false input=\"second.h\""),
+        "{marshal}"
     );
 
     std::fs::remove_dir_all(scratch).unwrap();

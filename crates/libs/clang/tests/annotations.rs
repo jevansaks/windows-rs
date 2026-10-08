@@ -984,7 +984,7 @@ fn associated_constants_include_only_the_provider() {
 }
 
 #[test]
-fn redeclarations_union_repeatable_annotations_and_reject_conflicts() {
+fn function_redeclarations_select_source_annotations_without_merging() {
     helpers::ensure_libclang();
 
     let snapshot = extract(
@@ -1007,7 +1007,7 @@ fn redeclarations_union_repeatable_annotations_and_reject_conflicts() {
     let rdl = snapshot.emit_with_options(&options).unwrap();
     assert_eq!(rdl.matches("#[supported_os(").count(), 2, "{rdl}");
 
-    let conflict = extract(
+    let snapshot = extract(
         [Input::new(
             "conflict.hpp",
             r#"
@@ -1019,13 +1019,15 @@ fn redeclarations_union_repeatable_annotations_and_reject_conflicts() {
         )],
         &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
     )
-    .unwrap_err();
-    assert!(
-        conflict
-            .to_string()
-            .contains("conflicting redeclaration annotation `raii_free`"),
-        "{conflict}"
+    .unwrap();
+    let rdl = snapshot.emit_with_options(&options).unwrap();
+    assert_eq!(
+        rdl.matches("#[raii_free(\"CloseFirst\")]").count(),
+        1,
+        "{rdl}"
     );
+    assert!(!rdl.contains("#[raii_free(\"CloseSecond\")]"), "{rdl}");
+    assert!(rdl.contains("RaiiFree(\"CloseSecond\")"), "{rdl}");
 
     let snapshot = extract(
         [Input::new(
@@ -1048,7 +1050,7 @@ fn redeclarations_union_repeatable_annotations_and_reject_conflicts() {
 }
 
 #[test]
-fn compatible_redeclarations_merge_singleton_and_repeatable_annotations() {
+fn function_redeclarations_select_annotations_while_types_still_merge() {
     helpers::ensure_libclang();
 
     let mut foreign = Input::new(
@@ -1081,11 +1083,9 @@ fn compatible_redeclarations_merge_singleton_and_repeatable_annotations() {
         .emit_with_options(&EmitOptions::new("Test", &references))
         .unwrap();
     assert_eq!(rdl.matches("fn SampleMergedContract").count(), 1, "{rdl}");
-    assert!(
-        rdl.contains("#[library(\"samplemerged.dll\", set_last_error)]"),
-        "{rdl}"
-    );
-    assert!(rdl.contains("#[supported_os(\"windows6.1\")]"), "{rdl}");
+    assert!(rdl.contains("#[library(\"samplemerged.dll\")]"), "{rdl}");
+    assert!(!rdl.contains("set_last_error"), "{rdl}");
+    assert!(!rdl.contains("#[supported_os("), "{rdl}");
 
     let snapshot = extract(
         [Input::new(
@@ -1110,7 +1110,8 @@ fn compatible_redeclarations_merge_singleton_and_repeatable_annotations() {
     let mut options = EmitOptions::new("Test", &references);
     options.library = Some("test.dll");
     let rdl = snapshot.emit_with_options(&options).unwrap();
-    assert!(rdl.contains("fn Fill(#[out] value: *mut void)"), "{rdl}");
+    assert!(rdl.contains("fn Fill(value: *mut void)"), "{rdl}");
+    assert!(!rdl.contains("#[out]"), "{rdl}");
     assert!(
         rdl.contains("#[supported_os(\"windows6.1\")]\n    struct FORWARD_RECORD"),
         "{rdl}"
@@ -1164,10 +1165,8 @@ fn compatible_redeclarations_merge_singleton_and_repeatable_annotations() {
         .emit_with_options(&EmitOptions::new("Test", &references))
         .unwrap();
     assert_eq!(rdl.matches("fn SampleMergedContract").count(), 1, "{rdl}");
-    assert!(
-        rdl.contains("#[library(\"samplemerged.dll\", set_last_error)]"),
-        "{rdl}"
-    );
+    assert!(rdl.contains("#[library(\"samplemerged.dll\")]"), "{rdl}");
+    assert!(!rdl.contains("set_last_error"), "{rdl}");
     assert!(rdl.contains("#[supported_os(\"windows6.1\")]"), "{rdl}");
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -251,31 +251,37 @@ an owner's remap, exclusion, override, or library maps do not create a conflict.
 planned declaration supplies the output partition and physical header, while every candidate remains
 available in an ambiguity report.
 
-Free-function declarations from separate extraction inputs may differ in parameter names and SAL
-parameter annotations. They share one root only when their native parent path, linker name, calling
-convention, variadic and noreturn state, and exact parameter and result type bindings match. An
-exact or wildcard namespace authority controls only the public namespace. When compatible
-declarations differ, the declaration from the earliest extraction input supplies the complete
-signature, parameter names, and parameter annotations. Source location breaks ties only within the
-same input. Parameter annotations are not combined. Every compatible observation still contributes
-its semantic route annotations, logical owner, and effective import library, so those conflicts are
-not hidden. Any callable ABI, type binding, native parent, or linker identity difference remains an
-ambiguous function root. Independent incompatible function groups are collected and reported
-together in symbol order.
+Free-function declarations with the same planned name are grouped by native linker name. Distinct
+linker names remain separate aliases. Within one linker-name group, the declaration from the
+earliest extraction input supplies the whole callable declaration. Source location breaks ties only
+within the same input. This ordering also resolves differences in native parent path, calling
+convention, parameter and result types, arity, variadic and noreturn state, parameter names, and SAL
+parameter annotations. None of those fields are combined across declarations.
+
+Only the selected declaration's source annotations affect emitted function parameters, returns,
+declaration attributes, and route semantics. Non-selected SAL and semantic annotations remain audit
+evidence. Every declaration still contributes its logical owner and effective import-library claim,
+so namespace and library conflicts are not hidden. An exact or wildcard namespace authority
+controls the public namespace without selecting the native declaration. Policy insertion order and
+namespace ownership do not change the extraction-input winner. Type/function name collisions,
+missing owners or libraries, conflicting owner or library claims, and output-name collisions remain
+errors.
 
 Emission places an audit note immediately before a function selected this way. The declarations
 are listed in extraction input order, then source order, with the selected declaration marked:
 
 ```rust
-// windows-clang: compatible function redeclarations symbol="Example" selection=input-order
-// windows-clang: declaration selected=true input="first.cpp" source="first.h:42" signature=...
-// windows-clang: declaration selected=false input="second.cpp" source="second.h:84" signature=...
+// windows-clang: function redeclarations symbol="Example" selection=input-order
+// windows-clang: declaration selected=true input="a" source="a:1" parent=... signature=...
+// windows-clang: declaration selected=false input="b" source="b:2" parent=... signature=...
 ```
 
-The signature summary includes the native signature, every parameter annotation, and the semantic
-annotations captured on that source declaration. Paths and other strings use escaped single-line
-formatting, so the note remains valid RDL. Fully equal declarations coalesce without an audit note.
-After a partitioned emission containing compatible differences succeeds, `windows-clang` writes one
+The parent and signature summaries include the native parent path, linker name, calling convention,
+parameter and result types, arity, variadic and noreturn state, parameter names, and every parameter
+annotation. The annotation summary contains the raw semantic annotations captured on that source
+declaration. Paths and other strings use escaped single-line formatting, so the note remains valid
+RDL. Declarations with equal parent paths, signatures, and source annotations coalesce without an
+audit note. After a partitioned emission containing differences succeeds, `windows-clang` writes one
 stderr summary with the total group count and the same deterministic symbol/source inventory.
 
 When equivalent roots resolve to different namespaces, header planning keeps one public identity per

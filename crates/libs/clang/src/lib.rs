@@ -3834,7 +3834,7 @@ impl Snapshot {
     ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate<'a>>, Error> {
         let declarations = DeclarationIndex::new(&self.facts);
         let annotation_signatures = self.route_annotation_signatures();
-        let source_annotation_signatures = self.source_route_annotation_signatures();
+        let function_annotation_signatures = self.function_route_annotation_signatures();
         let empty_annotations = Rc::new(Vec::new());
         let route_context = RouteClaimContext {
             annotations: &annotation_signatures,
@@ -3978,7 +3978,7 @@ impl Snapshot {
         }
         for planned in &plan.functions {
             let function = planned.fact;
-            let selected_annotations = source_annotation_signatures
+            let selected_annotations = function_annotation_signatures
                 .get(&function.origin)
                 .cloned()
                 .unwrap_or_else(|| empty_annotations.clone());
@@ -4235,7 +4235,7 @@ impl Snapshot {
             .collect()
     }
 
-    fn source_route_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
+    fn function_route_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
         let mut result: BTreeMap<Origin, RouteAnnotations> = BTreeMap::new();
         for (target, annotations) in &self.function_annotations {
             let (origin, target) = route_annotation_target(target);
@@ -4468,6 +4468,9 @@ impl Snapshot {
     fn selected_function_origins(&self) -> BTreeSet<Origin> {
         let mut selected = BTreeMap::<(String, String), &Fact>::new();
         for fact in &self.facts {
+            if !fact.root {
+                continue;
+            }
             let FactData::Function { link_name, .. } = &fact.data else {
                 continue;
             };
@@ -4500,7 +4503,7 @@ impl Snapshot {
         let function_origins: BTreeSet<_> = self
             .facts
             .iter()
-            .filter(|fact| matches!(fact.data, FactData::Function { .. }))
+            .filter(|fact| fact.kind == FactKind::Function)
             .map(|fact| fact.origin.clone())
             .collect();
         let selected_origins = self.selected_function_origins();
