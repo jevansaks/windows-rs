@@ -1326,6 +1326,7 @@ pub enum FactKind {
     Struct,
     Typedef,
     Union,
+    Variable,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]

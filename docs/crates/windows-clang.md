@@ -686,12 +686,16 @@ GUID, property-key, and coclass facts are also planned as values. They honor con
 while their referenced types still participate in dependency closure.
 
 Constant-qualified global variables are extracted when their initializer is representable without
-executing native code. Scalar variables retain the declared integer width and signedness. A direct
-single string literal assigned to a constant character array emits a string constant with ANSI or
-UTF-16 encoding, and a direct 11-part initializer for a `GUID`, `IID`, `CLSID`, or `FMTID` alias
-uses the existing GUID value projection. Mutable variables, local or member variables, pointer
-variables, dynamic or unresolved initializers, wrapped strings, and composed string literals are
-not promoted to constants.
+executing native code. Semantic qualification includes `const` carried through a typedef. Scalar
+variables retain the declared integer width and signedness. A direct single string literal assigned
+to a constant character array emits a string constant with ANSI or UTF-16 encoding only when the
+encoded payload and terminating NUL fit the declared array extent. ANSI extents count bytes and
+UTF-16 extents count code units. Truncated arrays and exact-fit arrays without the final terminator
+remain as unsupported variable diagnostics. A direct 11-part initializer for a `GUID`, `IID`,
+`CLSID`, or `FMTID` alias uses the existing GUID value projection and accepts C decimal, octal, and
+hexadecimal integer syntax. Mutable variables, local or member variables, pointer variables,
+dynamic or unresolved initializers, wrapped strings, and composed string literals are not promoted
+to constants.
 
 Native NaN and infinity constants are omitted because RDL and ECMA metadata cannot represent them.
 This includes `f64` values that become non-finite when narrowed to their declared `f32` type.

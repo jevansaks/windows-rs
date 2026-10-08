@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use windows_clang::{
-    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition,
-    Value as ClangValue, extract,
+    EmitOptions, FactData, FactKind, HeaderPartitionPolicy, Input, NamespaceAuthorities,
+    RootPartition, Value as ClangValue, extract,
 };
 use windows_metadata::{
     Type, Value,
@@ -11,6 +11,8 @@ use windows_metadata::{
 const SOURCE: &str = r#"
 typedef unsigned int UINT;
 typedef wchar_t WCHAR;
+typedef const int CI;
+typedef const wchar_t CWCHAR;
 typedef struct _GUID {
     unsigned long Data1;
     unsigned short Data2;
@@ -23,8 +25,10 @@ static const UINT DML_MINIMUM_BUFFER_TENSOR_ALIGNMENT = 16;
 const long UIA_SummaryChangeId = 90000;
 static const unsigned __int64 NATIVE_UNSIGNED_64 = 0xffffffffffffffffULL;
 static const __int64 NATIVE_SIGNED_64 = -2;
+CI TYPEDEF_CONST_NUMBER = 7;
 static const char g_szWMTitle[] = "Title";
 static const WCHAR g_wszWMTitle[] = L"Title";
+static CWCHAR TYPEDEF_CONST_TEXT[] = L"Alias";
 extern const __declspec(selectany) CLSID CLSID_SoftwareBitmapNativeFactory = {
     0x84e65691, 0x8602, 0x4a84, { 0xbe, 0x46, 0x70, 0x8b, 0xe9, 0xcd, 0x4b, 0x74 }
 };
@@ -33,6 +37,15 @@ extern const __declspec(selectany) CLSID CLSID_AudioFrameNativeFactory = {
 };
 extern const __declspec(selectany) CLSID CLSID_VideoFrameNativeFactory = {
     0xd194386a, 0x04e3, 0x4814, { 0x81, 0x00, 0xb2, 0xb0, 0xae, 0x6d, 0x78, 0xc7 }
+};
+extern const GUID GUID_RADIX_OCTAL = {
+    010UL, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+extern const GUID GUID_RADIX_DECIMAL = {
+    10U, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+extern const GUID GUID_RADIX_HEXADECIMAL = {
+    0x10L, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 "#;
 
@@ -63,6 +76,16 @@ fn typed_globals_emit_physically_across_windows_targets() {
                 .find(|constant| constant.name == "DML_MINIMUM_BUFFER_TENSOR_ALIGNMENT")
                 .map(|constant| &constant.value),
             Some(&ClangValue::Unsigned(16)),
+            "{architecture}: {:#?}",
+            snapshot.constants()
+        );
+        assert_eq!(
+            snapshot
+                .constants()
+                .iter()
+                .find(|constant| constant.name == "TYPEDEF_CONST_NUMBER")
+                .map(|constant| &constant.value),
+            Some(&ClangValue::Signed(7)),
             "{architecture}: {:#?}",
             snapshot.constants()
         );
@@ -116,6 +139,16 @@ fn typed_globals_emit_physically_across_windows_targets() {
             "{architecture}: {:#?}",
             snapshot.constants()
         );
+        assert_eq!(
+            snapshot
+                .constants()
+                .iter()
+                .find(|constant| constant.name == "TYPEDEF_CONST_TEXT")
+                .map(|constant| &constant.value),
+            Some(&ClangValue::Utf16("Alias".to_string())),
+            "{architecture}: {:#?}",
+            snapshot.constants()
+        );
         for (name, value) in [
             (
                 "CLSID_SoftwareBitmapNativeFactory",
@@ -128,6 +161,12 @@ fn typed_globals_emit_physically_across_windows_targets() {
             (
                 "CLSID_VideoFrameNativeFactory",
                 "d194386a-04e3-4814-8100-b2b0ae6d78c7",
+            ),
+            ("GUID_RADIX_OCTAL", "00000008-0000-0000-0000-000000000000"),
+            ("GUID_RADIX_DECIMAL", "0000000a-0000-0000-0000-000000000000"),
+            (
+                "GUID_RADIX_HEXADECIMAL",
+                "00000010-0000-0000-0000-000000000000",
             ),
         ] {
             assert!(
@@ -158,11 +197,21 @@ fn typed_globals_emit_physically_across_windows_targets() {
             "{architecture}: {rdl}"
         );
         assert!(
+            rdl.contains("const TYPEDEF_CONST_NUMBER: CI = 7"),
+            "{architecture}: {rdl}"
+        );
+        assert!(
             rdl.contains("#[encoding(\"ansi\")]\n        const g_szWMTitle: String = \"Title\""),
             "{architecture}: {rdl}"
         );
         assert!(
             rdl.contains("#[encoding(\"utf-16\")]\n        const g_wszWMTitle: String = \"Title\""),
+            "{architecture}: {rdl}"
+        );
+        assert!(
+            rdl.contains(
+                "#[encoding(\"utf-16\")]\n        const TYPEDEF_CONST_TEXT: String = \"Alias\""
+            ),
             "{architecture}: {rdl}"
         );
         for (name, value) in [
@@ -177,6 +226,15 @@ fn typed_globals_emit_physically_across_windows_targets() {
             (
                 "CLSID_VideoFrameNativeFactory",
                 "0xd194386a_04e3_4814_8100_b2b0ae6d78c7",
+            ),
+            ("GUID_RADIX_OCTAL", "0x00000008_0000_0000_0000_000000000000"),
+            (
+                "GUID_RADIX_DECIMAL",
+                "0x0000000a_0000_0000_0000_000000000000",
+            ),
+            (
+                "GUID_RADIX_HEXADECIMAL",
+                "0x00000010_0000_0000_0000_000000000000",
             ),
         ] {
             assert!(
@@ -209,6 +267,12 @@ fn typed_globals_emit_physically_across_windows_targets() {
         assert_constant(&index, "NATIVE_SIGNED_64", Type::I64, Value::I64(-2));
         assert_constant(
             &index,
+            "TYPEDEF_CONST_NUMBER",
+            Type::value_named("Example.TypedGlobals", "CI"),
+            Value::I32(7),
+        );
+        assert_constant(
+            &index,
             "g_szWMTitle",
             Type::String,
             Value::Utf16("Title".to_string()),
@@ -219,8 +283,15 @@ fn typed_globals_emit_physically_across_windows_targets() {
             Type::String,
             Value::Utf16("Title".to_string()),
         );
+        assert_constant(
+            &index,
+            "TYPEDEF_CONST_TEXT",
+            Type::String,
+            Value::Utf16("Alias".to_string()),
+        );
         assert_encoding(&index, "g_szWMTitle", "ansi");
         assert_encoding(&index, "g_wszWMTitle", "utf-16");
+        assert_encoding(&index, "TYPEDEF_CONST_TEXT", "utf-16");
         assert_guid(
             &index,
             "CLSID_SoftwareBitmapNativeFactory",
@@ -272,6 +343,29 @@ fn typed_globals_emit_physically_across_windows_targets() {
                 Value::U8(0xc7),
             ],
         );
+        for (name, data1) in [
+            ("GUID_RADIX_OCTAL", 8),
+            ("GUID_RADIX_DECIMAL", 10),
+            ("GUID_RADIX_HEXADECIMAL", 16),
+        ] {
+            assert_guid(
+                &index,
+                name,
+                [
+                    Value::U32(data1),
+                    Value::U16(0),
+                    Value::U16(0),
+                    Value::U8(0),
+                    Value::U8(0),
+                    Value::U8(0),
+                    Value::U8(0),
+                    Value::U8(0),
+                    Value::U8(0),
+                    Value::U8(0),
+                    Value::U8(0),
+                ],
+            );
+        }
     }
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -291,6 +385,7 @@ fn typed_globals_keep_mutable_and_unsupported_initializers_private() {
          static WCHAR MUTABLE_STRING[] = L\"mutable\";\n\
          static const WCHAR* POINTER_STRING = L\"pointer\";\n\
          static const WCHAR* const CONST_POINTER_STRING = L\"pointer\";\n\
+         static decltype((const char*)0, char{{}}) MUTABLE_DECLTYPE_STRING[] = \"Title\";\n\
          #define WRAPPED_TEXT(value) L##value\n\
          static const WCHAR WRAPPED_STRING[] = WRAPPED_TEXT(\"wrapped\");\n\
          static const WCHAR COMPOSED_STRING[] = L\"left\" L\"right\";\n\
@@ -319,6 +414,7 @@ fn typed_globals_keep_mutable_and_unsupported_initializers_private() {
         "MUTABLE_STRING",
         "POINTER_STRING",
         "CONST_POINTER_STRING",
+        "MUTABLE_DECLTYPE_STRING",
         "WRAPPED_STRING",
         "COMPOSED_STRING",
         "MUTABLE_GUID",
@@ -334,15 +430,117 @@ fn typed_globals_keep_mutable_and_unsupported_initializers_private() {
             snapshot.constants()
         );
         assert!(
-            snapshot
-                .facts()
-                .iter()
-                .all(|fact| { fact.name != name || !matches!(fact.data, FactData::Guid { .. }) }),
+            snapshot.facts().iter().all(|fact| fact.name != name),
             "{name}: {}",
             snapshot.dump()
         );
         assert!(!rdl.contains(name), "{name}: {rdl}");
     }
+}
+
+#[test]
+fn typed_global_strings_require_encoded_terminators_within_extent() {
+    helpers::ensure_libclang();
+
+    let source = r#"
+typedef unsigned short wchar_t;
+
+static const char ANSI_INFERRED[] = "ABC";
+static const char ANSI_TERMINATED[4] = "ABC";
+static const char ANSI_EMBEDDED[] = "A\0B";
+static const char ANSI_UTF8_BYTES[5] = "\xF0\x9F\x98\x80";
+static const char ANSI_EXACT_FIT[3] = "ABC";
+static const char ANSI_TRUNCATED[2] = "ABC";
+
+static const wchar_t UTF16_NON_BMP[3] = L"\U0001F600";
+static const wchar_t UTF16_EMBEDDED[] = L"A\0B";
+static const wchar_t UTF16_EXACT_FIT[2] = L"\U0001F600";
+"#;
+    let snapshot = extract(
+        [Input::new("string-extents.c", source)],
+        &[
+            "-x",
+            "c",
+            "-std=c11",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    for (name, value) in [
+        ("ANSI_INFERRED", ClangValue::Utf8("ABC".to_string())),
+        ("ANSI_TERMINATED", ClangValue::Utf8("ABC".to_string())),
+        ("ANSI_EMBEDDED", ClangValue::Utf8("A\0B".to_string())),
+        ("ANSI_UTF8_BYTES", ClangValue::Utf8("😀".to_string())),
+        ("UTF16_NON_BMP", ClangValue::Utf16("😀".to_string())),
+        ("UTF16_EMBEDDED", ClangValue::Utf16("A\0B".to_string())),
+    ] {
+        assert_eq!(
+            snapshot
+                .constants()
+                .iter()
+                .find(|constant| constant.name == name)
+                .map(|constant| &constant.value),
+            Some(&value),
+            "{name}: {:#?}",
+            snapshot.constants()
+        );
+    }
+
+    let unsupported = snapshot
+        .unsupported()
+        .map(|(fact, reason)| {
+            assert_eq!(fact.kind, FactKind::Variable, "{}", fact.name);
+            (fact.name.as_str(), reason)
+        })
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(unsupported.len(), 3, "{unsupported:#?}");
+    assert!(
+        unsupported["ANSI_EXACT_FIT"].contains("not NUL-terminated"),
+        "{unsupported:#?}"
+    );
+    assert!(
+        unsupported["ANSI_TRUNCATED"].contains("truncated"),
+        "{unsupported:#?}"
+    );
+    assert!(
+        unsupported["UTF16_EXACT_FIT"].contains("not NUL-terminated"),
+        "{unsupported:#?}"
+    );
+
+    let rdl = snapshot.emit("Example.StringExtents").unwrap();
+    for name in ["ANSI_EXACT_FIT", "ANSI_TRUNCATED", "UTF16_EXACT_FIT"] {
+        assert!(!rdl.contains(name), "{name}: {rdl}");
+    }
+
+    let scratch = scratch("string-extents");
+    let output = scratch.join("string-extents.winmd");
+    windows_rdl::reader()
+        .input_text(&rdl)
+        .reference_default()
+        .output(&output)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&output).unwrap();
+    for (name, value, encoding) in [
+        ("ANSI_INFERRED", "ABC", "ansi"),
+        ("ANSI_TERMINATED", "ABC", "ansi"),
+        ("ANSI_EMBEDDED", "A\0B", "ansi"),
+        ("ANSI_UTF8_BYTES", "😀", "ansi"),
+        ("UTF16_NON_BMP", "😀", "utf-16"),
+        ("UTF16_EMBEDDED", "A\0B", "utf-16"),
+    ] {
+        assert_constant_in(
+            &index,
+            "Example.StringExtents",
+            name,
+            Type::String,
+            Value::Utf16(value.to_string()),
+        );
+        assert_encoding_in(&index, "Example.StringExtents", name, encoding);
+    }
+    std::fs::remove_dir_all(scratch).unwrap();
 }
 
 #[test]
@@ -415,7 +613,17 @@ fn scratch(name: &str) -> std::path::PathBuf {
 }
 
 fn assert_constant(index: &windows_metadata::reader::Index, name: &str, ty: Type, value: Value) {
-    let Item::Const(constant) = index.expect_item("Example.TypedGlobals", name) else {
+    assert_constant_in(index, "Example.TypedGlobals", name, ty, value);
+}
+
+fn assert_constant_in(
+    index: &windows_metadata::reader::Index,
+    namespace: &str,
+    name: &str,
+    ty: Type,
+    value: Value,
+) {
+    let Item::Const(constant) = index.expect_item(namespace, name) else {
         panic!("{name} was not emitted as a constant");
     };
     assert_eq!(constant.ty(), ty, "{name}");
@@ -437,7 +645,16 @@ fn assert_guid(index: &windows_metadata::reader::Index, name: &str, value: [Valu
 }
 
 fn assert_encoding(index: &windows_metadata::reader::Index, name: &str, encoding: &str) {
-    let Item::Const(constant) = index.expect_item("Example.TypedGlobals", name) else {
+    assert_encoding_in(index, "Example.TypedGlobals", name, encoding);
+}
+
+fn assert_encoding_in(
+    index: &windows_metadata::reader::Index,
+    namespace: &str,
+    name: &str,
+    encoding: &str,
+) {
+    let Item::Const(constant) = index.expect_item(namespace, name) else {
         panic!("{name} was not emitted as a string constant");
     };
     assert_eq!(

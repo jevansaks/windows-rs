@@ -2133,36 +2133,58 @@ fn extract_child(
     }
     if kind == CXCursor_VarDecl
         && !name.is_empty()
-        && let Some((spelling, _, _, _)) = cursor_locations(child)
+        && let Some((spelling, expansion, main_file, system)) = cursor_locations(child)
         && traversal.is_root(&spelling.file)
         && variable_is_global(child)
     {
         let ty = unsafe { clang_getCursorType(child) };
-        if let Some((ty, value)) = evaluate_variable_constant(child, ty) {
-            let origin = Origin {
-                tu: traversal.tu.to_string(),
-                local,
-            };
-            let annotations = match annotation_values(child, traversal.macros) {
-                Ok(annotations) => annotations,
-                Err(error) => {
-                    traversal.error = Some(error);
-                    return;
-                }
-            };
-            traversal.constants.push(Constant {
-                root: origin.clone(),
-                definition: origin.clone(),
-                spelling,
-                name: name.clone(),
-                ty,
-                value,
-            });
-            insert_annotations(
-                traversal.annotations,
-                AnnotationTarget::Declaration(origin),
-                annotations,
-            );
+        match evaluate_variable_constant(child, ty) {
+            VariableConstant::Value(ty, value) => {
+                let origin = Origin {
+                    tu: traversal.tu.to_string(),
+                    local,
+                };
+                let annotations = match annotation_values(child, traversal.macros) {
+                    Ok(annotations) => annotations,
+                    Err(error) => {
+                        traversal.error = Some(error);
+                        return;
+                    }
+                };
+                traversal.constants.push(Constant {
+                    root: origin.clone(),
+                    definition: origin.clone(),
+                    spelling,
+                    name: name.clone(),
+                    ty,
+                    value,
+                });
+                insert_annotations(
+                    traversal.annotations,
+                    AnnotationTarget::Declaration(origin),
+                    annotations,
+                );
+            }
+            VariableConstant::Unsupported(reason) => {
+                let origin = Origin {
+                    tu: traversal.tu.to_string(),
+                    local,
+                };
+                traversal.facts.push(Fact {
+                    origin,
+                    parent: parent.cloned(),
+                    kind: FactKind::Variable,
+                    name: name.clone(),
+                    spelling,
+                    expansion,
+                    definition: unsafe { clang_isCursorDefinition(child) } != 0,
+                    main_file,
+                    root: true,
+                    system,
+                    data: FactData::Unsupported { reason },
+                });
+            }
+            VariableConstant::Excluded => {}
         }
     }
     let anonymous_enum =
@@ -3294,7 +3316,16 @@ fn string_literal(token: &str) -> Option<(bool, &str)> {
     Some((wide, quoted.strip_prefix('"')?.strip_suffix('"')?))
 }
 
+struct DecodedStringLiteral {
+    value: String,
+    units: usize,
+}
+
 fn decode_c_string(inner: &str, wide: bool) -> Option<String> {
+    Some(decode_c_string_literal(inner, wide)?.value)
+}
+
+fn decode_c_string_literal(inner: &str, wide: bool) -> Option<DecodedStringLiteral> {
     if !wide {
         return decode_c_bytes(inner);
     }
@@ -3342,10 +3373,13 @@ fn decode_c_string(inner: &str, wide: bool) -> Option<String> {
         };
         output.push(character);
     }
-    Some(output)
+    Some(DecodedStringLiteral {
+        units: output.encode_utf16().count(),
+        value: output,
+    })
 }
 
-fn decode_c_bytes(inner: &str) -> Option<String> {
+fn decode_c_bytes(inner: &str) -> Option<DecodedStringLiteral> {
     let mut output = vec![];
     let mut chars = inner.chars().peekable();
     while let Some(character) = chars.next() {
@@ -3396,7 +3430,10 @@ fn decode_c_bytes(inner: &str) -> Option<String> {
             }
         }
     }
-    String::from_utf8(output).ok()
+    Some(DecodedStringLiteral {
+        units: output.len(),
+        value: String::from_utf8(output).ok()?,
+    })
 }
 
 fn take_radix(
@@ -3680,14 +3717,25 @@ fn evaluate_integer(cursor: CXCursor) -> Option<(u64, i64)> {
     }
 }
 
-fn evaluate_variable_constant(cursor: CXCursor, ty: CXType) -> Option<(TypeRef, Value)> {
-    if unsafe { clang_isConstQualifiedType(ty) } != 0
+enum VariableConstant {
+    Value(TypeRef, Value),
+    Unsupported(String),
+    Excluded,
+}
+
+fn evaluate_variable_constant(cursor: CXCursor, ty: CXType) -> VariableConstant {
+    if type_is_const_qualified(ty)
         && let Some(value_scalar) = scalar(ty)
     {
         let value = if matches!(value_scalar, Scalar::F32 | Scalar::F64) {
-            evaluate_float(cursor, value_scalar)?
+            let Some(value) = evaluate_float(cursor, value_scalar) else {
+                return VariableConstant::Excluded;
+            };
+            value
         } else {
-            let (unsigned, signed) = evaluate_integer(cursor)?;
+            let Some((unsigned, signed)) = evaluate_integer(cursor) else {
+                return VariableConstant::Excluded;
+            };
             if matches!(
                 value_scalar,
                 Scalar::Bool | Scalar::U8 | Scalar::U16 | Scalar::U32 | Scalar::U64
@@ -3697,7 +3745,10 @@ fn evaluate_variable_constant(cursor: CXCursor, ty: CXType) -> Option<(TypeRef, 
                 Value::Signed(signed)
             }
         };
-        return Some((type_ref(ty)?, value));
+        let Some(ty) = type_ref(ty) else {
+            return VariableConstant::Excluded;
+        };
+        return VariableConstant::Value(ty, value);
     }
 
     let canonical = unsafe { clang_getCanonicalType(ty) };
@@ -3705,43 +3756,81 @@ fn evaluate_variable_constant(cursor: CXCursor, ty: CXType) -> Option<(TypeRef, 
         canonical.kind,
         CXType_ConstantArray | CXType_IncompleteArray
     ) {
-        return None;
+        return VariableConstant::Excluded;
     }
-    let element = unsafe { clang_getArrayElementType(canonical) };
-    if unsafe { clang_isConstQualifiedType(element) } == 0 && !variable_has_const_qualifier(cursor)
+    let source_element = matches!(ty.kind, CXType_ConstantArray | CXType_IncompleteArray)
+        .then(|| unsafe { clang_getArrayElementType(ty) });
+    let canonical_element = unsafe { clang_getArrayElementType(canonical) };
+    if !type_is_const_qualified(ty)
+        && !source_element.is_some_and(type_is_const_qualified)
+        && !type_is_const_qualified(canonical_element)
     {
-        return None;
+        return VariableConstant::Excluded;
     }
     let tokens = cursor_tokens(cursor);
-    let equals = tokens
+    let Some(equals) = tokens
         .iter()
-        .position(|(kind, token)| *kind == CXToken_Punctuation && token == "=")?;
+        .position(|(kind, token)| *kind == CXToken_Punctuation && token == "=")
+    else {
+        return VariableConstant::Excluded;
+    };
     let initializer: Vec<_> = tokens[equals + 1..]
         .iter()
         .filter(|(kind, token)| !(*kind == CXToken_Punctuation && token == ";"))
         .collect();
     let [(CXToken_Literal, literal)] = initializer.as_slice() else {
-        return None;
+        return VariableConstant::Excluded;
     };
-    let (wide, inner) = string_literal(literal)?;
-    let (target, value) = match (scalar(element)?, wide) {
-        (Scalar::I8 | Scalar::U8, false) => (
-            TypeRef::Scalar(Scalar::I8),
-            Value::Utf8(decode_c_string(inner, false)?),
-        ),
-        (Scalar::U16, true) => (
-            TypeRef::Scalar(Scalar::U16),
-            Value::Utf16(decode_c_string(inner, true)?),
-        ),
-        _ => return None,
+    let Some((wide, inner)) = string_literal(literal) else {
+        return VariableConstant::Excluded;
     };
-    Some((
+    let element = source_element.unwrap_or(canonical_element);
+    let (target, expected_width) = match (scalar(element), wide) {
+        (Some(Scalar::I8 | Scalar::U8), false) => (TypeRef::Scalar(Scalar::I8), 1),
+        (Some(Scalar::U16), true) => (TypeRef::Scalar(Scalar::U16), 2),
+        _ => return VariableConstant::Excluded,
+    };
+    let element_width = unsafe { clang_Type_getSizeOf(element) };
+    if element_width != expected_width {
+        return VariableConstant::Unsupported(format!(
+            "string array has unsupported element width {element_width}"
+        ));
+    }
+    let Some(decoded) = decode_c_string_literal(inner, wide) else {
+        return VariableConstant::Unsupported(
+            "string initializer has an unsupported encoded payload".to_string(),
+        );
+    };
+    let Some(extent) = array_extent(ty) else {
+        return VariableConstant::Unsupported(
+            "string array has an unavailable declared extent".to_string(),
+        );
+    };
+    if extent < decoded.units {
+        return VariableConstant::Unsupported(format!(
+            "string initializer is truncated: declared array extent {extent} is smaller than the \
+             encoded payload length {}",
+            decoded.units
+        ));
+    }
+    if extent == decoded.units {
+        return VariableConstant::Unsupported(format!(
+            "string initializer is not NUL-terminated: declared array extent {extent} leaves no \
+             element after the encoded payload"
+        ));
+    }
+    let value = if wide {
+        Value::Utf16(decoded.value)
+    } else {
+        Value::Utf8(decoded.value)
+    };
+    VariableConstant::Value(
         TypeRef::Pointer {
             mutable: false,
             target: Box::new(target),
         },
         value,
-    ))
+    )
 }
 
 fn variable_is_global(cursor: CXCursor) -> bool {
@@ -3752,12 +3841,20 @@ fn variable_is_global(cursor: CXCursor) -> bool {
     )
 }
 
-fn variable_has_const_qualifier(cursor: CXCursor) -> bool {
-    let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
-    cursor_tokens(cursor)
+fn type_is_const_qualified(ty: CXType) -> bool {
+    unsafe {
+        clang_isConstQualifiedType(ty) != 0
+            || clang_isConstQualifiedType(clang_getCanonicalType(ty)) != 0
+    }
+}
+
+fn array_extent(ty: CXType) -> Option<usize> {
+    [ty, unsafe { clang_getCanonicalType(ty) }]
         .into_iter()
-        .take_while(|(_, token)| token != &name)
-        .any(|(_, token)| matches!(token.as_str(), "const" | "constexpr"))
+        .find_map(|ty| {
+            let extent = unsafe { clang_getArraySize(ty) };
+            (extent >= 0).then(|| extent.try_into().ok()).flatten()
+        })
 }
 
 fn evaluate_float(cursor: CXCursor, scalar: Scalar) -> Option<Value> {
@@ -4470,7 +4567,7 @@ fn parse_property_key_tokens(tokens: &[(CXTokenKind, String)]) -> Option<(String
 
 fn variable_guid(cursor: CXCursor) -> Option<String> {
     let ty = unsafe { clang_getCursorType(cursor) };
-    if unsafe { clang_isConstQualifiedType(ty) } == 0 || !is_guid_type(ty) {
+    if !type_is_const_qualified(ty) || !is_guid_type(ty) {
         return None;
     }
     let tokens = cursor_tokens(cursor);
@@ -4511,14 +4608,17 @@ fn is_guid_type(mut ty: CXType) -> bool {
 
 fn parse_c_integer(value: &str) -> Option<u64> {
     let digits = value.trim_end_matches(['u', 'U', 'l', 'L']);
-    if let Some(hex) = digits
+    let (digits, radix) = if let Some(hex) = digits
         .strip_prefix("0x")
         .or_else(|| digits.strip_prefix("0X"))
     {
-        u64::from_str_radix(hex, 16).ok()
+        (hex, 16)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        (&digits[1..], 8)
     } else {
-        digits.parse().ok()
-    }
+        (digits, 10)
+    };
+    u64::from_str_radix(digits, radix).ok()
 }
 
 fn format_guid(values: &[u64]) -> Option<String> {
