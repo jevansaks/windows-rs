@@ -167,6 +167,7 @@ fn extract_impl(
     let mut constants = vec![];
     let mut annotations = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
+    let mut raw_function_link_names = BTreeMap::new();
     let mut pointer_callback_aliases = BTreeSet::new();
     let mut pointer_only_class_layouts = BTreeMap::new();
     let mut embeddable_class_layouts = BTreeSet::new();
@@ -181,6 +182,7 @@ fn extract_impl(
             constants: &mut constants,
             annotations: &mut annotations,
             declaration_guids: &mut declaration_guids,
+            raw_function_link_names: &mut raw_function_link_names,
             pointer_callback_aliases: &mut pointer_callback_aliases,
             pointer_only_class_layouts: &mut pointer_only_class_layouts,
             embeddable_class_layouts: &mut embeddable_class_layouts,
@@ -332,6 +334,15 @@ fn extract_impl(
             )));
         }
     }
+    if let Some(fact) = facts.iter().find(|fact| {
+        matches!(fact.data, FactData::Function { .. })
+            && !raw_function_link_names.contains_key(&fact.origin)
+    }) {
+        return Err(Error(format!(
+            "function `{}` is missing its raw linker identity",
+            origin(&fact.origin)
+        )));
+    }
     constants.sort();
     if timing {
         let headers = facts
@@ -387,6 +398,7 @@ fn extract_impl(
         facts,
         constants,
         included_files,
+        raw_function_link_names,
         declare_handles,
         annotations,
         declaration_guids,
@@ -1604,6 +1616,7 @@ impl TranslationUnit {
             constants: &mut *output.constants,
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
+            raw_function_link_names: &mut *output.raw_function_link_names,
             pointer_callback_aliases: &mut *output.pointer_callback_aliases,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
@@ -1668,6 +1681,7 @@ struct Traversal<'a> {
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    raw_function_link_names: &'a mut BTreeMap<Origin, String>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1681,6 +1695,7 @@ struct ExtractionState<'a> {
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    raw_function_link_names: &'a mut BTreeMap<Origin, String>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1994,6 +2009,8 @@ fn extract_child(
                     } else {
                         fact_data(child, fact_kind, traversal.macros)
                     };
+                    let raw_function_link_name =
+                        (fact_kind == FactKind::Function).then(|| raw_external_link_name(child));
                     if fact_kind == FactKind::Typedef
                         && matches!(data, FactData::Callback { .. })
                         && typedef_is_function_pointer_alias(child)
@@ -2034,6 +2051,11 @@ fn extract_child(
                         system,
                         data,
                     });
+                    if let Some(raw_function_link_name) = raw_function_link_name {
+                        traversal
+                            .raw_function_link_names
+                            .insert(origin.clone(), raw_function_link_name);
+                    }
                     if clang_flag_enum {
                         traversal.clang_flag_enums.insert(origin.clone());
                     }
@@ -3778,7 +3800,7 @@ fn pointer_only_class_definition(cursor: CXCursor) -> Option<(CXCursor, bool)> {
 
 fn external_link_name(cursor: CXCursor) -> String {
     let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
-    let mangled = cx_string(unsafe { clang_Cursor_getMangling(cursor) });
+    let mangled = raw_external_link_name(cursor);
     if mangled == name
         || mangled == format!("_{name}")
         || mangled
@@ -3792,6 +3814,10 @@ fn external_link_name(cursor: CXCursor) -> String {
     } else {
         mangled
     }
+}
+
+fn raw_external_link_name(cursor: CXCursor) -> String {
+    cx_string(unsafe { clang_Cursor_getMangling(cursor) })
 }
 
 fn is_interface(cursor: CXCursor) -> bool {

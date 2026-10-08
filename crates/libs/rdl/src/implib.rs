@@ -27,6 +27,13 @@ pub enum ImportName {
     ExportAs(String),
 }
 
+/// The resolved entry point named by a COFF short-import contract.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ImportEntryPoint {
+    Name(String),
+    Ordinal(u16),
+}
+
 /// One complete COFF short-import contract.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ImportContract {
@@ -36,6 +43,30 @@ pub struct ImportContract {
     pub machine: u16,
     pub import_type: ImportType,
     pub import_name: ImportName,
+}
+
+impl ImportContract {
+    /// Resolves the PE/COFF import name mode without changing the source contract.
+    ///
+    /// `Name` preserves the raw symbol, `ExportAs` uses its explicit export, `NameNoPrefix`
+    /// removes one leading `?`, `@`, or `_`, and `NameUndecorate` also truncates at the first `@`.
+    /// Named modes reject an empty result.
+    pub fn resolve_entry_point(&self) -> Result<ImportEntryPoint, Error> {
+        let name = match &self.import_name {
+            ImportName::Ordinal(ordinal) => return Ok(ImportEntryPoint::Ordinal(*ordinal)),
+            ImportName::Name => self.symbol.as_str(),
+            ImportName::ExportAs(name) => name,
+            ImportName::NameNoPrefix => strip_import_prefix(&self.symbol),
+            ImportName::NameUndecorate => {
+                let name = strip_import_prefix(&self.symbol);
+                name.split_once('@').map_or(name, |(name, _)| name)
+            }
+        };
+        if name.is_empty() {
+            return Err(err("short import resolves to an empty entry-point name"));
+        }
+        Ok(ImportEntryPoint::Name(name.to_string()))
+    }
 }
 
 const ARCHIVE_MAGIC: &[u8] = b"!<arch>\n";
@@ -221,6 +252,10 @@ fn trim(field: &[u8]) -> &[u8] {
     &field[..end]
 }
 
+fn strip_import_prefix(name: &str) -> &str {
+    name.strip_prefix(['?', '@', '_']).unwrap_or(name)
+}
+
 fn err(message: &str) -> Error {
     Error::new(message, "", 0, 0)
 }
@@ -232,14 +267,7 @@ mod tests {
     #[test]
     fn reads_complete_short_import_contracts() {
         let archive = archive([
-            short_import(
-                "FileIconInit",
-                "shell32.dll",
-                ImportType::Code,
-                0,
-                660,
-                None,
-            ),
+            short_import("OrdinalApi", "ordinal.dll", ImportType::Code, 0, 660, None),
             short_import("NamedApi", "named.dll", ImportType::Code, 1, 7, None),
             short_import("DataApi", "data.dll", ImportType::Data, 0, 12, None),
             short_import(
@@ -265,8 +293,8 @@ mod tests {
             read_contracts(&archive).unwrap(),
             [
                 ImportContract {
-                    symbol: "FileIconInit".to_string(),
-                    dll: "shell32.dll".to_string(),
+                    symbol: "OrdinalApi".to_string(),
+                    dll: "ordinal.dll".to_string(),
                     machine: 0x8664,
                     import_type: ImportType::Code,
                     import_name: ImportName::Ordinal(660),
@@ -312,8 +340,8 @@ mod tests {
             read(&archive).unwrap(),
             [
                 Import {
-                    symbol: "FileIconInit".to_string(),
-                    dll: "shell32.dll".to_string(),
+                    symbol: "OrdinalApi".to_string(),
+                    dll: "ordinal.dll".to_string(),
                 },
                 Import {
                     symbol: "NamedApi".to_string(),
@@ -349,6 +377,162 @@ mod tests {
         let contracts = read_contracts(&archive([x86, arm64])).unwrap();
         assert_eq!(contracts[0].machine, 0x014C);
         assert_eq!(contracts[1].machine, 0xAA64);
+    }
+
+    #[test]
+    fn resolves_every_import_name_mode() {
+        let contracts = [
+            ImportContract {
+                symbol: "_OrdinalApi@4".to_string(),
+                dll: "ordinal.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::Ordinal(321),
+            },
+            ImportContract {
+                symbol: "_ExactName".to_string(),
+                dll: "name.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::Name,
+            },
+            ImportContract {
+                symbol: "_IgnoredSymbol".to_string(),
+                dll: "export.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::ExportAs("ExactExport".to_string()),
+            },
+            ImportContract {
+                symbol: "_NoPrefix".to_string(),
+                dll: "prefix.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::NameNoPrefix,
+            },
+            ImportContract {
+                symbol: "?RouterUnregisterForPrintAsyncNotifications@@YAJPEAX@Z".to_string(),
+                dll: "SPOOLSS.DLL".to_string(),
+                machine: 0x8664,
+                import_type: ImportType::Code,
+                import_name: ImportName::NameUndecorate,
+            },
+        ];
+
+        assert_eq!(
+            contracts
+                .iter()
+                .map(ImportContract::resolve_entry_point)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            [
+                ImportEntryPoint::Ordinal(321),
+                ImportEntryPoint::Name("_ExactName".to_string()),
+                ImportEntryPoint::Name("ExactExport".to_string()),
+                ImportEntryPoint::Name("NoPrefix".to_string()),
+                ImportEntryPoint::Name("RouterUnregisterForPrintAsyncNotifications".to_string()),
+            ]
+        );
+        assert_eq!(contracts[4].machine, 0x8664);
+        assert_eq!(
+            contracts[4].symbol,
+            "?RouterUnregisterForPrintAsyncNotifications@@YAJPEAX@Z"
+        );
+    }
+
+    #[test]
+    fn no_prefix_removes_exactly_one_supported_prefix() {
+        for (symbol, expected) in [
+            ("ExactName", "ExactName"),
+            ("_UnderscoreName", "UnderscoreName"),
+            ("?QuestionName", "QuestionName"),
+            ("@AtName", "AtName"),
+            ("__DoublePrefix", "_DoublePrefix"),
+        ] {
+            let contract = ImportContract {
+                symbol: symbol.to_string(),
+                dll: "prefix.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::NameNoPrefix,
+            };
+            assert_eq!(
+                contract.resolve_entry_point().unwrap(),
+                ImportEntryPoint::Name(expected.to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn undecorate_applies_no_prefix_then_truncates_at_first_at() {
+        for (symbol, expected) in [
+            ("ExactName", "ExactName"),
+            ("_StdcallName@4", "StdcallName"),
+            ("@FastcallName@8", "FastcallName"),
+            ("?CppName@@YAHXZ", "CppName"),
+            ("__DoublePrefix@4", "_DoublePrefix"),
+        ] {
+            let contract = ImportContract {
+                symbol: symbol.to_string(),
+                dll: "undecorate.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::NameUndecorate,
+            };
+            assert_eq!(
+                contract.resolve_entry_point().unwrap(),
+                ImportEntryPoint::Name(expected.to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn resolved_entry_point_cannot_be_empty() {
+        for contract in [
+            ImportContract {
+                symbol: String::new(),
+                dll: "name.dll".to_string(),
+                machine: 0x8664,
+                import_type: ImportType::Code,
+                import_name: ImportName::Name,
+            },
+            ImportContract {
+                symbol: "ignored".to_string(),
+                dll: "export.dll".to_string(),
+                machine: 0x8664,
+                import_type: ImportType::Code,
+                import_name: ImportName::ExportAs(String::new()),
+            },
+            ImportContract {
+                symbol: "_".to_string(),
+                dll: "prefix.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::NameNoPrefix,
+            },
+            ImportContract {
+                symbol: "@".to_string(),
+                dll: "undecorate.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::NameUndecorate,
+            },
+            ImportContract {
+                symbol: "_@4".to_string(),
+                dll: "undecorate.dll".to_string(),
+                machine: 0x014C,
+                import_type: ImportType::Code,
+                import_name: ImportName::NameUndecorate,
+            },
+        ] {
+            assert!(
+                contract
+                    .resolve_entry_point()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("empty entry-point name")
+            );
+        }
     }
 
     #[test]

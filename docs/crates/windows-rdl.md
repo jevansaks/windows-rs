@@ -170,7 +170,8 @@ C/C++ headers -- clang() --> .rdl -- reader() --> .winmd -- bindgen() --> bindin
 - Use `windows-metadata` for table-level inspection, merge, and namespace remapping.
 - Use `implib::read_contracts` when a generator must preserve a COFF short import's raw machine
   value, code/data kind, and ordinal or native name mode. `implib::read` retains the older
-  symbol-to-DLL-only shape.
+  symbol-to-DLL-only shape. `ImportContract::resolve_entry_point` returns a typed ordinal or named
+  entry point without changing that source contract.
 - Use `writer().split()` to maintain namespace-partitioned reviewable metadata.
 - Use `merge_arch_rdl` only for generators that have per-architecture RDL directories and winmds.
   It merges structural differences and restores the defining-header partition.
@@ -212,11 +213,27 @@ The `implib` module reads the `IMPORT_OBJECT_HEADER` records in SDK COFF archive
 contracts keep the public linker symbol separate from the DLL entry point and preserve the raw
 `IMAGE_FILE_MACHINE_*` value for caller-side architecture checks. Ordinal imports retain their
 numeric ordinal, `IMPORT_OBJECT_NAME` retains an exact symbol name, and
-`IMPORT_OBJECT_EXPORTAS` retains its explicit export string. `NAME_NO_PREFIX` and
-`NAME_UNDECORATE` remain typed modes rather than guessed exported names. Contract parsing requires
-complete archive member headers and NUL-terminated short-import names. It skips anonymous and
-BigObj records by their nonzero header version even though they share the short-import signature.
-The older `implib::read` entry point keeps its permissive final-name and archive-tail behavior.
+`IMPORT_OBJECT_EXPORTAS` retains its explicit export string. The explicit
+`ImportContract::resolve_entry_point` step applies `NAME_NO_PREFIX` by removing one leading `?`,
+`@`, or `_`; `NAME_UNDECORATE` applies that rule and then truncates at the first `@`. A named
+record's hint is never converted to an ordinal, and an empty resolved name is rejected. Contract
+parsing requires complete archive member headers and NUL-terminated short-import names. It skips
+anonymous and BigObj records by their nonzero header version even though they share the
+short-import signature. The older `implib::read` entry point keeps its permissive final-name and
+archive-tail behavior.
+
+An archive-only SDK 10.0.28000.2270 probe found `FileIconInit` as
+`FileIconInit`/`0x8664`, `_FileIconInit@4`/`0x014c`, and `FileIconInit`/`0xaa64`, each from
+`SHELL32.dll` at ordinal 660. These rows do not establish that `FileIconInit` is declared by the
+checked-in native headers or admit it to a generated API surface. The ARM64 `shcore.lib` archive
+also contains both `0xaa64` and `0xa641` records. Consumers must filter each contract by the exact
+target machine; an ARM64EC `0xa641` record cannot satisfy an ARM64 `0xaa64` target, and an archive
+need not contain only one machine.
+
+A separate SDK 10.0.28000.2270 source/header-backed control joins genuine shell declarations to
+same-target CODE contracts and physical WinMD ImplMaps for `SHCreatePropSheetExtArray`,
+`DAD_DragEnterEx`, `DAD_DragEnterEx2`, `SHDefExtractIconA`, and `SHDefExtractIconW`. It verifies the
+contract transport only; it does not establish default activation or partition-owner qualification.
 
 ### Testing
 

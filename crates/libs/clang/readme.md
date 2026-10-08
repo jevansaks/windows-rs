@@ -36,7 +36,17 @@ combine immutable snapshots before emission.
 `EmitOptions::native_imports` accepts typed DLL entry-point contracts keyed by the native C linker
 symbol. It keeps an ordinal such as `#660` or an exact exported name separate from the projected
 metadata function name. The existing `library` and `libraries` options remain available for
-symbol-to-DLL-only callers.
+symbol-to-DLL-only callers. `NativeImports::insert` retains the global fallback behavior.
+`insert_for_library` retains separate contracts for the same linker symbol in different DLLs.
+Emission resolves the annotation, partition owner, or option library before selecting a
+DLL-scoped contract. A scoped symbol without a configured matching library is an error.
+
+`Snapshot::function_source_identities` exposes each supported function declaration's `Origin`,
+spelling location, source name, existing normalized `link_name`, and exact raw
+`clang_Cursor_getMangling` value. Records stay separate across translation units.
+`Snapshot::resolve_function_link_name` joins an exact raw COFF symbol to the normalized key used by
+`NativeImports`. It accepts equivalent duplicates and rejects a raw symbol with multiple normalized
+keys or distinct raw decorations that collapse to one normalized key.
 
 `Clang::parallelism` bounds concurrent parsing of original translation units. The lower-level
 `extract_with_options` and `extract_partitioned_with_options` functions accept the same setting

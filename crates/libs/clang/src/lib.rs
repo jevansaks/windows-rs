@@ -669,6 +669,7 @@ impl NativeImport {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct NativeImports {
     imports: BTreeMap<String, NativeImport>,
+    library_imports: BTreeMap<String, BTreeMap<String, NativeImport>>,
 }
 
 impl NativeImports {
@@ -685,19 +686,7 @@ impl NativeImports {
         import: NativeImport,
     ) -> Result<&mut Self, Error> {
         let symbol = symbol.into();
-        if symbol.is_empty() {
-            return Err(Error("native import symbol is empty".to_string()));
-        }
-        if import.library.is_empty() {
-            return Err(Error(format!(
-                "native import `{symbol}` has an empty library"
-            )));
-        }
-        if matches!(&import.name, NativeImportName::Name(name) if name.is_empty()) {
-            return Err(Error(format!(
-                "native import `{symbol}` has an empty entry-point name"
-            )));
-        }
+        validate_native_import(&symbol, &import)?;
         if let Some(existing) = self.imports.get(&symbol)
             && existing != &import
         {
@@ -707,27 +696,121 @@ impl NativeImports {
                 format_native_import(&import)
             )));
         }
+        if let Some(existing) = self.get_for_library(&symbol, &import.library)
+            && existing.name != import.name
+        {
+            return Err(Error(format!(
+                "conflicting native import contracts for `{symbol}` in library `{}`: {} and {}",
+                existing.library,
+                format_native_import(existing),
+                format_native_import(&import)
+            )));
+        }
         self.imports.insert(symbol, import);
         Ok(self)
     }
 
+    /// Adds one DLL-scoped contract or accepts an entry-point duplicate for the same DLL.
+    ///
+    /// DLL identity is ASCII-case-insensitive. The first accepted source spelling is retained.
+    pub fn insert_for_library(
+        &mut self,
+        symbol: impl Into<String>,
+        import: NativeImport,
+    ) -> Result<&mut Self, Error> {
+        let symbol = symbol.into();
+        validate_native_import(&symbol, &import)?;
+        if let Some(existing) = self.imports.get(&symbol)
+            && existing.library.eq_ignore_ascii_case(&import.library)
+            && existing.name != import.name
+        {
+            return Err(Error(format!(
+                "conflicting native import contracts for `{symbol}` in library `{}`: {} and {}",
+                existing.library,
+                format_native_import(existing),
+                format_native_import(&import)
+            )));
+        }
+        let library_key = import.library.to_ascii_lowercase();
+        let library_imports = self.library_imports.entry(symbol.clone()).or_default();
+        if let Some(existing) = library_imports.get(&library_key) {
+            if existing.name != import.name {
+                return Err(Error(format!(
+                    "conflicting native import contracts for `{symbol}` in library `{}`: {} and \
+                     {}",
+                    existing.library,
+                    format_native_import(existing),
+                    format_native_import(&import)
+                )));
+            }
+            return Ok(self);
+        }
+        library_imports.insert(library_key, import);
+        Ok(self)
+    }
+
+    /// Returns the global fallback contract for a linker symbol.
     pub fn get(&self, symbol: &str) -> Option<&NativeImport> {
         self.imports.get(symbol)
     }
 
+    /// Returns the DLL-scoped contract selected by an ASCII-case-insensitive library name.
+    pub fn get_for_library(&self, symbol: &str, library: &str) -> Option<&NativeImport> {
+        self.library_imports
+            .get(symbol)?
+            .get(&library.to_ascii_lowercase())
+    }
+
+    /// Returns every DLL-scoped contract for a linker symbol in normalized DLL order.
+    pub fn library_imports(&self, symbol: &str) -> impl Iterator<Item = &NativeImport> {
+        self.library_imports
+            .get(symbol)
+            .into_iter()
+            .flat_map(|imports| imports.values())
+    }
+
+    /// Iterates global contracts followed by DLL-scoped contracts.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &NativeImport)> {
         self.imports
             .iter()
             .map(|(symbol, import)| (symbol.as_str(), import))
+            .chain(self.library_imports.iter().flat_map(|(symbol, imports)| {
+                imports
+                    .values()
+                    .map(move |import| (symbol.as_str(), import))
+            }))
     }
 
     pub fn is_empty(&self) -> bool {
-        self.imports.is_empty()
+        self.imports.is_empty() && self.library_imports.is_empty()
     }
 
+    /// Returns the total number of global and DLL-scoped contracts.
     pub fn len(&self) -> usize {
         self.imports.len()
+            + self
+                .library_imports
+                .values()
+                .map(BTreeMap::len)
+                .sum::<usize>()
     }
+}
+
+fn validate_native_import(symbol: &str, import: &NativeImport) -> Result<(), Error> {
+    if symbol.is_empty() {
+        return Err(Error("native import symbol is empty".to_string()));
+    }
+    if import.library.is_empty() {
+        return Err(Error(format!(
+            "native import `{symbol}` has an empty library"
+        )));
+    }
+    if matches!(&import.name, NativeImportName::Name(name) if name.is_empty()) {
+        return Err(Error(format!(
+            "native import `{symbol}` has an empty entry-point name"
+        )));
+    }
+    Ok(())
 }
 
 fn format_native_import(import: &NativeImport) -> String {
@@ -1259,6 +1342,16 @@ pub struct Fact {
     pub data: FactData,
 }
 
+/// One function declaration's normalized linker name and exact Clang mangling.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct FunctionSourceIdentity<'a> {
+    pub origin: &'a Origin,
+    pub spelling: &'a Location,
+    pub name: &'a str,
+    pub link_name: &'a str,
+    pub raw_link_name: &'a str,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Value {
     F32(u32),
@@ -1284,6 +1377,7 @@ pub struct Snapshot {
     facts: Vec<Fact>,
     constants: Vec<Constant>,
     included_files: Vec<IncludedFile>,
+    raw_function_link_names: BTreeMap<Origin, String>,
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
@@ -1427,6 +1521,7 @@ impl PartialEq for Snapshot {
     fn eq(&self, other: &Self) -> bool {
         self.facts == other.facts
             && self.constants == other.constants
+            && self.raw_function_link_names == other.raw_function_link_names
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
             && self.declaration_guids == other.declaration_guids
@@ -1455,6 +1550,68 @@ impl Eq for Snapshot {}
 impl Snapshot {
     pub fn facts(&self) -> &[Fact] {
         &self.facts
+    }
+
+    /// Returns every supported function declaration with its exact raw COFF linker symbol.
+    ///
+    /// Equivalent declarations from separate translation units remain separate records.
+    pub fn function_source_identities(&self) -> impl Iterator<Item = FunctionSourceIdentity<'_>> {
+        self.facts.iter().filter_map(|fact| {
+            let FactData::Function { link_name, .. } = &fact.data else {
+                return None;
+            };
+            Some(FunctionSourceIdentity {
+                origin: &fact.origin,
+                spelling: &fact.spelling,
+                name: &fact.name,
+                link_name,
+                raw_link_name: &self.raw_function_link_names[&fact.origin],
+            })
+        })
+    }
+
+    /// Resolves an exact raw COFF linker symbol to the existing normalized function link name.
+    ///
+    /// Equivalent duplicate declarations are accepted. A raw symbol that maps to multiple
+    /// normalized names, or distinct raw decorations for one normalized name, is an error rather
+    /// than a declaration-order choice.
+    pub fn resolve_function_link_name(&self, raw_link_name: &str) -> Result<Option<&str>, Error> {
+        let link_names: BTreeSet<_> = self
+            .function_source_identities()
+            .filter(|identity| identity.raw_link_name == raw_link_name)
+            .map(|identity| identity.link_name)
+            .collect();
+        if link_names.len() > 1 {
+            let choices = link_names
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(Error(format!(
+                "raw COFF linker symbol `{raw_link_name}` maps to multiple normalized linker \
+                 symbols: {choices}"
+            )));
+        }
+        let Some(link_name) = link_names.into_iter().next() else {
+            return Ok(None);
+        };
+        let raw_link_names: BTreeSet<_> = self
+            .function_source_identities()
+            .filter(|identity| identity.link_name == link_name)
+            .map(|identity| identity.raw_link_name)
+            .collect();
+        if raw_link_names.len() > 1 {
+            let choices = raw_link_names
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(Error(format!(
+                "normalized linker symbol `{link_name}` has conflicting raw COFF symbols: \
+                 {choices}"
+            )));
+        }
+        Ok(Some(link_name))
     }
 
     pub fn constants(&self) -> &[Constant] {
@@ -4185,10 +4342,39 @@ impl Snapshot {
                 .and_then(|libraries| libraries.get(link_name).map(String::as_str))
         })
         .or(options.library);
+        if let Some(imports) = options.native_imports
+            && imports.library_imports(link_name).next().is_some()
+        {
+            let choices = || {
+                imports
+                    .library_imports(link_name)
+                    .map(|import| format!("`{}`", format_native_import(import)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let Some(configured_library) = configured_library else {
+                return Err(Error(format!(
+                    "function `{}` has DLL-scoped native import contracts for linker symbol \
+                     `{link_name}` but no import library is configured: {}",
+                    fact.name,
+                    choices()
+                )));
+            };
+            let Some(native_import) = imports.get_for_library(link_name, configured_library) else {
+                return Err(Error(format!(
+                    "function `{}` selects import library `{configured_library}` for linker symbol \
+                     `{link_name}`, but DLL-scoped native import contracts are available only for \
+                     {}",
+                    fact.name,
+                    choices()
+                )));
+            };
+            return Ok(Some(native_import.clone()));
+        }
+
         let native_import = options
             .native_imports
             .and_then(|imports| imports.get(link_name));
-
         if let Some(native_import) = native_import {
             if let Some(configured_library) = configured_library
                 && !configured_library.eq_ignore_ascii_case(native_import.library())

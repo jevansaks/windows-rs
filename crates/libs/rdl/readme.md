@@ -50,5 +50,11 @@ constructor signatures retain the exact core TypeRef selected by the compiler.
 
 `implib::read_contracts` reads COFF short-import records without collapsing the native linker
 symbol, DLL, raw machine value, import kind, and ordinal or name mode. Callers can reject contracts
-from a different architecture before emitting metadata. The older `implib::read` symbol-to-DLL
-view remains available for callers that do not emit native entry-point metadata.
+from a different architecture before emitting metadata. Archives can contain records for more than
+one machine, so selection filters each record by the exact target instead of requiring a
+single-machine archive. `ImportContract::resolve_entry_point` returns an `ImportEntryPoint` ordinal
+or applies the PE/COFF name transformation while leaving the source contract unchanged. A hint on a
+named import is not an ordinal, and an empty transformed name is an error. The older `implib::read`
+symbol-to-DLL view remains available for callers that do not emit native entry-point metadata.
+Callers must report a selected function with no exact-machine code contract instead of borrowing
+another machine's record or silently omitting the function.

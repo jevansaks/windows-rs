@@ -101,6 +101,15 @@ translation unit, including the main input and headers that produced no fact or 
 `input` field is the normalized `Input::name` used by `Origin::tu`; `path` is the slash-normalized
 filename reported by libclang.
 
+`function_source_identities` returns one `FunctionSourceIdentity` for every supported function
+fact. Each record keeps the `Origin`, spelling location, source name, legacy normalized
+`FactData::Function.link_name`, and exact raw `clang_Cursor_getMangling` value. Duplicate
+declarations remain separate and iteration follows deterministic fact order.
+`resolve_function_link_name(raw)` joins an exact COFF linker symbol to the normalized key expected
+by `NativeImports`. Equivalent duplicates are accepted. If one raw symbol maps to multiple
+normalized keys, or different raw decorations collapse to the same normalized key, resolution
+fails instead of selecting one declaration.
+
 Inclusion records are grouped by extraction input order, then sorted by ASCII-case-insensitive
 path with original spelling as the tie-break. Duplicate path spellings within an input are
 collapsed case-insensitively. The records do not include synthetic translation units used to
@@ -378,21 +387,51 @@ map of defining-header names to RDL partitions.
 | --- | --- |
 | `namespace` | RDL namespace. |
 | `library` / `libraries` | Default or per-function DLL mappings. |
-| `native_imports` | Per-linker-symbol DLL plus exact exported name or ordinal contracts. |
+| `native_imports` | Global or DLL-scoped exact exported name or ordinal contracts. |
 | `references` | External types and enum members available to the projection. |
 | `excluded_types` | Types omitted from the local output. |
 | `excluded_functions` | Functions omitted from the local output. |
 | `excluded_constants` | Constants omitted from the local output. |
 | `functions` | Optional free-function allowlist. |
 
-`NativeImports` rejects two different contracts for one linker symbol. A contract may name an
-export or use `NativeImport::ordinal` to emit an ordinal entry point such as `#660`. If the same
-symbol also has a `library`, `libraries`, source annotation, or partition-library mapping, the DLL
-names must agree. The native entry point is independent of both the linker symbol and the projected
-metadata method name. Callers reading SDK libraries can preserve that distinction with
-`windows_rdl::implib::read_contracts`. They must select contracts whose raw COFF machine matches
+`NativeImports::insert` retains one global fallback contract per linker symbol and rejects a
+different DLL or entry point for that symbol. `insert_for_library` retains separate contracts for
+the same normalized linker symbol in different DLLs. A second contract for the same symbol and DLL
+must name the same entry point; DLL matching is ASCII-case-insensitive and retains the first source
+spelling. `get_for_library` performs the same case-insensitive lookup.
+
+Emission resolves the configured library in the existing order: source annotation, partition
+owner, per-function option, then default option. It then selects a DLL-scoped contract. If scoped
+candidates exist, a missing configured library or a configured DLL without a candidate is an error.
+Only symbols without scoped candidates use the global fallback and its existing mismatch check. A
+contract may name an export or use `NativeImport::ordinal` to emit an ordinal such as `#660`.
+
+The native entry point is independent of both the linker symbol and the projected metadata method
+name. Callers reading SDK libraries can preserve that distinction with
+`windows_rdl::implib::read_contracts`, resolve each name mode with
+`ImportContract::resolve_entry_point`, and join its exact symbol through
+`Snapshot::resolve_function_link_name`. They must select contracts whose raw COFF machine matches
 the target architecture before constructing `NativeImports`; data and const import objects are not
-function contracts.
+function contracts. `NativeImports` uses the normalized `link_name`, including the existing x86 C
+decoration removal. A selected function with no exact-machine code contract is an unresolved error;
+callers must not borrow another machine's record or silently omit the function.
+
+An SDK 10.0.28000.2270 control using genuine `ShlObj.h`/`ShlObj_core.h` declarations found CODE
+contracts in `SHELL32.dll` for x64 (`0x8664`), x86 (`0x014c`), and ARM64 (`0xaa64`). The x64 and
+ARM64 raw symbols equal the function names. The x86 records are:
+
+| Function | x86 raw symbol | Ordinal |
+| --- | --- | --- |
+| `SHCreatePropSheetExtArray` | `_SHCreatePropSheetExtArray@12` | 168 |
+| `DAD_DragEnterEx` | `_DAD_DragEnterEx@12` | 131 |
+| `DAD_DragEnterEx2` | `_DAD_DragEnterEx2@16` | 22 |
+| `SHDefExtractIconA` | `_SHDefExtractIconA@24` | 3 |
+| `SHDefExtractIconW` | `_SHDefExtractIconW@24` | 6 |
+
+The `sdk_shell_ordinal_contracts_reach_physical_impl_maps` integration test binds those exact
+symbols to header source identities, selects only the matching machine, and verifies physical WinMD
+ImplMaps. This is transport evidence only; it does not establish default function activation or
+partition-owner qualification.
 
 References are explicit `TypeReference` values classified as `Type`, `Interface`, or `Enum`.
 Referenced enum member names let an overlay emit an enum only when it adds members to the base.
