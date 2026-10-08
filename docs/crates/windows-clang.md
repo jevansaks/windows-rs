@@ -564,7 +564,8 @@ remains a named typedef, so aliases such as a second handle name and pointer-to-
 retain their metadata identities. Other handles keep their record-backed output.
 
 An object-like macro defined after a global unscoped enum member may replace that member's value
-when it has one same-name candidate in the same translation unit and physical header. This
+when it has one same-name candidate in the same translation unit and physical header, and its type
+resolves directly, through scalar typedefs, or through an enum typedef to an integer domain. This
 preserves the identifier that C callers see without emitting two items into the header's shared RDL
 value namespace.
 

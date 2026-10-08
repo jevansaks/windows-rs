@@ -433,6 +433,18 @@ fn apply_macro_enum_overrides(
             ))
         })
         .collect();
+    let enum_reprs: HashMap<_, _> = facts
+        .iter()
+        .filter_map(|fact| {
+            let FactData::Enum { repr, .. } = &fact.data else {
+                return None;
+            };
+            Some((
+                (fact.origin.tu.as_str(), fact.name.as_str(), &fact.spelling),
+                *repr,
+            ))
+        })
+        .collect();
     let mut enum_members: HashMap<_, Vec<_>> = HashMap::new();
     for (fact_index, fact) in facts.iter().enumerate() {
         let FactData::Enum {
@@ -484,9 +496,10 @@ fn apply_macro_enum_overrides(
             continue;
         };
         let value = if constant.spelling.offset < *enum_offset {
-            macro_before_enum_matches(constant, *repr, *enum_value, &scalar_aliases).then_some(None)
+            macro_before_enum_matches(constant, *repr, *enum_value, &scalar_aliases, &enum_reprs)
+                .then_some(None)
         } else {
-            enum_override_value(&constant.value, *repr).map(Some)
+            macro_after_enum_value(constant, *repr, &scalar_aliases, &enum_reprs).map(Some)
         };
         if let Some(value) = value {
             actions.push((
@@ -501,6 +514,7 @@ fn apply_macro_enum_overrides(
     drop(enum_members);
     drop(macro_origins);
     drop(scalar_aliases);
+    drop(enum_reprs);
     for (_, _, fact_index, variant_index, value) in &actions {
         let Some(value) = value else {
             continue;
@@ -527,8 +541,11 @@ fn macro_before_enum_matches(
     repr: Scalar,
     variant_value: i64,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
+    enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
 ) -> bool {
-    let Some(source) = macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases) else {
+    let Some(source) =
+        macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases, enum_reprs)
+    else {
         return false;
     };
     let Some((source_width, source_value)) = scalar_value(source, &constant.value) else {
@@ -540,28 +557,45 @@ fn macro_before_enum_matches(
     source_width == enum_width && source_value == enum_value
 }
 
+fn macro_after_enum_value(
+    constant: &Constant,
+    repr: Scalar,
+    scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
+    enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
+) -> Option<i64> {
+    let source = macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases, enum_reprs)?;
+    scalar_value(source, &constant.value)?;
+    enum_override_value(&constant.value, repr)
+}
+
 fn macro_scalar_type(
     ty: &TypeRef,
     tu: &str,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
+    enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
 ) -> Option<Scalar> {
     fn resolve(
         ty: &TypeRef,
         tu: &str,
         scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
+        enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
         seen: &mut HashSet<Location>,
     ) -> Option<Scalar> {
         match ty {
             TypeRef::Scalar(scalar) => Some(*scalar),
             TypeRef::Named { name, declaration } if seen.insert(declaration.clone()) => {
-                let target = scalar_aliases.get(&(tu, name.as_str(), declaration))?;
-                resolve(target, tu, scalar_aliases, seen)
+                let key = (tu, name.as_str(), declaration);
+                if let Some(target) = scalar_aliases.get(&key) {
+                    resolve(target, tu, scalar_aliases, enum_reprs, seen)
+                } else {
+                    enum_reprs.get(&key).copied()
+                }
             }
             _ => None,
         }
     }
 
-    resolve(ty, tu, scalar_aliases, &mut HashSet::new())
+    resolve(ty, tu, scalar_aliases, enum_reprs, &mut HashSet::new())
 }
 
 fn scalar_value(scalar: Scalar, value: &Value) -> Option<(u8, i128)> {

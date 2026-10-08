@@ -4,7 +4,7 @@ use windows_clang::{
     EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition, extract,
 };
 use windows_metadata::{
-    Value,
+    Type, Value,
     reader::{Index, Item},
 };
 
@@ -196,6 +196,11 @@ fn write_source(path: &Path) {
             };
             #define LATER_OVERRIDE 64U
 
+            enum LATE_HANDLE_FLAGS : int {
+                LATE_HANDLE = -2
+            };
+            #define LATE_HANDLE ((TEST_HANDLE)-2)
+
             enum class SCOPED_LATER_FLAGS : unsigned int {
                 SCOPED_LATER = 128U
             };
@@ -239,6 +244,24 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
     );
     let references = BTreeMap::new();
     let options = EmitOptions::new("Example", &references);
+    for name in ["HANDLE_NEGATIVE", "LATE_HANDLE"] {
+        let constant = snapshot
+            .constants()
+            .iter()
+            .find(|constant| constant.name == name)
+            .unwrap();
+        assert!(
+            matches!(constant.value, windows_clang::Value::Signed(-2)),
+            "{constant:#?}"
+        );
+        assert!(
+            matches!(
+                &constant.ty,
+                windows_clang::TypeRef::Named { name, .. } if name == "TEST_HANDLE"
+            ),
+            "{constant:#?}"
+        );
+    }
     let partitions = snapshot
         .plan_header_partitions(&policy, &NamespaceAuthorities::new())
         .unwrap()
@@ -263,6 +286,7 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
         "WIDE_VALUE",
         "NARROW_VALUE",
         "OUT_OF_RANGE_VALUE",
+        "LATE_HANDLE",
         "SCOPED_LATER",
         "NAMESPACE_LATER",
     ] {
@@ -322,6 +346,18 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
         Value::U32(64)
     );
     assert_eq!(
+        enum_value(&index, namespace, "LATE_HANDLE_FLAGS", "LATE_HANDLE"),
+        Value::I32(-2)
+    );
+    let Item::Const(late_handle) = index.expect_item(namespace, "LATE_HANDLE") else {
+        panic!("{namespace}.LATE_HANDLE was not emitted as a constant");
+    };
+    assert_eq!(
+        late_handle.ty(),
+        Type::value_named(namespace, "TEST_HANDLE")
+    );
+    assert_eq!(late_handle.constant().unwrap().value(), Value::I32(-2));
+    assert_eq!(
         enum_value(&index, namespace, "HIGH_BIT_FLAGS", "SIGNED_HIGH_BIT"),
         Value::U32(2_147_483_648)
     );
@@ -351,6 +387,7 @@ fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
         "WIDE_VALUE",
         "NARROW_VALUE",
         "OUT_OF_RANGE_VALUE",
+        "LATE_HANDLE",
         "SCOPED_LATER",
         "NAMESPACE_LATER",
     ] {
