@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use windows_clang::{
-    EmitOptions, Input, NamespaceAuthorities, RdlPartition, RootPartition, TypeReference,
-    TypeReferenceKind, extract_partitioned,
+    EmitOptions, Input, NamespaceAuthorities, NativeImport, NativeImports, RdlPartition,
+    RootPartition, TypeReference, TypeReferenceKind, extract_partitioned,
 };
 
 #[test]
@@ -1647,6 +1647,143 @@ fn macro_aliased_functions_preserve_distinct_link_names() {
         process_status.contains("#[library(\"KERNEL32.dll\")]"),
         "{process_status}"
     );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn canonical_function_aliases_accept_equivalent_library_sources() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-canonical-function-library-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let export = scratch.join("export.h");
+    let alias = scratch.join("alias.h");
+    std::fs::write(
+        &export,
+        "__attribute__((annotate(\"win32metadata:supported_os=windows6.0.6000\")))\n\
+         __attribute__((annotate(\"win32metadata:import_library=clfsw32.dll\")))\n\
+         extern \"C\" unsigned LsnBlockOffset(unsigned lsn);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &alias,
+        "#define ClfsLsnBlockOffset LsnBlockOffset\n\
+         __attribute__((annotate(\"win32metadata:supported_os=windows6.0.6000\")))\n\
+         extern \"C\" unsigned ClfsLsnBlockOffset(unsigned lsn);\n",
+    )
+    .unwrap();
+    let source = format!(
+        "#include \"{}\"\n#include \"{}\"\n",
+        export.to_string_lossy(),
+        alias.to_string_lossy()
+    );
+    let owner = RootPartition::new("clfs", "Example.Clfs");
+    let snapshot = extract_partitioned(
+        [Input::new("aggregate.cpp", source)
+            .partitioned("aggregate")
+            .with_root_partition(export.to_string_lossy(), owner.clone())
+            .with_root_partition(alias.to_string_lossy(), owner)],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let mut imports = NativeImports::new();
+    imports
+        .insert(
+            "LsnBlockOffset",
+            NativeImport::named("clfsw32.dll", "LsnBlockOffset"),
+        )
+        .unwrap();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.native_imports = Some(&imports);
+    let output = snapshot
+        .emit_partitioned_with_options(&options)
+        .unwrap()
+        .values()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert_eq!(output.matches("fn LsnBlockOffset(").count(), 1, "{output}");
+    assert!(!output.contains("fn ClfsLsnBlockOffset("), "{output}");
+    assert!(output.contains("#[library(\"clfsw32.dll\")]"), "{output}");
+    assert!(
+        output.contains("#[supported_os(\"windows6.0.6000\")]"),
+        "{output}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn canonical_function_aliases_keep_distinct_routes() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-canonical-function-routes-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let export = scratch.join("export.h");
+    let alias = scratch.join("alias.h");
+    std::fs::write(
+        &export,
+        "extern \"C\" unsigned LsnBlockOffset(unsigned lsn);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &alias,
+        "#define ClfsLsnBlockOffset LsnBlockOffset\n\
+         extern \"C\" unsigned ClfsLsnBlockOffset(unsigned lsn);\n",
+    )
+    .unwrap();
+    let source = format!(
+        "#include \"{}\"\n#include \"{}\"\n",
+        export.to_string_lossy(),
+        alias.to_string_lossy()
+    );
+    let snapshot = extract_partitioned(
+        [Input::new("aggregate.cpp", source)
+            .partitioned("aggregate")
+            .with_root_partition(
+                export.to_string_lossy(),
+                RootPartition::new("export", "Example.Export")
+                    .with_library("LsnBlockOffset", "export.dll"),
+            )
+            .with_root_partition(
+                alias.to_string_lossy(),
+                RootPartition::new("alias", "Example.Alias")
+                    .with_library("LsnBlockOffset", "alias.dll"),
+            )],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let export = partitions
+        .iter()
+        .find(|(partition, _)| partition.partition == "export")
+        .unwrap()
+        .1;
+    let alias = partitions
+        .iter()
+        .find(|(partition, _)| partition.partition == "alias")
+        .unwrap()
+        .1;
+
+    assert!(export.contains("#[library(\"export.dll\")]"), "{export}");
+    assert!(export.contains("fn LsnBlockOffset("), "{export}");
+    assert!(
+        alias.contains("#[library(\"alias.dll\", import = \"LsnBlockOffset\")]"),
+        "{alias}"
+    );
+    assert!(alias.contains("fn ClfsLsnBlockOffset("), "{alias}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }

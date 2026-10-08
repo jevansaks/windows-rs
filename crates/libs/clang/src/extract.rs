@@ -168,6 +168,7 @@ fn extract_impl(
     let mut annotations = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
     let mut raw_function_link_names = BTreeMap::new();
+    let mut canonical_function_origins = BTreeMap::new();
     let mut pointer_callback_aliases = BTreeSet::new();
     let mut pointer_only_class_layouts = BTreeMap::new();
     let mut embeddable_class_layouts = BTreeSet::new();
@@ -183,6 +184,7 @@ fn extract_impl(
             annotations: &mut annotations,
             declaration_guids: &mut declaration_guids,
             raw_function_link_names: &mut raw_function_link_names,
+            canonical_function_origins: &mut canonical_function_origins,
             pointer_callback_aliases: &mut pointer_callback_aliases,
             pointer_only_class_layouts: &mut pointer_only_class_layouts,
             embeddable_class_layouts: &mut embeddable_class_layouts,
@@ -401,6 +403,7 @@ fn extract_impl(
         constants,
         included_files,
         raw_function_link_names,
+        canonical_function_origins,
         function_link_name_index,
         declare_handles,
         annotations,
@@ -1633,6 +1636,7 @@ impl TranslationUnit {
             excluded_roots: &input.excluded_roots,
             next: 0,
             seen: HashMap::new(),
+            canonical_functions: HashMap::new(),
             macros: &macros,
             pending_structs: vec![],
             pending_macros: vec![],
@@ -1642,6 +1646,7 @@ impl TranslationUnit {
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
             raw_function_link_names: &mut *output.raw_function_link_names,
+            canonical_function_origins: &mut *output.canonical_function_origins,
             pointer_callback_aliases: &mut *output.pointer_callback_aliases,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
@@ -1698,6 +1703,7 @@ struct Traversal<'a> {
     excluded_roots: &'a BTreeSet<String>,
     next: u32,
     seen: HashMap<u32, Vec<(CXCursor, Origin)>>,
+    canonical_functions: HashMap<u32, Vec<(CXCursor, Origin)>>,
     macros: &'a MacroDefinitions<'a>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
@@ -1707,6 +1713,7 @@ struct Traversal<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     raw_function_link_names: &'a mut BTreeMap<Origin, String>,
+    canonical_function_origins: &'a mut BTreeMap<Origin, Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1721,6 +1728,7 @@ struct ExtractionState<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     raw_function_link_names: &'a mut BTreeMap<Origin, String>,
+    canonical_function_origins: &'a mut BTreeMap<Origin, Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -2083,6 +2091,23 @@ fn extract_child(
                         traversal
                             .raw_function_link_names
                             .insert(origin.clone(), raw_function_link_name);
+                    }
+                    if fact_kind == FactKind::Function {
+                        let canonical = unsafe { clang_getCanonicalCursor(child) };
+                        let hash = unsafe { clang_hashCursor(canonical) };
+                        let declarations = traversal.canonical_functions.entry(hash).or_default();
+                        let canonical_origin = if let Some((_, canonical_origin)) =
+                            declarations.iter().find(|(declaration, _)| unsafe {
+                                clang_equalCursors(*declaration, canonical) != 0
+                            }) {
+                            canonical_origin.clone()
+                        } else {
+                            declarations.push((canonical, origin.clone()));
+                            origin.clone()
+                        };
+                        traversal
+                            .canonical_function_origins
+                            .insert(origin.clone(), canonical_origin);
                     }
                     if clang_flag_enum {
                         traversal.clang_flag_enums.insert(origin.clone());

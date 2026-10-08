@@ -887,6 +887,96 @@ fn source_function_alias_preserves_export_link_name() {
 }
 
 #[test]
+fn canonical_function_alias_prefers_unaliased_export() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract(
+        [Input::new(
+            "function_alias_pair.hpp",
+            "extern \"C\" unsigned LsnBlockOffset(unsigned lsn);\n\
+             #define ClfsLsnBlockOffset LsnBlockOffset\n\
+             extern \"C\" unsigned ClfsLsnBlockOffset(unsigned lsn);\n",
+        )],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let functions: Vec<_> = snapshot
+        .facts()
+        .iter()
+        .filter(|fact| matches!(fact.data, FactData::Function { .. }))
+        .collect();
+
+    assert_eq!(functions.len(), 2);
+    assert!(
+        functions
+            .iter()
+            .any(|fact| fact.name == "ClfsLsnBlockOffset")
+    );
+    assert!(functions.iter().any(|fact| fact.name == "LsnBlockOffset"));
+    assert!(functions.iter().all(|fact| {
+        matches!(
+            &fact.data,
+            FactData::Function { link_name, .. } if link_name == "LsnBlockOffset"
+        )
+    }));
+
+    let rdl = snapshot
+        .emit_with_library("FunctionAliasPair", "clfsw32.dll")
+        .unwrap();
+    assert_eq!(rdl.matches("fn LsnBlockOffset(").count(), 1, "{rdl}");
+    assert!(!rdl.contains("fn ClfsLsnBlockOffset("), "{rdl}");
+}
+
+#[test]
+fn separate_tu_function_alias_and_export_remain_independent() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract(
+        [
+            Input::new(
+                "function_alias.hpp",
+                "#define ClfsLsnBlockOffset LsnBlockOffset\n\
+                 extern \"C\" unsigned ClfsLsnBlockOffset(unsigned lsn);\n",
+            ),
+            Input::new(
+                "function_export.hpp",
+                "extern \"C\" unsigned LsnBlockOffset(unsigned lsn);\n",
+            ),
+        ],
+        &["-x", "c++"],
+    )
+    .unwrap();
+    let rdl = snapshot
+        .emit_with_library("FunctionAliasInputs", "clfsw32.dll")
+        .unwrap();
+
+    assert_eq!(rdl.matches("fn LsnBlockOffset(").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches("fn ClfsLsnBlockOffset(").count(), 1, "{rdl}");
+}
+
+#[test]
+fn incompatible_macro_alias_overloads_remain_independent() {
+    helpers::ensure_libclang();
+
+    let snapshot = extract(
+        [Input::new(
+            "function_alias_overloads.hpp",
+            "unsigned LsnBlockOffset(unsigned lsn);\n\
+             #define ClfsLsnBlockOffset LsnBlockOffset\n\
+             unsigned ClfsLsnBlockOffset(double lsn);\n",
+        )],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let rdl = snapshot
+        .emit_with_library("FunctionAliasOverloads", "clfsw32.dll")
+        .unwrap();
+
+    assert_eq!(rdl.matches("fn LsnBlockOffset(").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches("fn ClfsLsnBlockOffset(").count(), 1, "{rdl}");
+}
+
+#[test]
 fn source_method_alias_preserves_declared_name() {
     helpers::ensure_libclang();
 

@@ -1440,6 +1440,7 @@ pub struct Snapshot {
     constants: Vec<Constant>,
     included_files: Vec<IncludedFile>,
     raw_function_link_names: BTreeMap<Origin, String>,
+    canonical_function_origins: BTreeMap<Origin, Origin>,
     function_link_name_index: FunctionLinkNameIndex,
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
@@ -1630,6 +1631,7 @@ impl PartialEq for Snapshot {
         self.facts == other.facts
             && self.constants == other.constants
             && self.raw_function_link_names == other.raw_function_link_names
+            && self.canonical_function_origins == other.canonical_function_origins
             && self.function_link_name_index == other.function_link_name_index
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
@@ -4715,6 +4717,133 @@ impl Snapshot {
         })
     }
 
+    fn redundant_canonical_function_aliases<'a>(
+        &'a self,
+        functions: impl IntoIterator<Item = &'a Fact>,
+        source_names: Option<&PlanningSourceNames>,
+    ) -> BTreeSet<Origin> {
+        let mut groups: BTreeMap<&Origin, Vec<&Fact>> = BTreeMap::new();
+        for function in functions {
+            if let Some(canonical) = self.canonical_function_origins.get(&function.origin) {
+                groups.entry(canonical).or_default().push(function);
+            }
+        }
+
+        let mut redundant = BTreeSet::new();
+        for functions in groups.into_values() {
+            let exports: Vec<_> = functions
+                .iter()
+                .copied()
+                .filter(|function| function_source_name_matches_link_name(function, source_names))
+                .collect();
+            for alias in functions {
+                if function_source_name_matches_link_name(alias, source_names) {
+                    continue;
+                }
+                for export in &exports {
+                    if function_declarations_compatible(alias, export)
+                        && self.function_routes_match(alias, export)
+                    {
+                        redundant.insert(alias.origin.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        redundant
+    }
+
+    fn function_routes_match(&self, left: &Fact, right: &Fact) -> bool {
+        let owners_match = match (
+            self.root_owners.get(&left.origin),
+            self.root_owners.get(&right.origin),
+        ) {
+            (None, None) => true,
+            (Some(left), Some(right)) => same_owner_policy(left, right),
+            _ => false,
+        };
+        if !owners_match {
+            return false;
+        }
+
+        let namespace = |fact: &Fact| {
+            self.fact_namespace_authorities
+                .get(&fact.origin)
+                .or_else(|| {
+                    self.root_owners
+                        .get(&fact.origin)
+                        .map(|owner| &owner.namespace)
+                })
+        };
+        namespace(left) == namespace(right)
+            && self.function_import_libraries_match(left, right)
+            && self.function_annotations_match(left, right)
+    }
+
+    fn function_import_libraries_match(&self, left: &Fact, right: &Fact) -> bool {
+        let library = |fact: &Fact| {
+            let FactData::Function { link_name, .. } = &fact.data else {
+                return None;
+            };
+            annotations_for(
+                &self.annotations,
+                &AnnotationTarget::Declaration(fact.origin.clone()),
+            )
+            .iter()
+            .find_map(|annotation| match annotation {
+                Annotation::ImportLibrary(library) => Some(library.as_str()),
+                _ => None,
+            })
+            .or_else(|| {
+                self.root_owners
+                    .get(&fact.origin)?
+                    .libraries
+                    .get(link_name)
+                    .map(String::as_str)
+            })
+        };
+        match (library(left), library(right)) {
+            (None, None) => true,
+            (Some(left), Some(right)) => left.eq_ignore_ascii_case(right),
+            _ => false,
+        }
+    }
+
+    fn function_annotations_match(&self, left: &Fact, right: &Fact) -> bool {
+        let declaration = |fact: &Fact| AnnotationTarget::Declaration(fact.origin.clone());
+        let result = |fact: &Fact| AnnotationTarget::Return(fact.origin.clone());
+        let declaration_annotations = |fact: &Fact| {
+            annotations_for(&self.annotations, &declaration(fact))
+                .iter()
+                .filter(|annotation| !matches!(annotation, Annotation::ImportLibrary(_)))
+        };
+        if !declaration_annotations(left).eq(declaration_annotations(right))
+            || annotations_for(&self.annotations, &result(left))
+                != annotations_for(&self.annotations, &result(right))
+        {
+            return false;
+        }
+
+        let FactData::Function { params, .. } = &left.data else {
+            return false;
+        };
+        (0..params.len()).all(|index| {
+            annotations_for(
+                &self.annotations,
+                &AnnotationTarget::Parameter {
+                    declaration: left.origin.clone(),
+                    index,
+                },
+            ) == annotations_for(
+                &self.annotations,
+                &AnnotationTarget::Parameter {
+                    declaration: right.origin.clone(),
+                    index,
+                },
+            )
+        })
+    }
+
     fn plan(&self, options: PlanningOptions<'_>) -> Result<Plan<'_>, Error> {
         let PlanningOptions {
             references,
@@ -4935,6 +5064,17 @@ impl Snapshot {
             })
         {
             roots.entry(&fact.name).or_default().functions.push(fact);
+        }
+        let redundant_function_aliases = self.redundant_canonical_function_aliases(
+            roots
+                .values()
+                .flat_map(|roots| roots.functions.iter().copied()),
+            source_names,
+        );
+        for roots in roots.values_mut() {
+            roots
+                .functions
+                .retain(|fact| !redundant_function_aliases.contains(&fact.origin));
         }
         for constant in &self.constants {
             if excluded_constants.is_some_and(|excluded| excluded.contains(&constant.name))
@@ -6627,6 +6767,19 @@ impl PlanningSourceNames {
             .and_then(BTreeSet::first)
             .map_or(constant.name.as_str(), String::as_str)
     }
+}
+
+fn function_source_name_matches_link_name(
+    fact: &Fact,
+    source_names: Option<&PlanningSourceNames>,
+) -> bool {
+    let FactData::Function { link_name, .. } = &fact.data else {
+        return false;
+    };
+    source_names
+        .and_then(|names| names.facts.get(&fact.origin))
+        .map_or(fact.name.as_str(), String::as_str)
+        == link_name
 }
 
 fn partition_collision_typedef_target(
@@ -8875,6 +9028,40 @@ fn constant_types_match(left: &TypeRef, right: &TypeRef) -> bool {
         (TypeRef::InlineRecord(left), TypeRef::InlineRecord(right)) => left == right,
         _ => false,
     }
+}
+
+fn function_declarations_compatible(left: &Fact, right: &Fact) -> bool {
+    let (
+        FactData::Function {
+            link_name: left_link_name,
+            convention: left_convention,
+            params: left_params,
+            result: left_result,
+            variadic: left_variadic,
+            noreturn: left_noreturn,
+        },
+        FactData::Function {
+            link_name: right_link_name,
+            convention: right_convention,
+            params: right_params,
+            result: right_result,
+            variadic: right_variadic,
+            noreturn: right_noreturn,
+        },
+    ) = (&left.data, &right.data)
+    else {
+        return false;
+    };
+
+    left_link_name == right_link_name
+        && left_convention == right_convention
+        && left_variadic == right_variadic
+        && left_noreturn == right_noreturn
+        && left_params.len() == right_params.len()
+        && left_params.iter().zip(right_params).all(|(left, right)| {
+            left.annotation == right.annotation && constant_types_match(&left.ty, &right.ty)
+        })
+        && constant_types_match(left_result, right_result)
 }
 
 fn choose_function_root<'a>(name: &str, roots: &[&'a Fact]) -> Result<&'a Fact, Error> {

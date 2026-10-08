@@ -3526,6 +3526,69 @@ fn retained_function_identities_match_the_effective_partition_plan() {
 }
 
 #[test]
+fn retained_function_alias_identity_is_import_option_independent() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("retained-function-alias-imports");
+    let export = scratch.join("export.h");
+    let alias = scratch.join("alias.h");
+    std::fs::write(
+        &export,
+        "__attribute__((annotate(\"win32metadata:supported_os=windows6.0.6000\")))\n\
+         __attribute__((annotate(\"win32metadata:import_library=clfsw32.dll\")))\n\
+         extern \"C\" unsigned LsnBlockOffset(unsigned lsn);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &alias,
+        "#define ClfsLsnBlockOffset LsnBlockOffset\n\
+         __attribute__((annotate(\"win32metadata:supported_os=windows6.0.6000\")))\n\
+         extern \"C\" unsigned ClfsLsnBlockOffset(unsigned lsn);\n",
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&export, &alias]);
+    let owner = RootPartition::new("fs", "Example.FileSystem");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(export.to_string_lossy(), owner.clone())
+        .with_traversed_header(alias.to_string_lossy(), owner);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let references = BTreeMap::new();
+    let mut imports = NativeImports::new();
+    imports
+        .insert(
+            "LsnBlockOffset",
+            NativeImport::named("clfsw32.dll", "LsnBlockOffset"),
+        )
+        .unwrap();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.native_imports = Some(&imports);
+    let retained = plan.retained_function_source_identities(&options).unwrap();
+    assert_eq!(retained.len(), 1);
+    assert_eq!(retained[0].name, "LsnBlockOffset");
+    assert_eq!(retained[0].link_name, "LsnBlockOffset");
+
+    let without_imports = EmitOptions::new("Example.Common", &references);
+    let retained = plan
+        .retained_function_source_identities(&without_imports)
+        .unwrap();
+    assert_eq!(retained.len(), 1);
+    assert_eq!(retained[0].name, "LsnBlockOffset");
+
+    let rdl = plan
+        .emit_with_options(&without_imports)
+        .unwrap()
+        .values()
+        .cloned()
+        .collect::<String>();
+    assert_eq!(rdl.matches("fn LsnBlockOffset(").count(), 1, "{rdl}");
+    assert!(!rdl.contains("fn ClfsLsnBlockOffset("), "{rdl}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn equivalent_declarations_in_different_namespaces_emit_independently() {
     helpers::ensure_libclang();
 

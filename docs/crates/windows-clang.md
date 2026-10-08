@@ -178,6 +178,14 @@ traversed-header declaration has an explicit owner and its link name is selected
 `EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
 change non-header emission.
 
+Within one translation unit, Clang may represent a declaration spelled through a function-name
+macro and a later unaliased declaration as redeclarations of one native function. Planning uses
+`clang_getCanonicalCursor` equality for that relation. If the projected signatures, annotations,
+and output routes also match, only the unaliased export is retained. A lone source alias still emits
+with its recovered public name and native import name. Declarations from separate translation
+units, incompatible declarations, and declarations with different DLL, owner, or namespace routes
+remain separate.
+
 An `associated_enum` annotation on a selected root adds the matching enum provider from its
 annotation-compatible redeclarations to dependency closure. Those redeclarations may come from
 other extraction inputs in the aggregate snapshot. A provider that has no traversed-header owner

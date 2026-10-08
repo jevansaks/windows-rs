@@ -6,6 +6,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         constants: Vec::new(),
         included_files: Vec::new(),
         raw_function_link_names: BTreeMap::new(),
+        canonical_function_origins: BTreeMap::new(),
         function_link_name_index: FunctionLinkNameIndex::default(),
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
@@ -61,6 +62,31 @@ fn alias(local: u32, name: &str, file: &str, offset: u32, target: TypeRef) -> Fa
             offset,
         },
         FactData::Typedef { target },
+    )
+}
+
+fn function(local: u32, name: &str, link_name: &str, parameter: Scalar) -> Fact {
+    test_fact(
+        local,
+        None,
+        FactKind::Function,
+        name,
+        Location {
+            file: "functions.h".to_string(),
+            offset: local,
+        },
+        FactData::Function {
+            link_name: link_name.to_string(),
+            convention: CallingConvention::Platform,
+            params: vec![Parameter {
+                name: "value".to_string(),
+                ty: TypeRef::Scalar(parameter),
+                annotation: ParamAnnotation::default(),
+            }],
+            result: TypeRef::Void,
+            variadic: false,
+            noreturn: false,
+        },
     )
 }
 
@@ -191,6 +217,52 @@ fn authority_lookup_preserves_exact_identity_and_fact_order() {
         .fact_namespace_authorities
         .insert(root.origin.clone(), "Example.Direct".to_string());
     assert_eq!(authority(&snapshot, &root), Some("Example.Direct"));
+}
+
+#[test]
+fn canonical_function_alias_requires_compatible_declarations() {
+    let alias = function(1, "Alias", "Export", Scalar::I32);
+    let export = function(2, "Export", "Export", Scalar::U32);
+    let canonical = alias.origin.clone();
+    let mut snapshot = snapshot(vec![alias, export]);
+    for fact in &snapshot.facts {
+        snapshot
+            .canonical_function_origins
+            .insert(fact.origin.clone(), canonical.clone());
+    }
+
+    assert!(
+        snapshot
+            .redundant_canonical_function_aliases(snapshot.facts.iter(), None)
+            .is_empty()
+    );
+}
+
+#[test]
+fn canonical_function_alias_requires_matching_native_imports() {
+    let alias = function(1, "Alias", "Export", Scalar::I32);
+    let export = function(2, "Export", "Export", Scalar::I32);
+    let canonical = alias.origin.clone();
+    let mut snapshot = snapshot(vec![alias, export]);
+    for fact in &snapshot.facts {
+        snapshot
+            .canonical_function_origins
+            .insert(fact.origin.clone(), canonical.clone());
+    }
+    snapshot.annotations.insert(
+        AnnotationTarget::Declaration(snapshot.facts[0].origin.clone()),
+        vec![Annotation::ImportLibrary("alias.dll".to_string())],
+    );
+    snapshot.annotations.insert(
+        AnnotationTarget::Declaration(snapshot.facts[1].origin.clone()),
+        vec![Annotation::ImportLibrary("export.dll".to_string())],
+    );
+
+    assert!(
+        snapshot
+            .redundant_canonical_function_aliases(snapshot.facts.iter(), None)
+            .is_empty()
+    );
 }
 
 #[test]

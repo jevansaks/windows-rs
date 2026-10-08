@@ -47,6 +47,11 @@ spelling location, source name, existing normalized `link_name`, and exact raw
 `Snapshot::resolve_function_link_name` joins an exact raw COFF symbol to the normalized key used by
 `NativeImports`. It accepts equivalent duplicates and rejects a raw symbol with multiple normalized
 keys or distinct raw decorations that collapse to one normalized key.
+Within one Clang translation unit, a macro-recovered function alias and an unaliased export emit as
+one function only when `clang_getCanonicalCursor` identifies the same declaration, their projected
+signatures and annotations match, and they have the same route. The unaliased export name wins. A
+lone alias, declarations from separate translation units, and declarations with different routes
+remain independent.
 After applying a header policy, `HeaderPartitionPlan::retained_function_source_identities` returns
 only the canonical root functions retained by the same `EmitOptions` used for emission. This omits
 dependency-only and owner- or caller-excluded functions while preserving each selected declaration's
