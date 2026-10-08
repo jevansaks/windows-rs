@@ -141,10 +141,15 @@ let snapshot = extract(
 let references = BTreeMap::new();
 let options = EmitOptions::new("Example.Common", &references);
 let plan = snapshot
-    .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+    .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
     .unwrap();
 let partitions = plan.emit_with_options(&options).unwrap();
 ```
+
+`into_header_partition_plan` moves the extracted snapshot into the plan, so SDK-scale callers that
+are finished inspecting extraction results do not retain the original allocation beside a cloned
+planning snapshot. `plan_header_partitions` preserves the borrowed API for callers that still need
+the original snapshot; it clones the snapshot and otherwise produces the same plan.
 
 The extraction roots must cover every traversed header whose functions, GUIDs, macros, or deferred
 record bodies are needed. They control extraction coverage only for this API; the
