@@ -2,6 +2,8 @@
 #![doc = include_str!("../readme.md")]
 
 use std::borrow::Cow;
+#[cfg(test)]
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter, Write};
 use std::rc::Rc;
@@ -1338,6 +1340,69 @@ impl<'a> DeclarationIndex<'a> {
     }
 }
 
+struct TypedefDeclarationIndex<'a> {
+    facts: HashMap<(&'a str, &'a str, &'a Location), Vec<&'a Fact>>,
+    #[cfg(test)]
+    visited_facts: usize,
+    #[cfg(test)]
+    lookups: Cell<usize>,
+    #[cfg(test)]
+    inspected_candidates: Cell<usize>,
+}
+
+impl<'a> TypedefDeclarationIndex<'a> {
+    fn new(facts: &'a [Fact]) -> Self {
+        let mut result = Self {
+            facts: HashMap::new(),
+            #[cfg(test)]
+            visited_facts: 0,
+            #[cfg(test)]
+            lookups: Cell::new(0),
+            #[cfg(test)]
+            inspected_candidates: Cell::new(0),
+        };
+        for fact in facts {
+            #[cfg(test)]
+            {
+                result.visited_facts += 1;
+            }
+            if !matches!(fact.data, FactData::Typedef { .. }) {
+                continue;
+            }
+            result
+                .facts
+                .entry((&fact.origin.tu, &fact.name, &fact.spelling))
+                .or_default()
+                .push(fact);
+        }
+        result
+    }
+
+    fn get<'b>(&'b self, tu: &'b str, name: &'b str, declaration: &'b Location) -> &'b [&'a Fact] {
+        let facts = self
+            .facts
+            .get(&(tu, name, declaration))
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        #[cfg(test)]
+        {
+            self.lookups.set(self.lookups.get() + 1);
+            self.inspected_candidates
+                .set(self.inspected_candidates.get() + facts.len());
+        }
+        facts
+    }
+
+    #[cfg(test)]
+    fn metrics(&self) -> (usize, usize, usize) {
+        (
+            self.visited_facts,
+            self.lookups.get(),
+            self.inspected_candidates.get(),
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HeaderPartitionPlan {
     snapshot: Snapshot,
@@ -1718,18 +1783,24 @@ impl Snapshot {
         let emission_time = timing.then(std::time::Instant::now);
         let mut local_types = BTreeMap::new();
         let mut routed_types = BTreeMap::new();
+        let facts_by_origin = routes.is_some().then(|| {
+            self.facts
+                .iter()
+                .map(|fact| (&fact.origin, fact))
+                .collect::<HashMap<_, _>>()
+        });
         let mut retained_canonical_raw_pointers = RetainedCanonicalRawPointers::new();
         if routes.is_some() {
-            for planned in &plan.types {
-                if canonical_raw_pointer_name(&planned.fact.name)
-                    && matches!(planned.fact.data, FactData::Typedef { .. })
-                {
-                    retained_canonical_raw_pointers
-                        .entry(planned.fact.origin.tu.clone())
-                        .or_default()
-                        .insert(planned.fact.spelling.clone());
-                }
-            }
+            let declarations = TypedefDeclarationIndex::new(&self.facts);
+            let planned_types: Vec<_> = plan.types.iter().map(|planned| planned.fact).collect();
+            let annotations = self.route_annotation_signatures();
+            populate_retained_canonical_raw_pointers(
+                &planned_types,
+                &declarations,
+                facts_by_origin.as_ref().unwrap(),
+                &annotations,
+                &mut retained_canonical_raw_pointers,
+            );
         }
         let retained_canonical_raw_pointers =
             routes.is_some().then_some(&retained_canonical_raw_pointers);
@@ -1748,8 +1819,7 @@ impl Snapshot {
                 .iter()
                 .map(|planned| &planned.fact.origin)
                 .collect();
-            let facts_by_origin: HashMap<_, _> =
-                self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+            let facts_by_origin = facts_by_origin.as_ref().unwrap();
             let local_reference_names: BTreeSet<_> = plan
                 .types
                 .iter()
@@ -1762,7 +1832,7 @@ impl Snapshot {
                             .pointer_only_class_layouts
                             .contains_key(&planned.fact.origin)
                             && matches!(planned.fact.data, FactData::Record { .. }))
-                            || is_native_namespaced_declaration(planned.fact, &facts_by_origin)))
+                            || is_native_namespaced_declaration(planned.fact, facts_by_origin)))
                     .then_some(name)
                 })
                 .collect();
@@ -1780,7 +1850,7 @@ impl Snapshot {
                     && !planned_type_origins.contains(&fact.origin)
                     && is_abi_reference_declaration_for_name(
                         fact,
-                        &facts_by_origin,
+                        facts_by_origin,
                         options.references,
                         display_name,
                     )
@@ -1810,7 +1880,7 @@ impl Snapshot {
                 if !local_reference_names.contains(name)
                     || !is_abi_reference_declaration_for_name(
                         fact,
-                        &facts_by_origin,
+                        facts_by_origin,
                         options.references,
                         name,
                     )
@@ -1990,6 +2060,7 @@ impl Snapshot {
                     )
                 }
                 FactData::Typedef { target } => {
+                    let projection = projection.for_typedef(&fact.origin);
                     format!(
                         "{}    type {} = {};\n",
                         annotation_lines(
@@ -6548,12 +6619,135 @@ fn route_candidate_error(candidate: &RouteCandidate<'_>, reason: PartitionConfli
     }
 }
 
-type RetainedCanonicalRawPointers = BTreeMap<String, BTreeSet<Location>>;
+fn populate_retained_canonical_raw_pointers<'a>(
+    planned_types: &[&'a Fact],
+    declarations: &TypedefDeclarationIndex<'a>,
+    facts_by_origin: &HashMap<&'a Origin, &'a Fact>,
+    annotations: &BTreeMap<Origin, Rc<RouteAnnotations>>,
+    retained: &mut RetainedCanonicalRawPointers,
+) {
+    let retained_aliases: Vec<_> = planned_types
+        .iter()
+        .copied()
+        .filter(|fact| {
+            canonical_raw_pointer_name(&fact.name) && matches!(fact.data, FactData::Typedef { .. })
+        })
+        .collect();
+    for alias in &retained_aliases {
+        retained.retain_translation_unit(alias);
+    }
 
+    // A direct typedef may target the same physical alias declaration through another
+    // translation unit, without retaining every use of that translation unit's copy.
+    for planned in planned_types {
+        let FactData::Typedef {
+            target: TypeRef::Named { name, declaration },
+        } = &planned.data
+        else {
+            continue;
+        };
+        let local_declarations = declarations.get(&planned.origin.tu, name, declaration);
+        if !local_declarations.is_empty()
+            && local_declarations.iter().all(|local| {
+                retained_aliases.iter().any(|retained| {
+                    same_typedef_bridge_identity(retained, local, facts_by_origin, annotations)
+                })
+            })
+        {
+            retained.retain_typedef_target(&planned.origin, declaration);
+        }
+    }
+}
+
+fn same_typedef_bridge_identity(
+    left: &Fact,
+    right: &Fact,
+    facts_by_origin: &HashMap<&Origin, &Fact>,
+    annotations: &BTreeMap<Origin, Rc<RouteAnnotations>>,
+) -> bool {
+    if !same_source_declaration(left, right) {
+        return false;
+    }
+    let Some(left_scope) = native_parent_scope(left, facts_by_origin) else {
+        return false;
+    };
+    let Some(right_scope) = native_parent_scope(right, facts_by_origin) else {
+        return false;
+    };
+    if left_scope != right_scope {
+        return false;
+    }
+    let left_annotations = annotations
+        .get(&left.origin)
+        .map_or(&[][..], |annotations| annotations.as_slice());
+    let right_annotations = annotations
+        .get(&right.origin)
+        .map_or(&[][..], |annotations| annotations.as_slice());
+    left_annotations == right_annotations
+}
+
+fn native_parent_scope(
+    fact: &Fact,
+    facts_by_origin: &HashMap<&Origin, &Fact>,
+) -> Option<Vec<(FactKind, String, Option<Location>)>> {
+    let mut result = vec![];
+    let mut parent = fact.parent.as_ref();
+    while let Some(origin) = parent {
+        let fact = facts_by_origin.get(origin)?;
+        result.push((
+            fact.kind,
+            fact.name.clone(),
+            fact.name.is_empty().then(|| fact.spelling.clone()),
+        ));
+        parent = fact.parent.as_ref();
+    }
+    result.reverse();
+    Some(result)
+}
+
+#[derive(Default)]
+struct RetainedCanonicalRawPointers {
+    translation_units: BTreeMap<String, BTreeSet<Location>>,
+    typedef_targets: BTreeMap<Origin, BTreeSet<Location>>,
+}
+
+impl RetainedCanonicalRawPointers {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn retain_translation_unit(&mut self, fact: &Fact) {
+        self.translation_units
+            .entry(fact.origin.tu.clone())
+            .or_default()
+            .insert(fact.spelling.clone());
+    }
+
+    fn retain_typedef_target(&mut self, origin: &Origin, declaration: &Location) {
+        self.typedef_targets
+            .entry(origin.clone())
+            .or_default()
+            .insert(declaration.clone());
+    }
+
+    fn contains(&self, tu: &str, origin: Option<&Origin>, declaration: &Location) -> bool {
+        self.translation_units
+            .get(tu)
+            .is_some_and(|locations| locations.contains(declaration))
+            || origin.is_some_and(|origin| {
+                self.typedef_targets
+                    .get(origin)
+                    .is_some_and(|locations| locations.contains(declaration))
+            })
+    }
+}
+
+#[derive(Clone, Copy)]
 struct TypeProjection<'a> {
     type_names: &'a BTreeMap<String, String>,
     interface_names: &'a BTreeSet<(String, String)>,
     tu: &'a str,
+    typedef_origin: Option<&'a Origin>,
     local_types: &'a BTreeMap<Location, String>,
     routed_types: &'a BTreeMap<String, String>,
     retained_canonical_raw_pointers: Option<&'a RetainedCanonicalRawPointers>,
@@ -6574,6 +6768,7 @@ impl<'a> TypeProjection<'a> {
             type_names,
             interface_names,
             tu,
+            typedef_origin: None,
             local_types,
             routed_types,
             retained_canonical_raw_pointers,
@@ -6583,6 +6778,13 @@ impl<'a> TypeProjection<'a> {
 
     fn name(&self, ty: &TypeRef) -> String {
         planned_emitted_type_name(ty, self)
+    }
+
+    fn for_typedef(self, origin: &'a Origin) -> Self {
+        Self {
+            typedef_origin: Some(origin),
+            ..self
+        }
     }
 }
 
@@ -9383,13 +9585,10 @@ fn canonical_raw_pointer_mutability(name: &str) -> Option<bool> {
 fn canonical_raw_pointer_is_retained(
     declarations: Option<&RetainedCanonicalRawPointers>,
     tu: &str,
+    origin: Option<&Origin>,
     declaration: &Location,
 ) -> bool {
-    declarations.is_none_or(|declarations| {
-        declarations
-            .get(tu)
-            .is_some_and(|locations| locations.contains(declaration))
-    })
+    declarations.is_none_or(|declarations| declarations.contains(tu, origin, declaration))
 }
 
 fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
@@ -9960,6 +10159,7 @@ fn emitted_pointer_is_mutable(param: &Parameter, projection: &TypeProjection<'_>
                 && canonical_raw_pointer_is_retained(
                     projection.retained_canonical_raw_pointers,
                     projection.tu,
+                    projection.typedef_origin,
                     declaration,
                 ))
         }
@@ -10011,6 +10211,7 @@ fn planned_emitted_type_name(ty: &TypeRef, projection: &TypeProjection<'_>) -> S
             || canonical_raw_pointer_is_retained(
                 projection.retained_canonical_raw_pointers,
                 projection.tu,
+                projection.typedef_origin,
                 declaration,
             ))
     {
@@ -10789,15 +10990,35 @@ mod tests {
         spelling: Location,
         data: FactData,
     ) -> Fact {
-        Fact {
-            origin: Origin {
-                tu: "tu".to_string(),
-                local,
-            },
-            parent: parent.map(|local| Origin {
+        test_fact_in_tu(
+            "tu",
+            local,
+            parent.map(|local| Origin {
                 tu: "tu".to_string(),
                 local,
             }),
+            kind,
+            name,
+            spelling,
+            data,
+        )
+    }
+
+    fn test_fact_in_tu(
+        tu: &str,
+        local: u32,
+        parent: Option<Origin>,
+        kind: FactKind,
+        name: &str,
+        spelling: Location,
+        data: FactData,
+    ) -> Fact {
+        Fact {
+            origin: Origin {
+                tu: tu.to_string(),
+                local,
+            },
+            parent,
             kind,
             name: name.to_string(),
             spelling: spelling.clone(),
@@ -10808,6 +11029,256 @@ mod tests {
             system: false,
             data,
         }
+    }
+
+    #[test]
+    fn typedef_bridge_lookups_ignore_unrelated_facts() {
+        const PLANNED_ALIASES: usize = 256;
+        const UNRELATED_TYPEDEFS: usize = 20_000;
+        let declaration = Location {
+            file: "common.h".to_string(),
+            offset: 32,
+        };
+        let pointer = FactData::Typedef {
+            target: TypeRef::Pointer {
+                mutable: true,
+                target: Box::new(TypeRef::Void),
+            },
+        };
+        let mut facts = vec![
+            test_fact_in_tu(
+                "foundation",
+                0,
+                None,
+                FactKind::Typedef,
+                "LPVOID",
+                declaration.clone(),
+                pointer.clone(),
+            ),
+            test_fact_in_tu(
+                "consumer",
+                0,
+                None,
+                FactKind::Typedef,
+                "LPVOID",
+                declaration.clone(),
+                pointer.clone(),
+            ),
+            test_fact_in_tu(
+                "consumer",
+                1,
+                None,
+                FactKind::Typedef,
+                "LPVOID",
+                declaration.clone(),
+                pointer,
+            ),
+        ];
+        for index in 0..PLANNED_ALIASES {
+            facts.push(test_fact_in_tu(
+                "consumer",
+                1000 + index as u32,
+                None,
+                FactKind::Typedef,
+                &format!("ALIAS_{index}"),
+                Location {
+                    file: "consumer.h".to_string(),
+                    offset: index as u32,
+                },
+                FactData::Typedef {
+                    target: TypeRef::Named {
+                        name: "LPVOID".to_string(),
+                        declaration: declaration.clone(),
+                    },
+                },
+            ));
+        }
+        for index in 0..UNRELATED_TYPEDEFS {
+            facts.push(test_fact_in_tu(
+                "noise",
+                index as u32,
+                None,
+                FactKind::Typedef,
+                &format!("NOISE_{index}"),
+                Location {
+                    file: "noise.h".to_string(),
+                    offset: index as u32,
+                },
+                FactData::Typedef {
+                    target: TypeRef::Scalar(Scalar::U32),
+                },
+            ));
+        }
+
+        let planned: Vec<_> = facts
+            .iter()
+            .filter(|fact| {
+                (fact.origin.tu == "foundation" && fact.name == "LPVOID")
+                    || fact.name.starts_with("ALIAS_")
+            })
+            .collect();
+        let declarations = TypedefDeclarationIndex::new(&facts);
+        let facts_by_origin = facts
+            .iter()
+            .map(|fact| (&fact.origin, fact))
+            .collect::<HashMap<_, _>>();
+        let mut retained = RetainedCanonicalRawPointers::new();
+        populate_retained_canonical_raw_pointers(
+            &planned,
+            &declarations,
+            &facts_by_origin,
+            &BTreeMap::new(),
+            &mut retained,
+        );
+
+        assert_eq!(
+            declarations.metrics(),
+            (facts.len(), PLANNED_ALIASES, PLANNED_ALIASES * 2)
+        );
+        assert_eq!(retained.typedef_targets.len(), PLANNED_ALIASES);
+        assert!(!retained.translation_units.contains_key("noise"));
+    }
+
+    #[test]
+    fn typedef_bridge_requires_every_exact_candidate_equivalent() {
+        let declaration = Location {
+            file: "common.h".to_string(),
+            offset: 32,
+        };
+        let pointer = |target| FactData::Typedef {
+            target: TypeRef::Pointer {
+                mutable: true,
+                target: Box::new(target),
+            },
+        };
+        let facts = vec![
+            test_fact_in_tu(
+                "foundation",
+                0,
+                None,
+                FactKind::Typedef,
+                "LPVOID",
+                declaration.clone(),
+                pointer(TypeRef::Void),
+            ),
+            test_fact_in_tu(
+                "consumer",
+                0,
+                None,
+                FactKind::Typedef,
+                "LPVOID",
+                declaration.clone(),
+                pointer(TypeRef::Void),
+            ),
+            test_fact_in_tu(
+                "consumer",
+                1,
+                None,
+                FactKind::Typedef,
+                "LPVOID",
+                declaration.clone(),
+                pointer(TypeRef::Scalar(Scalar::U32)),
+            ),
+            test_fact_in_tu(
+                "consumer",
+                2,
+                None,
+                FactKind::Typedef,
+                "ALIAS",
+                Location {
+                    file: "consumer.h".to_string(),
+                    offset: 16,
+                },
+                FactData::Typedef {
+                    target: TypeRef::Named {
+                        name: "LPVOID".to_string(),
+                        declaration,
+                    },
+                },
+            ),
+        ];
+        let planned = [&facts[0], &facts[3]];
+        let declarations = TypedefDeclarationIndex::new(&facts);
+        let facts_by_origin = facts
+            .iter()
+            .map(|fact| (&fact.origin, fact))
+            .collect::<HashMap<_, _>>();
+        let mut retained = RetainedCanonicalRawPointers::new();
+        populate_retained_canonical_raw_pointers(
+            &planned,
+            &declarations,
+            &facts_by_origin,
+            &BTreeMap::new(),
+            &mut retained,
+        );
+
+        assert_eq!(declarations.metrics(), (facts.len(), 1, 2));
+        assert!(retained.typedef_targets.is_empty());
+    }
+
+    #[test]
+    fn typedef_bridge_identity_includes_semantic_annotations() {
+        let declaration = Location {
+            file: "common.h".to_string(),
+            offset: 32,
+        };
+        let data = FactData::Typedef {
+            target: TypeRef::Pointer {
+                mutable: true,
+                target: Box::new(TypeRef::Void),
+            },
+        };
+        let left = test_fact_in_tu(
+            "left",
+            1,
+            None,
+            FactKind::Typedef,
+            "LPVOID",
+            declaration.clone(),
+            data.clone(),
+        );
+        let right = test_fact_in_tu(
+            "right",
+            1,
+            None,
+            FactKind::Typedef,
+            "LPVOID",
+            declaration,
+            data,
+        );
+        let facts = [&left, &right];
+        let facts_by_origin = facts
+            .into_iter()
+            .map(|fact| (&fact.origin, fact))
+            .collect::<HashMap<_, _>>();
+        let shared = Rc::new(vec![(
+            RouteAnnotationTarget::Declaration,
+            vec![Annotation::Const],
+        )]);
+        let mut annotations = BTreeMap::from([
+            (left.origin.clone(), shared.clone()),
+            (right.origin.clone(), shared),
+        ]);
+        assert!(same_typedef_bridge_identity(
+            &left,
+            &right,
+            &facts_by_origin,
+            &annotations,
+        ));
+
+        annotations.insert(
+            right.origin.clone(),
+            Rc::new(vec![(
+                RouteAnnotationTarget::Declaration,
+                vec![Annotation::Optional],
+            )]),
+        );
+        assert!(!same_typedef_bridge_identity(
+            &left,
+            &right,
+            &facts_by_origin,
+            &annotations,
+        ));
     }
 
     #[test]
