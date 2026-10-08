@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use windows_clang::{
-    EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition, extract,
+    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition,
+    Scalar, extract,
 };
 use windows_metadata::{
     HasAttributes, Type, Value,
@@ -467,6 +468,153 @@ fn windows_metadata_enum_owns_matching_native_macro_across_widths() {
         constant_value(&index, namespace, "VK_NEGATIVE"),
         Value::I32(-1)
     );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn windows_metadata_enum_owns_restored_ansi_oem_macros() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("windows-metadata-restored-ansi-oem");
+    let header = scratch.join("wingdi.h");
+    std::fs::write(
+        &header,
+        r#"
+            #define ANSI_CHARSET 0
+            #define OEM_CHARSET 255
+
+            #pragma push_macro("ANSI_CHARSET")
+            #pragma push_macro("OEM_CHARSET")
+            #undef ANSI_CHARSET
+            #undef OEM_CHARSET
+            namespace Windows {
+                enum FONT_CHARSET : unsigned char {
+                    ANSI_CHARSET = 0,
+                    OEM_CHARSET = 255
+                };
+            }
+            #pragma pop_macro("OEM_CHARSET")
+            #pragma pop_macro("ANSI_CHARSET")
+        "#,
+    )
+    .unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    for (name, tokens) in [("ANSI_CHARSET", ["0"]), ("OEM_CHARSET", ["255"])] {
+        let facts: Vec<_> = snapshot
+            .facts()
+            .iter()
+            .filter(|fact| fact.name == name)
+            .collect();
+        assert_eq!(facts.len(), 1, "{name}: {}", snapshot.dump());
+        let FactData::Macro {
+            function_like,
+            tokens: actual,
+        } = &facts[0].data
+        else {
+            panic!("{name} was not extracted as a macro: {:#?}", facts[0]);
+        };
+        assert!(!function_like, "{name}: {:#?}", facts[0]);
+        assert_eq!(
+            actual.iter().map(String::as_str).collect::<Vec<_>>(),
+            tokens,
+            "{name}: {:#?}",
+            facts[0]
+        );
+        assert!(
+            snapshot
+                .constants()
+                .iter()
+                .all(|constant| constant.name != name),
+            "{name}: {}",
+            snapshot.dump()
+        );
+    }
+    let windows = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "Windows" && fact.parent.is_none())
+        .unwrap();
+    let font_charset = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "FONT_CHARSET")
+        .unwrap();
+    assert_eq!(font_charset.parent.as_ref(), Some(&windows.origin));
+    let FactData::Enum { repr, variants, .. } = &font_charset.data else {
+        panic!("FONT_CHARSET was not extracted as an enum: {font_charset:#?}");
+    };
+    assert_eq!(*repr, Scalar::U8);
+    assert_eq!(
+        variants
+            .iter()
+            .map(|variant| (variant.name.as_str(), variant.value))
+            .collect::<Vec<_>>(),
+        [("ANSI_CHARSET", 0), ("OEM_CHARSET", -1)]
+    );
+    for name in ["ANSI_CHARSET", "OEM_CHARSET"] {
+        let macro_fact = snapshot
+            .facts()
+            .iter()
+            .find(|fact| fact.name == name)
+            .unwrap();
+        assert!(
+            macro_fact.spelling.offset < font_charset.spelling.offset,
+            "{name}: {}",
+            snapshot.dump()
+        );
+    }
+
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("provider", "Example.Metadata"),
+    );
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Example", &references))
+        .unwrap();
+    let rdl = partitions.values().next().unwrap();
+    assert!(rdl.contains("ANSI_CHARSET = 0"), "{rdl}");
+    assert!(rdl.contains("OEM_CHARSET = 255"), "{rdl}");
+    assert!(!rdl.contains("const ANSI_CHARSET:"), "{rdl}");
+    assert!(!rdl.contains("const OEM_CHARSET:"), "{rdl}");
+
+    let winmd = scratch.join("windows-metadata-restored-ansi-oem.winmd");
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = Index::read(&winmd).unwrap();
+    let namespace = "Example.Metadata";
+    assert_eq!(
+        enum_value(&index, namespace, "FONT_CHARSET", "ANSI_CHARSET"),
+        Value::U8(0)
+    );
+    assert_eq!(
+        enum_value(&index, namespace, "FONT_CHARSET", "OEM_CHARSET"),
+        Value::U8(255)
+    );
+    assert!(index.get_item(namespace, "ANSI_CHARSET").next().is_none());
+    assert!(index.get_item(namespace, "OEM_CHARSET").next().is_none());
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
