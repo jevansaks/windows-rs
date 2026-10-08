@@ -325,6 +325,13 @@ fn extract_impl(
             elapsed_ms(phase_time)
         );
     }
+    suppress_redundant_interface_typedefs(
+        &mut facts,
+        &mut constants,
+        &mut pointer_only_class_layouts,
+        &annotations,
+        &extracted,
+    );
     materialize_anonymous_callbacks(&mut facts);
     let declare_handles = identify_declare_handles(&inputs, &facts, &extracted);
     facts.sort();
@@ -986,6 +993,201 @@ fn recover_midl_artifacts(
         };
     }
     suppressed_origins
+}
+
+fn suppress_redundant_interface_typedefs(
+    facts: &mut Vec<Fact>,
+    constants: &mut [Constant],
+    pointer_only_class_layouts: &mut BTreeMap<Origin, FactData>,
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    extracted: &[Extracted<'_>],
+) {
+    if extracted
+        .iter()
+        .all(|extracted| extracted.redundant_interface_typedefs.is_empty())
+    {
+        return;
+    }
+    let annotated_origins: BTreeSet<_> = annotations
+        .keys()
+        .map(annotation_target_origin)
+        .cloned()
+        .collect();
+    let facts_by_origin: HashMap<_, _> = facts.iter().map(|fact| (&fact.origin, fact)).collect();
+    let providers: BTreeSet<_> = facts
+        .iter()
+        .filter(|fact| fact.definition && matches!(fact.data, FactData::Interface { .. }))
+        .map(|fact| {
+            (
+                fact.origin.tu.clone(),
+                fact.name.clone(),
+                fact.spelling.clone(),
+            )
+        })
+        .collect();
+    let mut candidates: BTreeMap<(String, String, Location), Vec<(&Origin, &Location)>> =
+        BTreeMap::new();
+
+    for candidate in extracted
+        .iter()
+        .flat_map(|extracted| &extracted.redundant_interface_typedefs)
+    {
+        if annotated_origins.contains(&candidate.alias) {
+            continue;
+        }
+        let Some(alias) = facts_by_origin.get(&candidate.alias) else {
+            continue;
+        };
+        let FactData::Typedef {
+            target: TypeRef::Named { name, declaration },
+        } = &alias.data
+        else {
+            continue;
+        };
+        if alias.name != candidate.name
+            || alias.spelling != candidate.declaration
+            || name != &candidate.name
+            || (declaration != &candidate.target_declaration
+                && declaration != &candidate.provider_declaration)
+            || !providers.contains(&(
+                alias.origin.tu.clone(),
+                candidate.name.clone(),
+                candidate.provider_declaration.clone(),
+            ))
+        {
+            continue;
+        }
+        candidates
+            .entry((
+                alias.origin.tu.clone(),
+                candidate.name.clone(),
+                candidate.declaration.clone(),
+            ))
+            .or_default()
+            .push((&candidate.alias, &candidate.provider_declaration));
+    }
+
+    drop(facts_by_origin);
+    let mut bindings: RedundantInterfaceTypedefBindings = BTreeMap::new();
+    let mut suppressed = BTreeSet::new();
+    for ((tu, name, declaration), candidates) in candidates {
+        let providers: BTreeSet<_> = candidates
+            .iter()
+            .map(|(_, provider)| (*provider).clone())
+            .collect();
+        if providers.len() != 1 {
+            continue;
+        }
+        bindings
+            .entry(tu)
+            .or_default()
+            .entry(name)
+            .or_default()
+            .insert(declaration, providers.into_iter().next().unwrap());
+        suppressed.extend(candidates.into_iter().map(|(origin, _)| origin.clone()));
+    }
+    if suppressed.is_empty() {
+        return;
+    }
+
+    for fact in facts.iter_mut() {
+        rebind_redundant_interface_typedefs(&mut fact.data, &fact.origin.tu, &bindings);
+    }
+    for constant in constants {
+        rebind_redundant_interface_typedef(&mut constant.ty, &constant.root.tu, &bindings);
+    }
+    for (origin, data) in pointer_only_class_layouts {
+        rebind_redundant_interface_typedefs(data, &origin.tu, &bindings);
+    }
+    facts.retain(|fact| !suppressed.contains(&fact.origin));
+}
+
+fn rebind_redundant_interface_typedefs(
+    data: &mut FactData,
+    tu: &str,
+    bindings: &RedundantInterfaceTypedefBindings,
+) {
+    match data {
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            for param in params {
+                rebind_redundant_interface_typedef(&mut param.ty, tu, bindings);
+            }
+            rebind_redundant_interface_typedef(result, tu, bindings);
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                rebind_redundant_interface_typedef(base, tu, bindings);
+            }
+            for method in methods {
+                for param in &mut method.params {
+                    rebind_redundant_interface_typedef(&mut param.ty, tu, bindings);
+                }
+                rebind_redundant_interface_typedef(&mut method.result, tu, bindings);
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                rebind_redundant_interface_typedef(base, tu, bindings);
+            }
+            for field in fields {
+                rebind_redundant_interface_typedef(&mut field.ty, tu, bindings);
+            }
+        }
+        FactData::Typedef { target } => {
+            rebind_redundant_interface_typedef(target, tu, bindings);
+        }
+        _ => {}
+    }
+}
+
+fn rebind_redundant_interface_typedef(
+    ty: &mut TypeRef,
+    tu: &str,
+    bindings: &RedundantInterfaceTypedefBindings,
+) {
+    match ty {
+        TypeRef::Named { name, declaration }
+        | TypeRef::Generic {
+            name, declaration, ..
+        } => {
+            if let Some(provider) = bindings
+                .get(tu)
+                .and_then(|names| names.get(name.as_str()))
+                .and_then(|declarations| declarations.get(declaration))
+            {
+                declaration.clone_from(provider);
+            }
+            if let TypeRef::Generic { args, .. } = ty {
+                for arg in args {
+                    rebind_redundant_interface_typedef(arg, tu, bindings);
+                }
+            }
+        }
+        TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. }
+        | TypeRef::Array { target, .. } => {
+            rebind_redundant_interface_typedef(target, tu, bindings);
+        }
+        TypeRef::FunctionPointer { params, result, .. } => {
+            for param in params {
+                rebind_redundant_interface_typedef(param, tu, bindings);
+            }
+            rebind_redundant_interface_typedef(result, tu, bindings);
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &mut record.base {
+                rebind_redundant_interface_typedef(base, tu, bindings);
+            }
+            for field in &mut record.fields {
+                rebind_redundant_interface_typedef(&mut field.ty, tu, bindings);
+            }
+        }
+        TypeRef::Void
+        | TypeRef::String
+        | TypeRef::Object
+        | TypeRef::Scalar(_)
+        | TypeRef::OpaquePointer { .. } => {}
+    }
 }
 
 fn midl_generated_name(name: &str) -> bool {
@@ -1652,6 +1854,7 @@ impl TranslationUnit {
             pending_structs: vec![],
             pending_macros: vec![],
             declare_handle_expansions: vec![],
+            redundant_interface_typedefs: vec![],
             facts: &mut *output.facts,
             constants: &mut *output.constants,
             annotations: &mut *output.annotations,
@@ -1687,6 +1890,8 @@ impl TranslationUnit {
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         let declare_handle_expansions = std::mem::take(&mut traversal.declare_handle_expansions);
+        let redundant_interface_typedefs =
+            std::mem::take(&mut traversal.redundant_interface_typedefs);
         drop(traversal);
         Ok((
             Extracted {
@@ -1694,6 +1899,7 @@ impl TranslationUnit {
                 pending_structs,
                 pending_macros,
                 declare_handle_expansions,
+                redundant_interface_typedefs,
             },
             metrics,
         ))
@@ -1719,6 +1925,7 @@ struct Traversal<'a> {
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
+    redundant_interface_typedefs: Vec<RedundantInterfaceTypedef>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
@@ -1751,6 +1958,7 @@ struct Extracted<'tu> {
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
+    redundant_interface_typedefs: Vec<RedundantInterfaceTypedef>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1758,6 +1966,18 @@ struct DeclareHandleExpansion {
     name: String,
     location: Location,
 }
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RedundantInterfaceTypedef {
+    alias: Origin,
+    name: String,
+    declaration: Location,
+    target_declaration: Location,
+    provider_declaration: Location,
+}
+
+type RedundantInterfaceTypedefBindings =
+    BTreeMap<String, BTreeMap<String, BTreeMap<Location, Location>>>;
 
 impl Traversal<'_> {
     fn is_root(&self, file: &str) -> bool {
@@ -2056,6 +2276,24 @@ fn extract_child(
                     } else {
                         fact_data(child, fact_kind, traversal.macros)
                     };
+                    let redundant_interface_typedef = (fact_kind == FactKind::Typedef
+                        && matches!(
+                            &data,
+                            FactData::Typedef {
+                                target: TypeRef::Named { name: target, .. },
+                            } if target == &name
+                        ))
+                    .then(|| redundant_interface_typedef(child, &name))
+                    .flatten()
+                    .map(
+                        |(target_declaration, provider_declaration)| RedundantInterfaceTypedef {
+                            alias: origin.clone(),
+                            name: name.clone(),
+                            declaration: spelling.clone(),
+                            target_declaration,
+                            provider_declaration,
+                        },
+                    );
                     let raw_function_link_name =
                         (fact_kind == FactKind::Function).then(|| raw_external_link_name(child));
                     if fact_kind == FactKind::Typedef
@@ -2098,6 +2336,11 @@ fn extract_child(
                         system,
                         data,
                     });
+                    if let Some(redundant_interface_typedef) = redundant_interface_typedef {
+                        traversal
+                            .redundant_interface_typedefs
+                            .push(redundant_interface_typedef);
+                    }
                     if let Some(raw_function_link_name) = raw_function_link_name {
                         traversal
                             .raw_function_link_names
@@ -3970,6 +4213,35 @@ fn external_link_name(cursor: CXCursor) -> String {
 
 fn raw_external_link_name(cursor: CXCursor) -> String {
     cx_string(unsafe { clang_Cursor_getMangling(cursor) })
+}
+
+fn redundant_interface_typedef(
+    cursor: CXCursor,
+    typedef_name: &str,
+) -> Option<(Location, Location)> {
+    let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+    let target = unsafe { clang_getTypeDeclaration(ty) };
+    if unsafe { clang_Cursor_isNull(target) } != 0
+        || cx_string(unsafe { clang_getCursorSpelling(target) }) != typedef_name
+    {
+        return None;
+    }
+    let provider = unsafe { clang_getCursorDefinition(target) };
+    if unsafe { clang_Cursor_isNull(provider) } != 0
+        || cx_string(unsafe { clang_getCursorSpelling(provider) }) != typedef_name
+        || !is_interface(provider)
+        || unsafe {
+            clang_equalCursors(
+                clang_getCanonicalCursor(target),
+                clang_getCanonicalCursor(provider),
+            )
+        } == 0
+    {
+        return None;
+    }
+    let target = cursor_locations(target)?.0;
+    let provider = cursor_locations(provider)?.0;
+    Some((target, provider))
 }
 
 fn is_interface(cursor: CXCursor) -> bool {

@@ -166,6 +166,22 @@ are finished inspecting extraction results do not retain the original allocation
 planning snapshot. `plan_header_partitions` preserves the borrowed API for callers that still need
 the original snapshot; it clones the snapshot and otherwise produces the same plan.
 
+Aggregate extraction omits a direct interface self typedef such as
+`typedef interface IFoo IFoo;` only when all of these source facts agree:
+
+| Requirement | Check |
+| --- | --- |
+| Direct self alias | The public typedef name equals its direct interface target name. |
+| Exact declaration | Canonical Clang cursors for the target and definition are equal. |
+| Available provider | The linked interface definition was extracted with its provider location. |
+| No typedef policy | The typedef has no source annotations. |
+
+Uses keyed by that translation unit, name, and typedef source location are rebound to the linked
+interface provider. Differently named aliases, annotated aliases such as `raii_free`, declarations
+with the same leaf name but a different source identity, and non-interface typedefs remain types.
+Header ownership and namespace authority then route the real interface provider through the normal
+partition planner.
+
 The extraction roots must cover every traversed header whose functions, GUIDs, macros, or deferred
 record bodies are needed. They control extraction coverage only for this API; the
 `HeaderPartitionPolicy` supplies logical root ownership after extraction. Included headers that

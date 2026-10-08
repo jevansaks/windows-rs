@@ -96,6 +96,10 @@ source pointer, so its uses keep only their authored outer pointer depth.
 Dependency declarations remain available for closure without becoming public roots. When
 equivalent compile variants exist, an owner whose typedef projection reaches an excluded type is
 omitted if another unsuppressed projection can own that output.
+A direct interface self typedef such as `typedef interface IFoo IFoo;` is omitted only when
+libclang links its target declaration to an extracted interface definition by canonical cursor
+identity. Uses of that exact typedef declaration bind to the interface provider. Differently named,
+annotated, source-distinct, and non-interface aliases remain typedefs.
 An `associated_enum` annotation on a selected root adds its matching enum provider from compatible
 redeclarations to closure, including redeclarations from another aggregate extraction input.
 Dependency-only providers inherit that root's owner settings; providers already owned by a
