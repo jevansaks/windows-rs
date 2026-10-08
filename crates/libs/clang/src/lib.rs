@@ -7,6 +7,7 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter, Write};
 use std::rc::Rc;
+use std::sync::OnceLock;
 
 fn timings_enabled() -> bool {
     ["WINDOWS_CLANG_TIMINGS", "WINDOWS_CLANG_TIMING"]
@@ -1560,10 +1561,55 @@ impl<'a> TypedefDeclarationIndex<'a> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct HeaderPartitionPlan {
     snapshot: Snapshot,
     root_conflicts: Vec<PartitionConflict>,
+    prepared: OnceLock<PreparedHeaderPartitionSnapshot>,
+}
+
+impl Clone for HeaderPartitionPlan {
+    fn clone(&self) -> Self {
+        Self {
+            snapshot: self.snapshot.clone(),
+            root_conflicts: self.root_conflicts.clone(),
+            prepared: OnceLock::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct PreparedHeaderPartitionSnapshot {
+    options: PartitionPlanningOptionsIdentity,
+    snapshot: Snapshot,
+    display_names: BTreeMap<String, String>,
+    source_names: PlanningSourceNames,
+    function_origins: Vec<Origin>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PartitionPlanningOptionsIdentity {
+    references: usize,
+    excluded_types: Option<usize>,
+    excluded_functions: Option<usize>,
+    excluded_constants: Option<usize>,
+    selected_functions: Option<usize>,
+}
+
+impl PartitionPlanningOptionsIdentity {
+    fn new(options: &EmitOptions<'_>) -> Self {
+        fn address<T>(value: Option<&T>) -> Option<usize> {
+            value.map(|value| value as *const T as usize)
+        }
+
+        Self {
+            references: options.references as *const BTreeMap<String, TypeReference> as usize,
+            excluded_types: address(options.excluded_types.or(options.excluded)),
+            excluded_functions: address(options.excluded_functions.or(options.excluded)),
+            excluded_constants: address(options.excluded_constants.or(options.excluded)),
+            selected_functions: address(options.functions),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1809,6 +1855,7 @@ impl Snapshot {
         Ok(HeaderPartitionPlan {
             snapshot: self,
             root_conflicts,
+            prepared: OnceLock::new(),
         })
     }
 
@@ -6331,13 +6378,34 @@ impl Snapshot {
 
 impl HeaderPartitionPlan {
     pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
-        let (mut snapshot, display_names, source_names) = self
-            .snapshot
-            .clone()
-            .into_partitioned_planning_snapshot(options);
-        snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
-        let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
+        let options_identity = PartitionPlanningOptionsIdentity::new(options);
+        let (snapshot, display_names, source_names);
+        let owned;
+        if let Some(prepared) = self
+            .prepared
+            .get()
+            .filter(|prepared| prepared.options == options_identity)
+        {
+            snapshot = &prepared.snapshot;
+            display_names = &prepared.display_names;
+            source_names = &prepared.source_names;
+        } else {
+            let (mut planning_snapshot, planning_display_names, planning_source_names) = self
+                .snapshot
+                .clone()
+                .into_partitioned_planning_snapshot(options);
+            planning_snapshot.project_suppressed_declare_handles();
+            owned = (
+                planning_snapshot,
+                planning_display_names,
+                planning_source_names,
+            );
+            snapshot = &owned.0;
+            display_names = &owned.1;
+            source_names = &owned.2;
+        }
+        let plan = snapshot.plan_partitioned(options, display_names, source_names)?;
+        let candidates = snapshot.partition_route_candidates(&plan, source_names, options)?;
         let mut conflicts = self.root_conflicts.clone();
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
         conflicts.sort();
@@ -6345,14 +6413,85 @@ impl HeaderPartitionPlan {
         Ok(PartitionAudit { conflicts })
     }
 
+    /// Returns the canonical root function declarations retained by this plan and the supplied
+    /// emission options.
+    ///
+    /// The returned identities borrow the original extracted snapshot. Per-owner and global
+    /// exclusions, selected functions, remaps, and canonical declaration selection use the same
+    /// planning path as [`Self::emit_with_options`]. A dirty plan returns its complete audit error.
+    /// The transformed snapshot is cached for a later audit or consuming emission with the same
+    /// planning inputs.
+    pub fn retained_function_source_identities<'a>(
+        &'a self,
+        options: &EmitOptions<'_>,
+    ) -> Result<Vec<FunctionSourceIdentity<'a>>, Error> {
+        let options_identity = PartitionPlanningOptionsIdentity::new(options);
+        let retained = if let Some(prepared) = self
+            .prepared
+            .get()
+            .filter(|prepared| prepared.options == options_identity)
+        {
+            prepared.function_origins.clone()
+        } else {
+            let (mut snapshot, display_names, source_names) = self
+                .snapshot
+                .clone()
+                .into_partitioned_planning_snapshot(options);
+            snapshot.project_suppressed_declare_handles();
+            let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
+            let function_origins: Vec<_> = plan
+                .functions
+                .iter()
+                .map(|function| function.fact.origin.clone())
+                .collect();
+            let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
+            let mut conflicts = self.root_conflicts.clone();
+            conflicts.extend(snapshot.partition_route_conflicts(&candidates));
+            conflicts.sort();
+            conflicts.dedup();
+            let audit = PartitionAudit { conflicts };
+            if !audit.is_clean() {
+                return Err(Error(audit.to_string()));
+            }
+            drop(plan);
+            let _ = self.prepared.set(PreparedHeaderPartitionSnapshot {
+                options: options_identity,
+                snapshot,
+                display_names,
+                source_names,
+                function_origins: function_origins.clone(),
+            });
+            function_origins
+        };
+        let identities: BTreeMap<_, _> = self
+            .snapshot
+            .function_source_identities()
+            .map(|identity| (identity.origin, identity))
+            .collect();
+        Ok(retained.iter().map(|origin| identities[origin]).collect())
+    }
+
     pub fn emit_with_options(
         self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let target = self.snapshot.timing_target.clone();
-        let (mut snapshot, display_names, source_names) =
-            self.snapshot.into_partitioned_planning_snapshot(options);
-        snapshot.project_suppressed_declare_handles();
+        let options_identity = PartitionPlanningOptionsIdentity::new(options);
+        let prepared = self.prepared.into_inner();
+        let (snapshot, display_names, source_names) = if let Some(prepared) =
+            prepared.filter(|prepared| prepared.options == options_identity)
+        {
+            (
+                prepared.snapshot,
+                prepared.display_names,
+                prepared.source_names,
+            )
+        } else {
+            let (mut snapshot, display_names, source_names) =
+                self.snapshot.into_partitioned_planning_snapshot(options);
+            snapshot.project_suppressed_declare_handles();
+            (snapshot, display_names, source_names)
+        };
         let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let mut conflicts = self.root_conflicts;
@@ -6444,6 +6583,7 @@ struct PlanningOptions<'a> {
     source_names: Option<&'a PlanningSourceNames>,
 }
 
+#[derive(Debug)]
 struct PlanningSourceNames {
     facts: BTreeMap<Origin, String>,
     constants: BTreeMap<(Origin, Origin, Location), BTreeSet<String>>,

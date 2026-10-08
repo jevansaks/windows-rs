@@ -47,6 +47,10 @@ spelling location, source name, existing normalized `link_name`, and exact raw
 `Snapshot::resolve_function_link_name` joins an exact raw COFF symbol to the normalized key used by
 `NativeImports`. It accepts equivalent duplicates and rejects a raw symbol with multiple normalized
 keys or distinct raw decorations that collapse to one normalized key.
+After applying a header policy, `HeaderPartitionPlan::retained_function_source_identities` returns
+only the canonical root functions retained by the same `EmitOptions` used for emission. This omits
+dependency-only and owner- or caller-excluded functions while preserving each selected declaration's
+source `Origin`, normalized link name, and raw COFF symbol.
 
 `Clang::parallelism` bounds concurrent parsing of original translation units. The lower-level
 `extract_with_options` and `extract_partitioned_with_options` functions accept the same setting
@@ -76,6 +80,9 @@ overrides replace the default candidates for selected declarations, including in
 compile variants. Call the consuming `emit_with_options` for normal generation; it audits
 internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report without
 emission because auditing before emission repeats planning and clones the snapshot.
+Calling `retained_function_source_identities` first caches the transformed planning snapshot, so a
+later audit or consuming emission with the same planning inputs does not clone and transform the
+complete snapshot again.
 `RootPartition::with_preserved_auto_function_pointer_level` restores the implicit pointer level for
 uses of a bare function typedef. A pointer typedef promoted to a delegate already contains that
 source pointer, so its uses keep only their authored outer pointer depth.

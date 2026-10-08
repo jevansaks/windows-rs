@@ -105,6 +105,12 @@ filename reported by libclang.
 fact. Each record keeps the `Origin`, spelling location, source name, legacy normalized
 `FactData::Function.link_name`, and exact raw `clang_Cursor_getMangling` value. Duplicate
 declarations remain separate and iteration follows deterministic fact order.
+`HeaderPartitionPlan::retained_function_source_identities` applies the already-selected header
+owners and the supplied `EmitOptions`, then returns only the canonical root function declarations
+that the same plan can emit. Owner exclusions, global function exclusions, the function allowlist,
+remaps, and canonical declaration selection use the emission planner. Included dependency-only
+functions are omitted. The result borrows the plan, so callers can build owned `NativeImports`,
+release the returned identities, and consume that same plan with `emit_with_options`.
 `resolve_function_link_name(raw)` joins an exact COFF linker symbol to the normalized key expected
 by `NativeImports`. Equivalent duplicates are accepted. If one raw symbol maps to multiple
 normalized keys, or different raw decorations collapse to the same normalized key, resolution
@@ -343,6 +349,9 @@ physical declaration or expansion path rather than the aggregate translation-uni
 routes, and formats once, avoiding repeated planning for SDK-scale snapshots. Use
 `HeaderPartitionPlan::audit` only for report-only callers that will not emit the same plan.
 Calling `audit` before `emit_with_options` repeats planning and clones the snapshot.
+Calling `retained_function_source_identities` first caches the transformed snapshot. A later audit
+or consuming emission with the same references, exclusions, and function allowlist reuses that
+snapshot instead of cloning and applying the partition transformations again.
 
 Header-plan dependency closure collects independent missing, ambiguous, and unsupported dependency
 edges before returning an error. The report groups each blocker by translation unit, declaration

@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use windows_clang::{
-    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities,
-    PartitionConflictReason, PartitionItemKind, RdlPartition, RootPartition, Snapshot, TypeRef,
-    TypeReference, TypeReferenceKind, extract, extract_partitioned,
+    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities, NativeImport,
+    NativeImports, PartitionConflictReason, PartitionItemKind, RdlPartition, RootPartition,
+    Snapshot, TypeRef, TypeReference, TypeReferenceKind, extract, extract_partitioned,
 };
 use windows_metadata::{
     Type, Value,
@@ -3363,6 +3363,164 @@ fn equivalent_function_libraries_use_the_effective_value() {
     let rdl = output(&partitions, "Example.Shared");
     assert!(rdl.contains("#[library(\"shared.dll\")]"), "{rdl}");
     assert!(rdl.contains("fn SharedFunction() -> i32"), "{rdl}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn retained_function_identities_match_the_effective_partition_plan() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("retained-function-identities");
+    let dependency = scratch.join("dependency.h");
+    let shared = scratch.join("shared.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         extern \"C\" int __stdcall DependencyOnly(int value);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &shared,
+        "#pragma once\n\
+         #include \"dependency.h\"\n\
+         #define OneOwner ExportedOneOwner\n\
+         extern \"C\" int __stdcall OneOwner(int value);\n\
+         #undef OneOwner\n\
+         extern \"C\" int __stdcall MultipleOwners(int value);\n\
+         extern \"C\" int __stdcall AllOwnersExcluded(int value);\n\
+         extern \"C\" int __stdcall GloballyExcluded(int value);\n",
+    )
+    .unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", shared.to_string_lossy()),
+        )
+        .with_root_dirs([scratch.to_string_lossy().to_string()])],
+        &["-x", "c++", "--target=i686-pc-windows-msvc"],
+    )
+    .unwrap();
+    assert_eq!(snapshot.function_source_identities().count(), 5);
+
+    let first = RootPartition::new("first", "Example.First")
+        .with_exclusion("OneOwner")
+        .with_exclusion("AllOwnersExcluded")
+        .with_library("ExportedOneOwner", "first.dll")
+        .with_library("MultipleOwners", "first-multi.dll");
+    let second = RootPartition::new("second", "Example.Second")
+        .with_exclusion("AllOwnersExcluded")
+        .with_library("ExportedOneOwner", "second.dll")
+        .with_library("MultipleOwners", "second-multi.dll");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(shared.to_string_lossy(), first.clone())
+        .with_traversed_header(shared.to_string_lossy(), second.clone());
+    let reverse = HeaderPartitionPolicy::new()
+        .with_traversed_header(shared.to_string_lossy(), second)
+        .with_traversed_header(shared.to_string_lossy(), first);
+    let references = BTreeMap::new();
+    let excluded = BTreeSet::from(["GloballyExcluded".to_string()]);
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("shared.dll");
+    options.excluded_functions = Some(&excluded);
+    let authorities = NamespaceAuthorities::new()
+        .with_exact("MultipleOwners", "Example.Second")
+        .with_exact("GloballyExcluded", "Example.Second");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+
+    let identities = plan
+        .retained_function_source_identities(&options)
+        .unwrap()
+        .into_iter()
+        .map(|identity| {
+            (
+                identity.origin.tu.as_str(),
+                identity.spelling.file.as_str(),
+                identity.name,
+                identity.link_name,
+                identity.raw_link_name,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        identities,
+        [
+            (
+                "aggregate.cpp",
+                shared.to_string_lossy().replace('\\', "/").as_str(),
+                "MultipleOwners",
+                "MultipleOwners",
+                "_MultipleOwners@4",
+            ),
+            (
+                "aggregate.cpp",
+                shared.to_string_lossy().replace('\\', "/").as_str(),
+                "OneOwner",
+                "ExportedOneOwner",
+                "_ExportedOneOwner@4",
+            ),
+        ]
+    );
+    let reverse_plan = snapshot
+        .plan_header_partitions(&reverse, &authorities)
+        .unwrap();
+    let reverse_identities = reverse_plan
+        .retained_function_source_identities(&options)
+        .unwrap()
+        .into_iter()
+        .map(|identity| {
+            (
+                identity.origin.tu.as_str(),
+                identity.spelling.file.as_str(),
+                identity.name,
+                identity.link_name,
+                identity.raw_link_name,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(reverse_identities, identities);
+
+    let mut imports = NativeImports::new();
+    imports
+        .insert_for_library(
+            "MultipleOwners",
+            NativeImport::ordinal("second-multi.dll", 12),
+        )
+        .unwrap()
+        .insert_for_library("ExportedOneOwner", NativeImport::ordinal("second.dll", 34))
+        .unwrap();
+    options.native_imports = Some(&imports);
+    let audit = plan.audit(&options).unwrap();
+    assert!(audit.is_clean(), "{audit}");
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let rdl = partitions.values().cloned().collect::<String>();
+    assert!(
+        rdl.contains("fn MultipleOwners(value: i32) -> i32"),
+        "{rdl}"
+    );
+    assert!(rdl.contains("fn OneOwner(value: i32) -> i32"), "{rdl}");
+    assert!(
+        rdl.contains("#[library(\"second-multi.dll\", import = \"#12\")]"),
+        "{rdl}"
+    );
+    assert!(
+        rdl.contains("#[library(\"second.dll\", import = \"#34\")]"),
+        "{rdl}"
+    );
+    assert!(!rdl.contains("first.dll"), "{rdl}");
+    for name in ["DependencyOnly", "AllOwnersExcluded", "GloballyExcluded"] {
+        assert!(!rdl.contains(name), "{name}: {rdl}");
+    }
+
+    let ambiguous = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let error = ambiguous
+        .retained_function_source_identities(&options)
+        .unwrap_err();
+    assert!(error.to_string().contains("MultipleOwners"), "{error}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
