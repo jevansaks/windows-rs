@@ -6,6 +6,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         constants: Vec::new(),
         included_files: Vec::new(),
         raw_function_link_names: BTreeMap::new(),
+        function_link_name_index: FunctionLinkNameIndex::default(),
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
@@ -29,6 +30,24 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         header_authority_partition: None,
         timing_target: None,
     }
+}
+
+#[test]
+fn function_link_name_resolver_uses_prebuilt_index() {
+    let mut snapshot = snapshot(Vec::new());
+    snapshot
+        .function_link_name_index
+        .insert("_IndexedFunction", "IndexedFunction");
+
+    assert!(snapshot.facts().is_empty());
+    assert!(snapshot.function_source_identities().next().is_none());
+    assert!(snapshot.raw_function_link_names.is_empty());
+    assert_eq!(
+        snapshot
+            .resolve_function_link_name("_IndexedFunction")
+            .unwrap(),
+        Some("IndexedFunction")
+    );
 }
 
 fn alias(local: u32, name: &str, file: &str, offset: u32, target: TypeRef) -> Fact {

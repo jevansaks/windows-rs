@@ -1352,6 +1352,67 @@ pub struct FunctionSourceIdentity<'a> {
     pub raw_link_name: &'a str,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct FunctionLinkNameIndex {
+    link_names_by_raw: BTreeMap<String, BTreeSet<String>>,
+    raw_names_by_link: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl FunctionLinkNameIndex {
+    fn from_facts(facts: &[Fact], raw_function_link_names: &BTreeMap<Origin, String>) -> Self {
+        let mut result = Self::default();
+        for fact in facts {
+            let FactData::Function { link_name, .. } = &fact.data else {
+                continue;
+            };
+            result.insert(&raw_function_link_names[&fact.origin], link_name);
+        }
+        result
+    }
+
+    fn insert(&mut self, raw_link_name: &str, link_name: &str) {
+        self.link_names_by_raw
+            .entry(raw_link_name.to_string())
+            .or_default()
+            .insert(link_name.to_string());
+        self.raw_names_by_link
+            .entry(link_name.to_string())
+            .or_default()
+            .insert(raw_link_name.to_string());
+    }
+
+    fn resolve(&self, raw_link_name: &str) -> Result<Option<&str>, Error> {
+        let Some(link_names) = self.link_names_by_raw.get(raw_link_name) else {
+            return Ok(None);
+        };
+        if link_names.len() > 1 {
+            let choices = link_names
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(Error(format!(
+                "raw COFF linker symbol `{raw_link_name}` maps to multiple normalized linker \
+                 symbols: {choices}"
+            )));
+        }
+        let link_name = link_names.first().unwrap();
+        let raw_link_names = &self.raw_names_by_link[link_name];
+        if raw_link_names.len() > 1 {
+            let choices = raw_link_names
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(Error(format!(
+                "normalized linker symbol `{link_name}` has conflicting raw COFF symbols: \
+                 {choices}"
+            )));
+        }
+        Ok(Some(link_name))
+    }
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Value {
     F32(u32),
@@ -1378,6 +1439,7 @@ pub struct Snapshot {
     constants: Vec<Constant>,
     included_files: Vec<IncludedFile>,
     raw_function_link_names: BTreeMap<Origin, String>,
+    function_link_name_index: FunctionLinkNameIndex,
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
@@ -1522,6 +1584,7 @@ impl PartialEq for Snapshot {
         self.facts == other.facts
             && self.constants == other.constants
             && self.raw_function_link_names == other.raw_function_link_names
+            && self.function_link_name_index == other.function_link_name_index
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
             && self.declaration_guids == other.declaration_guids
@@ -1576,42 +1639,7 @@ impl Snapshot {
     /// normalized names, or distinct raw decorations for one normalized name, is an error rather
     /// than a declaration-order choice.
     pub fn resolve_function_link_name(&self, raw_link_name: &str) -> Result<Option<&str>, Error> {
-        let link_names: BTreeSet<_> = self
-            .function_source_identities()
-            .filter(|identity| identity.raw_link_name == raw_link_name)
-            .map(|identity| identity.link_name)
-            .collect();
-        if link_names.len() > 1 {
-            let choices = link_names
-                .iter()
-                .map(|name| format!("`{name}`"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            return Err(Error(format!(
-                "raw COFF linker symbol `{raw_link_name}` maps to multiple normalized linker \
-                 symbols: {choices}"
-            )));
-        }
-        let Some(link_name) = link_names.into_iter().next() else {
-            return Ok(None);
-        };
-        let raw_link_names: BTreeSet<_> = self
-            .function_source_identities()
-            .filter(|identity| identity.link_name == link_name)
-            .map(|identity| identity.raw_link_name)
-            .collect();
-        if raw_link_names.len() > 1 {
-            let choices = raw_link_names
-                .iter()
-                .map(|name| format!("`{name}`"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            return Err(Error(format!(
-                "normalized linker symbol `{link_name}` has conflicting raw COFF symbols: \
-                 {choices}"
-            )));
-        }
-        Ok(Some(link_name))
+        self.function_link_name_index.resolve(raw_link_name)
     }
 
     pub fn constants(&self) -> &[Constant] {

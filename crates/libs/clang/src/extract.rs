@@ -343,6 +343,8 @@ fn extract_impl(
             origin(&fact.origin)
         )));
     }
+    let function_link_name_index =
+        FunctionLinkNameIndex::from_facts(&facts, &raw_function_link_names);
     constants.sort();
     if timing {
         let headers = facts
@@ -399,6 +401,7 @@ fn extract_impl(
         constants,
         included_files,
         raw_function_link_names,
+        function_link_name_index,
         declare_handles,
         annotations,
         declaration_guids,
