@@ -302,7 +302,7 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
-    apply_macro_enum_overrides(&mut facts, &mut constants);
+    apply_macro_enum_overrides(&mut facts, &mut constants, &associated_constants);
     if timing {
         eprintln!(
             "windows-clang timing phase=macro-overrides target={} elapsed_ms={:.3}",
@@ -409,7 +409,11 @@ fn extract_impl(
     })
 }
 
-fn apply_macro_enum_overrides(facts: &mut [Fact], constants: &mut Vec<Constant>) {
+fn apply_macro_enum_overrides(
+    facts: &mut [Fact],
+    constants: &mut Vec<Constant>,
+    associated_constants: &BTreeSet<String>,
+) {
     let macro_origins: HashSet<_> = facts
         .iter()
         .filter_map(|fact| {
@@ -417,65 +421,175 @@ fn apply_macro_enum_overrides(facts: &mut [Fact], constants: &mut Vec<Constant>)
                 .then_some((fact.origin.tu.as_str(), fact.origin.local))
         })
         .collect();
+    let scalar_aliases: HashMap<_, _> = facts
+        .iter()
+        .filter_map(|fact| {
+            let FactData::Typedef { target } = &fact.data else {
+                return None;
+            };
+            Some((
+                (fact.origin.tu.as_str(), fact.name.as_str(), &fact.spelling),
+                target,
+            ))
+        })
+        .collect();
     let mut enum_members: HashMap<_, Vec<_>> = HashMap::new();
     for (fact_index, fact) in facts.iter().enumerate() {
-        let FactData::Enum { repr, variants, .. } = &fact.data else {
+        let FactData::Enum {
+            repr,
+            variants,
+            scoped,
+            ..
+        } = &fact.data
+        else {
             continue;
         };
+        if *scoped || fact.parent.is_some() {
+            continue;
+        }
         for (variant_index, variant) in variants.iter().enumerate() {
             enum_members
                 .entry((
-                    fact.origin.tu.as_str(),
-                    fact.spelling.file.as_str(),
-                    variant.name.as_str(),
+                    fact.origin.tu.clone(),
+                    source_file_key(&fact.spelling.file),
+                    variant.name.clone(),
                 ))
                 .or_default()
-                .push((fact_index, variant_index, *repr));
+                .push((
+                    fact_index,
+                    variant_index,
+                    *repr,
+                    fact.spelling.offset,
+                    variant.value,
+                ));
         }
     }
 
-    let mut overrides = vec![];
+    let mut actions = vec![];
     for constant in constants.iter() {
-        if !macro_origins.contains(&(constant.definition.tu.as_str(), constant.definition.local)) {
+        if associated_constants.contains(&constant.name)
+            || !macro_origins
+                .contains(&(constant.definition.tu.as_str(), constant.definition.local))
+        {
             continue;
         }
-        let candidates: Vec<_> = enum_members
+        let Some([(fact_index, variant_index, repr, enum_offset, enum_value)]) = enum_members
             .get(&(
-                constant.root.tu.as_str(),
-                constant.spelling.file.as_str(),
-                constant.name.as_str(),
+                constant.root.tu.clone(),
+                source_file_key(&constant.spelling.file),
+                constant.name.clone(),
             ))
-            .into_iter()
-            .flatten()
-            .filter_map(|(fact_index, variant_index, repr)| {
-                enum_override_value(&constant.value, *repr)
-                    .map(|value| (*fact_index, *variant_index, value))
-            })
-            .collect();
-        if let [(fact_index, variant_index, value)] = candidates.as_slice() {
-            overrides.push((
+            .map(Vec::as_slice)
+        else {
+            continue;
+        };
+        let value = if constant.spelling.offset < *enum_offset {
+            macro_before_enum_matches(constant, *repr, *enum_value, &scalar_aliases).then_some(None)
+        } else {
+            enum_override_value(&constant.value, *repr).map(Some)
+        };
+        if let Some(value) = value {
+            actions.push((
                 constant.definition.clone(),
                 constant.name.clone(),
                 *fact_index,
                 *variant_index,
-                *value,
+                value,
             ));
         }
     }
     drop(enum_members);
     drop(macro_origins);
-    for (_, _, fact_index, variant_index, value) in &overrides {
+    drop(scalar_aliases);
+    for (_, _, fact_index, variant_index, value) in &actions {
+        let Some(value) = value else {
+            continue;
+        };
         let FactData::Enum { variants, .. } = &mut facts[*fact_index].data else {
             unreachable!()
         };
         variants[*variant_index].value = *value;
     }
-    let overridden: HashSet<_> = overrides
+    let overridden: HashSet<_> = actions
         .iter()
         .map(|(definition, name, ..)| (definition, name.as_str()))
         .collect();
     constants
         .retain(|constant| !overridden.contains(&(&constant.definition, constant.name.as_str())));
+}
+
+fn source_file_key(file: &str) -> String {
+    normalize_name(file)
+}
+
+fn macro_before_enum_matches(
+    constant: &Constant,
+    repr: Scalar,
+    variant_value: i64,
+    scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
+) -> bool {
+    let Some(source) = macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases) else {
+        return false;
+    };
+    let Some((source_width, source_value)) = scalar_value(source, &constant.value) else {
+        return false;
+    };
+    let Some((enum_width, enum_value)) = normalized_enum_value(repr, variant_value) else {
+        return false;
+    };
+    source_width == enum_width && source_value == enum_value
+}
+
+fn macro_scalar_type(
+    ty: &TypeRef,
+    tu: &str,
+    scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
+) -> Option<Scalar> {
+    fn resolve(
+        ty: &TypeRef,
+        tu: &str,
+        scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
+        seen: &mut HashSet<Location>,
+    ) -> Option<Scalar> {
+        match ty {
+            TypeRef::Scalar(scalar) => Some(*scalar),
+            TypeRef::Named { name, declaration } if seen.insert(declaration.clone()) => {
+                let target = scalar_aliases.get(&(tu, name.as_str(), declaration))?;
+                resolve(target, tu, scalar_aliases, seen)
+            }
+            _ => None,
+        }
+    }
+
+    resolve(ty, tu, scalar_aliases, &mut HashSet::new())
+}
+
+fn scalar_value(scalar: Scalar, value: &Value) -> Option<(u8, i128)> {
+    match (scalar, value) {
+        (Scalar::I8, Value::Signed(value)) => Some((8, i128::from(*value))),
+        (Scalar::U8, Value::Unsigned(value)) => Some((8, i128::from(*value))),
+        (Scalar::I16, Value::Signed(value)) => Some((16, i128::from(*value))),
+        (Scalar::U16, Value::Unsigned(value)) => Some((16, i128::from(*value))),
+        (Scalar::I32, Value::Signed(value)) => Some((32, i128::from(*value))),
+        (Scalar::U32, Value::Unsigned(value)) => Some((32, i128::from(*value))),
+        (Scalar::I64, Value::Signed(value)) => Some((64, i128::from(*value))),
+        (Scalar::U64, Value::Unsigned(value)) => Some((64, i128::from(*value))),
+        _ => None,
+    }
+}
+
+fn normalized_enum_value(repr: Scalar, value: i64) -> Option<(u8, i128)> {
+    Some(match repr {
+        Scalar::I8 => (8, i128::from(value as i8)),
+        Scalar::U8 => (8, i128::from(value as u8)),
+        Scalar::I16 => (16, i128::from(value as i16)),
+        Scalar::U16 => (16, i128::from(value as u16)),
+        Scalar::I32 => (32, i128::from(value as i32)),
+        Scalar::U32 => (32, i128::from(value as u32)),
+        Scalar::I64 => (64, i128::from(value)),
+        Scalar::U64 => (64, i128::from(value as u64)),
+        Scalar::Bool | Scalar::F32 | Scalar::F64 => return None,
+    })
 }
 
 fn enum_override_value(value: &Value, repr: Scalar) -> Option<i64> {

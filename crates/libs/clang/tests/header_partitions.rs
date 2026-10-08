@@ -208,15 +208,7 @@ fn namespace_containers_do_not_enter_partition_symbol_collisions() {
     )
     .unwrap();
 
-    assert!(
-        !snapshot
-            .constants()
-            .iter()
-            .any(|constant| constant.name == "CSTR_LESS_THAN"),
-        "{}",
-        snapshot.dump()
-    );
-    for name in ["FIRST_FLAG", "SECOND_FLAG"] {
+    for name in ["CSTR_LESS_THAN", "FIRST_FLAG", "SECOND_FLAG"] {
         assert!(
             snapshot
                 .constants()
@@ -293,7 +285,10 @@ fn namespace_containers_do_not_enter_partition_symbol_collisions() {
         "{second_rdl}"
     );
     assert!(first_rdl.contains("CSTR_LESS_THAN = 1"), "{first_rdl}");
-    assert!(!first_rdl.contains("const CSTR_LESS_THAN"), "{first_rdl}");
+    assert!(
+        first_rdl.contains("const CSTR_LESS_THAN: i32 = 1"),
+        "{first_rdl}"
+    );
     assert!(
         first_rdl.contains("const FIRST_FLAG: i32 = 4"),
         "{first_rdl}"
@@ -331,6 +326,10 @@ fn namespace_containers_do_not_enter_partition_symbol_collisions() {
             .value(),
         Value::I32(1)
     );
+    let Item::Const(cstr_less_than) = index.expect_item("Example.First", "CSTR_LESS_THAN") else {
+        panic!("Example.First.CSTR_LESS_THAN was not emitted as a constant");
+    };
+    assert_eq!(cstr_less_than.constant().unwrap().value(), Value::I32(1));
     assert_eq!(
         index
             .expect("Example.First", "FIRST_ALIAS")

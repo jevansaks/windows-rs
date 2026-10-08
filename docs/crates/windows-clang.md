@@ -563,10 +563,17 @@ recorded macro expansion whose private record origin is excluded by its owner. T
 remains a named typedef, so aliases such as a second handle name and pointer-to-handle typedefs
 retain their metadata identities. Other handles keep their record-backed output.
 
-When an active object-like macro shadows an enum member declared by the same header, the member
-takes the macro's effective value. This preserves the identifier that C callers see without
-emitting two items into the header's shared RDL value namespace. Same-named declarations owned by
-different headers remain separate.
+An object-like macro defined after a global unscoped enum member may replace that member's value
+when it has one same-name candidate in the same translation unit and physical header. This
+preserves the identifier that C callers see without emitting two items into the header's shared RDL
+value namespace.
+
+A macro defined before the member is treated as the same source symbol only when its integer type
+resolves directly or through scalar typedefs to the enum's width and their mathematical values are
+equal. Signed positive values may match unsigned values of the same width, but negative
+reinterpretation and width changes do not match. Explicitly associated constants remain separate
+providers. Scoped enums, C++ namespace members, ambiguous candidates, typed pointer or handle
+constants, and declarations from different headers or translation units also remain separate.
 
 RDL can encode a type definition and a member of the namespace's `Apis` class with the same
 projected name. The extractor therefore preserves a type and object-like macro with the same public
