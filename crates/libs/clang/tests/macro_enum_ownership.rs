@@ -472,6 +472,169 @@ fn windows_metadata_enum_owns_matching_native_macro_across_widths() {
 }
 
 #[test]
+fn windows_metadata_enum_does_not_accept_later_macro_overrides() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("windows-metadata-later-macros");
+    let header = scratch.join("provider.h");
+    std::fs::write(
+        &header,
+        r#"
+            namespace Windows {
+                enum SAME_WIDTH_UNEQUAL_FLAGS : unsigned short {
+                    WINDOWS_SAME_WIDTH_UNEQUAL = 1
+                };
+                enum CROSS_WIDTH_UNEQUAL_FLAGS : unsigned short {
+                    WINDOWS_CROSS_WIDTH_UNEQUAL = 3
+                };
+                enum SAME_WIDTH_EQUAL_FLAGS : unsigned short {
+                    WINDOWS_SAME_WIDTH_EQUAL = 5
+                };
+                enum CROSS_WIDTH_EQUAL_FLAGS : unsigned short {
+                    WINDOWS_CROSS_WIDTH_EQUAL = 6
+                };
+            }
+
+            #define WINDOWS_SAME_WIDTH_UNEQUAL ((unsigned short)2)
+            #define WINDOWS_CROSS_WIDTH_UNEQUAL 4U
+            #define WINDOWS_SAME_WIDTH_EQUAL ((unsigned short)5)
+            #define WINDOWS_CROSS_WIDTH_EQUAL 6U
+
+            enum NATIVE_AFTER_ENUM_FLAGS : unsigned short {
+                NATIVE_AFTER_ENUM = 7
+            };
+            #define NATIVE_AFTER_ENUM ((unsigned short)8)
+        "#,
+    )
+    .unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    for name in [
+        "WINDOWS_SAME_WIDTH_UNEQUAL",
+        "WINDOWS_CROSS_WIDTH_UNEQUAL",
+        "WINDOWS_SAME_WIDTH_EQUAL",
+        "WINDOWS_CROSS_WIDTH_EQUAL",
+    ] {
+        assert!(
+            snapshot
+                .constants()
+                .iter()
+                .any(|constant| constant.name == name),
+            "{name}: {}",
+            snapshot.dump()
+        );
+    }
+    assert!(
+        snapshot
+            .constants()
+            .iter()
+            .all(|constant| constant.name != "NATIVE_AFTER_ENUM"),
+        "{}",
+        snapshot.dump()
+    );
+
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("provider", "Example.Metadata"),
+    );
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Example", &references))
+        .unwrap();
+    let rdl = partitions.values().next().unwrap();
+
+    for (name, value) in [
+        ("WINDOWS_SAME_WIDTH_UNEQUAL", 1),
+        ("WINDOWS_CROSS_WIDTH_UNEQUAL", 3),
+        ("WINDOWS_SAME_WIDTH_EQUAL", 5),
+        ("WINDOWS_CROSS_WIDTH_EQUAL", 6),
+    ] {
+        assert!(rdl.contains(&format!("{name} = {value}")), "{name}: {rdl}");
+        assert!(rdl.contains(&format!("const {name}:")), "{name}: {rdl}");
+    }
+    assert!(rdl.contains("NATIVE_AFTER_ENUM = 8"), "{rdl}");
+    assert!(!rdl.contains("const NATIVE_AFTER_ENUM:"), "{rdl}");
+
+    let winmd = scratch.join("windows-metadata-later-macros.winmd");
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = Index::read(&winmd).unwrap();
+    let namespace = "Example.Metadata";
+    for (ty, member, enum_value_expected, constant_value_expected) in [
+        (
+            "SAME_WIDTH_UNEQUAL_FLAGS",
+            "WINDOWS_SAME_WIDTH_UNEQUAL",
+            Value::U16(1),
+            Value::U16(2),
+        ),
+        (
+            "CROSS_WIDTH_UNEQUAL_FLAGS",
+            "WINDOWS_CROSS_WIDTH_UNEQUAL",
+            Value::U16(3),
+            Value::U32(4),
+        ),
+        (
+            "SAME_WIDTH_EQUAL_FLAGS",
+            "WINDOWS_SAME_WIDTH_EQUAL",
+            Value::U16(5),
+            Value::U16(5),
+        ),
+        (
+            "CROSS_WIDTH_EQUAL_FLAGS",
+            "WINDOWS_CROSS_WIDTH_EQUAL",
+            Value::U16(6),
+            Value::U32(6),
+        ),
+    ] {
+        assert_eq!(
+            enum_value(&index, namespace, ty, member),
+            enum_value_expected
+        );
+        assert_eq!(
+            constant_value(&index, namespace, member),
+            constant_value_expected
+        );
+    }
+    assert_eq!(
+        enum_value(
+            &index,
+            namespace,
+            "NATIVE_AFTER_ENUM_FLAGS",
+            "NATIVE_AFTER_ENUM"
+        ),
+        Value::U16(8)
+    );
+    assert!(
+        index
+            .get_item(namespace, "NATIVE_AFTER_ENUM")
+            .next()
+            .is_none()
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
     helpers::ensure_libclang();
 

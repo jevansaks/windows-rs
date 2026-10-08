@@ -540,6 +540,8 @@ fn apply_macro_enum_overrides(
                 &scalar_aliases,
             )
             .then_some(None)
+        } else if *windows_metadata_enum {
+            None
         } else {
             macro_after_enum_value(
                 constant,
