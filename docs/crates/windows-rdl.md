@@ -48,7 +48,8 @@ nested references retain their enclosing TypeRef chain, and local RDL definition
 same-named definitions even when the local definition is encoded later. Compiler-generated
 `IsConst`, `UnmanagedFunctionPointerAttribute`, and `CallingConvention` references use the
 core-library identity. Other unresolved names remain module-scoped rather than inheriting an
-assembly from their namespace.
+assembly from their namespace. Compiler-selected core rows remain distinct from local homonyms;
+callback constructor signatures bind the exact `CallingConvention` TypeRef chosen during lowering.
 
 Reference emission happens before architecture merge. The metadata merger preserves exact
 AssemblyRef identities from its inputs, but it does not reinterpret an input that the RDL compiler

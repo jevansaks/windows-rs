@@ -12,6 +12,68 @@ use strings::*;
 mod helpers;
 use helpers::*;
 
+#[cfg(test)]
+use std::{
+    hash::BuildHasher,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering as AtomicOrdering},
+    },
+};
+
+#[cfg(test)]
+#[derive(Clone, Default)]
+struct LocalTypeBuildHasher {
+    state: hash_map::RandomState,
+    hashes: Arc<AtomicUsize>,
+}
+
+#[cfg(test)]
+impl LocalTypeBuildHasher {
+    fn reset(&self) {
+        self.hashes.store(0, AtomicOrdering::Relaxed);
+    }
+
+    fn count(&self) -> usize {
+        self.hashes.load(AtomicOrdering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+impl BuildHasher for LocalTypeBuildHasher {
+    type Hasher = <hash_map::RandomState as BuildHasher>::Hasher;
+
+    fn build_hasher(&self) -> Self::Hasher {
+        self.hashes.fetch_add(1, AtomicOrdering::Relaxed);
+        self.state.build_hasher()
+    }
+}
+
+#[cfg(not(test))]
+type LocalTypeBuildHasher = hash_map::RandomState;
+
+type LocalTypeNames = HashSet<String, LocalTypeBuildHasher>;
+
+#[derive(Default)]
+struct LocalTypeIndex {
+    namespaces: HashMap<String, LocalTypeNames, LocalTypeBuildHasher>,
+}
+
+impl LocalTypeIndex {
+    fn insert(&mut self, namespace: &str, name: &str) {
+        self.namespaces
+            .entry(namespace.to_string())
+            .or_insert_with(|| LocalTypeNames::with_hasher(Default::default()))
+            .insert(name.to_string());
+    }
+
+    fn contains(&self, namespace: &str, name: &str) -> bool {
+        self.namespaces
+            .get(namespace)
+            .is_some_and(|names| names.contains(name))
+    }
+}
+
 /// Represents an ECMA-335 file in memory so that it can be built incrementally.
 #[derive(Default)]
 pub struct File {
@@ -20,9 +82,9 @@ pub struct File {
     records: rec::Records,
     reference: Option<reader::Index>,
 
-    local_types: HashSet<(String, String)>,
+    local_types: LocalTypeIndex,
     TypeRef: HashMap<String, HashMap<String, TypeRef>>,
-    core_type_refs: HashSet<TypeRef>,
+    CoreTypeRef: HashMap<String, HashMap<String, TypeRef>>,
     TypeSpec: HashMap<BlobId, TypeSpec>,
     AssemblyRef: HashMap<AssemblyRefIdentity, AssemblyRef>,
     reference_assemblies: HashMap<(String, String), AssemblyRefIdentity>,
@@ -378,8 +440,7 @@ impl File {
         flags: TypeAttributes,
     ) -> TypeDef {
         if !flags.is_nested() {
-            self.local_types
-                .insert((namespace.to_string(), name.to_string()));
+            self.local_types.insert(namespace, name);
         }
 
         TypeDef(self.records.TypeDef.push_pos(rec::TypeDef {
@@ -406,21 +467,11 @@ impl File {
 
     fn type_ref(&mut self, namespace: &str, name: &str, core: bool) -> TypeRef {
         if let Some(reference) = self
-            .TypeRef
+            .type_ref_cache(core)
             .get(namespace)
             .and_then(|names| names.get(name))
             .copied()
         {
-            if core && !name.contains('/') {
-                let assembly = self
-                    .reference_assembly(namespace, name)
-                    .unwrap_or_else(AssemblyRefIdentity::system);
-                self.records.TypeRef[reference.0 as usize].ResolutionScope =
-                    ResolutionScope::AssemblyRef(self.assembly_ref(assembly));
-            }
-            if core {
-                self.core_type_refs.insert(reference);
-            }
             return reference;
         }
 
@@ -454,15 +505,28 @@ impl File {
             }))
         };
 
-        self.TypeRef
+        self.type_ref_cache_mut(core)
             .entry(namespace.to_string())
             .or_default()
             .insert(name.to_string(), pos);
-        if core {
-            self.core_type_refs.insert(pos);
-        }
 
         pos
+    }
+
+    fn type_ref_cache(&self, core: bool) -> &HashMap<String, HashMap<String, TypeRef>> {
+        if core {
+            &self.CoreTypeRef
+        } else {
+            &self.TypeRef
+        }
+    }
+
+    fn type_ref_cache_mut(&mut self, core: bool) -> &mut HashMap<String, HashMap<String, TypeRef>> {
+        if core {
+            &mut self.CoreTypeRef
+        } else {
+            &mut self.TypeRef
+        }
     }
 
     fn reference_assembly(&self, namespace: &str, name: &str) -> Option<AssemblyRefIdentity> {
@@ -479,18 +543,13 @@ impl File {
     }
 
     fn has_local_type(&self, namespace: &str, name: &str) -> bool {
-        self.local_types
-            .iter()
-            .any(|(local_namespace, local_name)| local_namespace == namespace && local_name == name)
+        self.local_types.contains(namespace, name)
     }
 
     fn localize_inferred_type_refs(&mut self) {
         for (namespace, names) in &self.TypeRef {
             for (name, reference) in names {
-                if !self.core_type_refs.contains(reference)
-                    && !name.contains('/')
-                    && self.has_local_type(namespace, name)
-                {
+                if !name.contains('/') && self.has_local_type(namespace, name) {
                     self.records.TypeRef[reference.0 as usize].ResolutionScope =
                         ResolutionScope::Module(Module(0));
                 }
@@ -563,7 +622,19 @@ impl File {
         signature: &Signature,
         parent: MemberRefParent,
     ) -> MemberRef {
-        let signature = self.MethodDefSig(signature);
+        self.MemberRefWithTypeRefs(name, signature, parent, &[])
+    }
+
+    /// Adds a member reference whose signature uses the supplied physical TypeRef rows for exact
+    /// namespace/name matches.
+    pub fn MemberRefWithTypeRefs(
+        &mut self,
+        name: &str,
+        signature: &Signature,
+        parent: MemberRefParent,
+        type_refs: &[(&str, &str, TypeRef)],
+    ) -> MemberRef {
+        let signature = self.MethodDefSigWithTypeRefs(signature, type_refs);
 
         let record = rec::MemberRef {
             Name: self.strings.insert(name),
@@ -780,6 +851,15 @@ impl File {
 
     /// Encodes the `Type` into the buffer, adding any required `TypeRef` rows to the file.
     fn Type(&mut self, ty: &Type, buffer: &mut Vec<u8>) {
+        self.TypeWithTypeRefs(ty, buffer, &[]);
+    }
+
+    fn TypeWithTypeRefs(
+        &mut self,
+        ty: &Type,
+        buffer: &mut Vec<u8>,
+        type_refs: &[(&str, &str, TypeRef)],
+    ) {
         match ty {
             Type::Void => buffer.push(ELEMENT_TYPE_VOID),
             Type::Bool => buffer.push(ELEMENT_TYPE_BOOLEAN),
@@ -801,12 +881,12 @@ impl File {
 
             Type::Array(ty) => {
                 buffer.push(ELEMENT_TYPE_SZARRAY);
-                self.Type(ty, buffer);
+                self.TypeWithTypeRefs(ty, buffer, type_refs);
             }
 
             Type::RefMut(ty) => {
                 buffer.push(ELEMENT_TYPE_BYREF);
-                self.Type(ty, buffer);
+                self.TypeWithTypeRefs(ty, buffer, type_refs);
             }
 
             Type::RefConst(ty) => {
@@ -814,7 +894,7 @@ impl File {
                 let pos = self.CoreTypeRef("System.Runtime.CompilerServices", "IsConst");
                 buffer.write_compressed(TypeDefOrRef::TypeRef(pos).encode() as usize);
                 buffer.push(ELEMENT_TYPE_BYREF);
-                self.Type(ty, buffer);
+                self.TypeWithTypeRefs(ty, buffer, type_refs);
             }
 
             Type::PtrMut(ty, pointers) => {
@@ -822,7 +902,7 @@ impl File {
                     buffer.write_compressed(ELEMENT_TYPE_PTR as usize);
                 }
 
-                self.Type(ty, buffer);
+                self.TypeWithTypeRefs(ty, buffer, type_refs);
             }
 
             Type::PtrConst(ty, pointers) => {
@@ -834,13 +914,13 @@ impl File {
                     buffer.write_compressed(ELEMENT_TYPE_PTR as usize);
                 }
 
-                self.Type(ty, buffer);
+                self.TypeWithTypeRefs(ty, buffer, type_refs);
             }
 
             Type::ArrayFixed(ty, len) => {
                 // See II.23.2.13 ArrayShape
                 buffer.push(ELEMENT_TYPE_ARRAY);
-                self.Type(ty, buffer);
+                self.TypeWithTypeRefs(ty, buffer, type_refs);
                 buffer.write_compressed(1); // rank
                 buffer.write_compressed(1); // num_sizes
                 buffer.write_compressed(*len); // size
@@ -853,10 +933,24 @@ impl File {
             }
 
             Type::ClassName(ty) => {
-                self.TypeName(false, &ty.namespace, &ty.name, &ty.generics, buffer);
+                self.TypeName(
+                    false,
+                    &ty.namespace,
+                    &ty.name,
+                    &ty.generics,
+                    buffer,
+                    type_refs,
+                );
             }
             Type::ValueName(ty) => {
-                self.TypeName(true, &ty.namespace, &ty.name, &ty.generics, buffer);
+                self.TypeName(
+                    true,
+                    &ty.namespace,
+                    &ty.name,
+                    &ty.generics,
+                    buffer,
+                    type_refs,
+                );
             }
         }
     }
@@ -868,15 +962,16 @@ impl File {
         name: &str,
         generics: &[Type],
         buffer: &mut Vec<u8>,
+        type_refs: &[(&str, &str, TypeRef)],
     ) {
         let pos = if !generics.is_empty() {
             buffer.push(ELEMENT_TYPE_GENERICINST);
             // Strip any existing `N suffix before re-deriving it (see TypeSpec).
             let base = name.split_once('`').map_or(name, |(base, _)| base);
             let name = format!("{base}`{}", generics.len());
-            self.TypeRef(namespace, &name)
+            self.signature_type_ref(namespace, &name, type_refs)
         } else {
-            self.TypeRef(namespace, name)
+            self.signature_type_ref(namespace, name, type_refs)
         };
 
         buffer.push(if is_value_type {
@@ -890,9 +985,26 @@ impl File {
             buffer.write_compressed(generics.len());
 
             for ty in generics {
-                self.Type(ty, buffer);
+                self.TypeWithTypeRefs(ty, buffer, type_refs);
             }
         }
+    }
+
+    fn signature_type_ref(
+        &mut self,
+        namespace: &str,
+        name: &str,
+        type_refs: &[(&str, &str, TypeRef)],
+    ) -> TypeRef {
+        type_refs
+            .iter()
+            .find(|(candidate_namespace, candidate_name, _)| {
+                *candidate_namespace == namespace && *candidate_name == name
+            })
+            .map_or_else(
+                || self.TypeRef(namespace, name),
+                |(_, _, reference)| *reference,
+            )
     }
 
     /// Writes the `Type` into a `FileSig` buffer and stores it in the file, returning the blob
@@ -912,12 +1024,20 @@ impl File {
 
     /// Stores a method signature and returns its blob offset.
     fn MethodDefSig(&mut self, signature: &Signature) -> BlobId {
+        self.MethodDefSigWithTypeRefs(signature, &[])
+    }
+
+    fn MethodDefSigWithTypeRefs(
+        &mut self,
+        signature: &Signature,
+        type_refs: &[(&str, &str, TypeRef)],
+    ) -> BlobId {
         let mut buffer = vec![signature.flags.0];
         buffer.write_compressed(signature.types.len());
-        self.Type(&signature.return_type, &mut buffer);
+        self.TypeWithTypeRefs(&signature.return_type, &mut buffer, type_refs);
 
         for ty in &signature.types {
-            self.Type(ty, &mut buffer);
+            self.TypeWithTypeRefs(ty, &mut buffer, type_refs);
         }
 
         self.blobs.insert(&buffer)
@@ -1024,5 +1144,48 @@ mod tests {
                 .collect();
             assert_eq!(sha1(&input).as_slice(), hex(expected), "length {length}");
         }
+    }
+
+    #[test]
+    fn local_type_lookup_uses_constant_hash_probes() {
+        let mut types = LocalTypeIndex::default();
+        for index in 0..4096 {
+            types.insert(&format!("Namespace{index}"), &format!("Type{index}`1"));
+        }
+        types.insert("Exact.Namespace", "IMapView`2");
+
+        let namespace_hasher = types.namespaces.hasher().clone();
+        let name_hasher = types
+            .namespaces
+            .get("Exact.Namespace")
+            .unwrap()
+            .hasher()
+            .clone();
+        namespace_hasher.reset();
+        name_hasher.reset();
+        assert!(types.contains("Exact.Namespace", "IMapView`2"));
+        assert_eq!(
+            namespace_hasher.count() + name_hasher.count(),
+            2,
+            "an exact hit must hash one namespace and one type bucket"
+        );
+
+        namespace_hasher.reset();
+        name_hasher.reset();
+        assert!(!types.contains("Exact.Namespace", "imapview`2"));
+        assert_eq!(
+            namespace_hasher.count() + name_hasher.count(),
+            2,
+            "case-sensitive misses must stay within the selected namespace bucket"
+        );
+
+        namespace_hasher.reset();
+        name_hasher.reset();
+        assert!(!types.contains("Exact.Namespace", "IMapView"));
+        assert_eq!(
+            namespace_hasher.count() + name_hasher.count(),
+            2,
+            "raw generic arity must be part of the indexed name"
+        );
     }
 }

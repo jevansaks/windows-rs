@@ -45,6 +45,8 @@ enclosing TypeRef chain, and the writer uses that identity when reconstructing i
 Reference resolution keeps exact generic arity and nested ownership. Local RDL definitions win
 over same-named reference definitions, including forward references. Compiler-generated const
 modifiers and callback metadata use the core-library identity rather than a module-scoped fallback.
+Those core references remain distinct from local types with the same qualified name, and callback
+constructor signatures retain the exact core TypeRef selected by the compiler.
 
 `implib::read_contracts` reads COFF short-import records without collapsing the native linker
 symbol, DLL, raw machine value, import kind, and ordinal or name mode. Callers can reject contracts

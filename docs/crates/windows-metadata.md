@@ -67,6 +67,11 @@ exact supplied reference definition when one exists and otherwise reuses the leg
 `mscorlib` identity. The ordinary resolver does not treat every `System.*` namespace as core;
 unresolved non-core names retain module scope.
 
+Local TypeDefs are indexed by exact namespace and raw metadata name, including generic arity.
+Core and inferred TypeRefs use separate physical rows, so a local homonym and a core-library
+reference can coexist without either row being retargeted. `MemberRefWithTypeRefs` lets a compiler
+pin exact physical TypeRef rows in a synthesized member signature.
+
 ## Common tool tasks
 
 | Task | API |
@@ -229,7 +234,7 @@ variants and absent-versus-zero offsets), and `merge.rs` (native-sized callback 
 external AssemblyRef identity, matching-assembly localization, nested and unrelated reference
 conflicts, CLR version/key mismatches, Windows Runtime wildcard versions, and the legacy `System`
 sentinel). `reference_scopes.rs` covers exact generic and nested definition lookup, forward local
-homonyms, and unresolved non-core names.
+homonyms, distinct local/core homonyms, and unresolved non-core names.
 `method_params.rs` authors metadata directly with `writer::File` and covers dense, absent, return,
 sparse, out-of-order, duplicate, and out-of-range parameter rows. It also covers all four raw
 directions and verifies that optional, reserved, retval, and count attributes remain independent

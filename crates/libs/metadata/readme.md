@@ -44,3 +44,6 @@ continue to return the exact row values.
 including generic arity and nested paths. Local definitions keep module scope, including forward
 definitions completed before `into_stream`. Use `CoreTypeRef` only for compiler-known core-library
 types; it prefers an exact supplied definition and otherwise uses the legacy `mscorlib` identity.
+Core and inferred references use separate physical rows, so a local type with the same qualified
+name cannot be retargeted by later core emission. `MemberRefWithTypeRefs` pins exact physical
+TypeRef rows in compiler-authored member signatures without changing ordinary name resolution.

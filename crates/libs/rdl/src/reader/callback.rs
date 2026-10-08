@@ -103,7 +103,8 @@ impl Encoder<'_> {
             "System.Runtime.InteropServices",
             "UnmanagedFunctionPointerAttribute",
         );
-        self.output
+        let calling_convention = self
+            .output
             .CoreTypeRef("System.Runtime.InteropServices", "CallingConvention");
 
         let signature = windows_metadata::Signature {
@@ -115,10 +116,15 @@ impl Encoder<'_> {
             )],
         };
 
-        let ctor = self.output.MemberRef(
+        let ctor = self.output.MemberRefWithTypeRefs(
             ".ctor",
             &signature,
             windows_metadata::writer::MemberRefParent::TypeRef(attribute),
+            &[(
+                "System.Runtime.InteropServices",
+                "CallingConvention",
+                calling_convention,
+            )],
         );
 
         self.output.Attribute(

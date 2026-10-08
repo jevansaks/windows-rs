@@ -84,3 +84,94 @@ fn core_references_prefer_exact_supplied_definitions() {
         assert_eq!(assembly.flags(), AssemblyFlags::WindowsRuntime);
     }
 }
+
+fn assert_local_and_core_is_const(core_first: bool) {
+    let mut file = writer::File::new("Consumer");
+    let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+    file.TypeDef(
+        COMPILER,
+        "IsConst",
+        value_type,
+        TypeAttributes::Public | TypeAttributes::SequentialLayout | TypeAttributes::Sealed,
+    );
+    file.TypeDef(
+        "Test",
+        "Holder",
+        value_type,
+        TypeAttributes::Public | TypeAttributes::SequentialLayout | TypeAttributes::Sealed,
+    );
+
+    let write_local = |file: &mut writer::File| {
+        file.Field(
+            "local",
+            &Type::value_named(COMPILER, "IsConst"),
+            FieldAttributes::Public,
+        );
+    };
+    let write_core = |file: &mut writer::File| {
+        file.Field(
+            "ptr",
+            &Type::PtrConst(Box::new(Type::I32), 1),
+            FieldAttributes::Public,
+        );
+    };
+
+    if core_first {
+        write_core(&mut file);
+        write_local(&mut file);
+    } else {
+        write_local(&mut file);
+        write_core(&mut file);
+    }
+
+    let index = reader::Index::new(vec![reader::File::new(file.into_stream()).unwrap()]);
+    let holder = index.expect("Test", "Holder");
+
+    let local = holder
+        .fields()
+        .find(|field| field.name() == "local")
+        .unwrap();
+    let mut blob = local.blob(2);
+    assert_eq!([blob.read_u8(), blob.read_u8()], [0x06, 0x11]);
+    let reader::TypeDefOrRef::TypeRef(local_ref) = blob.decode() else {
+        panic!("local field must use a TypeRef");
+    };
+    assert!(
+        matches!(local_ref.scope(), reader::ResolutionScope::Module(_)),
+        "local IsConst must remain module-scoped: {:?}",
+        local_ref.scope()
+    );
+
+    let ptr = holder.fields().find(|field| field.name() == "ptr").unwrap();
+    let mut blob = ptr.blob(2);
+    assert_eq!([blob.read_u8(), blob.read_u8()], [0x06, 0x1F]);
+    let reader::TypeDefOrRef::TypeRef(core_ref) = blob.decode() else {
+        panic!("const modifier must use a TypeRef");
+    };
+    let assembly = core_ref
+        .assembly()
+        .unwrap_or_else(|| panic!("const modifier must use the core assembly: {core_ref:?}"));
+    assert_eq!(assembly.name(), "mscorlib");
+    assert_eq!([blob.read_u8(), blob.read_u8()], [0x0F, 0x08]);
+    assert_ne!(local_ref, core_ref);
+
+    let references: Vec<_> = index
+        .type_refs()
+        .filter(|reference| reference.namespace() == COMPILER && reference.name() == "IsConst")
+        .collect();
+    assert_eq!(
+        references.len(),
+        2,
+        "local and core identities must be distinct"
+    );
+}
+
+#[test]
+fn local_then_core_type_refs_remain_distinct() {
+    assert_local_and_core_is_const(false);
+}
+
+#[test]
+fn core_then_local_type_refs_remain_distinct() {
+    assert_local_and_core_is_const(true);
+}
