@@ -3609,15 +3609,7 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
             };
             if matches!(function.kind, CXType_FunctionProto | CXType_FunctionNoProto) {
                 let inherited_convention = if ty.kind == CXType_Pointer {
-                    cursor_children(cursor)
-                        .into_iter()
-                        .filter(|child| unsafe { clang_getCursorKind(*child) == CXCursor_TypeRef })
-                        .find_map(|child| {
-                            let declaration = unsafe { clang_getCursorReferenced(child) };
-                            (unsafe { clang_Cursor_isNull(declaration) } == 0)
-                                .then(|| source_calling_convention(declaration, macros))
-                                .flatten()
-                        })
+                    inherited_function_typedef_calling_convention(cursor, function, macros)
                 } else {
                     None
                 };
@@ -5962,6 +5954,29 @@ fn calling_convention_fact(ty: CXType) -> Option<CallingConvention> {
         | CXCallingConv_X86StdCall
         | CXCallingConv_Win64 => CallingConvention::Platform,
         _ => return None,
+    })
+}
+
+fn inherited_function_typedef_calling_convention(
+    cursor: CXCursor,
+    function: CXType,
+    macros: &MacroDefinitions,
+) -> Option<CallingConvention> {
+    let function = unsafe { clang_getCanonicalType(function) };
+    cursor_children(cursor).into_iter().find_map(|child| {
+        if unsafe { clang_getCursorKind(child) } != CXCursor_TypeRef {
+            return None;
+        }
+        let declaration = unsafe { clang_getCursorReferenced(child) };
+        if unsafe { clang_getCursorKind(declaration) } != CXCursor_TypedefDecl {
+            return None;
+        }
+        let referenced =
+            unsafe { clang_getCanonicalType(clang_getTypedefDeclUnderlyingType(declaration)) };
+        if unsafe { clang_equalTypes(function, referenced) } == 0 {
+            return None;
+        }
+        source_calling_convention(declaration, macros)
     })
 }
 

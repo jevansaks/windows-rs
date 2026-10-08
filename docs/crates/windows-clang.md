@@ -420,6 +420,13 @@ optionality, size relationships, return-value markers, and interface-selection m
 not rewrite the declared C type. Explicit string and pointer typedefs therefore survive parameter
 annotations.
 
+Callback calling conventions come from the callback declarator. A pointer alias to a bare function
+typedef can inherit the convention from that exact function type when Clang canonicalizes the
+pointee. Referenced return, parameter, and record types do not contribute a convention. An
+unannotated function pointer therefore remains C even when its return type contains `WINAPI`
+members, while aliases of an explicitly annotated callback keep the annotation on every target
+architecture.
+
 `ParamAnnotation::null_terminated` records ordinary `_z_` string contracts.
 `ParamAnnotation::null_null_terminated` records the captured `_NullNull_terminated_` multistring
 contract and emits `#[null_null_terminated]`. The two flags are independent, and neither is
