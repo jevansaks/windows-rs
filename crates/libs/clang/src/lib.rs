@@ -1709,14 +1709,46 @@ impl Snapshot {
         let mut routed_types = BTreeMap::new();
         let mut retained_canonical_raw_pointers = RetainedCanonicalRawPointers::new();
         if routes.is_some() {
+            let retained_aliases: Vec<_> = plan
+                .types
+                .iter()
+                .filter_map(|planned| {
+                    (canonical_raw_pointer_name(&planned.fact.name)
+                        && matches!(planned.fact.data, FactData::Typedef { .. }))
+                    .then_some(planned.fact)
+                })
+                .collect();
+            for alias in &retained_aliases {
+                retained_canonical_raw_pointers.retain_translation_unit(alias);
+            }
+            // A direct typedef may target the same physical alias declaration through another
+            // translation unit, without retaining every use of that translation unit's copy.
             for planned in &plan.types {
-                if canonical_raw_pointer_name(&planned.fact.name)
-                    && matches!(planned.fact.data, FactData::Typedef { .. })
+                let FactData::Typedef {
+                    target: TypeRef::Named { name, declaration },
+                } = &planned.fact.data
+                else {
+                    continue;
+                };
+                let mut local_declarations = self
+                    .facts
+                    .iter()
+                    .filter(|fact| {
+                        fact.origin.tu == planned.fact.origin.tu
+                            && fact.name == *name
+                            && fact.spelling == *declaration
+                            && matches!(fact.data, FactData::Typedef { .. })
+                    })
+                    .peekable();
+                if local_declarations.peek().is_some()
+                    && local_declarations.all(|local| {
+                        retained_aliases
+                            .iter()
+                            .any(|retained| same_source_declaration(retained, local))
+                    })
                 {
                     retained_canonical_raw_pointers
-                        .entry(planned.fact.origin.tu.clone())
-                        .or_default()
-                        .insert(planned.fact.spelling.clone());
+                        .retain_typedef_target(&planned.fact.origin, declaration);
                 }
             }
         }
@@ -1979,6 +2011,7 @@ impl Snapshot {
                     )
                 }
                 FactData::Typedef { target } => {
+                    let projection = projection.for_typedef(&fact.origin);
                     format!(
                         "{}    type {} = {};\n",
                         annotation_lines(
@@ -6537,12 +6570,49 @@ fn route_candidate_error(candidate: &RouteCandidate<'_>, reason: PartitionConfli
     }
 }
 
-type RetainedCanonicalRawPointers = BTreeMap<String, BTreeSet<Location>>;
+#[derive(Default)]
+struct RetainedCanonicalRawPointers {
+    translation_units: BTreeMap<String, BTreeSet<Location>>,
+    typedef_targets: BTreeMap<Origin, BTreeSet<Location>>,
+}
 
+impl RetainedCanonicalRawPointers {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn retain_translation_unit(&mut self, fact: &Fact) {
+        self.translation_units
+            .entry(fact.origin.tu.clone())
+            .or_default()
+            .insert(fact.spelling.clone());
+    }
+
+    fn retain_typedef_target(&mut self, origin: &Origin, declaration: &Location) {
+        self.typedef_targets
+            .entry(origin.clone())
+            .or_default()
+            .insert(declaration.clone());
+    }
+
+    fn contains(&self, tu: &str, origin: Option<&Origin>, declaration: &Location) -> bool {
+        self.translation_units
+            .get(tu)
+            .is_some_and(|locations| locations.contains(declaration))
+            || origin.is_some_and(|origin| {
+                self.typedef_targets
+                    .get(origin)
+                    .is_some_and(|locations| locations.contains(declaration))
+            })
+    }
+}
+
+#[derive(Clone, Copy)]
 struct TypeProjection<'a> {
     type_names: &'a BTreeMap<String, String>,
     interface_names: &'a BTreeSet<(String, String)>,
     tu: &'a str,
+    typedef_origin: Option<&'a Origin>,
     local_types: &'a BTreeMap<Location, String>,
     routed_types: &'a BTreeMap<String, String>,
     retained_canonical_raw_pointers: Option<&'a RetainedCanonicalRawPointers>,
@@ -6563,6 +6633,7 @@ impl<'a> TypeProjection<'a> {
             type_names,
             interface_names,
             tu,
+            typedef_origin: None,
             local_types,
             routed_types,
             retained_canonical_raw_pointers,
@@ -6572,6 +6643,13 @@ impl<'a> TypeProjection<'a> {
 
     fn name(&self, ty: &TypeRef) -> String {
         planned_emitted_type_name(ty, self)
+    }
+
+    fn for_typedef(self, origin: &'a Origin) -> Self {
+        Self {
+            typedef_origin: Some(origin),
+            ..self
+        }
     }
 }
 
@@ -9372,13 +9450,10 @@ fn canonical_raw_pointer_mutability(name: &str) -> Option<bool> {
 fn canonical_raw_pointer_is_retained(
     declarations: Option<&RetainedCanonicalRawPointers>,
     tu: &str,
+    origin: Option<&Origin>,
     declaration: &Location,
 ) -> bool {
-    declarations.is_none_or(|declarations| {
-        declarations
-            .get(tu)
-            .is_some_and(|locations| locations.contains(declaration))
-    })
+    declarations.is_none_or(|declarations| declarations.contains(tu, origin, declaration))
 }
 
 fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
@@ -9949,6 +10024,7 @@ fn emitted_pointer_is_mutable(param: &Parameter, projection: &TypeProjection<'_>
                 && canonical_raw_pointer_is_retained(
                     projection.retained_canonical_raw_pointers,
                     projection.tu,
+                    projection.typedef_origin,
                     declaration,
                 ))
         }
@@ -10000,6 +10076,7 @@ fn planned_emitted_type_name(ty: &TypeRef, projection: &TypeProjection<'_>) -> S
             || canonical_raw_pointer_is_retained(
                 projection.retained_canonical_raw_pointers,
                 projection.tu,
+                projection.typedef_origin,
                 declaration,
             ))
     {

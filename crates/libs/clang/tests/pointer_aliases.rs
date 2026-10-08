@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use windows_clang::{
-    EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition, extract,
+    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition,
+    Snapshot, TypeRef, extract,
 };
 use windows_metadata::{Type, reader::Item};
 
@@ -329,6 +330,280 @@ fn retained_canonical_aliases_follow_their_emitted_namespace() {
 }
 
 #[test]
+fn canonical_pointer_alias_identity_survives_isolated_translation_units() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-isolated-canonical-alias-{}",
+        std::process::id()
+    ));
+    if scratch.exists() {
+        std::fs::remove_dir_all(&scratch).unwrap();
+    }
+    std::fs::create_dir_all(&scratch).unwrap();
+    let common = scratch.join("common.h");
+    let foundation = scratch.join("foundation.h");
+    let consumer = scratch.join("consumer.h");
+    std::fs::write(&common, "typedef void *LPVOID;\n").unwrap();
+    std::fs::write(&foundation, "typedef LPVOID *PFOUNDATION_POINTER;\n").unwrap();
+    std::fs::write(
+        &consumer,
+        "typedef LPVOID CONSUMER_POINTER;\n\
+         extern \"C\" CONSUMER_POINTER UseConsumerPointer(CONSUMER_POINTER value);\n\
+         extern \"C\" void UseRawPointer(void *value);\n",
+    )
+    .unwrap();
+
+    let include = |header: &std::path::Path| format!("#include \"{}\"\n", header.to_string_lossy());
+    let roots = [scratch.to_string_lossy().to_string()];
+    let aggregate = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!(
+                "{}{}{}",
+                include(&common),
+                include(&foundation),
+                include(&consumer)
+            ),
+        )
+        .with_root_dirs(roots.clone())],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let isolated = extract(
+        [
+            Input::new(
+                "foundation.cpp",
+                format!("{}{}", include(&common), include(&foundation)),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "consumer.cpp",
+                format!("{}{}", include(&common), include(&consumer)),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+
+    let aggregate_target = named_alias_target(&aggregate, "aggregate.cpp", "CONSUMER_POINTER");
+    let isolated_target = named_alias_target(&isolated, "consumer.cpp", "CONSUMER_POINTER");
+    assert_eq!(aggregate_target.0, "LPVOID");
+    assert_eq!(isolated_target.0, "LPVOID");
+    assert_eq!(aggregate_target.1, isolated_target.1);
+    assert_eq!(
+        aggregate_target.1.file,
+        common.to_string_lossy().replace('\\', "/")
+    );
+    let isolated_common_aliases = isolated
+        .facts()
+        .iter()
+        .filter(|fact| fact.name == "LPVOID")
+        .collect::<Vec<_>>();
+    assert_eq!(isolated_common_aliases.len(), 2);
+    assert_eq!(
+        isolated_common_aliases[0].spelling,
+        isolated_common_aliases[1].spelling
+    );
+    assert_eq!(
+        isolated_common_aliases[0].data,
+        isolated_common_aliases[1].data
+    );
+
+    let foundation_partition = RootPartition::new("foundation", "Example.Foundation");
+    let consumer_partition = RootPartition::new("consumer", "Example.Consumer");
+    let aggregate_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "aggregate.cpp",
+            common.to_string_lossy(),
+            foundation_partition.clone(),
+        )
+        .with_traversed_header_for_input(
+            "aggregate.cpp",
+            foundation.to_string_lossy(),
+            foundation_partition.clone(),
+        )
+        .with_traversed_header_for_input(
+            "aggregate.cpp",
+            consumer.to_string_lossy(),
+            consumer_partition.clone(),
+        );
+    let isolated_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "foundation.cpp",
+            common.to_string_lossy(),
+            foundation_partition.clone(),
+        )
+        .with_traversed_header_for_input(
+            "foundation.cpp",
+            foundation.to_string_lossy(),
+            foundation_partition,
+        )
+        .with_traversed_header_for_input(
+            "consumer.cpp",
+            consumer.to_string_lossy(),
+            consumer_partition,
+        );
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("test.dll");
+    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy| {
+        let plan = snapshot
+            .plan_header_partitions(policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+    let aggregate_partitions = emit(aggregate, &aggregate_policy);
+    let isolated_partitions = emit(isolated, &isolated_policy);
+    assert_eq!(isolated_partitions, aggregate_partitions);
+
+    let foundation_rdl = isolated_partitions
+        .values()
+        .find(|rdl| rdl.contains("type LPVOID"))
+        .unwrap()
+        .as_str();
+    assert!(
+        foundation_rdl.contains("type LPVOID = *mut void;"),
+        "{foundation_rdl}"
+    );
+    let consumer_rdl = isolated_partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Consumer")
+        .unwrap()
+        .1;
+    assert!(
+        consumer_rdl.contains("type CONSUMER_POINTER = Example::Foundation::LPVOID;"),
+        "{consumer_rdl}"
+    );
+    assert!(
+        consumer_rdl.contains("fn UseRawPointer(value: *mut void)"),
+        "{consumer_rdl}"
+    );
+
+    let winmd = scratch.join("isolated-canonical-alias.winmd");
+    windows_rdl::reader()
+        .input_texts(isolated_partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    assert_eq!(
+        index
+            .expect("Example.Consumer", "CONSUMER_POINTER")
+            .underlying_type(),
+        Some(Type::value_named("Example.Foundation", "LPVOID"))
+    );
+    let Item::Fn(use_raw_pointer) = index.expect_item("Example.Consumer", "UseRawPointer") else {
+        panic!("UseRawPointer was not emitted as a function");
+    };
+    assert_eq!(
+        use_raw_pointer.signature(&[]).types,
+        [Type::PtrMut(Box::new(Type::Void), 1)]
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn canonical_pointer_alias_identity_requires_equivalent_source_declarations() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-variant-canonical-alias-{}",
+        std::process::id()
+    ));
+    if scratch.exists() {
+        std::fs::remove_dir_all(&scratch).unwrap();
+    }
+    std::fs::create_dir_all(&scratch).unwrap();
+    let common = scratch.join("common.h");
+    let foundation = scratch.join("foundation.h");
+    let consumer = scratch.join("consumer.h");
+    std::fs::write(&common, "typedef POINTER_TARGET *LPVOID;\n").unwrap();
+    std::fs::write(&foundation, "typedef LPVOID *PFOUNDATION_POINTER;\n").unwrap();
+    std::fs::write(&consumer, "typedef LPVOID CONSUMER_POINTER;\n").unwrap();
+    let include = |header: &std::path::Path| format!("#include \"{}\"\n", header.to_string_lossy());
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "foundation.cpp",
+                format!(
+                    "#define POINTER_TARGET void\n{}{}",
+                    include(&common),
+                    include(&foundation)
+                ),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "consumer.cpp",
+                format!(
+                    "#define POINTER_TARGET unsigned long\n{}{}",
+                    include(&common),
+                    include(&consumer)
+                ),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let consumer_target = named_alias_target(&snapshot, "consumer.cpp", "CONSUMER_POINTER");
+    assert_eq!(consumer_target.0, "LPVOID");
+    assert_eq!(
+        consumer_target.1.file,
+        common.to_string_lossy().replace('\\', "/")
+    );
+    let common_aliases = snapshot
+        .facts()
+        .iter()
+        .filter(|fact| fact.name == "LPVOID")
+        .collect::<Vec<_>>();
+    assert_eq!(common_aliases.len(), 2);
+    assert_eq!(common_aliases[0].spelling, common_aliases[1].spelling);
+    assert_ne!(common_aliases[0].data, common_aliases[1].data);
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "foundation.cpp",
+            common.to_string_lossy(),
+            RootPartition::new("foundation", "Example.Foundation"),
+        )
+        .with_traversed_header_for_input(
+            "foundation.cpp",
+            foundation.to_string_lossy(),
+            RootPartition::new("foundation", "Example.Foundation"),
+        )
+        .with_traversed_header_for_input(
+            "consumer.cpp",
+            consumer.to_string_lossy(),
+            RootPartition::new("consumer", "Example.Consumer"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let consumer_rdl = partitions
+        .iter()
+        .find(|(partition, _)| partition.namespace == "Example.Consumer")
+        .unwrap()
+        .1;
+    assert!(
+        consumer_rdl.contains("type CONSUMER_POINTER = *mut void;"),
+        "{consumer_rdl}"
+    );
+    assert!(!consumer_rdl.contains("Example::Foundation::LPVOID"));
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn direct_tchar_aliases_are_retained_or_resolved_from_metadata() {
     helpers::ensure_libclang();
 
@@ -537,4 +812,23 @@ fn pointer_to_alias(outer_const: bool, name: &str) -> Type {
     } else {
         Type::PtrMut(target, 1)
     }
+}
+
+fn named_alias_target<'a>(
+    snapshot: &'a Snapshot,
+    translation_unit: &str,
+    alias: &str,
+) -> (&'a str, &'a windows_clang::Location) {
+    let fact = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.origin.tu == translation_unit && fact.name == alias)
+        .unwrap();
+    let FactData::Typedef {
+        target: TypeRef::Named { name, declaration },
+    } = &fact.data
+    else {
+        panic!("{alias} did not retain a named alias target");
+    };
+    (name, declaration)
 }
