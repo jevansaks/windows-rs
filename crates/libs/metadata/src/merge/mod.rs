@@ -868,7 +868,12 @@ fn write_type_arch_merged(
                 .constant()
                 .map(|c| format!("{:?}", c.value()))
                 .unwrap_or_default();
-            let key = format!("{}|{:?}|{val}", field.name(), field.ty());
+            let key = format!(
+                "{}|{:?}|{:?}|{val}",
+                field.name(),
+                field.ty(),
+                field.offset()
+            );
             fields.entry(key).or_insert((field, 0)).1 |= bits;
         }
     }
@@ -919,7 +924,7 @@ fn type_sig(index: &reader::Index, def: reader::TypeDef) -> String {
                 .constant()
                 .map(|c| format!("{:?}", c.value()))
                 .unwrap_or_default();
-            format!("{}:{:?}={val}", f.name(), f.ty())
+            format!("{}:{:?}@{:?}={val}", f.name(), f.ty(), f.offset())
         })
         .collect();
     let methods: Vec<String> = def
