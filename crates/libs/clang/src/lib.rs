@@ -1581,34 +1581,23 @@ impl Clone for HeaderPartitionPlan {
 
 #[derive(Debug)]
 struct PreparedHeaderPartitionSnapshot {
-    options: PartitionPlanningOptionsIdentity,
+    options: PartitionTransformOptions,
     snapshot: Snapshot,
     display_names: BTreeMap<String, String>,
     source_names: PlanningSourceNames,
-    function_origins: Vec<Origin>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct PartitionPlanningOptionsIdentity {
-    references: usize,
-    excluded_types: Option<usize>,
-    excluded_functions: Option<usize>,
-    excluded_constants: Option<usize>,
-    selected_functions: Option<usize>,
+#[derive(Debug, Eq, PartialEq)]
+struct PartitionTransformOptions {
+    excluded_functions: Option<BTreeSet<String>>,
+    selected_functions: Option<BTreeSet<String>>,
 }
 
-impl PartitionPlanningOptionsIdentity {
+impl PartitionTransformOptions {
     fn new(options: &EmitOptions<'_>) -> Self {
-        fn address<T>(value: Option<&T>) -> Option<usize> {
-            value.map(|value| value as *const T as usize)
-        }
-
         Self {
-            references: options.references as *const BTreeMap<String, TypeReference> as usize,
-            excluded_types: address(options.excluded_types.or(options.excluded)),
-            excluded_functions: address(options.excluded_functions.or(options.excluded)),
-            excluded_constants: address(options.excluded_constants.or(options.excluded)),
-            selected_functions: address(options.functions),
+            excluded_functions: options.excluded_functions.or(options.excluded).cloned(),
+            selected_functions: options.functions.cloned(),
         }
     }
 }
@@ -6562,13 +6551,13 @@ impl Snapshot {
 
 impl HeaderPartitionPlan {
     pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
-        let options_identity = PartitionPlanningOptionsIdentity::new(options);
+        let transform_options = PartitionTransformOptions::new(options);
         let (snapshot, display_names, source_names);
         let owned;
         if let Some(prepared) = self
             .prepared
             .get()
-            .filter(|prepared| prepared.options == options_identity)
+            .filter(|prepared| prepared.options == transform_options)
         {
             snapshot = &prepared.snapshot;
             display_names = &prepared.display_names;
@@ -6589,12 +6578,42 @@ impl HeaderPartitionPlan {
             source_names = &owned.2;
         }
         let plan = snapshot.plan_partitioned(options, display_names, source_names)?;
-        let candidates = snapshot.partition_route_candidates(&plan, source_names, options)?;
+        self.audit_partition_plan(snapshot, &plan, source_names, options)
+    }
+
+    fn audit_partition_plan<'a>(
+        &self,
+        snapshot: &'a Snapshot,
+        plan: &Plan<'a>,
+        source_names: &PlanningSourceNames,
+        options: &EmitOptions<'_>,
+    ) -> Result<PartitionAudit, Error> {
+        let candidates = snapshot.partition_route_candidates(plan, source_names, options)?;
         let mut conflicts = self.root_conflicts.clone();
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
         conflicts.sort();
         conflicts.dedup();
         Ok(PartitionAudit { conflicts })
+    }
+
+    fn retained_function_origins(
+        &self,
+        snapshot: &Snapshot,
+        display_names: &BTreeMap<String, String>,
+        source_names: &PlanningSourceNames,
+        options: &EmitOptions<'_>,
+    ) -> Result<Vec<Origin>, Error> {
+        let plan = snapshot.plan_partitioned(options, display_names, source_names)?;
+        let function_origins = plan
+            .functions
+            .iter()
+            .map(|function| function.fact.origin.clone())
+            .collect();
+        let audit = self.audit_partition_plan(snapshot, &plan, source_names, options)?;
+        if !audit.is_clean() {
+            return Err(Error(audit.to_string()));
+        }
+        Ok(function_origins)
     }
 
     /// Returns the canonical root function declarations retained by this plan and the supplied
@@ -6603,47 +6622,37 @@ impl HeaderPartitionPlan {
     /// The returned identities borrow the original extracted snapshot. Per-owner and global
     /// exclusions, selected functions, remaps, and canonical declaration selection use the same
     /// planning path as [`Self::emit_with_options`]. A dirty plan returns its complete audit error.
-    /// The transformed snapshot is cached for a later audit or consuming emission with the same
-    /// planning inputs.
+    /// The transformed snapshot is cached for a later query with the same function selection and
+    /// exclusion contents. Selection and audit always use the current options.
     pub fn retained_function_source_identities<'a>(
         &'a self,
         options: &EmitOptions<'_>,
     ) -> Result<Vec<FunctionSourceIdentity<'a>>, Error> {
-        let options_identity = PartitionPlanningOptionsIdentity::new(options);
+        let transform_options = PartitionTransformOptions::new(options);
         let retained = if let Some(prepared) = self
             .prepared
             .get()
-            .filter(|prepared| prepared.options == options_identity)
+            .filter(|prepared| prepared.options == transform_options)
         {
-            prepared.function_origins.clone()
+            self.retained_function_origins(
+                &prepared.snapshot,
+                &prepared.display_names,
+                &prepared.source_names,
+                options,
+            )?
         } else {
             let (mut snapshot, display_names, source_names) = self
                 .snapshot
                 .clone()
                 .into_partitioned_planning_snapshot(options);
             snapshot.project_suppressed_declare_handles();
-            let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
-            let function_origins: Vec<_> = plan
-                .functions
-                .iter()
-                .map(|function| function.fact.origin.clone())
-                .collect();
-            let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
-            let mut conflicts = self.root_conflicts.clone();
-            conflicts.extend(snapshot.partition_route_conflicts(&candidates));
-            conflicts.sort();
-            conflicts.dedup();
-            let audit = PartitionAudit { conflicts };
-            if !audit.is_clean() {
-                return Err(Error(audit.to_string()));
-            }
-            drop(plan);
+            let function_origins =
+                self.retained_function_origins(&snapshot, &display_names, &source_names, options)?;
             let _ = self.prepared.set(PreparedHeaderPartitionSnapshot {
-                options: options_identity,
+                options: transform_options,
                 snapshot,
                 display_names,
                 source_names,
-                function_origins: function_origins.clone(),
             });
             function_origins
         };
@@ -6660,10 +6669,10 @@ impl HeaderPartitionPlan {
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let target = self.snapshot.timing_target.clone();
-        let options_identity = PartitionPlanningOptionsIdentity::new(options);
+        let transform_options = PartitionTransformOptions::new(options);
         let prepared = self.prepared.into_inner();
         let (snapshot, display_names, source_names) = if let Some(prepared) =
-            prepared.filter(|prepared| prepared.options == options_identity)
+            prepared.filter(|prepared| prepared.options == transform_options)
         {
             (
                 prepared.snapshot,

@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use windows_clang::{
-    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities, NativeImport,
-    NativeImports, PartitionConflictReason, PartitionItemKind, RdlPartition, RootPartition,
-    Snapshot, TypeRef, TypeReference, TypeReferenceKind, extract, extract_partitioned,
+    EmitOptions, FactData, HeaderPartitionPlan, HeaderPartitionPolicy, Input, NamespaceAuthorities,
+    NativeImport, NativeImports, PartitionConflictReason, PartitionItemKind, RdlPartition,
+    RootPartition, Snapshot, TypeRef, TypeReference, TypeReferenceKind, extract,
+    extract_partitioned,
 };
 use windows_metadata::{
     Type, Value,
@@ -35,6 +36,28 @@ fn aggregate_snapshot(scratch: &Path, headers: &[&Path]) -> Snapshot {
         &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
     )
     .unwrap()
+}
+
+fn header_partition_fixture(
+    name: &str,
+    source: &str,
+    owner: RootPartition,
+) -> (PathBuf, Snapshot, HeaderPartitionPolicy) {
+    let scratch = scratch(name);
+    let header = scratch.join("api.h");
+    std::fs::write(&header, source).unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&header]);
+    let policy =
+        HeaderPartitionPolicy::new().with_traversed_header(header.to_string_lossy(), owner);
+    (scratch, snapshot, policy)
+}
+
+fn retained_function_names(plan: &HeaderPartitionPlan, options: &EmitOptions<'_>) -> Vec<String> {
+    plan.retained_function_source_identities(options)
+        .unwrap()
+        .into_iter()
+        .map(|identity| identity.name.to_string())
+        .collect()
 }
 
 fn duplicate_declaration_snapshot(
@@ -3526,6 +3549,247 @@ fn retained_function_identities_match_the_effective_partition_plan() {
 }
 
 #[test]
+fn retained_function_identities_replan_mutated_allowlist_contents() {
+    helpers::ensure_libclang();
+
+    let (scratch, snapshot, policy) = header_partition_fixture(
+        "retained-function-mutated-allowlist",
+        "extern \"C\" int First();\nextern \"C\" int Second();\n",
+        RootPartition::new("api", "Example.Api"),
+    );
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let references = BTreeMap::new();
+    let mut functions = BTreeSet::from(["First".to_string()]);
+    {
+        let mut options = EmitOptions::new("Example.Common", &references);
+        options.library = Some("example.dll");
+        options.functions = Some(&functions);
+        assert_eq!(
+            retained_function_names(&plan, &options),
+            vec!["First".to_string()]
+        );
+    }
+
+    functions.clear();
+    functions.insert("Second".to_string());
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    options.functions = Some(&functions);
+    assert!(plan.audit(&options).unwrap().is_clean());
+    assert_eq!(
+        retained_function_names(&plan, &options),
+        vec!["Second".to_string()]
+    );
+    let rdl = plan
+        .emit_with_options(&options)
+        .unwrap()
+        .into_values()
+        .collect::<String>();
+    assert!(!rdl.contains("fn First("), "{rdl}");
+    assert!(rdl.contains("fn Second("), "{rdl}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn retained_function_identities_replan_mutated_exclusion_contents() {
+    helpers::ensure_libclang();
+
+    let (scratch, snapshot, policy) = header_partition_fixture(
+        "retained-function-mutated-exclusions",
+        "extern \"C\" int First();\nextern \"C\" int Second();\n",
+        RootPartition::new("api", "Example.Api"),
+    );
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let references = BTreeMap::new();
+    let mut excluded = BTreeSet::from(["First".to_string()]);
+    {
+        let mut options = EmitOptions::new("Example.Common", &references);
+        options.library = Some("example.dll");
+        options.excluded_functions = Some(&excluded);
+        assert_eq!(
+            retained_function_names(&plan, &options),
+            vec!["Second".to_string()]
+        );
+    }
+
+    excluded.clear();
+    excluded.insert("Second".to_string());
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("example.dll");
+    options.excluded_functions = Some(&excluded);
+    assert!(plan.audit(&options).unwrap().is_clean());
+    assert_eq!(
+        retained_function_names(&plan, &options),
+        vec!["First".to_string()]
+    );
+    let rdl = plan
+        .emit_with_options(&options)
+        .unwrap()
+        .into_values()
+        .collect::<String>();
+    assert!(rdl.contains("fn First("), "{rdl}");
+    assert!(!rdl.contains("fn Second("), "{rdl}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn retained_function_identities_replan_mutated_reference_contents() {
+    helpers::ensure_libclang();
+
+    let (scratch, snapshot, policy) =
+        colliding_ntstatus_snapshot("retained-function-mutated-references");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let mut references = BTreeMap::from([(
+        "NTSTATUS".to_string(),
+        TypeReference::new(
+            "Windows.Win32.Foundation",
+            "NTSTATUS",
+            TypeReferenceKind::Type,
+        ),
+    )]);
+    {
+        let mut options = EmitOptions::new("Windows.Win32", &references);
+        options.library = Some("ntdll.dll");
+        assert_eq!(
+            retained_function_names(&plan, &options),
+            vec!["KernelCall".to_string()]
+        );
+    }
+
+    references.clear();
+    let mut options = EmitOptions::new("Windows.Win32", &references);
+    options.library = Some("ntdll.dll");
+    let audit = plan.audit(&options).unwrap_err().to_string();
+    let retained = plan
+        .retained_function_source_identities(&options)
+        .unwrap_err()
+        .to_string();
+    let emission = plan.emit_with_options(&options).unwrap_err().to_string();
+    assert_eq!(audit, retained);
+    assert_eq!(audit, emission);
+    assert!(
+        audit.contains("owner-excluded local type `NTSTATUS`"),
+        "{audit}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn retained_function_identities_reaudit_current_import_options() {
+    helpers::ensure_libclang();
+
+    let (scratch, snapshot, policy) = header_partition_fixture(
+        "retained-function-current-imports",
+        "extern \"C\" int Conflict();\n",
+        RootPartition::new("api", "Example.Api"),
+    );
+    let owner_policy = HeaderPartitionPolicy::new().with_traversed_header(
+        scratch.join("api.h").to_string_lossy(),
+        RootPartition::new("api", "Example.Api").with_library("Conflict", "first.dll"),
+    );
+    let scalar_plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let libraries_plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let owner_plan = snapshot
+        .plan_header_partitions(&owner_policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let references = BTreeMap::new();
+
+    let mut scalar_imports = NativeImports::new();
+    scalar_imports
+        .insert("Conflict", NativeImport::named("first.dll", "Conflict"))
+        .unwrap();
+    let mut scalar_options = EmitOptions::new("Example.Common", &references);
+    scalar_options.library = Some("first.dll");
+    scalar_options.native_imports = Some(&scalar_imports);
+    assert_eq!(
+        retained_function_names(&scalar_plan, &scalar_options),
+        vec!["Conflict".to_string()]
+    );
+    scalar_options.library = Some("second.dll");
+    let audit = scalar_plan.audit(&scalar_options).unwrap_err().to_string();
+    let retained = scalar_plan
+        .retained_function_source_identities(&scalar_options)
+        .unwrap_err()
+        .to_string();
+    let emission = scalar_plan
+        .emit_with_options(&scalar_options)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(audit, retained);
+    assert_eq!(audit, emission);
+    assert!(audit.contains("conflicting import libraries"), "{audit}");
+
+    let mut libraries = BTreeMap::from([("Conflict".to_string(), "first.dll".to_string())]);
+    {
+        let mut options = EmitOptions::new("Example.Common", &references);
+        options.libraries = Some(&libraries);
+        options.native_imports = Some(&scalar_imports);
+        assert_eq!(
+            retained_function_names(&libraries_plan, &options),
+            vec!["Conflict".to_string()]
+        );
+    }
+    libraries.insert("Conflict".to_string(), "second.dll".to_string());
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.libraries = Some(&libraries);
+    options.native_imports = Some(&scalar_imports);
+    let audit = libraries_plan.audit(&options).unwrap_err().to_string();
+    let retained = libraries_plan
+        .retained_function_source_identities(&options)
+        .unwrap_err()
+        .to_string();
+    let emission = libraries_plan
+        .emit_with_options(&options)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(audit, retained);
+    assert_eq!(audit, emission);
+    assert!(audit.contains("conflicting import libraries"), "{audit}");
+
+    let mut owner_imports = NativeImports::new();
+    {
+        let mut options = EmitOptions::new("Example.Common", &references);
+        options.native_imports = Some(&owner_imports);
+        assert_eq!(
+            retained_function_names(&owner_plan, &options),
+            vec!["Conflict".to_string()]
+        );
+    }
+    owner_imports
+        .insert("Conflict", NativeImport::named("second.dll", "Conflict"))
+        .unwrap();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.native_imports = Some(&owner_imports);
+    let audit = owner_plan.audit(&options).unwrap_err().to_string();
+    let retained = owner_plan
+        .retained_function_source_identities(&options)
+        .unwrap_err()
+        .to_string();
+    let emission = owner_plan
+        .emit_with_options(&options)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(audit, retained);
+    assert_eq!(audit, emission);
+    assert!(audit.contains("conflicting import libraries"), "{audit}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn retained_function_alias_identity_is_import_option_independent() {
     helpers::ensure_libclang();
 
@@ -3638,6 +3902,28 @@ fn retained_function_alias_identity_is_import_option_independent() {
     let import = function.impl_map().unwrap();
     assert_eq!(import.import_scope().name(), "clfsw32.dll");
     assert_eq!(import.import_name(), "LsnBlockOffset");
+
+    let mut conflicting_imports = NativeImports::new();
+    conflicting_imports
+        .insert(
+            "LsnBlockOffset",
+            NativeImport::named("other.dll", "LsnBlockOffset"),
+        )
+        .unwrap();
+    let mut conflicting_options = EmitOptions::new("Example.Common", &references);
+    conflicting_options.native_imports = Some(&conflicting_imports);
+    let audit = plan.audit(&conflicting_options).unwrap_err().to_string();
+    let retained = plan
+        .retained_function_source_identities(&conflicting_options)
+        .unwrap_err()
+        .to_string();
+    let emission = plan
+        .emit_with_options(&conflicting_options)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(audit, retained);
+    assert_eq!(audit, emission);
+    assert!(audit.contains("conflicting import libraries"), "{audit}");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
