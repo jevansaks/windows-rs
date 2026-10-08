@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use windows_clang::{
     EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition,
-    TypeRef, extract,
+    TypeRef, TypeReference, TypeReferenceKind, extract,
 };
 use windows_metadata::{
     Type,
@@ -431,6 +431,183 @@ fn interface_self_typedef_identity_does_not_cross_source_declarations() {
         "annotated interface typedef was suppressed:\n{}",
         snapshot.dump()
     );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn nested_interface_self_typedef_routes_to_provider_without_dangling_parent() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("nested-parent");
+    let support = scratch.join("support.h");
+    let alias = scratch.join("alias.h");
+    let provider = scratch.join("provider.h");
+    let consumer = scratch.join("consumer.h");
+    std::fs::write(&support, "#pragma once\n#define interface struct\n").unwrap();
+    std::fs::write(
+        &alias,
+        "#pragma once\n\
+         #include \"support.h\"\n\
+         typedef interface IFoo IFoo;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &provider,
+        "#pragma once\n\
+         #include \"support.h\"\n\
+         struct __declspec(uuid(\"66666666-6666-6666-6666-666666666666\")) IFoo {\n\
+             virtual unsigned GetValue() = 0;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &consumer,
+        "#pragma once\n\
+         #include \"alias.h\"\n\
+         struct FOO_USE { IFoo *value; };\n",
+    )
+    .unwrap();
+
+    let include_dir = format!("-I{}", scratch.display());
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            [&alias, &provider, &consumer]
+                .into_iter()
+                .map(|path| include(path))
+                .collect::<String>(),
+        )
+        .with_root_dirs([scratch.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+            include_dir.as_str(),
+        ],
+    )
+    .unwrap();
+
+    assert!(
+        !snapshot
+            .facts()
+            .iter()
+            .any(|fact| fact.name == "IFoo" && matches!(fact.data, FactData::Typedef { .. })),
+        "{}",
+        snapshot.dump()
+    );
+    let provider_fact = snapshot
+        .facts()
+        .iter()
+        .find(|fact| {
+            fact.name == "IFoo"
+                && fact.definition
+                && matches!(fact.data, FactData::Interface { .. })
+        })
+        .unwrap_or_else(|| panic!("IFoo provider was not extracted:\n{}", snapshot.dump()));
+    let nested_forward = snapshot
+        .facts()
+        .iter()
+        .find(|fact| {
+            fact.name == "IFoo"
+                && !fact.definition
+                && matches!(fact.data, FactData::Interface { .. })
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "nested IFoo declaration was not extracted:\n{}",
+                snapshot.dump()
+            )
+        });
+    let origins = snapshot
+        .facts()
+        .iter()
+        .map(|fact| &fact.origin)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        snapshot.facts().iter().all(|fact| fact
+            .parent
+            .as_ref()
+            .is_none_or(|parent| origins.contains(parent))),
+        "{}",
+        snapshot.dump()
+    );
+    assert!(nested_forward.parent.is_none(), "{nested_forward:#?}");
+
+    let use_fact = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "FOO_USE")
+        .unwrap();
+    let FactData::Record { fields, .. } = &use_fact.data else {
+        panic!("FOO_USE was not extracted as a record");
+    };
+    let TypeRef::Pointer { target, .. } = &fields[0].ty else {
+        panic!("FOO_USE.value was not extracted as a pointer");
+    };
+    let TypeRef::Named { declaration, .. } = target.as_ref() else {
+        panic!("FOO_USE.value did not retain an interface declaration");
+    };
+    assert_eq!(declaration, &provider_fact.spelling);
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            alias.to_string_lossy(),
+            RootPartition::new("alias", "Example.Alias"),
+        )
+        .with_traversed_header(
+            provider.to_string_lossy(),
+            RootPartition::new("provider", "Example.Provider"),
+        )
+        .with_traversed_header(
+            consumer.to_string_lossy(),
+            RootPartition::new("consumer", "Example.Consumer"),
+        );
+    let references = BTreeMap::from([(
+        "EXTERNAL_TYPE".to_string(),
+        TypeReference::new("Example.External", "EXTERNAL_TYPE", TypeReferenceKind::Type),
+    )]);
+    let options = EmitOptions::new("Example.Common", &references);
+    let authorities = NamespaceAuthorities::new().with_exact("IFoo", "Example.Provider");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+
+    assert!(
+        !partitions
+            .keys()
+            .any(|partition| partition.namespace == "Example.Alias"),
+        "{partitions:#?}"
+    );
+    let provider_rdl = output(&partitions, "Example.Provider");
+    assert_eq!(provider_rdl.matches("interface IFoo").count(), 1);
+    assert!(
+        provider_rdl.contains("fn GetValue(&self) -> u32"),
+        "{provider_rdl}"
+    );
+    let consumer_rdl = output(&partitions, "Example.Consumer");
+    assert!(
+        consumer_rdl.contains("value: Example::Provider::IFoo"),
+        "{consumer_rdl}"
+    );
+
+    let winmd = scratch.join("nested-interface-self-typedef.winmd");
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    let interface = index.expect("Example.Provider", "IFoo");
+    assert_eq!(interface.category(), TypeCategory::Interface);
+    assert_eq!(interface.methods().len(), 1);
+    assert!(interface.find_attribute("GuidAttribute").is_some());
+    assert!(!index.contains("Example.Alias", "IFoo"));
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
