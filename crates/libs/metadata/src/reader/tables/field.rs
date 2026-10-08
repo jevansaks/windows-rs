@@ -23,6 +23,12 @@ impl<'a> Field<'a> {
         blob.read_type_signature(&[])
     }
 
+    pub fn offset(&self) -> Option<u32> {
+        self.equal_range::<FieldLayout>(1, self.pos() + 1)
+            .next()
+            .map(|layout| layout.offset())
+    }
+
     pub fn constant(&self) -> Option<Constant<'a>> {
         self.equal_range(1, HasConstant::Field(*self).encode())
             .next()

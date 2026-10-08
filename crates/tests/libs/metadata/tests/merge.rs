@@ -13,6 +13,24 @@ fn winmd(dir: &std::path::Path, name: &str, rdl: &str) -> String {
     out.to_string_lossy().into_owned()
 }
 
+fn explicit_layout_winmd(dir: &std::path::Path, name: &str) -> String {
+    let mut file = writer::File::new(name);
+    let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+    file.TypeDef(
+        "Test",
+        "EXPLICIT",
+        value_type,
+        TypeAttributes::ExplicitLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+    );
+    let first = file.Field("first", &Type::I32, FieldAttributes::Public);
+    file.FieldLayout(first, 4);
+    let second = file.Field("second", &Type::U64, FieldAttributes::Public);
+    file.FieldLayout(second, 12);
+    let out = dir.join(format!("{name}.winmd"));
+    std::fs::write(&out, file.into_stream()).unwrap();
+    out.to_string_lossy().into_owned()
+}
+
 fn arch_bits(field: reader::Field) -> Option<i32> {
     field.attributes().find_map(|a| {
         (a.ctor().parent().name() == "SupportedArchitectureAttribute").then(|| {
@@ -27,6 +45,12 @@ fn arch_bits(field: reader::Field) -> Option<i32> {
 fn type_arch_bits(ty: reader::TypeDef) -> Option<i32> {
     ty.has_attribute("SupportedArchitectureAttribute")
         .then(|| ty.arches())
+}
+
+fn nested_field_offsets(index: &reader::Index, namespace: &str, name: &str) -> Vec<Option<u32>> {
+    let outer = index.expect(namespace, name);
+    let inner = index.nested(outer).next().unwrap();
+    inner.fields().map(|field| field.offset()).collect()
 }
 
 #[test]
@@ -132,6 +156,85 @@ fn arch_merge_constants() {
     assert_eq!(arch_bits(*x64_only), Some(2));
     let arm_only = consts.iter().find(|f| f.name() == "ARM_ONLY").unwrap();
     assert_eq!(arch_bits(*arm_only), Some(4));
+}
+
+#[test]
+fn arch_merge_preserves_explicit_field_layouts() {
+    let dir = std::env::temp_dir().join("win_merge_field_layout");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let source =
+        "#[win32] mod Test { struct VALUE { data: union { signed: i32, unsigned: u32 } } }";
+    let x64 = winmd(&dir, "x64", source);
+    let arm = winmd(&dir, "arm", source);
+    let x86 = winmd(&dir, "x86", source);
+
+    for input in [&x64, &arm, &x86] {
+        let index = reader::Index::read(input).unwrap();
+        assert_eq!(
+            nested_field_offsets(&index, "Test", "VALUE"),
+            [Some(0), Some(0)],
+            "RDL compilation must emit explicit offsets before architecture merge"
+        );
+    }
+
+    let merged = dir.join("merged.winmd");
+    merge()
+        .arch_input(&x64, 2)
+        .arch_input(&arm, 4)
+        .arch_input(&x86, 1)
+        .output(&merged)
+        .merge()
+        .unwrap();
+
+    let index = reader::Index::read(merged).unwrap();
+    assert_eq!(
+        nested_field_offsets(&index, "Test", "VALUE"),
+        [Some(0), Some(0)],
+        "architecture merge must preserve explicit field offsets"
+    );
+}
+
+#[test]
+fn arch_merge_preserves_nonzero_field_layouts() {
+    let dir = std::env::temp_dir().join("win_merge_nonzero_field_layout");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let x64 = explicit_layout_winmd(&dir, "x64");
+    let arm = explicit_layout_winmd(&dir, "arm");
+    let x86 = explicit_layout_winmd(&dir, "x86");
+
+    for input in [&x64, &arm, &x86] {
+        let index = reader::Index::read(input).unwrap();
+        assert_eq!(
+            index
+                .expect("Test", "EXPLICIT")
+                .fields()
+                .map(|field| field.offset())
+                .collect::<Vec<_>>(),
+            [Some(4), Some(12)]
+        );
+    }
+
+    let merged = dir.join("merged.winmd");
+    merge()
+        .arch_input(&x64, 2)
+        .arch_input(&arm, 4)
+        .arch_input(&x86, 1)
+        .output(&merged)
+        .merge()
+        .unwrap();
+
+    let index = reader::Index::read(merged).unwrap();
+    assert_eq!(
+        index
+            .expect("Test", "EXPLICIT")
+            .fields()
+            .map(|field| field.offset())
+            .collect::<Vec<_>>(),
+        [Some(4), Some(12)],
+        "architecture merge must preserve the input offsets rather than inventing zero"
+    );
 }
 
 #[test]

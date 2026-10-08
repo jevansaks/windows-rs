@@ -5,6 +5,7 @@ mod attribute;
 mod class_layout;
 mod constant;
 mod field;
+mod field_layout;
 mod generic_param;
 mod impl_map;
 mod interface_impl;
@@ -58,4 +59,5 @@ tables! {
     (TypeDef, 15)
     (TypeRef, 16)
     (TypeSpec, 17)
+    (FieldLayout, 18)
 }
