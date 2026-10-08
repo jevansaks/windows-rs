@@ -3301,33 +3301,37 @@ fn wildcard_authority_collapses_equivalent_logical_routes() {
 }
 
 #[test]
-fn compatible_function_redeclarations_use_namespace_authority() {
+fn compatible_function_redeclarations_use_input_order_and_namespace_authority() {
     helpers::ensure_libclang();
 
-    let scratch = scratch("compatible-function-authority");
+    let scratch = scratch("compatible-function-input-order");
     let common = scratch.join("common.h");
-    let fallback = scratch.join("fallback.h");
-    let authority = scratch.join("authority.h");
+    let first = scratch.join("objidl.h");
+    let second = scratch.join("textstor.h");
     std::fs::write(&common, "typedef unsigned short CLIPFORMAT;\n").unwrap();
     std::fs::write(
-        &fallback,
+        &first,
         format!(
             "#include \"{}\"\n\
              #define W32M(text) __attribute__((annotate(text)))\n\
-             W32M(\"win32metadata:set_last_error\")\n\
+             W32M(\"win32metadata:supported_os=windows6.1\")\n\
              extern \"C\" unsigned long CLIPFORMAT_UserSize(\n\
-                 unsigned long *flags, unsigned long offset, CLIPFORMAT *value);\n",
+                 unsigned long *first_flags, unsigned long first_offset, \
+                 CLIPFORMAT *first_value);\n",
             common.to_string_lossy()
         ),
     )
     .unwrap();
     std::fs::write(
-        &authority,
+        &second,
         format!(
             "#include \"{}\"\n\
+             #define W32M(text) __attribute__((annotate(text)))\n\
              #define IN __attribute__((annotate(\"_In_\")))\n\
+             W32M(\"win32metadata:set_last_error\")\n\
              extern \"C\" unsigned long CLIPFORMAT_UserSize(\n\
-                 IN unsigned long *flags, IN unsigned long offset, IN CLIPFORMAT *value);\n",
+                 IN unsigned long *second_flags, IN unsigned long second_offset, \
+                 IN CLIPFORMAT *second_value);\n",
             common.to_string_lossy()
         ),
     )
@@ -3338,73 +3342,54 @@ fn compatible_function_redeclarations_use_namespace_authority() {
             .with_root_dirs(roots.clone())
     };
     let forward = extract(
-        [
-            input("fallback.cpp", &fallback),
-            input("authority.cpp", &authority),
-        ],
+        [input("objidl.cpp", &first), input("textstor.cpp", &second)],
         &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
     )
     .unwrap();
     let reverse = extract(
-        [
-            input("authority.cpp", &authority),
-            input("fallback.cpp", &fallback),
-        ],
+        [input("textstor.cpp", &second), input("objidl.cpp", &first)],
         &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
     )
     .unwrap();
-    let fallback_function = forward
+    let first_function = forward
         .facts()
         .iter()
-        .find(|fact| fact.name == "CLIPFORMAT_UserSize" && fact.origin.tu == "fallback.cpp")
+        .find(|fact| fact.name == "CLIPFORMAT_UserSize" && fact.origin.tu == "objidl.cpp")
         .unwrap();
-    let authority_function = forward
+    let second_function = forward
         .facts()
         .iter()
-        .find(|fact| fact.name == "CLIPFORMAT_UserSize" && fact.origin.tu == "authority.cpp")
+        .find(|fact| fact.name == "CLIPFORMAT_UserSize" && fact.origin.tu == "textstor.cpp")
         .unwrap();
     let FactData::Function {
-        params: fallback_params,
+        params: first_params,
         ..
-    } = &fallback_function.data
+    } = &first_function.data
     else {
-        panic!("fallback declaration is not a function");
+        panic!("first declaration is not a function");
     };
     let FactData::Function {
-        params: authority_params,
+        params: second_params,
         ..
-    } = &authority_function.data
+    } = &second_function.data
     else {
-        panic!("authority declaration is not a function");
+        panic!("second declaration is not a function");
     };
-    assert!(!fallback_params[1].annotation.input);
-    assert!(authority_params[1].annotation.input);
+    assert!(!first_params[1].annotation.input);
+    assert!(second_params[1].annotation.input);
 
-    let fallback_partition = RootPartition::new("fallback", "Example.Fallback")
-        .with_library("CLIPFORMAT_UserSize", "ole32.dll");
-    let authority_partition = RootPartition::new("authority", "Example.System.Com.Marshal")
-        .with_library("CLIPFORMAT_UserSize", "ole32.dll");
     let policy = HeaderPartitionPolicy::new()
         .with_traversed_header_for_input(
-            "fallback.cpp",
-            fallback.to_string_lossy(),
-            fallback_partition.clone(),
+            "objidl.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("com", "Example.System.Com")
+                .with_library("CLIPFORMAT_UserSize", "ole32.dll"),
         )
         .with_traversed_header_for_input(
-            "authority.cpp",
-            authority.to_string_lossy(),
-            authority_partition.clone(),
-        );
-    let reverse_policy = HeaderPartitionPolicy::new()
-        .with_traversed_header_for_input(
-            "authority.cpp",
-            authority.to_string_lossy(),
-            authority_partition,
-        )
-        .with_traversed_header_for_input(
-            "fallback.cpp",
-            fallback.to_string_lossy(),
-            fallback_partition,
+            "textstor.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("tsf", "Example.System.Tsf")
+                .with_library("CLIPFORMAT_UserSize", "ole32.dll"),
         );
     let authorities =
         NamespaceAuthorities::new().with_exact("CLIPFORMAT_UserSize", "Example.System.Com.Marshal");
@@ -3417,50 +3402,318 @@ fn compatible_function_redeclarations_use_namespace_authority() {
     assert!(plan.audit(&options).unwrap().is_clean());
     let partitions = plan.emit_with_options(&options).unwrap();
     let reverse_partitions = reverse
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "textstor.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("tsf", "Example.System.Tsf")
+                .with_library("CLIPFORMAT_UserSize", "ole32.dll"),
+        )
+        .with_traversed_header_for_input(
+            "objidl.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("com", "Example.System.Com")
+                .with_library("CLIPFORMAT_UserSize", "ole32.dll"),
+        );
+    let reverse_policy_partitions = forward
         .plan_header_partitions(&reverse_policy, &authorities)
         .unwrap()
         .emit_with_options(&options)
         .unwrap();
-    assert_eq!(partitions, reverse_partitions);
-    let route = partitions
+    assert_eq!(partitions, reverse_policy_partitions);
+
+    let forward_route = partitions
         .keys()
         .find(|partition| partition.namespace == "Example.System.Com.Marshal")
         .unwrap();
-    assert_eq!(route.partition, "authority");
-    assert_eq!(route.header, authority.to_string_lossy().replace('\\', "/"));
-    let rdl = output(&partitions, "Example.System.Com.Marshal");
-    assert_eq!(rdl.matches("fn CLIPFORMAT_UserSize").count(), 1, "{rdl}");
-    assert_eq!(rdl.matches("#[in]").count(), 2, "{rdl}");
-    assert!(
-        rdl.contains("#[library(\"ole32.dll\", set_last_error)]"),
-        "{rdl}"
+    assert_eq!(forward_route.partition, "com");
+    assert_eq!(
+        forward_route.header,
+        first.to_string_lossy().replace('\\', "/")
+    );
+    let reverse_route = reverse_partitions
+        .keys()
+        .find(|partition| partition.namespace == "Example.System.Com.Marshal")
+        .unwrap();
+    assert_eq!(reverse_route.partition, "tsf");
+    assert_eq!(
+        reverse_route.header,
+        second.to_string_lossy().replace('\\', "/")
     );
 
-    let unmatched_policy = HeaderPartitionPolicy::new()
+    let forward_rdl = output(&partitions, "Example.System.Com.Marshal");
+    assert_eq!(
+        forward_rdl.matches("fn CLIPFORMAT_UserSize").count(),
+        1,
+        "{forward_rdl}"
+    );
+    assert!(!forward_rdl.contains("#[in]"), "{forward_rdl}");
+    assert!(
+        forward_rdl.contains(
+            "fn CLIPFORMAT_UserSize(first_flags: *mut u32, first_offset: u32, \
+             first_value: *mut u16)"
+        ),
+        "{forward_rdl}"
+    );
+    assert!(
+        forward_rdl.contains("#[library(\"ole32.dll\", set_last_error)]"),
+        "{forward_rdl}"
+    );
+    assert!(
+        forward_rdl.contains("#[supported_os(\"windows6.1\")]"),
+        "{forward_rdl}"
+    );
+    assert_eq!(
+        forward_rdl.matches("// windows-clang: declaration").count(),
+        2,
+        "{forward_rdl}"
+    );
+    let forward_selected = forward_rdl
+        .find("declaration selected=true input=\"objidl.cpp\"")
+        .unwrap();
+    let forward_other = forward_rdl
+        .find("declaration selected=false input=\"textstor.cpp\"")
+        .unwrap();
+    assert!(forward_selected < forward_other, "{forward_rdl}");
+    assert!(forward_rdl.contains("objidl.h"), "{forward_rdl}");
+    assert!(forward_rdl.contains("textstor.h"), "{forward_rdl}");
+    assert!(
+        forward_rdl.contains("annotation: ParamAnnotation { input: false"),
+        "{forward_rdl}"
+    );
+    assert!(
+        forward_rdl.contains("annotation: ParamAnnotation { input: true"),
+        "{forward_rdl}"
+    );
+    let forward_selected_line = forward_rdl[forward_selected..].lines().next().unwrap();
+    let forward_other_line = forward_rdl[forward_other..].lines().next().unwrap();
+    assert!(
+        forward_selected_line.contains("SupportedOs(\"windows6.1\")"),
+        "{forward_selected_line}"
+    );
+    assert!(
+        forward_other_line.contains("SetLastError"),
+        "{forward_other_line}"
+    );
+
+    let reverse_rdl = output(&reverse_partitions, "Example.System.Com.Marshal");
+    assert_eq!(reverse_rdl.matches("#[in]").count(), 2, "{reverse_rdl}");
+    assert!(
+        reverse_rdl.contains(
+            "fn CLIPFORMAT_UserSize(#[in] second_flags: *mut u32, second_offset: u32, \
+             #[in] second_value: *mut u16)"
+        ),
+        "{reverse_rdl}"
+    );
+    assert!(
+        reverse_rdl.contains("#[library(\"ole32.dll\", set_last_error)]"),
+        "{reverse_rdl}"
+    );
+    assert!(
+        reverse_rdl.contains("#[supported_os(\"windows6.1\")]"),
+        "{reverse_rdl}"
+    );
+    let reverse_selected = reverse_rdl
+        .find("declaration selected=true input=\"textstor.cpp\"")
+        .unwrap();
+    let reverse_other = reverse_rdl
+        .find("declaration selected=false input=\"objidl.cpp\"")
+        .unwrap();
+    assert!(reverse_selected < reverse_other, "{reverse_rdl}");
+    assert_ne!(forward_rdl, reverse_rdl);
+
+    for (name, partitions) in [("forward", &partitions), ("reverse", &reverse_partitions)] {
+        windows_rdl::reader()
+            .input_text(include_str!("../../../../metadata/metadata.rdl"))
+            .input_texts(partitions.values())
+            .reference_default()
+            .output(scratch.join(format!("{name}.winmd")))
+            .write()
+            .unwrap();
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn multiple_compatible_function_groups_emit_complete_ordered_inventory() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("multiple-compatible-function-groups");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &first,
+        "#define W32M(text) __attribute__((annotate(text)))\n\
+         W32M(\"win32metadata:supported_os=windows6.1\")\n\
+         extern \"C\" int Alpha(unsigned *alpha_first);\n\
+         extern \"C\" int Beta(unsigned *beta_first);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#define IN __attribute__((annotate(\"_In_\")))\n\
+         extern \"C\" int Alpha(IN unsigned *alpha_second);\n\
+         extern \"C\" int Beta(IN unsigned *beta_second);\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let forward = extract(
+        [
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let reverse = extract(
+        [
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
         .with_traversed_header_for_input(
-            "fallback.cpp",
-            fallback.to_string_lossy(),
-            RootPartition::new("fallback", "Example.Fallback"),
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First")
+                .with_library("Alpha", "example.dll")
+                .with_library("Beta", "example.dll"),
         )
         .with_traversed_header_for_input(
-            "authority.cpp",
-            authority.to_string_lossy(),
-            RootPartition::new("other", "Example.Other"),
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second")
+                .with_library("Alpha", "example.dll")
+                .with_library("Beta", "example.dll"),
         );
-    let error = forward
-        .plan_header_partitions(
-            &unmatched_policy,
-            &NamespaceAuthorities::new().with_exact("CLIPFORMAT_UserSize", "Example.Unmatched"),
-        )
+    let authorities = NamespaceAuthorities::new()
+        .with_exact("Alpha", "Example.Public")
+        .with_exact("Beta", "Example.Public");
+    let selected = BTreeSet::from(["Alpha".to_string(), "Beta".to_string()]);
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&selected);
+    let forward = forward
+        .plan_header_partitions(&policy, &authorities)
         .unwrap()
         .emit_with_options(&options)
-        .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("ambiguous function root `CLIPFORMAT_UserSize`"),
-        "{error}"
+        .unwrap();
+    let reverse = reverse
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let forward = output(&forward, "Example.Public");
+    let reverse = output(&reverse, "Example.Public");
+
+    assert_eq!(
+        forward
+            .matches("// windows-clang: compatible function redeclarations")
+            .count(),
+        2,
+        "{forward}"
     );
+    assert_eq!(
+        forward
+            .matches("// windows-clang: declaration selected=")
+            .count(),
+        4,
+        "{forward}"
+    );
+    assert_eq!(forward.matches("fn Alpha").count(), 1, "{forward}");
+    assert_eq!(forward.matches("fn Beta").count(), 1, "{forward}");
+    let alpha = forward.find("symbol=\"Alpha\"").unwrap();
+    let beta = forward.find("symbol=\"Beta\"").unwrap();
+    assert!(alpha < beta, "{forward}");
+    for symbol in ["Alpha", "Beta"] {
+        let start = forward.find(&format!("symbol=\"{symbol}\"")).unwrap();
+        let end = forward[start..].find(&format!("fn {symbol}")).unwrap() + start;
+        let item = &forward[start..end];
+        assert!(
+            item.contains("declaration selected=true input=\"first.cpp\""),
+            "{item}"
+        );
+        assert!(
+            item.contains("declaration selected=false input=\"second.cpp\""),
+            "{item}"
+        );
+    }
+    assert!(!forward.contains("#[in]"), "{forward}");
+    assert_eq!(reverse.matches("#[in]").count(), 2, "{reverse}");
+    for symbol in ["Alpha", "Beta"] {
+        let start = reverse.find(&format!("symbol=\"{symbol}\"")).unwrap();
+        let end = reverse[start..].find(&format!("fn {symbol}")).unwrap() + start;
+        let item = &reverse[start..end];
+        assert!(
+            item.contains("declaration selected=true input=\"second.cpp\""),
+            "{item}"
+        );
+        assert!(
+            item.contains("declaration selected=false input=\"first.cpp\""),
+            "{item}"
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn fully_equal_function_redeclarations_emit_without_note() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("equal-function-redeclarations");
+    let (first, second, snapshot) =
+        duplicate_declaration_snapshot(&scratch, "extern \"C\" int Shared(unsigned value);\n");
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.First").with_library("Shared", "shared.dll"),
+        &second,
+        RootPartition::new("second", "Example.Second").with_library("Shared", "shared.dll"),
+    );
+    let references = BTreeMap::new();
+    let partitions = snapshot
+        .plan_header_partitions(
+            &policy,
+            &NamespaceAuthorities::new().with_exact("Shared", "Example.Public"),
+        )
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let rdl = output(&partitions, "Example.Public");
+
+    assert_eq!(rdl.matches("fn Shared").count(), 1, "{rdl}");
+    assert!(!rdl.contains("// windows-clang:"), "{rdl}");
+
+    windows_rdl::reader()
+        .input_text(include_str!("../../../../metadata/metadata.rdl"))
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(scratch.join("equal.winmd"))
+        .write()
+        .unwrap();
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -3484,6 +3737,11 @@ fn incompatible_function_redeclarations_remain_ambiguous() {
             "calling-convention",
             "extern \"C\" int __cdecl Shared(unsigned value);\n",
             "extern \"C\" int __stdcall Shared(unsigned value);\n",
+        ),
+        (
+            "arity",
+            "extern \"C\" int Shared(unsigned value);\n",
+            "extern \"C\" int Shared(unsigned value, unsigned other);\n",
         ),
         (
             "variadic",
@@ -3558,6 +3816,130 @@ fn incompatible_function_redeclarations_remain_ambiguous() {
         );
         std::fs::remove_dir_all(scratch).unwrap();
     }
+
+    let scratch = scratch("incompatible-function-parent");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &first,
+        "namespace First { extern \"C\" int Shared(unsigned value); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "namespace Second { extern \"C\" int Shared(unsigned value); }\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.First"),
+        &second,
+        RootPartition::new("second", "Example.Second"),
+    );
+    let selected = BTreeSet::from(["Shared".to_string()]);
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&selected);
+    let error = snapshot
+        .plan_header_partitions(
+            &policy,
+            &NamespaceAuthorities::new().with_exact("Shared", "Example.Public"),
+        )
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("ambiguous function root `Shared`"),
+        "{error}"
+    );
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn independent_incompatible_function_groups_are_reported_together() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("multiple-incompatible-function-groups");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &first,
+        "extern \"C\" int Alpha(unsigned value);\n\
+         extern \"C\" int Beta(unsigned value);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "extern \"C\" int Alpha(float value);\n\
+         extern \"C\" long long Beta(unsigned value);\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = duplicate_declaration_policy(
+        &first,
+        RootPartition::new("first", "Example.First"),
+        &second,
+        RootPartition::new("second", "Example.Second"),
+    );
+    let authorities = NamespaceAuthorities::new()
+        .with_exact("Alpha", "Example.Public")
+        .with_exact("Beta", "Example.Public");
+    let selected = BTreeSet::from(["Alpha".to_string(), "Beta".to_string()]);
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&selected);
+    let error = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.starts_with("ambiguous function roots (2):"),
+        "{error}"
+    );
+    let alpha = error.find("ambiguous function root `Alpha`").unwrap();
+    let beta = error.find("ambiguous function root `Beta`").unwrap();
+    assert!(alpha < beta, "{error}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
 }
 
 #[test]

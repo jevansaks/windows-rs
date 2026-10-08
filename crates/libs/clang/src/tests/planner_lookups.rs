@@ -7,6 +7,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         included_files: Vec::new(),
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
+        source_annotations: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
         pointer_callback_aliases: BTreeSet::new(),
         pointer_only_class_layouts: BTreeMap::new(),
@@ -23,7 +24,6 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         projected_type_names: BTreeMap::new(),
         namespace_authorities: BTreeMap::new(),
         fact_namespace_authorities: BTreeMap::new(),
-        matched_namespace_authorities: BTreeSet::new(),
         constant_namespace_authorities: BTreeMap::new(),
         header_partition_policy: false,
         header_authority_partition: None,
@@ -42,6 +42,35 @@ fn alias(local: u32, name: &str, file: &str, offset: u32, target: TypeRef) -> Fa
             offset,
         },
         FactData::Typedef { target },
+    )
+}
+
+fn function(tu: &str, local: u32, name: &str, file: &str, parameter: &str, input: bool) -> Fact {
+    test_fact_in_tu(
+        tu,
+        local,
+        None,
+        FactKind::Function,
+        name,
+        Location {
+            file: file.to_string(),
+            offset: local,
+        },
+        FactData::Function {
+            link_name: name.to_string(),
+            convention: CallingConvention::Platform,
+            params: vec![Parameter {
+                name: parameter.to_string(),
+                ty: TypeRef::Scalar(Scalar::U32),
+                annotation: ParamAnnotation {
+                    input,
+                    ..Default::default()
+                },
+            }],
+            result: TypeRef::Scalar(Scalar::I32),
+            variadic: false,
+            noreturn: false,
+        },
     )
 }
 
@@ -365,6 +394,54 @@ fn owned_planner_reuses_snapshot_fact_storage() {
         .unwrap();
     assert_eq!(plan.snapshot.facts.as_ptr(), facts);
     assert_eq!(plan.snapshot.facts.capacity(), fact_capacity);
+}
+
+#[test]
+fn function_ambiguity_inventory_is_complete_and_stable() {
+    let mut snapshot = snapshot(vec![
+        function("first.cpp", 1, "Alpha", "first.h", "alpha_first", false),
+        function("second.cpp", 2, "Alpha", "second.h", "alpha_second", true),
+        function("first.cpp", 3, "Beta", "first.h", "beta_first", false),
+        function("second.cpp", 4, "Beta", "second.h", "beta_second", true),
+    ]);
+    snapshot.input_order =
+        BTreeMap::from([("first.cpp".to_string(), 0), ("second.cpp".to_string(), 1)]);
+    let references = BTreeMap::new();
+    let plan = snapshot
+        .plan(PlanningOptions {
+            references: &references,
+            excluded_types: None,
+            excluded_functions: None,
+            excluded_constants: None,
+            selected_functions: None,
+            display_names: None,
+            source_names: None,
+        })
+        .unwrap();
+    let ambiguities = plan.function_ambiguities().collect::<Vec<_>>();
+
+    assert_eq!(
+        ambiguities
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>(),
+        ["Alpha", "Beta"]
+    );
+    assert!(ambiguities.iter().all(|(_, ambiguity)| {
+        ambiguity.declarations.len() == 2
+            && ambiguity.declarations[0].selected
+            && ambiguity.declarations[0].fact.origin.tu == "first.cpp"
+    }));
+    assert_eq!(
+        plan.function_ambiguity_summary().as_deref(),
+        Some(
+            "windows-clang: compatible function redeclarations count=2 \
+             inventory=\"Alpha\"[selected=true input=\"first.cpp\" source=\"first.h:1\", \
+             selected=false input=\"second.cpp\" source=\"second.h:2\"]; \
+             \"Beta\"[selected=true input=\"first.cpp\" source=\"first.h:3\", \
+             selected=false input=\"second.cpp\" source=\"second.h:4\"]"
+        )
+    );
 }
 
 #[test]

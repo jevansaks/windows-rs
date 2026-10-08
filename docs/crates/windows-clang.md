@@ -254,12 +254,29 @@ available in an ambiguity report.
 Free-function declarations from separate extraction inputs may differ in parameter names and SAL
 parameter annotations. They share one root only when their native parent path, linker name, calling
 convention, variadic and noreturn state, and exact parameter and result type bindings match. An
-exact or wildcard namespace authority selects a declaration only when that destination namespace
-was already one of the declaration's logical owner candidates. Rewriting an unrelated owner to the
-authority namespace does not make its declaration authoritative. The selected declaration supplies
-the parameter annotations without merging them, while every compatible declaration still
-contributes owner and import-library claims. If no unique authoritative declaration exists, or any
-callable ABI or type binding differs, planning reports an ambiguous function root.
+exact or wildcard namespace authority controls only the public namespace. When compatible
+declarations differ, the declaration from the earliest extraction input supplies the complete
+signature, parameter names, and parameter annotations. Source location breaks ties only within the
+same input. Parameter annotations are not combined. Every compatible observation still contributes
+its semantic route annotations, logical owner, and effective import library, so those conflicts are
+not hidden. Any callable ABI, type binding, native parent, or linker identity difference remains an
+ambiguous function root. Independent incompatible function groups are collected and reported
+together in symbol order.
+
+Emission places an audit note immediately before a function selected this way. The declarations
+are listed in extraction input order, then source order, with the selected declaration marked:
+
+```rust
+// windows-clang: compatible function redeclarations symbol="Example" selection=input-order
+// windows-clang: declaration selected=true input="first.cpp" source="first.h:42" signature=...
+// windows-clang: declaration selected=false input="second.cpp" source="second.h:84" signature=...
+```
+
+The signature summary includes the native signature, every parameter annotation, and the semantic
+annotations captured on that source declaration. Paths and other strings use escaped single-line
+formatting, so the note remains valid RDL. Fully equal declarations coalesce without an audit note.
+After a partitioned emission containing compatible differences succeeds, `windows-clang` writes one
+stderr summary with the total group count and the same deterministic symbol/source inventory.
 
 When equivalent roots resolve to different namespaces, header planning keeps one public identity per
 namespace if each exact source declaration belongs to one effective namespace. Ordinary declarations

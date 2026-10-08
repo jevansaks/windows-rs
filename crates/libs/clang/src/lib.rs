@@ -1286,6 +1286,7 @@ pub struct Snapshot {
     included_files: Vec<IncludedFile>,
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    source_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
@@ -1302,7 +1303,6 @@ pub struct Snapshot {
     projected_type_names: BTreeMap<Origin, String>,
     namespace_authorities: BTreeMap<String, String>,
     fact_namespace_authorities: BTreeMap<Origin, String>,
-    matched_namespace_authorities: BTreeSet<Origin>,
     constant_namespace_authorities: BTreeMap<(Origin, String), String>,
     header_partition_policy: bool,
     header_authority_partition: Option<String>,
@@ -1430,6 +1430,7 @@ impl PartialEq for Snapshot {
             && self.constants == other.constants
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
+            && self.source_annotations == other.source_annotations
             && self.declaration_guids == other.declaration_guids
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
@@ -1445,7 +1446,6 @@ impl PartialEq for Snapshot {
             && self.projected_type_names == other.projected_type_names
             && self.namespace_authorities == other.namespace_authorities
             && self.fact_namespace_authorities == other.fact_namespace_authorities
-            && self.matched_namespace_authorities == other.matched_namespace_authorities
             && self.constant_namespace_authorities == other.constant_namespace_authorities
             && self.header_partition_policy == other.header_partition_policy
             && self.header_authority_partition == other.header_authority_partition
@@ -1669,17 +1669,6 @@ impl Snapshot {
                     .get(&fact.name)
                     .map(|namespace| (fact.origin.clone(), namespace.clone()))
             })
-            .collect();
-        self.matched_namespace_authorities = self
-            .facts
-            .iter()
-            .filter(|fact| {
-                self.fact_namespace_authorities
-                    .get(&fact.origin)
-                    .zip(self.root_owners.get(&fact.origin))
-                    .is_some_and(|(namespace, owner)| owner.namespace == *namespace)
-            })
-            .map(|fact| fact.origin.clone())
             .collect();
         self.constant_namespace_authorities = self
             .constants
@@ -2222,6 +2211,11 @@ impl Snapshot {
         }
         for planned in plan.functions {
             let function = planned.fact;
+            let ambiguity_note = planned
+                .ambiguity
+                .as_ref()
+                .map(|ambiguity| function_ambiguity_note(&planned.name, ambiguity))
+                .unwrap_or_default();
             let output_name = display_names
                 .and_then(|names| names.get(&planned.name))
                 .unwrap_or(&planned.name);
@@ -2307,7 +2301,7 @@ impl Snapshot {
                 )
             };
             let item = format!(
-                "{}{}    {library}\n    extern{abi} fn {}({params}){result};\n",
+                "{ambiguity_note}{}{}    {library}\n    extern{abi} fn {}({params}){result};\n",
                 annotation_lines(declaration_annotations, "    ")?,
                 if *noreturn { "    #[noreturn]\n" } else { "" },
                 rdl_ident(output_name),
@@ -2402,7 +2396,6 @@ impl Snapshot {
         self.partition_exclusions.clear();
         self.forced_flags.clear();
         self.suppressed_type_origins.clear();
-        self.matched_namespace_authorities.clear();
         self.header_partition_policy = true;
         self.header_authority_partition
             .clone_from(&policy.authority_partition);
@@ -2470,8 +2463,6 @@ impl Snapshot {
                 .namespace_authorities
                 .get(&fact.name)
                 .map(String::as_str);
-            let authority_matches = namespace
-                .is_some_and(|namespace| selected.iter().any(|owner| owner.namespace == namespace));
             let (owner, conflict) = resolve_header_owner(&fact.name, kind, selected, namespace)?;
             if !excluded && let Some(conflict) = conflict {
                 conflicts.push(conflict);
@@ -2479,10 +2470,6 @@ impl Snapshot {
             self.root_owners.insert(fact.origin.clone(), owner);
             if !excluded {
                 fact.root = true;
-                if authority_matches {
-                    self.matched_namespace_authorities
-                        .insert(fact.origin.clone());
-                }
             }
         }
 
@@ -3522,23 +3509,6 @@ impl Snapshot {
         }
     }
 
-    fn function_authority_candidates<'a>(
-        &self,
-        facts: &[&'a Fact],
-        declarations: &DeclarationIndex<'_>,
-    ) -> Vec<&'a Fact> {
-        let matching: Vec<_> = facts
-            .iter()
-            .copied()
-            .filter(|fact| self.matched_namespace_authorities.contains(&fact.origin))
-            .collect();
-        if matching.is_empty() {
-            self.authority_candidates(facts, declarations)
-        } else {
-            matching
-        }
-    }
-
     fn fact_authority_namespace<'a>(
         &'a self,
         fact: &Fact,
@@ -4215,6 +4185,24 @@ impl Snapshot {
             .collect()
     }
 
+    fn source_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
+        let mut result: BTreeMap<Origin, RouteAnnotations> = BTreeMap::new();
+        for (target, annotations) in &self.source_annotations {
+            let (origin, target) = route_annotation_target(target);
+            result
+                .entry(origin.clone())
+                .or_default()
+                .push((target, annotations.clone()));
+        }
+        result
+            .into_iter()
+            .map(|(origin, mut annotations)| {
+                annotations.sort();
+                (origin, Rc::new(annotations))
+            })
+            .collect()
+    }
+
     fn resolve_native_import(
         &self,
         fact: &Fact,
@@ -4451,24 +4439,59 @@ impl Snapshot {
         &self,
         name: &str,
         roots: &[&'a Fact],
-        declarations: &DeclarationIndex<'_>,
         facts_by_origin: &HashMap<&Origin, &Fact>,
-    ) -> Result<(&'a Fact, Vec<&'a Fact>), Error> {
-        let distinct = distinct_source_declarations(roots);
-        let compatible = distinct.first().is_some_and(|first| {
-            distinct
-                .iter()
-                .all(|fact| common_callable_declarations_compatible(first, fact, facts_by_origin))
+        annotation_signatures: &BTreeMap<Origin, Rc<RouteAnnotations>>,
+    ) -> Result<FunctionRootSelection<'a>, Error> {
+        let Some(first) = roots.first() else {
+            return Err(Error(format!("missing function root `{name}`")));
+        };
+        let first_annotations = annotation_signatures.get(&first.origin);
+        let fully_equal = roots.iter().all(|fact| {
+            fact.kind == first.kind
+                && fact.definition == first.definition
+                && fact.data == first.data
+                && annotation_signatures.get(&fact.origin) == first_annotations
         });
-        match choose_function_root(name, &distinct) {
-            Ok(root) => Ok((root, if compatible { distinct } else { vec![root] })),
-            Err(error) if !compatible => Err(error),
-            Err(_) => {
-                let authority = self.function_authority_candidates(&distinct, declarations);
-                let root = choose_function_root(name, &authority)?;
-                Ok((root, distinct))
-            }
+        if !roots
+            .iter()
+            .all(|fact| common_callable_declarations_compatible(first, fact, facts_by_origin))
+        {
+            return Err(ambiguous_function_root(name, roots));
         }
+        let mut declarations = roots.to_vec();
+        declarations.sort_by(|left, right| {
+            (
+                self.input_rank(&left.origin.tu),
+                &left.spelling,
+                &left.expansion,
+                &left.origin,
+            )
+                .cmp(&(
+                    self.input_rank(&right.origin.tu),
+                    &right.spelling,
+                    &right.expansion,
+                    &right.origin,
+                ))
+        });
+        let fact = declarations[0];
+        let ambiguity = (!fully_equal).then(|| FunctionAmbiguity {
+            declarations: declarations
+                .iter()
+                .map(|declaration| FunctionDeclarationVariant {
+                    fact: declaration,
+                    selected: declaration.origin == fact.origin,
+                    annotations: annotation_signatures
+                        .get(&declaration.origin)
+                        .cloned()
+                        .unwrap_or_else(|| Rc::new(Vec::new())),
+                })
+                .collect(),
+        });
+        Ok(FunctionRootSelection {
+            fact,
+            declarations,
+            ambiguity,
+        })
     }
 
     fn authoritative_owner(
@@ -4559,6 +4582,7 @@ impl Snapshot {
         let declarations = DeclarationIndex::new(&self.facts);
         let facts_by_origin: HashMap<_, _> =
             self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+        let source_annotation_signatures = self.source_annotation_signatures();
         let source_fact_name = |fact: &Fact| {
             source_names.map_or_else(
                 || fact.name.clone(),
@@ -4869,6 +4893,7 @@ impl Snapshot {
         let mut type_roots = vec![];
         let mut value_roots = vec![];
         let mut functions = vec![];
+        let mut function_root_errors = vec![];
         let mut constants = vec![];
         let mut root_names = BTreeSet::new();
         let mut shape_cache = ShapeCache::default();
@@ -4935,20 +4960,27 @@ impl Snapshot {
                 }
                 let split_names = by_link_name.len() > 1;
                 for (link_name, roots) in by_link_name {
-                    let (fact, declarations) = self.choose_common_function_root(
+                    let selection = match self.choose_common_function_root(
                         name,
                         &roots,
-                        &declarations,
                         &facts_by_origin,
-                    )?;
+                        &source_annotation_signatures,
+                    ) {
+                        Ok(selection) => selection,
+                        Err(error) => {
+                            function_root_errors.push(error);
+                            continue;
+                        }
+                    };
                     functions.push(PlannedFunction {
                         name: if split_names {
                             link_name.to_string()
                         } else {
-                            fact.name.clone()
+                            selection.fact.name.clone()
                         },
-                        fact,
-                        declarations,
+                        fact: selection.fact,
+                        declarations: selection.declarations,
+                        ambiguity: selection.ambiguity,
                     });
                 }
             }
@@ -4958,6 +4990,9 @@ impl Snapshot {
             if let Some(constant) = constant {
                 constants.push(constant);
             }
+        }
+        if !function_root_errors.is_empty() {
+            return Err(aggregate_function_root_errors(function_root_errors));
         }
         if self.header_partition_policy {
             // Associated enum names are semantic type dependencies of selected roots.
@@ -6227,6 +6262,7 @@ impl HeaderPartitionPlan {
             self.snapshot.into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
         let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
+        let ambiguity_summary = plan.function_ambiguity_summary();
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let mut conflicts = self.root_conflicts;
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
@@ -6237,8 +6273,45 @@ impl HeaderPartitionPlan {
             return Err(Error(audit.to_string()));
         }
         let routes = snapshot.resolve_partition_routes(candidates)?;
-        snapshot.format_partitioned_plan(plan, options, &routes, &display_names, target.as_deref())
+        let result = snapshot.format_partitioned_plan(
+            plan,
+            options,
+            &routes,
+            &display_names,
+            target.as_deref(),
+        )?;
+        if let Some(summary) = ambiguity_summary {
+            eprintln!("{summary}");
+        }
+        Ok(result)
     }
+}
+
+fn function_ambiguity_note(name: &str, ambiguity: &FunctionAmbiguity<'_>) -> String {
+    let mut result = format!(
+        "    // windows-clang: compatible function redeclarations symbol={name:?} \
+         selection=input-order\n"
+    );
+    for declaration in &ambiguity.declarations {
+        let source = function_declaration_source(declaration.fact);
+        result.push_str(&format!(
+            "    // windows-clang: declaration selected={} input={:?} source={source:?} \
+             signature={:?} annotations={:?}\n",
+            declaration.selected,
+            declaration.fact.origin.tu,
+            declaration.fact.data,
+            declaration.annotations
+        ));
+    }
+    result
+}
+
+fn function_declaration_source(fact: &Fact) -> String {
+    format!(
+        "{}:{}",
+        normalize_name(&fact.spelling.file),
+        fact.spelling.offset
+    )
 }
 
 fn write_rdl<'a>(
@@ -6288,6 +6361,23 @@ struct PlannedFunction<'a> {
     fact: &'a Fact,
     name: String,
     declarations: Vec<&'a Fact>,
+    ambiguity: Option<FunctionAmbiguity<'a>>,
+}
+
+struct FunctionRootSelection<'a> {
+    fact: &'a Fact,
+    declarations: Vec<&'a Fact>,
+    ambiguity: Option<FunctionAmbiguity<'a>>,
+}
+
+struct FunctionAmbiguity<'a> {
+    declarations: Vec<FunctionDeclarationVariant<'a>>,
+}
+
+struct FunctionDeclarationVariant<'a> {
+    fact: &'a Fact,
+    selected: bool,
+    annotations: Rc<RouteAnnotations>,
 }
 
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
@@ -6306,6 +6396,48 @@ struct Plan<'a> {
     pointer_interface_aliases: BTreeMap<String, String>,
     interface_guids: BTreeMap<String, String>,
     flag_enums: BTreeSet<(String, String)>,
+}
+
+impl<'a> Plan<'a> {
+    fn function_ambiguities(&self) -> impl Iterator<Item = (&str, &FunctionAmbiguity<'a>)> {
+        self.functions.iter().filter_map(|function| {
+            function
+                .ambiguity
+                .as_ref()
+                .map(|ambiguity| (function.name.as_str(), ambiguity))
+        })
+    }
+
+    fn function_ambiguity_summary(&self) -> Option<String> {
+        let ambiguities = self.function_ambiguities().collect::<Vec<_>>();
+        if ambiguities.is_empty() {
+            return None;
+        }
+        let inventory = ambiguities
+            .iter()
+            .map(|(name, ambiguity)| {
+                let declarations = ambiguity
+                    .declarations
+                    .iter()
+                    .map(|declaration| {
+                        format!(
+                            "selected={} input={:?} source={:?}",
+                            declaration.selected,
+                            declaration.fact.origin.tu,
+                            function_declaration_source(declaration.fact)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{name:?}[{declarations}]")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        Some(format!(
+            "windows-clang: compatible function redeclarations count={} inventory={inventory}",
+            ambiguities.len()
+        ))
+    }
 }
 
 struct PlanningOptions<'a> {
@@ -8611,41 +8743,8 @@ fn constant_types_match(left: &TypeRef, right: &TypeRef) -> bool {
     }
 }
 
-fn choose_function_root<'a>(name: &str, roots: &[&'a Fact]) -> Result<&'a Fact, Error> {
-    let distinct = distinct_source_declarations(roots);
-    if let [root] = distinct.as_slice() {
-        return Ok(root);
-    }
-    if let Some(first) = distinct.first()
-        && distinct.iter().all(|fact| {
-            fact.kind == first.kind
-                && fact.definition == first.definition
-                && fact.data == first.data
-        })
-    {
-        return Ok(preferred_fact(&distinct));
-    }
-    if let Some(first) = distinct.first()
-        && let FactData::Function {
-            link_name: first_link_name,
-            ..
-        } = &first.data
-        && distinct.iter().all(|fact| {
-            fact.origin.tu == first.origin.tu
-                && fact.parent == first.parent
-                && matches!(
-                    &fact.data,
-                    FactData::Function { link_name, .. } if link_name == first_link_name
-                )
-        })
-    {
-        return Ok(distinct
-            .iter()
-            .min_by_key(|fact| &fact.spelling)
-            .copied()
-            .unwrap());
-    }
-    let choices = distinct
+fn ambiguous_function_root(name: &str, roots: &[&Fact]) -> Error {
+    let choices = roots
         .iter()
         .map(|fact| {
             format!(
@@ -8655,9 +8754,22 @@ fn choose_function_root<'a>(name: &str, roots: &[&'a Fact]) -> Result<&'a Fact, 
         })
         .collect::<Vec<_>>()
         .join("; ");
-    Err(Error(format!(
-        "ambiguous function root `{name}`: {choices}"
-    )))
+    Error(format!("ambiguous function root `{name}`: {choices}"))
+}
+
+fn aggregate_function_root_errors(mut errors: Vec<Error>) -> Error {
+    if errors.len() == 1 {
+        return errors.pop().unwrap();
+    }
+    let count = errors.len();
+    Error(format!(
+        "ambiguous function roots ({count}):\n  {}",
+        errors
+            .into_iter()
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>()
+            .join("\n  ")
+    ))
 }
 
 fn common_callable_declarations_compatible(

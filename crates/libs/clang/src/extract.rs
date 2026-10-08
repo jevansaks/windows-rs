@@ -210,6 +210,7 @@ fn extract_impl(
         }
         extracted.push(result);
     }
+    let source_annotations = annotations.clone();
     merge_redeclaration_annotations(&facts, &mut annotations)?;
     let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
@@ -389,6 +390,7 @@ fn extract_impl(
         included_files,
         declare_handles,
         annotations,
+        source_annotations,
         declaration_guids,
         pointer_callback_aliases,
         pointer_only_class_layouts,
@@ -405,7 +407,6 @@ fn extract_impl(
         projected_type_names: BTreeMap::new(),
         namespace_authorities: BTreeMap::new(),
         fact_namespace_authorities: BTreeMap::new(),
-        matched_namespace_authorities: BTreeSet::new(),
         constant_namespace_authorities: BTreeMap::new(),
         header_partition_policy: false,
         header_authority_partition: None,
