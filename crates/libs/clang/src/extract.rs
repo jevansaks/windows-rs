@@ -2990,13 +2990,22 @@ fn source_owned_annotation(declaration: CXCursor, attribute: CXCursor) -> bool {
     if (declaration_start..declaration_end).contains(&attribute_offset) {
         return true;
     }
-    attribute_offset < declaration_start
-        && !source_range_has_declaration_boundary(
-            unsafe { clang_Cursor_getTranslationUnit(declaration) },
+    let tu = unsafe { clang_Cursor_getTranslationUnit(declaration) };
+    if attribute_offset < declaration_start {
+        !source_range_has_declaration_boundary(
+            tu,
             declaration_file,
             attribute_offset,
             declaration_start,
         )
+    } else {
+        !source_range_has_declaration_boundary(
+            tu,
+            declaration_file,
+            declaration_end,
+            attribute_offset,
+        )
+    }
 }
 
 fn expansion_file_offset(location: CXSourceLocation) -> Option<(CXFile, u32)> {
@@ -4016,6 +4025,7 @@ fn normalize_canonical_typedef_origins(
     canonical_origins: &mut BTreeMap<Origin, Origin>,
 ) {
     let facts_by_origin: HashMap<_, _> = facts.iter().map(|fact| (&fact.origin, fact)).collect();
+    canonical_origins.retain(|origin, _| facts_by_origin.contains_key(origin));
     let mut groups: BTreeMap<Origin, Vec<Origin>> = BTreeMap::new();
     for (origin, canonical) in canonical_origins.iter() {
         groups

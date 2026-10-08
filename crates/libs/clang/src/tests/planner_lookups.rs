@@ -558,10 +558,10 @@ fn canonical_typedef_representative_prefers_rooted_fact() {
 }
 
 #[test]
-fn canonical_pointer_typedef_conflicting_annotations_are_rejected() {
+fn canonical_pointer_typedef_conflicting_annotations_are_not_coalesced() {
     helpers::ensure_libclang();
 
-    let error = extract(
+    let snapshot = extract(
         [Input::new(
             "conflicting.cpp",
             "#define W32M(value) __attribute__((annotate(value)))\n\
@@ -576,12 +576,32 @@ fn canonical_pointer_typedef_conflicting_annotations_are_rejected() {
         )],
         &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
     )
-    .unwrap_err()
-    .to_string();
-
+    .unwrap();
+    let aliases = snapshot
+        .facts
+        .iter()
+        .filter(|fact| fact.name == "LPDISPATCH")
+        .collect::<Vec<_>>();
+    assert_eq!(aliases.len(), 2);
+    assert_eq!(
+        snapshot.canonical_typedef_origins[&aliases[0].origin],
+        snapshot.canonical_typedef_origins[&aliases[1].origin]
+    );
+    let annotations = snapshot.source_annotation_signatures();
+    assert_ne!(
+        annotations.get(&aliases[0].origin),
+        annotations.get(&aliases[1].origin)
+    );
+    let canonical_typedefs = CanonicalTypedefIndex::new(
+        &snapshot.facts,
+        &snapshot.canonical_typedef_origins,
+        &annotations,
+        None,
+    );
     assert!(
-        error.contains("conflicting redeclaration annotation `raii_free` on `LPDISPATCH`"),
-        "{error}"
+        aliases
+            .iter()
+            .all(|fact| canonical_typedefs.representative(&fact.origin).is_none())
     );
 }
 
@@ -652,7 +672,7 @@ fn canonical_pointer_typedef_identity_is_tu_scoped_and_type_exact() {
         snapshot.canonical_typedef_origins[&first[0].origin],
         snapshot.canonical_typedef_origins[&second[0].origin]
     );
-    let route_annotations = snapshot.route_annotation_signatures();
+    let route_annotations = snapshot.source_annotation_signatures();
     let canonical_typedefs = CanonicalTypedefIndex::new(
         &snapshot.facts,
         &snapshot.canonical_typedef_origins,
