@@ -898,3 +898,48 @@ impl File {
         self.blobs.insert(&buffer)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hex(value: &str) -> Vec<u8> {
+        let mut chunks = value.as_bytes().chunks_exact(2);
+        let result = chunks
+            .by_ref()
+            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+            .collect();
+        assert!(chunks.remainder().is_empty());
+        result
+    }
+
+    #[test]
+    fn public_key_token_matches_framework_strong_name() {
+        let public_key = hex(concat!(
+            "0024000004800000940000000602000000240000525341310004000001000100",
+            "07d1fa57c4aed9f0a32e84aa0faefd0de9e8fd6aec8f87fb03766c834c99921e",
+            "b23be79ad9d5dcc1dd9ad236132102900b723cf980957fc4e177108fc607774f",
+            "29e8320e92ea05ece4e821c0a5efe8f1645c4c0c93c1ab99285d622caa652c1d",
+            "fad63d745d6f2de5f17e5eaf0fc4963d261c8a12436518206dc093344d5ad293",
+        ));
+        assert_eq!(public_key.len(), 160);
+        assert_eq!(public_key_token(&public_key), hex("b03f5f7f11d50a3a"));
+    }
+
+    #[test]
+    fn sha1_handles_padding_boundaries() {
+        let cases = [
+            (55, "8ae2d46729cfe68ff927af5eec9c7d1b66d65ac2"),
+            (56, "636e2ec698dac903498e648bd2f3af641d3c88cb"),
+            (63, "6d942da0c4392b123528f2905c713a3ce28364bd"),
+            (64, "c6138d514ffa2135bfce0ed0b8fac65669917ec7"),
+        ];
+
+        for (length, expected) in cases {
+            let input: Vec<_> = (0..length)
+                .map(|value| u8::try_from(value).unwrap())
+                .collect();
+            assert_eq!(sha1(&input).as_slice(), hex(expected), "length {length}");
+        }
+    }
+}
