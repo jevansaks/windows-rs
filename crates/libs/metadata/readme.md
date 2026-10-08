@@ -39,3 +39,8 @@ assert_eq!(fields[1].ty(), Type::F32);
 `TypeDef::qualified_name` and `TypeRef::qualified_name` preserve nested identity as a root
 namespace plus a slash-separated enclosing path. The physical `namespace` and `name` accessors
 continue to return the exact row values.
+
+`writer::File::TypeRef` resolves supplied reference definitions by their exact metadata name,
+including generic arity and nested paths. Local definitions keep module scope, including forward
+definitions completed before `into_stream`. Use `CoreTypeRef` only for compiler-known core-library
+types; it prefers an exact supplied definition and otherwise uses the legacy `mscorlib` identity.

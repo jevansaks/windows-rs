@@ -57,6 +57,16 @@ The writer API is lower-level. `writer::File` builds ECMA-335 rows and `into_str
 finished bytes. Prefer [`windows-rdl`](windows-rdl.md) when a reviewable source format is useful;
 use the writer directly when a tool is copying or synthesizing table rows.
 
+`writer::File::TypeRef` resolves a supplied reference definition by its exact physical metadata
+name. Generic arity suffixes and slash-separated nested paths therefore select the defining
+assembly instead of falling back to the output module. A local TypeDef with the same exact name
+wins, including a forward definition added after the TypeRef was first requested.
+
+`writer::File::CoreTypeRef` is the explicit path for compiler-known core-library types. It uses an
+exact supplied reference definition when one exists and otherwise reuses the legacy `System` ->
+`mscorlib` identity. The ordinary resolver does not treat every `System.*` namespace as core;
+unresolved non-core names retain module scope.
+
 ## Common tool tasks
 
 | Task | API |
@@ -160,6 +170,8 @@ cannot represent both scopes in its qualified-name TypeRef cache. If no local de
 inputs name different assemblies for the same qualified type, the merge also returns an error
 instead of choosing one reference. The legacy writer reference index still treats an assembly named
 `System` as the `mscorlib` sentinel rather than synthesizing a Windows Runtime `System` assembly.
+This merge path preserves source scopes; it does not repair a TypeRef that was already module-scoped
+when the RDL compiler produced an architecture input.
 
 The merge is deterministic: it stages through `BTreeMap`s and insertion-ordered `Vec`s, with no
 `HashMap` reaching the output.
@@ -216,7 +228,8 @@ alignment, enum constant values, subset-present divergence), `merge_layout.rs` (
 variants and absent-versus-zero offsets), and `merge.rs` (native-sized callback reconciliation,
 external AssemblyRef identity, matching-assembly localization, nested and unrelated reference
 conflicts, CLR version/key mismatches, Windows Runtime wildcard versions, and the legacy `System`
-sentinel).
+sentinel). `reference_scopes.rs` covers exact generic and nested definition lookup, forward local
+homonyms, and unresolved non-core names.
 `method_params.rs` authors metadata directly with `writer::File` and covers dense, absent, return,
 sparse, out-of-order, duplicate, and out-of-range parameter rows. It also covers all four raw
 directions and verifies that optional, reserved, retval, and count attributes remain independent

@@ -43,6 +43,17 @@ Reader references resolve names but are not emitted as definitions. Use `referen
 the bundled standard metadata, or the path and byte reference methods for custom dependencies.
 Writer inputs are definitions to render; `input_default` renders the bundled metadata.
 
+Reference lookup retains exact metadata identity. A generic use resolves the raw backtick arity,
+nested references retain their enclosing TypeRef chain, and local RDL definitions beat external
+same-named definitions even when the local definition is encoded later. Compiler-generated
+`IsConst`, `UnmanagedFunctionPointerAttribute`, and `CallingConvention` references use the
+core-library identity. Other unresolved names remain module-scoped rather than inheriting an
+assembly from their namespace.
+
+Reference emission happens before architecture merge. The metadata merger preserves exact
+AssemblyRef identities from its inputs, but it does not reinterpret an input that the RDL compiler
+already emitted with module scope.
+
 Writer filters accept namespace prefixes, qualified or unqualified names, and `!` exclusions.
 `split` writes one file per namespace. `partition` accepts an unqualified item-name -> file-stem
 map for flat metadata. `partition_qualified` accepts typed namespace/name identities when short
@@ -209,7 +220,8 @@ The older `implib::read` entry point keeps its permissive final-name and archive
 Dedicated test crates cover the crate:
 
 - `test_rdl` covers RDL to winmd round trips with `input/*.rdl` fixtures and invalid input with
-  `errors/input/*.rdl` and `errors/expected/*.txt` diagnostic fixtures.
+  `errors/input/*.rdl` and `errors/expected/*.txt` diagnostic fixtures. Its reference-scope controls
+  compile, write, and read back generic, callback-attribute, and const-modifier signatures.
 - The `windows-clang` integration tests cover header-to-RDL output.
 - `tool-roundtrip` re-derives committed RDL files from committed winmd files. The `gen` workflow
   enforces a clean `git diff`.

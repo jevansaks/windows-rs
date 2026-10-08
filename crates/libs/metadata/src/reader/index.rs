@@ -221,6 +221,23 @@ impl Index {
             .and_then(|file| file.assembly_name())
     }
 
+    pub(crate) fn exact_type(&self, namespace: &str, name: &str) -> Option<TypeDef<'_>> {
+        let root = name.split('/').next().unwrap_or(name);
+        for ty in self.get(namespace, trim_tick(root)) {
+            if ty.qualified_name().name == name {
+                return Some(ty);
+            }
+            if let Some(ty) = self
+                .nested_recursive(ty)
+                .into_iter()
+                .find(|ty| ty.qualified_name().name == name)
+            {
+                return Some(ty);
+            }
+        }
+        None
+    }
+
     /// Returns the single `TypeDef` matching `(namespace, name)`, panicking if there are zero
     /// or more than one.
     #[track_caller]

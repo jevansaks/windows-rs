@@ -99,10 +99,12 @@ impl Encoder<'_> {
             };
         }
 
-        let attribute = self.output.TypeRef(
+        let attribute = self.output.CoreTypeRef(
             "System.Runtime.InteropServices",
             "UnmanagedFunctionPointerAttribute",
         );
+        self.output
+            .CoreTypeRef("System.Runtime.InteropServices", "CallingConvention");
 
         let signature = windows_metadata::Signature {
             flags: windows_metadata::MethodCallAttributes::HASTHIS,

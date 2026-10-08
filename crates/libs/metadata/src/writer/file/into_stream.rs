@@ -39,6 +39,8 @@ impl<const LEN: usize> STREAM_HEADER<LEN> {
 
 impl File {
     pub fn into_stream(mut self) -> Vec<u8> {
+        self.localize_inferred_type_refs();
+
         self.records.Constant.extend(self.Constant.values());
 
         self.records

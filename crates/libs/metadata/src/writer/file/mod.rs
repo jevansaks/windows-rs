@@ -20,7 +20,9 @@ pub struct File {
     records: rec::Records,
     reference: Option<reader::Index>,
 
+    local_types: HashSet<(String, String)>,
     TypeRef: HashMap<String, HashMap<String, TypeRef>>,
+    core_type_refs: HashSet<TypeRef>,
     TypeSpec: HashMap<BlobId, TypeSpec>,
     AssemblyRef: HashMap<AssemblyRefIdentity, AssemblyRef>,
     reference_assemblies: HashMap<(String, String), AssemblyRefIdentity>,
@@ -133,6 +135,25 @@ impl AssemblyRefIdentity {
             self.public_key_or_token == definition.public_key
         } else {
             self.public_key_or_token == public_key_token(&definition.public_key)
+        }
+    }
+
+    fn from_definition(value: reader::Assembly<'_>) -> Self {
+        if value.name() == "System" {
+            return Self::system();
+        }
+
+        let (major_version, minor_version, build_number, revision_number) = value.version();
+        Self {
+            major_version,
+            minor_version,
+            build_number,
+            revision_number,
+            flags: value.flags().0,
+            public_key_or_token: value.public_key().to_vec(),
+            name: value.name().to_string(),
+            culture: value.culture().to_string(),
+            hash_value: vec![],
         }
     }
 }
@@ -356,6 +377,11 @@ impl File {
         extends: TypeDefOrRef,
         flags: TypeAttributes,
     ) -> TypeDef {
+        if !flags.is_nested() {
+            self.local_types
+                .insert((namespace.to_string(), name.to_string()));
+        }
+
         TypeDef(self.records.TypeDef.push_pos(rec::TypeDef {
             TypeName: self.strings.insert(name),
             TypeNamespace: self.strings.insert(namespace),
@@ -367,33 +393,54 @@ impl File {
     }
 
     pub fn TypeRef(&mut self, namespace: &str, name: &str) -> TypeRef {
-        if let Some(key) = self.TypeRef.get(namespace)
-            && let Some(pos) = key.get(name)
+        self.type_ref(namespace, name, false)
+    }
+
+    /// Creates a reference to a compiler-known core-library type.
+    ///
+    /// An exact supplied reference definition takes precedence. Otherwise this uses the same
+    /// `mscorlib` identity as the legacy `System` sentinel.
+    pub fn CoreTypeRef(&mut self, namespace: &str, name: &str) -> TypeRef {
+        self.type_ref(namespace, name, true)
+    }
+
+    fn type_ref(&mut self, namespace: &str, name: &str, core: bool) -> TypeRef {
+        if let Some(reference) = self
+            .TypeRef
+            .get(namespace)
+            .and_then(|names| names.get(name))
+            .copied()
         {
-            return *pos;
+            if core && !name.contains('/') {
+                let assembly = self
+                    .reference_assembly(namespace, name)
+                    .unwrap_or_else(AssemblyRefIdentity::system);
+                self.records.TypeRef[reference.0 as usize].ResolutionScope =
+                    ResolutionScope::AssemblyRef(self.assembly_ref(assembly));
+            }
+            if core {
+                self.core_type_refs.insert(reference);
+            }
+            return reference;
         }
 
         let pos = if let Some((parent, leaf)) = name.rsplit_once('/') {
-            let enclosing = self.TypeRef(namespace, parent);
+            let enclosing = self.type_ref(namespace, parent, core);
             TypeRef(self.records.TypeRef.push_pos(rec::TypeRef {
                 TypeName: self.strings.insert(leaf),
                 TypeNamespace: self.strings.insert(""),
                 ResolutionScope: ResolutionScope::TypeRef(enclosing),
             }))
         } else {
-            let assembly = self
-                .reference_assemblies
-                .get(&(namespace.to_string(), name.to_string()))
-                .cloned()
-                .or_else(|| {
-                    self.reference
-                        .as_ref()
-                        .and_then(|r| r.assembly_name(namespace, name))
-                        .map(AssemblyRefIdentity::named)
-                });
-
-            let scope = if let Some(assembly) = assembly {
-                ResolutionScope::AssemblyRef(self.assembly_ref(assembly))
+            let reference = self.reference_assembly(namespace, name);
+            let scope = if core {
+                ResolutionScope::AssemblyRef(
+                    self.assembly_ref(reference.unwrap_or_else(AssemblyRefIdentity::system)),
+                )
+            } else if self.has_local_type(namespace, name) {
+                ResolutionScope::Module(Module(0))
+            } else if let Some(reference) = reference {
+                ResolutionScope::AssemblyRef(self.assembly_ref(reference))
             } else if namespace == "System" {
                 ResolutionScope::AssemblyRef(self.AssemblyRef("System"))
             } else {
@@ -411,8 +458,44 @@ impl File {
             .entry(namespace.to_string())
             .or_default()
             .insert(name.to_string(), pos);
+        if core {
+            self.core_type_refs.insert(pos);
+        }
 
         pos
+    }
+
+    fn reference_assembly(&self, namespace: &str, name: &str) -> Option<AssemblyRefIdentity> {
+        self.reference_assemblies
+            .get(&(namespace.to_string(), name.to_string()))
+            .cloned()
+            .or_else(|| {
+                self.reference
+                    .as_ref()
+                    .and_then(|reference| reference.exact_type(namespace, name))
+                    .and_then(|ty| ty.assembly())
+                    .map(AssemblyRefIdentity::from_definition)
+            })
+    }
+
+    fn has_local_type(&self, namespace: &str, name: &str) -> bool {
+        self.local_types
+            .iter()
+            .any(|(local_namespace, local_name)| local_namespace == namespace && local_name == name)
+    }
+
+    fn localize_inferred_type_refs(&mut self) {
+        for (namespace, names) in &self.TypeRef {
+            for (name, reference) in names {
+                if !self.core_type_refs.contains(reference)
+                    && !name.contains('/')
+                    && self.has_local_type(namespace, name)
+                {
+                    self.records.TypeRef[reference.0 as usize].ResolutionScope =
+                        ResolutionScope::Module(Module(0));
+                }
+            }
+        }
     }
 
     pub fn TypeSpec(&mut self, namespace: &str, name: &str, generics: &[Type]) -> TypeSpec {
@@ -728,7 +811,7 @@ impl File {
 
             Type::RefConst(ty) => {
                 buffer.write_compressed(ELEMENT_TYPE_CMOD_REQD as usize);
-                let pos = self.TypeRef("System.Runtime.CompilerServices", "IsConst");
+                let pos = self.CoreTypeRef("System.Runtime.CompilerServices", "IsConst");
                 buffer.write_compressed(TypeDefOrRef::TypeRef(pos).encode() as usize);
                 buffer.push(ELEMENT_TYPE_BYREF);
                 self.Type(ty, buffer);
@@ -744,7 +827,7 @@ impl File {
 
             Type::PtrConst(ty, pointers) => {
                 buffer.write_compressed(ELEMENT_TYPE_CMOD_REQD as usize);
-                let pos = self.TypeRef("System.Runtime.CompilerServices", "IsConst");
+                let pos = self.CoreTypeRef("System.Runtime.CompilerServices", "IsConst");
                 buffer.write_compressed(TypeDefOrRef::TypeRef(pos).encode() as usize);
 
                 for _ in 0..*pointers {

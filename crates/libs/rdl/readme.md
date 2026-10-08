@@ -42,6 +42,10 @@ The flat and qualified partition modes cannot be combined on one writer.
 Inline structs and unions compile to nested TypeDefs. Their field signatures retain the full
 enclosing TypeRef chain, and the writer uses that identity when reconstructing inline RDL.
 
+Reference resolution keeps exact generic arity and nested ownership. Local RDL definitions win
+over same-named reference definitions, including forward references. Compiler-generated const
+modifiers and callback metadata use the core-library identity rather than a module-scoped fallback.
+
 `implib::read_contracts` reads COFF short-import records without collapsing the native linker
 symbol, DLL, raw machine value, import kind, and ordinal or name mode. Callers can reject contracts
 from a different architecture before emitting metadata. The older `implib::read` symbol-to-DLL
