@@ -103,6 +103,11 @@ A direct interface self typedef such as `typedef interface IFoo IFoo;` is omitte
 libclang links its target declaration to an extracted interface definition by canonical cursor
 identity. Uses of that exact typedef declaration bind to the interface provider. Differently named,
 annotated, source-distinct, and non-interface aliases remain typedefs.
+Same-translation-unit redeclarations of a direct interface-pointer typedef may retain one nominal
+alias only when libclang reports the same canonical typedef cursor and canonical underlying type.
+Native scope, source-owned annotations, and logical owner policy must also match. Conflicting owner
+policies remain an audit error, while a single declaration or declarations from different
+translation units keep the existing interface-pointer projection.
 An `associated_enum` annotation on a selected root adds its matching enum provider from compatible
 redeclarations to closure, including redeclarations from another aggregate extraction input.
 Dependency-only providers inherit that root's owner settings; providers already owned by a
@@ -110,7 +115,10 @@ traversed header keep their existing route.
 
 Headers may transport metadata policy with Clang `annotate` attributes whose payload begins with
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
-planning into RDL and WinMD attributes. Unknown, malformed, or misplaced annotations are errors.
+planning into RDL and WinMD attributes. Planning identity uses only annotations physically owned by
+each source declaration, even when libclang exposes inherited attributes on a later redeclaration.
+Compatible function redeclarations still merge their semantic annotations for emission. Unknown,
+malformed, or misplaced annotations are errors.
 Callback conventions come from the callback declarator. Pointer aliases inherit from the exact
 bare function typedef they alias, not from referenced return, parameter, or record types.
 The valueless `native_opaque` marker may appear on a named C++ class definition. It preserves only

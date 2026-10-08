@@ -346,6 +346,14 @@ or change its owner. Direct non-typedef uses, declarations from another physical
 pointers still project to the raw pointer and do not create nominal aliases in their logical or
 default namespaces.
 
+Direct interface-pointer typedef redeclarations use a narrower canonical rule. The declarations
+must be in one translation unit, share a libclang canonical typedef cursor and canonical underlying
+type, target an interface directly, and have the same native parent scope and source-owned
+annotation signature. Header planning prefers an owned root before source order. Equivalent owner
+policies retain one nominal alias; different partition, namespace, or owner settings remain an
+`AmbiguousOwners` audit conflict. A single declaration and declarations from different translation
+units keep the existing interface-pointer projection.
+
 Equivalent canonical raw-pointer declarations are scoped only for exact declarations that need a
 nominal identity: another pointer typedef points through the declaration, a pointer boundary changes
 mutability, or a selected function reaches a named callback that directly uses the same declaration.
@@ -520,6 +528,16 @@ Headers can add metadata policy with Clang `annotate` attributes whose payload b
 origin and member slot, merged across compatible redeclarations, and emitted with the selected
 owning declaration. Extraction-only annotations may instead control fact classification.
 Annotation collection does not change defining-header ownership.
+
+Libclang may expose an earlier declaration's `AnnotateAttr` children again on a later canonical
+redeclaration. Extraction therefore preserves a separate source-owned annotation map before
+semantic redeclaration merging. An attribute belongs to a declaration only when its expansion is in
+the same physical file and lies inside the declaration extent or in an immediately adjacent leading
+or trailing interval with no declaration-boundary token between them. Provider routing, canonical
+typedef identity, and partition conflicts use this source-owned map. Emission and compatible
+function/import inheritance use the merged semantic map. Divergent typedef annotations are not
+propagated to each other; if they would occupy one logical output route, preflight reports an
+`AmbiguousOwners` conflict instead of choosing by include order.
 
 The primary vocabulary controls:
 
