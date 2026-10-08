@@ -8,6 +8,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
         source_annotations: BTreeMap::new(),
+        function_annotations: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
         pointer_callback_aliases: BTreeSet::new(),
         pointer_only_class_layouts: BTreeMap::new(),
@@ -435,7 +436,7 @@ fn function_ambiguity_inventory_is_complete_and_stable() {
     assert_eq!(
         plan.function_ambiguity_summary().as_deref(),
         Some(
-            "windows-clang: compatible function redeclarations count=2 \
+            "windows-clang: function redeclarations count=2 \
              inventory=\"Alpha\"[selected=true input=\"first.cpp\" source=\"first.h:1\", \
              selected=false input=\"second.cpp\" source=\"second.h:2\"]; \
              \"Beta\"[selected=true input=\"first.cpp\" source=\"first.h:3\", \

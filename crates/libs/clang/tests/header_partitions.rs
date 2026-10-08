@@ -84,6 +84,12 @@ fn output<'a>(partitions: &'a BTreeMap<RdlPartition, String>, namespace: &str) -
         .1
 }
 
+fn function_line<'a>(rdl: &'a str, symbol: &str) -> &'a str {
+    rdl.lines()
+        .find(|line| line.contains(&format!(" fn {symbol}(")))
+        .unwrap()
+}
+
 fn nonempty_references() -> BTreeMap<String, TypeReference> {
     BTreeMap::from([(
         "EXTERNAL_TYPE".to_string(),
@@ -1165,7 +1171,7 @@ fn traversed_headers_select_roots_and_route_dependencies_to_default() {
 }
 
 #[test]
-fn associated_enums_from_included_headers_follow_the_annotated_root() {
+fn selected_function_annotations_control_included_enum_dependencies() {
     helpers::ensure_libclang();
 
     let scratch = scratch("associated-enum-dependency");
@@ -1256,21 +1262,14 @@ fn associated_enums_from_included_headers_follow_the_annotated_root() {
         "{public_rdl}"
     );
     assert!(
-        public_rdl.contains("#[associated_enum(\"DEPENDENCY_FLAGS\")]"),
+        !public_rdl.contains("#[associated_enum(\"DEPENDENCY_FLAGS\")]"),
         "{public_rdl}"
     );
     assert!(
         public_rdl.contains("#[associated_enum(\"DEPENDENCY_STATUS\")]"),
         "{public_rdl}"
     );
-    assert!(
-        public_rdl.contains("#[repr(u32)]\n        #[flags]\n        enum DEPENDENCY_FLAGS"),
-        "{partitions:#?}"
-    );
-    assert!(
-        public_rdl.contains("DEPENDENCY_HIGH = 2147483648"),
-        "{public_rdl}"
-    );
+    assert!(!public_rdl.contains("DEPENDENCY_FLAGS"), "{partitions:#?}");
     assert!(
         public_rdl.contains("#[repr(i32)]\n        enum DEPENDENCY_STATUS"),
         "{partitions:#?}"
@@ -1326,22 +1325,6 @@ fn associated_enums_from_included_headers_follow_the_annotated_root() {
         .write()
         .unwrap();
     let index = windows_metadata::reader::Index::read(&winmd).unwrap();
-
-    let flags = index.expect("Example.Public", "DEPENDENCY_FLAGS");
-    assert_eq!(flags.underlying_type(), Some(Type::U32));
-    assert!(flags.attributes().any(|attribute| {
-        attribute.name() == "FlagsAttribute" && attribute.ctor().parent().namespace() == "System"
-    }));
-    assert_eq!(
-        flags
-            .fields()
-            .find(|field| field.name() == "DEPENDENCY_HIGH")
-            .unwrap()
-            .constant()
-            .unwrap()
-            .value(),
-        Value::U32(0x8000_0000)
-    );
 
     let status = index.expect("Example.Public", "DEPENDENCY_STATUS");
     assert_eq!(status.underlying_type(), Some(Type::I32));
@@ -3460,9 +3443,10 @@ fn compatible_function_redeclarations_use_input_order_and_namespace_authority() 
         "{forward_rdl}"
     );
     assert!(
-        forward_rdl.contains("#[library(\"ole32.dll\", set_last_error)]"),
+        forward_rdl.contains("#[library(\"ole32.dll\")]"),
         "{forward_rdl}"
     );
+    assert!(!forward_rdl.contains("set_last_error)]"), "{forward_rdl}");
     assert!(
         forward_rdl.contains("#[supported_os(\"windows6.1\")]"),
         "{forward_rdl}"
@@ -3514,7 +3498,7 @@ fn compatible_function_redeclarations_use_input_order_and_namespace_authority() 
         "{reverse_rdl}"
     );
     assert!(
-        reverse_rdl.contains("#[supported_os(\"windows6.1\")]"),
+        !reverse_rdl.contains("#[supported_os(\"windows6.1\")]"),
         "{reverse_rdl}"
     );
     let reverse_selected = reverse_rdl
@@ -3540,7 +3524,7 @@ fn compatible_function_redeclarations_use_input_order_and_namespace_authority() 
 }
 
 #[test]
-fn multiple_compatible_function_groups_emit_complete_ordered_inventory() {
+fn multiple_differing_function_groups_emit_complete_ordered_inventory() {
     helpers::ensure_libclang();
 
     let scratch = scratch("multiple-compatible-function-groups");
@@ -3631,7 +3615,7 @@ fn multiple_compatible_function_groups_emit_complete_ordered_inventory() {
 
     assert_eq!(
         forward
-            .matches("// windows-clang: compatible function redeclarations")
+            .matches("// windows-clang: function redeclarations")
             .count(),
         2,
         "{forward}"
@@ -3719,66 +3703,122 @@ fn fully_equal_function_redeclarations_emit_without_note() {
 }
 
 #[test]
-fn incompatible_function_redeclarations_remain_ambiguous() {
+fn differing_function_redeclarations_select_complete_first_input_declaration() {
     helpers::ensure_libclang();
 
+    struct Case {
+        name: &'static str,
+        symbol: &'static str,
+        first: &'static str,
+        second: &'static str,
+        first_line: &'static [&'static str],
+        second_line: &'static [&'static str],
+    }
+
     let cases = [
-        (
-            "parameter-type",
-            "extern \"C\" int Shared(unsigned value);\n",
-            "extern \"C\" int Shared(unsigned long long value);\n",
-        ),
-        (
-            "result-type",
-            "extern \"C\" int Shared(unsigned value);\n",
-            "extern \"C\" long long Shared(unsigned value);\n",
-        ),
-        (
-            "calling-convention",
-            "extern \"C\" int __cdecl Shared(unsigned value);\n",
-            "extern \"C\" int __stdcall Shared(unsigned value);\n",
-        ),
-        (
-            "arity",
-            "extern \"C\" int Shared(unsigned value);\n",
-            "extern \"C\" int Shared(unsigned value, unsigned other);\n",
-        ),
-        (
-            "variadic",
-            "extern \"C\" int Shared(unsigned value);\n",
-            "extern \"C\" int Shared(unsigned value, ...);\n",
-        ),
-        (
-            "noreturn",
-            "extern \"C\" void Shared(void);\n",
-            "extern \"C\" __declspec(noreturn) void Shared(void);\n",
-        ),
-        (
-            "native-binding",
-            "struct TOKEN { int value; };\nextern \"C\" int Shared(TOKEN *value);\n",
-            "struct TOKEN { int value; };\nextern \"C\" int Shared(TOKEN *value);\n",
-        ),
+        Case {
+            name: "parameter-type",
+            symbol: "Shared",
+            first: "extern \"C\" int Shared(unsigned first_value);\n",
+            second: "extern \"C\" int Shared(unsigned long long second_value);\n",
+            first_line: &["first_value: u32", "-> i32"],
+            second_line: &["second_value: u64", "-> i32"],
+        },
+        Case {
+            name: "result-type",
+            symbol: "Shared",
+            first: "extern \"C\" int Shared(unsigned first_value);\n",
+            second: "extern \"C\" long long Shared(unsigned second_value);\n",
+            first_line: &["first_value: u32", "-> i32"],
+            second_line: &["second_value: u32", "-> i64"],
+        },
+        Case {
+            name: "pointer-depth-mutability",
+            symbol: "Shared",
+            first: "extern \"C\" int Shared(unsigned *first_value);\n",
+            second: "extern \"C\" int Shared(const unsigned **second_value);\n",
+            first_line: &["first_value: *mut u32"],
+            second_line: &["second_value: *const *const u32"],
+        },
+        Case {
+            name: "typedef-binding",
+            symbol: "Shared",
+            first: "typedef unsigned FIRST_DWORD;\n\
+                    extern \"C\" int Shared(FIRST_DWORD first_value);\n",
+            second: "typedef unsigned long long SECOND_DWORD;\n\
+                     extern \"C\" int Shared(SECOND_DWORD second_value);\n",
+            first_line: &["first_value:", "FIRST_DWORD"],
+            second_line: &["second_value:", "SECOND_DWORD"],
+        },
+        Case {
+            name: "callback-binding-contract",
+            symbol: "Shared",
+            first: "typedef int (__cdecl *FIRST_CALLBACK)(int);\n\
+                    extern \"C\" int Shared(FIRST_CALLBACK first_callback);\n",
+            second: "typedef long long (__stdcall *SECOND_CALLBACK)(unsigned, unsigned);\n\
+                     extern \"C\" int Shared(SECOND_CALLBACK second_callback);\n",
+            first_line: &["first_callback:", "FIRST_CALLBACK"],
+            second_line: &["second_callback:", "SECOND_CALLBACK"],
+        },
+        Case {
+            name: "arity",
+            symbol: "Shared",
+            first: "extern \"C\" int Shared(unsigned first_value);\n",
+            second: "extern \"C\" int Shared(unsigned second_value, unsigned second_other);\n",
+            first_line: &["first_value: u32"],
+            second_line: &["second_value: u32", "second_other: u32"],
+        },
+        Case {
+            name: "variadic",
+            symbol: "Shared",
+            first: "extern \"C\" int Shared(unsigned first_value);\n",
+            second: "extern \"C\" int Shared(unsigned second_value, ...);\n",
+            first_line: &["first_value: u32"],
+            second_line: &["second_value: u32", "..."],
+        },
+        Case {
+            name: "noreturn",
+            symbol: "Shared",
+            first: "extern \"C\" void Shared(unsigned first_value);\n",
+            second: "extern \"C\" __declspec(noreturn) void Shared(unsigned second_value);\n",
+            first_line: &["first_value: u32"],
+            second_line: &["second_value: u32"],
+        },
+        Case {
+            name: "is-window-arranged-convention",
+            symbol: "IsWindowArranged",
+            first: "extern \"C\" int __stdcall IsWindowArranged(unsigned first_value);\n",
+            second: "extern \"C\" int __cdecl IsWindowArranged(unsigned second_value);\n",
+            first_line: &["extern fn IsWindowArranged", "first_value: u32"],
+            second_line: &["extern \"C\" fn IsWindowArranged", "second_value: u32"],
+        },
+        Case {
+            name: "parent-path",
+            symbol: "Shared",
+            first: "namespace FirstParent {\n\
+                        extern \"C\" int Shared(unsigned first_value);\n\
+                    }\n",
+            second: "namespace SecondParent {\n\
+                         extern \"C\" int Shared(unsigned second_value);\n\
+                     }\n",
+            first_line: &["first_value: u32"],
+            second_line: &["second_value: u32"],
+        },
     ];
-    for (case, fallback_declaration, authority_declaration) in cases {
-        let scratch = scratch(&format!("incompatible-function-{case}"));
-        let fallback = scratch.join("fallback.h");
-        let authority = scratch.join("authority.h");
-        std::fs::write(&fallback, fallback_declaration).unwrap();
-        std::fs::write(&authority, authority_declaration).unwrap();
+
+    for case in cases {
+        let scratch = scratch(&format!("ordered-function-{}", case.name));
+        let first = scratch.join("first.h");
+        let second = scratch.join("second.h");
+        std::fs::write(&first, case.first).unwrap();
+        std::fs::write(&second, case.second).unwrap();
         let roots = [scratch.to_string_lossy().to_string()];
-        let snapshot = extract(
-            [
-                Input::new(
-                    "fallback.cpp",
-                    format!("#include \"{}\"\n", fallback.to_string_lossy()),
-                )
-                .with_root_dirs(roots.clone()),
-                Input::new(
-                    "authority.cpp",
-                    format!("#include \"{}\"\n", authority.to_string_lossy()),
-                )
-                .with_root_dirs(roots),
-            ],
+        let input = |name: &str, header: &Path| {
+            Input::new(name, format!("#include \"{}\"\n", header.to_string_lossy()))
+                .with_root_dirs(roots.clone())
+        };
+        let forward = extract(
+            [input("first.cpp", &first), input("second.cpp", &second)],
             &[
                 "-x",
                 "c++",
@@ -3787,47 +3827,137 @@ fn incompatible_function_redeclarations_remain_ambiguous() {
             ],
         )
         .unwrap();
-        let policy = HeaderPartitionPolicy::new()
-            .with_traversed_header_for_input(
-                "fallback.cpp",
-                fallback.to_string_lossy(),
-                RootPartition::new("fallback", "Example.Fallback"),
-            )
-            .with_traversed_header_for_input(
-                "authority.cpp",
-                authority.to_string_lossy(),
-                RootPartition::new("authority", "Example.Authority"),
-            );
-        let references = BTreeMap::new();
-        let error = snapshot
-            .plan_header_partitions(
-                &policy,
-                &NamespaceAuthorities::new().with_exact("Shared", "Example.Authority"),
-            )
-            .unwrap()
-            .emit_with_options(&EmitOptions::new("Example.Common", &references))
-            .unwrap_err();
-
-        assert!(
-            error
-                .to_string()
-                .contains("ambiguous function root `Shared`"),
-            "{case}: {error}"
+        let reverse = extract(
+            [input("second.cpp", &second), input("first.cpp", &first)],
+            &[
+                "-x",
+                "c++",
+                "-fms-extensions",
+                "--target=i686-pc-windows-msvc",
+            ],
+        )
+        .unwrap();
+        let policy = duplicate_declaration_policy(
+            &first,
+            RootPartition::new("first", "Example.First").with_library(case.symbol, "test.dll"),
+            &second,
+            RootPartition::new("second", "Example.Second").with_library(case.symbol, "test.dll"),
         );
+        let authorities = NamespaceAuthorities::new().with_exact(case.symbol, "Example.Public");
+        let selected = BTreeSet::from([case.symbol.to_string()]);
+        let references = BTreeMap::new();
+        let mut options = EmitOptions::new("Example.Common", &references);
+        options.functions = Some(&selected);
+        let forward_partitions = forward
+            .plan_header_partitions(&policy, &authorities)
+            .unwrap()
+            .emit_with_options(&options)
+            .unwrap();
+        let reverse_partitions = reverse
+            .plan_header_partitions(&policy, &authorities)
+            .unwrap()
+            .emit_with_options(&options)
+            .unwrap();
+        let forward_rdl = output(&forward_partitions, "Example.Public");
+        let reverse_rdl = output(&reverse_partitions, "Example.Public");
+        let forward_line = function_line(forward_rdl, case.symbol);
+        let reverse_line = function_line(reverse_rdl, case.symbol);
+
+        for expected in case.first_line {
+            assert!(
+                forward_line.contains(expected),
+                "{} forward: {forward_rdl}",
+                case.name
+            );
+        }
+        for expected in case.second_line {
+            assert!(
+                reverse_line.contains(expected),
+                "{} reverse: {reverse_rdl}",
+                case.name
+            );
+        }
+        assert!(
+            forward_rdl.contains("declaration selected=true input=\"first.cpp\""),
+            "{} forward: {forward_rdl}",
+            case.name
+        );
+        assert!(
+            forward_rdl.contains("declaration selected=false input=\"second.cpp\""),
+            "{} forward: {forward_rdl}",
+            case.name
+        );
+        assert!(
+            reverse_rdl.contains("declaration selected=true input=\"second.cpp\""),
+            "{} reverse: {reverse_rdl}",
+            case.name
+        );
+        assert!(
+            reverse_rdl.contains("declaration selected=false input=\"first.cpp\""),
+            "{} reverse: {reverse_rdl}",
+            case.name
+        );
+        assert_eq!(
+            forward_rdl
+                .matches("// windows-clang: function redeclarations")
+                .count(),
+            1,
+            "{} forward: {forward_rdl}",
+            case.name
+        );
+        assert_eq!(
+            forward_rdl
+                .matches("// windows-clang: declaration selected=")
+                .count(),
+            2,
+            "{} forward: {forward_rdl}",
+            case.name
+        );
+        assert_ne!(forward_line, reverse_line, "{}", case.name);
+
+        if case.name == "noreturn" {
+            assert!(!forward_rdl.contains("#[noreturn]"), "{forward_rdl}");
+            assert!(reverse_rdl.contains("#[noreturn]"), "{reverse_rdl}");
+        }
+        if case.name == "parent-path" {
+            assert!(forward_rdl.contains("FirstParent"), "{forward_rdl}");
+            assert!(forward_rdl.contains("SecondParent"), "{forward_rdl}");
+        }
+
+        for (order, partitions) in [
+            ("forward", &forward_partitions),
+            ("reverse", &reverse_partitions),
+        ] {
+            windows_rdl::reader()
+                .input_text(METADATA_RDL)
+                .input_texts(partitions.values())
+                .reference_default()
+                .output(scratch.join(format!("{order}.winmd")))
+                .write()
+                .unwrap();
+        }
+
         std::fs::remove_dir_all(scratch).unwrap();
     }
+}
 
-    let scratch = scratch("incompatible-function-parent");
+#[test]
+fn distinct_function_link_names_remain_independent_aliases() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("distinct-function-link-names");
     let first = scratch.join("first.h");
     let second = scratch.join("second.h");
     std::fs::write(
         &first,
-        "namespace First { extern \"C\" int Shared(unsigned value); }\n",
+        "#define Shared FirstExport\n\
+         extern \"C\" int Shared(unsigned first_value);\n",
     )
     .unwrap();
     std::fs::write(
         &second,
-        "namespace Second { extern \"C\" int Shared(unsigned value); }\n",
+        "#define Shared SecondExport\n\
+         extern \"C\" long long Shared(unsigned second_value);\n",
     )
     .unwrap();
     let roots = [scratch.to_string_lossy().to_string()];
@@ -3847,99 +3977,107 @@ fn incompatible_function_redeclarations_remain_ambiguous() {
         &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
     )
     .unwrap();
-    let policy = duplicate_declaration_policy(
-        &first,
-        RootPartition::new("first", "Example.First"),
-        &second,
-        RootPartition::new("second", "Example.Second"),
-    );
-    let selected = BTreeSet::from(["Shared".to_string()]);
+    let link_names: BTreeSet<_> = snapshot
+        .facts()
+        .iter()
+        .filter(|fact| fact.name == "Shared")
+        .filter_map(|fact| match &fact.data {
+            FactData::Function { link_name, .. } => Some(link_name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(link_names, BTreeSet::from(["FirstExport", "SecondExport"]));
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.Public").with_library("FirstExport", "test.dll"),
+        )
+        .with_traversed_header_for_input(
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Public").with_library("SecondExport", "test.dll"),
+        );
+    let selected = BTreeSet::from(["FirstExport".to_string(), "SecondExport".to_string()]);
     let references = BTreeMap::new();
     let mut options = EmitOptions::new("Example.Common", &references);
     options.functions = Some(&selected);
-    let error = snapshot
-        .plan_header_partitions(
-            &policy,
-            &NamespaceAuthorities::new().with_exact("Shared", "Example.Public"),
-        )
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
         .unwrap()
         .emit_with_options(&options)
-        .unwrap_err();
+        .unwrap();
+    let rdl = partitions.values().cloned().collect::<String>();
 
-    assert!(
-        error
-            .to_string()
-            .contains("ambiguous function root `Shared`"),
-        "{error}"
-    );
+    assert_eq!(rdl.matches("fn FirstExport").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches("fn SecondExport").count(), 1, "{rdl}");
+    assert!(!rdl.contains("// windows-clang: function redeclarations"));
+
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(scratch.join("aliases.winmd"))
+        .write()
+        .unwrap();
+
     std::fs::remove_dir_all(scratch).unwrap();
 }
 
 #[test]
-fn independent_incompatible_function_groups_are_reported_together() {
+fn function_redeclaration_route_claims_still_report_library_conflicts() {
     helpers::ensure_libclang();
 
-    let scratch = scratch("multiple-incompatible-function-groups");
-    let first = scratch.join("first.h");
-    let second = scratch.join("second.h");
-    std::fs::write(
-        &first,
-        "extern \"C\" int Alpha(unsigned value);\n\
-         extern \"C\" int Beta(unsigned value);\n",
-    )
-    .unwrap();
-    std::fs::write(
-        &second,
-        "extern \"C\" int Alpha(float value);\n\
-         extern \"C\" long long Beta(unsigned value);\n",
-    )
-    .unwrap();
-    let roots = [scratch.to_string_lossy().to_string()];
-    let snapshot = extract(
-        [
-            Input::new(
-                "first.cpp",
-                format!("#include \"{}\"\n", first.to_string_lossy()),
-            )
-            .with_root_dirs(roots.clone()),
-            Input::new(
-                "second.cpp",
-                format!("#include \"{}\"\n", second.to_string_lossy()),
-            )
-            .with_root_dirs(roots),
-        ],
-        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
-    )
-    .unwrap();
-    let policy = duplicate_declaration_policy(
-        &first,
-        RootPartition::new("first", "Example.First"),
-        &second,
-        RootPartition::new("second", "Example.Second"),
-    );
-    let authorities = NamespaceAuthorities::new()
-        .with_exact("Alpha", "Example.Public")
-        .with_exact("Beta", "Example.Public");
-    let selected = BTreeSet::from(["Alpha".to_string(), "Beta".to_string()]);
-    let references = BTreeMap::new();
-    let mut options = EmitOptions::new("Example.Common", &references);
-    options.functions = Some(&selected);
-    let error = snapshot
-        .plan_header_partitions(&policy, &authorities)
-        .unwrap()
-        .emit_with_options(&options)
-        .unwrap_err()
-        .to_string();
-
-    assert!(
-        error.starts_with("ambiguous function roots (2):"),
-        "{error}"
-    );
-    let alpha = error.find("ambiguous function root `Alpha`").unwrap();
-    let beta = error.find("ambiguous function root `Beta`").unwrap();
-    assert!(alpha < beta, "{error}");
-
-    std::fs::remove_dir_all(scratch).unwrap();
+    let cases = [(
+        "parameter",
+        "extern \"C\" int Shared(unsigned first_value);\n",
+        "extern \"C\" long long Shared(unsigned second_value);\n",
+    )];
+    for (case, first_declaration, second_declaration) in cases {
+        let scratch = scratch(&format!("ordered-function-library-conflict-{case}"));
+        let first = scratch.join("first.h");
+        let second = scratch.join("second.h");
+        std::fs::write(&first, first_declaration).unwrap();
+        std::fs::write(&second, second_declaration).unwrap();
+        let roots = [scratch.to_string_lossy().to_string()];
+        let snapshot = extract(
+            [
+                Input::new(
+                    "first.cpp",
+                    format!("#include \"{}\"\n", first.to_string_lossy()),
+                )
+                .with_root_dirs(roots.clone()),
+                Input::new(
+                    "second.cpp",
+                    format!("#include \"{}\"\n", second.to_string_lossy()),
+                )
+                .with_root_dirs(roots),
+            ],
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        let policy = duplicate_declaration_policy(
+            &first,
+            RootPartition::new("first", "Example.Public").with_library("Shared", "first.dll"),
+            &second,
+            RootPartition::new("second", "Example.Public").with_library("Shared", "second.dll"),
+        );
+        let references = BTreeMap::new();
+        let plan = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap();
+        let audit = plan
+            .audit(&EmitOptions::new("Example.Common", &references))
+            .unwrap();
+        assert_eq!(audit.conflicts().len(), 1, "{audit}");
+        assert_eq!(audit.conflicts()[0].name, "Shared");
+        assert_eq!(
+            audit.conflicts()[0].reason,
+            PartitionConflictReason::AmbiguousOwners
+        );
+        std::fs::remove_dir_all(scratch).unwrap();
+    }
 }
 
 #[test]

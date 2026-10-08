@@ -1287,6 +1287,7 @@ pub struct Snapshot {
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     source_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    function_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
@@ -1431,6 +1432,7 @@ impl PartialEq for Snapshot {
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
             && self.source_annotations == other.source_annotations
+            && self.function_annotations == other.function_annotations
             && self.declaration_guids == other.declaration_guids
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
@@ -2246,7 +2248,8 @@ impl Snapshot {
                 namespace,
             );
             let callable = CallableTarget::Function(&function.origin);
-            let mut params = write_params(params, &projection, &self.annotations, callable)?;
+            let mut params =
+                write_params(params, &projection, &self.function_annotations, callable)?;
             if *variadic {
                 params.push("...".to_string());
             }
@@ -2257,14 +2260,14 @@ impl Snapshot {
                 format!(
                     " -> {}{}",
                     annotation_inline(annotations_for(
-                        &self.annotations,
+                        &self.function_annotations,
                         &AnnotationTarget::Return(function.origin.clone()),
                     ),)?,
                     planned_emitted_type_name(result, &projection)
                 )
             };
             let declaration_annotations = annotations_for(
-                &self.annotations,
+                &self.function_annotations,
                 &AnnotationTarget::Declaration(function.origin.clone()),
             );
             let route =
@@ -2480,9 +2483,10 @@ impl Snapshot {
             .filter(|fact| fact.root)
             .map(|fact| fact.origin.clone())
             .collect();
+        let selected_annotations = self.annotations_with_selected_functions();
         let mut associated_enum_annotations: BTreeMap<String, BTreeSet<AnnotationTarget>> =
             BTreeMap::new();
-        for (target, annotations) in &self.annotations {
+        for (target, annotations) in &selected_annotations {
             for annotation in annotations {
                 if let Annotation::AssociatedEnum(name) = annotation {
                     associated_enum_annotations
@@ -2637,21 +2641,25 @@ impl Snapshot {
             }
         }
         if !associated_enum_remaps.is_empty() {
-            for (target, annotations) in &mut self.annotations {
-                for annotation in annotations {
-                    let Annotation::AssociatedEnum(name) = annotation else {
-                        continue;
-                    };
-                    let Some(remap) = associated_enum_remaps.get(&(target.clone(), name.clone()))
-                    else {
-                        continue;
-                    };
-                    name.clone_from(remap);
+            for annotation_map in [&mut self.annotations, &mut self.function_annotations] {
+                for (target, annotations) in annotation_map {
+                    for annotation in annotations {
+                        let Annotation::AssociatedEnum(name) = annotation else {
+                            continue;
+                        };
+                        let Some(remap) =
+                            associated_enum_remaps.get(&(target.clone(), name.clone()))
+                        else {
+                            continue;
+                        };
+                        name.clone_from(remap);
+                    }
                 }
             }
         }
 
-        for (target, annotations) in &self.annotations {
+        let selected_annotations = self.annotations_with_selected_functions();
+        for (target, annotations) in &selected_annotations {
             let AnnotationTarget::Declaration(origin) = target else {
                 continue;
             };
@@ -3826,6 +3834,7 @@ impl Snapshot {
     ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate<'a>>, Error> {
         let declarations = DeclarationIndex::new(&self.facts);
         let annotation_signatures = self.route_annotation_signatures();
+        let source_annotation_signatures = self.source_route_annotation_signatures();
         let empty_annotations = Rc::new(Vec::new());
         let route_context = RouteClaimContext {
             annotations: &annotation_signatures,
@@ -3969,20 +3978,20 @@ impl Snapshot {
         }
         for planned in &plan.functions {
             let function = planned.fact;
+            let selected_annotations = source_annotation_signatures
+                .get(&function.origin)
+                .cloned()
+                .unwrap_or_else(|| empty_annotations.clone());
             let mut claims = BTreeSet::new();
             for &declaration in &planned.declarations {
                 let Some(owner) = self.root_owners.get(&declaration.origin) else {
                     continue;
                 };
-                let annotations = annotation_signatures
-                    .get(&declaration.origin)
-                    .cloned()
-                    .unwrap_or_else(|| empty_annotations.clone());
                 claims.insert(self.fact_route_claim(
                     function,
                     declaration,
                     owner,
-                    annotations,
+                    selected_annotations.clone(),
                     &plan.flag_enums,
                     options,
                 )?);
@@ -3993,7 +4002,7 @@ impl Snapshot {
             let key = (planned.name.clone(), OutputKind::Value);
             result.insert(
                 key,
-                self.fact_route_candidate(
+                self.fact_route_candidate_with_annotations(
                     function,
                     (
                         planned.name.clone(),
@@ -4002,6 +4011,7 @@ impl Snapshot {
                     OutputKind::Value,
                     claims,
                     namespace,
+                    selected_annotations,
                     &route_context,
                 )?,
             );
@@ -4067,7 +4077,7 @@ impl Snapshot {
         fact: &'a Fact,
         names: (String, String),
         kind: OutputKind,
-        mut claims: BTreeSet<RouteClaim<'a>>,
+        claims: BTreeSet<RouteClaim<'a>>,
         namespace: Option<String>,
         context: &RouteClaimContext<'_, '_>,
     ) -> Result<RouteCandidate<'a>, Error> {
@@ -4076,6 +4086,28 @@ impl Snapshot {
             .get(&fact.origin)
             .cloned()
             .unwrap_or_else(|| context.empty_annotations.clone());
+        self.fact_route_candidate_with_annotations(
+            fact,
+            names,
+            kind,
+            claims,
+            namespace,
+            annotations,
+            context,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn fact_route_candidate_with_annotations<'a>(
+        &'a self,
+        fact: &'a Fact,
+        names: (String, String),
+        kind: OutputKind,
+        mut claims: BTreeSet<RouteClaim<'a>>,
+        namespace: Option<String>,
+        annotations: Rc<RouteAnnotations>,
+        context: &RouteClaimContext<'_, '_>,
+    ) -> Result<RouteCandidate<'a>, Error> {
         if claims.is_empty() {
             let mut owners = BTreeSet::new();
             self.add_authority_fallback(&mut owners, fact, namespace.as_deref())?;
@@ -4203,6 +4235,31 @@ impl Snapshot {
             .collect()
     }
 
+    fn source_route_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
+        let mut result: BTreeMap<Origin, RouteAnnotations> = BTreeMap::new();
+        for (target, annotations) in &self.function_annotations {
+            let (origin, target) = route_annotation_target(target);
+            let annotations: Vec<_> = annotations
+                .iter()
+                .filter(|annotation| !matches!(annotation, Annotation::ImportLibrary(_)))
+                .cloned()
+                .collect();
+            if !annotations.is_empty() {
+                result
+                    .entry(origin.clone())
+                    .or_default()
+                    .push((target, annotations));
+            }
+        }
+        result
+            .into_iter()
+            .map(|(origin, mut annotations)| {
+                annotations.sort();
+                (origin, Rc::new(annotations))
+            })
+            .collect()
+    }
+
     fn resolve_native_import(
         &self,
         fact: &Fact,
@@ -4213,7 +4270,7 @@ impl Snapshot {
             return Ok(None);
         };
         let configured_library = annotations_for(
-            &self.annotations,
+            &self.function_annotations,
             &AnnotationTarget::Declaration(fact.origin.clone()),
         )
         .iter()
@@ -4268,8 +4325,7 @@ impl Snapshot {
                 },
                 annotations,
                 uuid: self.fact_uuid(fact),
-                flags: flag_enums
-                    .contains(&(declaration.origin.tu.clone(), declaration.name.clone())),
+                flags: flag_enums.contains(&(fact.origin.tu.clone(), fact.name.clone())),
                 native_import: self.resolve_native_import(declaration, Some(owner), options)?,
             },
         })
@@ -4409,6 +4465,60 @@ impl Snapshot {
         self.input_order.get(tu).copied().unwrap_or(usize::MAX)
     }
 
+    fn selected_function_origins(&self) -> BTreeSet<Origin> {
+        let mut selected = BTreeMap::<(String, String), &Fact>::new();
+        for fact in &self.facts {
+            let FactData::Function { link_name, .. } = &fact.data else {
+                continue;
+            };
+            selected
+                .entry((fact.name.clone(), link_name.clone()))
+                .and_modify(|current| {
+                    if (
+                        self.input_rank(&fact.origin.tu),
+                        &fact.spelling,
+                        &fact.expansion,
+                        &fact.origin,
+                    ) < (
+                        self.input_rank(&current.origin.tu),
+                        &current.spelling,
+                        &current.expansion,
+                        &current.origin,
+                    ) {
+                        *current = fact;
+                    }
+                })
+                .or_insert(fact);
+        }
+        selected
+            .into_values()
+            .map(|fact| fact.origin.clone())
+            .collect()
+    }
+
+    fn annotations_with_selected_functions(&self) -> BTreeMap<AnnotationTarget, Vec<Annotation>> {
+        let function_origins: BTreeSet<_> = self
+            .facts
+            .iter()
+            .filter(|fact| matches!(fact.data, FactData::Function { .. }))
+            .map(|fact| fact.origin.clone())
+            .collect();
+        let selected_origins = self.selected_function_origins();
+        let mut result = self
+            .annotations
+            .iter()
+            .filter(|(target, _)| !function_origins.contains(target.origin()))
+            .map(|(target, annotations)| (target.clone(), annotations.clone()))
+            .collect::<BTreeMap<_, _>>();
+        result.extend(
+            self.function_annotations
+                .iter()
+                .filter(|(target, _)| selected_origins.contains(target.origin()))
+                .map(|(target, annotations)| (target.clone(), annotations.clone())),
+        );
+        result
+    }
+
     fn choose_constant_root<'a>(
         &self,
         name: &str,
@@ -4441,23 +4551,20 @@ impl Snapshot {
         roots: &[&'a Fact],
         facts_by_origin: &HashMap<&Origin, &Fact>,
         annotation_signatures: &BTreeMap<Origin, Rc<RouteAnnotations>>,
+        source_names: Option<&PlanningSourceNames>,
     ) -> Result<FunctionRootSelection<'a>, Error> {
         let Some(first) = roots.first() else {
             return Err(Error(format!("missing function root `{name}`")));
         };
         let first_annotations = annotation_signatures.get(&first.origin);
+        let first_parent = function_parent_path(first, facts_by_origin, source_names);
         let fully_equal = roots.iter().all(|fact| {
             fact.kind == first.kind
                 && fact.definition == first.definition
                 && fact.data == first.data
+                && function_parent_path(fact, facts_by_origin, source_names) == first_parent
                 && annotation_signatures.get(&fact.origin) == first_annotations
         });
-        if !roots
-            .iter()
-            .all(|fact| common_callable_declarations_compatible(first, fact, facts_by_origin))
-        {
-            return Err(ambiguous_function_root(name, roots));
-        }
         let mut declarations = roots.to_vec();
         declarations.sort_by(|left, right| {
             (
@@ -4480,6 +4587,7 @@ impl Snapshot {
                 .map(|declaration| FunctionDeclarationVariant {
                     fact: declaration,
                     selected: declaration.origin == fact.origin,
+                    parent: function_parent_path(declaration, facts_by_origin, source_names),
                     annotations: annotation_signatures
                         .get(&declaration.origin)
                         .cloned()
@@ -4965,6 +5073,7 @@ impl Snapshot {
                         &roots,
                         &facts_by_origin,
                         &source_annotation_signatures,
+                        source_names,
                     ) {
                         Ok(selection) => selection,
                         Err(error) => {
@@ -4996,6 +5105,7 @@ impl Snapshot {
         }
         if self.header_partition_policy {
             // Associated enum names are semantic type dependencies of selected roots.
+            let selected_annotations = self.annotations_with_selected_functions();
             let selected_origins: BTreeSet<_> = type_roots
                 .iter()
                 .chain(value_roots.iter())
@@ -5007,8 +5117,7 @@ impl Snapshot {
                 )
                 .chain(constants.iter().map(|constant| constant.root.clone()))
                 .collect();
-            let associated_enums: BTreeSet<_> = self
-                .annotations
+            let associated_enums: BTreeSet<_> = selected_annotations
                 .iter()
                 .filter(|(target, _)| selected_origins.contains(target.origin()))
                 .flat_map(|(_, annotations)| {
@@ -6289,16 +6398,16 @@ impl HeaderPartitionPlan {
 
 fn function_ambiguity_note(name: &str, ambiguity: &FunctionAmbiguity<'_>) -> String {
     let mut result = format!(
-        "    // windows-clang: compatible function redeclarations symbol={name:?} \
-         selection=input-order\n"
+        "    // windows-clang: function redeclarations symbol={name:?} selection=input-order\n"
     );
     for declaration in &ambiguity.declarations {
         let source = function_declaration_source(declaration.fact);
         result.push_str(&format!(
             "    // windows-clang: declaration selected={} input={:?} source={source:?} \
-             signature={:?} annotations={:?}\n",
+             parent={:?} signature={:?} annotations={:?}\n",
             declaration.selected,
             declaration.fact.origin.tu,
+            declaration.parent,
             declaration.fact.data,
             declaration.annotations
         ));
@@ -6377,6 +6486,7 @@ struct FunctionAmbiguity<'a> {
 struct FunctionDeclarationVariant<'a> {
     fact: &'a Fact,
     selected: bool,
+    parent: Option<FunctionParentPath>,
     annotations: Rc<RouteAnnotations>,
 }
 
@@ -6434,7 +6544,7 @@ impl<'a> Plan<'a> {
             .collect::<Vec<_>>()
             .join("; ");
         Some(format!(
-            "windows-clang: compatible function redeclarations count={} inventory={inventory}",
+            "windows-clang: function redeclarations count={} inventory={inventory}",
             ambiguities.len()
         ))
     }
@@ -8743,20 +8853,6 @@ fn constant_types_match(left: &TypeRef, right: &TypeRef) -> bool {
     }
 }
 
-fn ambiguous_function_root(name: &str, roots: &[&Fact]) -> Error {
-    let choices = roots
-        .iter()
-        .map(|fact| {
-            format!(
-                "{}:{} {:?}",
-                fact.spelling.file, fact.spelling.offset, fact.data
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("; ");
-    Error(format!("ambiguous function root `{name}`: {choices}"))
-}
-
 fn aggregate_function_root_errors(mut errors: Vec<Error>) -> Error {
     if errors.len() == 1 {
         return errors.pop().unwrap();
@@ -8772,73 +8868,27 @@ fn aggregate_function_root_errors(mut errors: Vec<Error>) -> Error {
     ))
 }
 
-fn common_callable_declarations_compatible(
-    left: &Fact,
-    right: &Fact,
-    facts_by_origin: &HashMap<&Origin, &Fact>,
-) -> bool {
-    fn parents_match(left: &Fact, right: &Fact, facts_by_origin: &HashMap<&Origin, &Fact>) -> bool {
-        let mut left = left.parent.as_ref();
-        let mut right = right.parent.as_ref();
-        loop {
-            match (left, right) {
-                (None, None) => return true,
-                (Some(left_origin), Some(right_origin)) => {
-                    let (Some(left_fact), Some(right_fact)) = (
-                        facts_by_origin.get(left_origin),
-                        facts_by_origin.get(right_origin),
-                    ) else {
-                        return left_origin == right_origin;
-                    };
-                    if left_fact.kind != right_fact.kind || left_fact.name != right_fact.name {
-                        return false;
-                    }
-                    left = left_fact.parent.as_ref();
-                    right = right_fact.parent.as_ref();
-                }
-                _ => return false,
-            }
-        }
-    }
+type FunctionParentPath = Vec<(FactKind, String, Option<Location>)>;
 
-    if left.kind != right.kind
-        || left.name != right.name
-        || left.definition != right.definition
-        || !parents_match(left, right, facts_by_origin)
-    {
-        return false;
+fn function_parent_path(
+    fact: &Fact,
+    facts_by_origin: &HashMap<&Origin, &Fact>,
+    source_names: Option<&PlanningSourceNames>,
+) -> Option<FunctionParentPath> {
+    let mut result = Vec::new();
+    let mut parent = fact.parent.as_ref();
+    while let Some(origin) = parent {
+        let fact = facts_by_origin.get(origin)?;
+        let name = source_names.map_or(fact.name.as_str(), |names| names.fact_name(fact));
+        result.push((
+            fact.kind,
+            name.to_string(),
+            name.is_empty().then(|| fact.spelling.clone()),
+        ));
+        parent = fact.parent.as_ref();
     }
-    let (
-        FactData::Function {
-            link_name: left_link_name,
-            convention: left_convention,
-            params: left_params,
-            result: left_result,
-            variadic: left_variadic,
-            noreturn: left_noreturn,
-        },
-        FactData::Function {
-            link_name: right_link_name,
-            convention: right_convention,
-            params: right_params,
-            result: right_result,
-            variadic: right_variadic,
-            noreturn: right_noreturn,
-        },
-    ) = (&left.data, &right.data)
-    else {
-        return false;
-    };
-    left_link_name == right_link_name
-        && left_convention == right_convention
-        && left_params.len() == right_params.len()
-        && left_params
-            .iter()
-            .zip(right_params)
-            .all(|(left, right)| left.ty == right.ty)
-        && left_result == right_result
-        && left_variadic == right_variadic
-        && left_noreturn == right_noreturn
+    result.reverse();
+    Some(result)
 }
 
 fn distinct_source_declarations<'a>(roots: &[&'a Fact]) -> Vec<&'a Fact> {
