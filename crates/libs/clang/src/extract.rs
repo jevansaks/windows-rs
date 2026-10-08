@@ -498,7 +498,14 @@ fn apply_macro_enum_overrides(
         let value = if constant.spelling.offset < *enum_offset {
             macro_before_enum_matches(constant, *repr, *enum_value, &scalar_aliases).then_some(None)
         } else {
-            macro_after_enum_value(constant, *repr, &scalar_aliases, &enum_reprs).map(Some)
+            macro_after_enum_value(
+                constant,
+                *repr,
+                &facts[*fact_index].spelling,
+                &scalar_aliases,
+                &enum_reprs,
+            )
+            .map(Some)
         };
         if let Some(value) = value {
             actions.push((
@@ -557,6 +564,7 @@ fn macro_before_enum_matches(
 fn macro_after_enum_value(
     constant: &Constant,
     repr: Scalar,
+    enum_declaration: &Location,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
     enum_reprs: &HashMap<(&str, &str, &Location), Scalar>,
 ) -> Option<i64> {
@@ -564,7 +572,7 @@ fn macro_after_enum_value(
         &constant.ty,
         &constant.root.tu,
         scalar_aliases,
-        Some(enum_reprs),
+        Some((enum_reprs, enum_declaration)),
     )?;
     scalar_value(source, &constant.value)?;
     enum_override_value(&constant.value, repr)
@@ -574,13 +582,13 @@ fn macro_scalar_type(
     ty: &TypeRef,
     tu: &str,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
-    enum_reprs: Option<&HashMap<(&str, &str, &Location), Scalar>>,
+    enum_reprs: Option<(&HashMap<(&str, &str, &Location), Scalar>, &Location)>,
 ) -> Option<Scalar> {
     fn resolve(
         ty: &TypeRef,
         tu: &str,
         scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
-        enum_reprs: Option<&HashMap<(&str, &str, &Location), Scalar>>,
+        enum_reprs: Option<(&HashMap<(&str, &str, &Location), Scalar>, &Location)>,
         seen: &mut HashSet<Location>,
     ) -> Option<Scalar> {
         match ty {
@@ -590,7 +598,12 @@ fn macro_scalar_type(
                 if let Some(target) = scalar_aliases.get(&key) {
                     resolve(target, tu, scalar_aliases, enum_reprs, seen)
                 } else {
-                    enum_reprs.and_then(|enum_reprs| enum_reprs.get(&key).copied())
+                    let (enum_reprs, target_declaration) = enum_reprs?;
+                    if declaration == target_declaration {
+                        enum_reprs.get(&key).copied()
+                    } else {
+                        None
+                    }
                 }
             }
             _ => None,
