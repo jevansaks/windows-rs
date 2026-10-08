@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use windows_clang::{
-    EmitOptions, FactData, HeaderPartitionPlan, HeaderPartitionPolicy, Input, NamespaceAuthorities,
-    NativeImport, NativeImports, PartitionConflictReason, PartitionItemKind, RdlPartition,
-    RootPartition, Snapshot, TypeRef, TypeReference, TypeReferenceKind, extract,
+    AnnotationTarget, EmitOptions, FactData, HeaderPartitionPlan, HeaderPartitionPolicy, Input,
+    NamespaceAuthorities, NativeImport, NativeImports, PartitionConflictReason, PartitionItemKind,
+    RdlPartition, RootPartition, Snapshot, TypeRef, TypeReference, TypeReferenceKind, extract,
     extract_partitioned,
 };
 use windows_metadata::{
@@ -6582,6 +6582,387 @@ fn property_key_type_with_multiple_routes_remains_diagnostic() {
         "{error}"
     );
     assert!(error.contains("`DEVPROPKEY`"), "{error}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn canonical_pointer_typedef_redeclarations_use_one_stable_owner() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("canonical-pointer-typedef-owner");
+    let dependency = scratch.join("dispatch_dependency.h");
+    let oaidl = scratch.join("oaidl.h");
+    let oleauto = scratch.join("oleauto.h");
+    let api = scratch.join("api.h");
+    std::fs::write(
+        &dependency,
+        "#pragma once\n\
+         struct DISPATCH_CONTEXT { int value; };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &oaidl,
+        "#pragma once\n\
+         #include \"dispatch_dependency.h\"\n\
+         #define __RPC_unique_pointer __attribute__((annotate(\"_Maybenull_\")))\n\
+         struct IUnknown { virtual int QueryInterface() = 0; };\n\
+         struct IDispatch;\n\
+         typedef struct IDispatch IDispatch;\n\
+         typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n\
+         struct __declspec(uuid(\"12345678-1234-5678-90ab-cdef12345678\")) \
+             __declspec(novtable) IDispatch : public IUnknown {\n\
+             virtual int Invoke(DISPATCH_CONTEXT* value) = 0;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &oleauto,
+        "#pragma once\n\
+         #include \"oaidl.h\"\n\
+         typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n\
+         struct PARAMDATA { int value; };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &api,
+        "#pragma once\n\
+         #include \"oleauto.h\"\n\
+         extern \"C\" LPDISPATCH UseDispatch(LPDISPATCH value);\n",
+    )
+    .unwrap();
+
+    let forward = aggregate_snapshot(&scratch, &[&oaidl, &oleauto, &api]);
+    let reverse = aggregate_snapshot(&scratch, &[&api, &oleauto, &oaidl]);
+    for snapshot in [&forward, &reverse] {
+        let aliases = snapshot
+            .facts()
+            .iter()
+            .filter(|fact| fact.name == "LPDISPATCH")
+            .collect::<Vec<_>>();
+        assert_eq!(aliases.len(), 2, "{aliases:#?}");
+        assert_ne!(aliases[0].spelling, aliases[1].spelling);
+        let target_declarations = aliases
+            .iter()
+            .map(|fact| {
+                let FactData::Typedef {
+                    target:
+                        TypeRef::Pointer {
+                            mutable: true,
+                            target,
+                        },
+                } = &fact.data
+                else {
+                    panic!("LPDISPATCH was not extracted as a mutable pointer typedef");
+                };
+                let TypeRef::Named { name, declaration } = target.as_ref() else {
+                    panic!("LPDISPATCH did not retain its named IDispatch target");
+                };
+                assert_eq!(name, "IDispatch");
+                declaration
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(target_declarations[0], target_declarations[1]);
+        assert!(aliases.iter().all(|fact| {
+            snapshot
+                .annotations()
+                .get(&AnnotationTarget::Declaration(fact.origin.clone()))
+                .is_none_or(Vec::is_empty)
+        }));
+    }
+
+    let comole_partition = RootPartition::new("ComOle", "Windows.Win32.System.Ole");
+    let api_partition =
+        RootPartition::new("api", "Example.Api").with_library("UseDispatch", "api.dll");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(oaidl.to_string_lossy(), comole_partition.clone())
+        .with_traversed_header(oleauto.to_string_lossy(), comole_partition.clone())
+        .with_traversed_header(api.to_string_lossy(), api_partition.clone());
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(api.to_string_lossy(), api_partition)
+        .with_traversed_header(oleauto.to_string_lossy(), comole_partition.clone())
+        .with_traversed_header(oaidl.to_string_lossy(), comole_partition);
+    let authorities =
+        NamespaceAuthorities::new().with_exact("IDispatch", "Windows.Win32.System.Com");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Windows.Win32", &references);
+    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy| {
+        let plan = snapshot
+            .plan_header_partitions(policy, &authorities)
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+    let partitions = emit(forward, &policy);
+    let reverse_partitions = emit(reverse, &reverse_policy);
+    assert_eq!(partitions, reverse_partitions);
+
+    let (alias_route, ole) = partitions
+        .iter()
+        .find(|(_, rdl)| rdl.contains("type LPDISPATCH ="))
+        .unwrap();
+    assert_eq!(alias_route.partition, "ComOle");
+    assert_eq!(alias_route.namespace, "Windows.Win32.System.Ole");
+    assert_eq!(
+        alias_route.header,
+        oaidl.to_string_lossy().replace('\\', "/")
+    );
+    let combined = partitions.values().cloned().collect::<Vec<_>>().join("\n");
+    assert_eq!(
+        combined.matches("type LPDISPATCH =").count(),
+        1,
+        "{combined}"
+    );
+    assert!(
+        ole.contains("type LPDISPATCH = Windows::Win32::System::Com::IDispatch"),
+        "{ole}"
+    );
+    let com = output(&partitions, "Windows.Win32.System.Com");
+    assert!(com.contains("interface IDispatch"), "{com}");
+    assert!(!com.contains("type LPDISPATCH ="), "{com}");
+    let (_, oleauto_rdl) = partitions
+        .iter()
+        .find(|(partition, _)| partition.header == oleauto.to_string_lossy().replace('\\', "/"))
+        .unwrap();
+    assert!(oleauto_rdl.contains("struct PARAMDATA"), "{oleauto_rdl}");
+    assert!(!oleauto_rdl.contains("LPDISPATCH"), "{oleauto_rdl}");
+    let common = output(&partitions, "Windows.Win32");
+    assert!(common.contains("struct DISPATCH_CONTEXT"), "{common}");
+    let api_rdl = output(&partitions, "Example.Api");
+    assert!(
+        api_rdl.contains(
+            "fn UseDispatch(value: Windows::Win32::System::Ole::LPDISPATCH) -> \
+             Windows::Win32::System::Ole::LPDISPATCH"
+        ),
+        "{api_rdl}"
+    );
+
+    let winmd = scratch.join("canonical-pointer-typedef-owner.winmd");
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    assert_eq!(
+        index
+            .expect("Windows.Win32.System.Ole", "LPDISPATCH")
+            .underlying_type(),
+        Some(Type::class_named("Windows.Win32.System.Com", "IDispatch"))
+    );
+    let Item::Fn(use_dispatch) = index.expect_item("Example.Api", "UseDispatch") else {
+        panic!("Example.Api.UseDispatch was not emitted as a function");
+    };
+    let signature = use_dispatch.signature(&[]);
+    assert_eq!(
+        signature.return_type,
+        Type::value_named("Windows.Win32.System.Ole", "LPDISPATCH")
+    );
+    assert_eq!(
+        signature.types,
+        [Type::value_named("Windows.Win32.System.Ole", "LPDISPATCH")]
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn canonical_pointer_typedef_redeclarations_keep_conflicting_logical_owners() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("canonical-pointer-typedef-owner-conflict");
+    let oaidl = scratch.join("oaidl.h");
+    let oleauto = scratch.join("oleauto.h");
+    std::fs::write(
+        &oaidl,
+        "#pragma once\n\
+         #define __RPC_unique_pointer __attribute__((annotate(\"_Maybenull_\")))\n\
+         struct IUnknown { virtual int QueryInterface() = 0; };\n\
+         struct IDispatch;\n\
+         typedef struct IDispatch IDispatch;\n\
+         typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n\
+         struct __declspec(uuid(\"12345678-1234-5678-90ab-cdef12345678\")) \
+             __declspec(novtable) IDispatch : public IUnknown {\n\
+             virtual int Invoke(int value) = 0;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &oleauto,
+        "#pragma once\n\
+         #include \"oaidl.h\"\n\
+         typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n",
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&oaidl, &oleauto]);
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            oaidl.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header(
+            oleauto.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        );
+    let authorities = NamespaceAuthorities::new().with_exact("IDispatch", "Example.Com");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let audit = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap()
+        .audit(&options)
+        .unwrap();
+    let conflict = audit
+        .conflicts()
+        .iter()
+        .find(|conflict| conflict.name == "LPDISPATCH")
+        .unwrap();
+    assert_eq!(conflict.kind, PartitionItemKind::Type);
+    assert_eq!(conflict.reason, PartitionConflictReason::AmbiguousOwners);
+    assert_eq!(
+        conflict
+            .owners
+            .iter()
+            .map(|owner| owner.partition.as_str())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["first", "second"])
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn single_interface_pointer_typedef_keeps_legacy_projection() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("single-interface-pointer-typedef");
+    let header = scratch.join("oaidl.h");
+    std::fs::write(
+        &header,
+        "#pragma once\n\
+         struct IUnknown { virtual int QueryInterface() = 0; };\n\
+         struct __declspec(uuid(\"12345678-1234-5678-90ab-cdef12345678\")) \
+             __declspec(novtable) IDispatch : public IUnknown {\n\
+             virtual int Invoke(int value) = 0;\n\
+         };\n\
+         typedef IDispatch *LPDISPATCH;\n\
+         extern \"C\" LPDISPATCH UseDispatch(LPDISPATCH value);\n",
+    )
+    .unwrap();
+    let snapshot = aggregate_snapshot(&scratch, &[&header]);
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("ComOle", "Windows.Win32.System.Ole")
+            .with_library("UseDispatch", "api.dll"),
+    );
+    let authorities =
+        NamespaceAuthorities::new().with_exact("IDispatch", "Windows.Win32.System.Com");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Windows.Win32", &references);
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let combined = partitions.values().cloned().collect::<String>();
+
+    assert!(!combined.contains("type LPDISPATCH ="), "{combined}");
+    assert!(
+        combined.contains(
+            "fn UseDispatch(value: Windows::Win32::System::Com::IDispatch) -> \
+             Windows::Win32::System::Com::IDispatch"
+        ),
+        "{combined}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn interface_pointer_typedefs_in_separate_translation_units_do_not_rebind() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("separate-tu-interface-pointer-typedefs");
+    let common = scratch.join("common.h");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &common,
+        "#pragma once\n\
+         struct IUnknown { virtual int QueryInterface() = 0; };\n\
+         struct __declspec(uuid(\"12345678-1234-5678-90ab-cdef12345678\")) \
+             __declspec(novtable) IDispatch : public IUnknown {\n\
+             virtual int Invoke(int value) = 0;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &first,
+        "#pragma once\n\
+         #include \"common.h\"\n\
+         typedef IDispatch *LPDISPATCH;\n\
+         extern \"C\" LPDISPATCH UseFirst(LPDISPATCH value);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#pragma once\n\
+         #include \"common.h\"\n\
+         typedef IDispatch *LPDISPATCH;\n\
+         extern \"C\" LPDISPATCH UseSecond(LPDISPATCH value);\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First").with_library("UseFirst", "first.dll"),
+        )
+        .with_traversed_header_for_input(
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second").with_library("UseSecond", "second.dll"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let combined = partitions.values().cloned().collect::<String>();
+
+    assert!(!combined.contains("type LPDISPATCH ="), "{combined}");
+    assert!(
+        output(&partitions, "Example.First").contains(
+            "fn UseFirst(value: Example::Common::IDispatch) -> Example::Common::IDispatch"
+        ),
+        "{partitions:#?}"
+    );
+    assert!(
+        output(&partitions, "Example.Second").contains(
+            "fn UseSecond(value: Example::Common::IDispatch) -> Example::Common::IDispatch"
+        ),
+        "{partitions:#?}"
+    );
 
     std::fs::remove_dir_all(scratch).unwrap();
 }

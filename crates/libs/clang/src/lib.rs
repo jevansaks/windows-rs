@@ -1442,6 +1442,7 @@ pub struct Snapshot {
     included_files: Vec<IncludedFile>,
     raw_function_link_names: BTreeMap<Origin, String>,
     canonical_function_origins: BTreeMap<Origin, Origin>,
+    canonical_typedef_origins: BTreeMap<Origin, Origin>,
     function_link_name_index: FunctionLinkNameIndex,
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
@@ -1499,6 +1500,78 @@ impl<'a> DeclarationIndex<'a> {
             .get(&(tu, name, declaration))
             .map(Vec::as_slice)
             .unwrap_or_default()
+    }
+}
+
+#[derive(Default)]
+struct CanonicalTypedefIndex {
+    origins: BTreeMap<Origin, Origin>,
+}
+
+impl CanonicalTypedefIndex {
+    fn new(
+        facts: &[Fact],
+        canonical_origins: &BTreeMap<Origin, Origin>,
+        annotations: &BTreeMap<Origin, Rc<RouteAnnotations>>,
+        root_owners: Option<&BTreeMap<Origin, RootOwner>>,
+    ) -> Self {
+        let facts_by_origin = facts
+            .iter()
+            .map(|fact| (&fact.origin, fact))
+            .collect::<HashMap<_, _>>();
+        let interface_names = facts
+            .iter()
+            .filter(|fact| matches!(fact.data, FactData::Interface { .. }))
+            .map(|fact| (fact.origin.tu.as_str(), fact.name.as_str()))
+            .collect::<HashSet<_>>();
+        let mut groups: BTreeMap<&Origin, Vec<&Fact>> = BTreeMap::new();
+        for fact in facts {
+            if let Some(canonical) = canonical_origins.get(&fact.origin) {
+                groups.entry(canonical).or_default().push(fact);
+            }
+        }
+
+        let mut origins = BTreeMap::new();
+        for facts in groups.into_values() {
+            let Some(first) = facts.first() else {
+                continue;
+            };
+            let first_scope = native_parent_scope(first, &facts_by_origin);
+            let first_annotations = annotations
+                .get(&first.origin)
+                .map_or(&[][..], |annotations| annotations.as_slice());
+            if facts.len() < 2
+                || !facts.iter().all(|fact| {
+                    fact.name == first.name
+                        && fact.origin.tu == first.origin.tu
+                        && fact.kind == FactKind::Typedef
+                        && fact.definition == first.definition
+                        && direct_pointer_interface_typedef(fact, &interface_names)
+                        && native_parent_scope(fact, &facts_by_origin) == first_scope
+                        && canonical_typedef_annotations_match(fact, first_annotations, annotations)
+                })
+                || root_owners.is_some_and(|root_owners| {
+                    !canonical_typedef_owner_policies_match(&facts, root_owners)
+                })
+            {
+                continue;
+            }
+            let representative = facts
+                .iter()
+                .copied()
+                .min_by(|left, right| canonical_typedef_fact_cmp(left, right))
+                .unwrap()
+                .origin
+                .clone();
+            for fact in facts {
+                origins.insert(fact.origin.clone(), representative.clone());
+            }
+        }
+        Self { origins }
+    }
+
+    fn representative(&self, origin: &Origin) -> Option<&Origin> {
+        self.origins.get(origin)
     }
 }
 
@@ -1624,6 +1697,7 @@ impl PartialEq for Snapshot {
             && self.constants == other.constants
             && self.raw_function_link_names == other.raw_function_link_names
             && self.canonical_function_origins == other.canonical_function_origins
+            && self.canonical_typedef_origins == other.canonical_typedef_origins
             && self.function_link_name_index == other.function_link_name_index
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
@@ -2692,6 +2766,7 @@ impl Snapshot {
                 fact.root = true;
             }
         }
+        conflicts.extend(self.rebind_canonical_typedef_owners());
 
         let mut associated_constant_owners: BTreeMap<String, BTreeSet<RootOwner>> = BTreeMap::new();
         let retained_origins: BTreeSet<_> = self
@@ -3727,6 +3802,60 @@ impl Snapshot {
         } else {
             matching
         }
+    }
+
+    fn rebind_canonical_typedef_owners(&mut self) -> Vec<PartitionConflict> {
+        let annotations = self.route_annotation_signatures();
+        let canonical_typedefs = CanonicalTypedefIndex::new(
+            &self.facts,
+            &self.canonical_typedef_origins,
+            &annotations,
+            None,
+        );
+        let mut groups: BTreeMap<Origin, Vec<&Fact>> = BTreeMap::new();
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| fact.root && self.root_owners.contains_key(&fact.origin))
+        {
+            if let Some(canonical) = canonical_typedefs.representative(&fact.origin) {
+                groups.entry(canonical.clone()).or_default().push(fact);
+            }
+        }
+
+        let mut updates = Vec::new();
+        let mut conflicts = Vec::new();
+        for facts in groups.into_values().filter(|facts| facts.len() > 1) {
+            if !canonical_typedef_owner_policies_match(&facts, &self.root_owners) {
+                conflicts.push(PartitionConflict {
+                    name: facts[0].name.clone(),
+                    kind: PartitionItemKind::Type,
+                    reason: PartitionConflictReason::AmbiguousOwners,
+                    owners: facts
+                        .iter()
+                        .map(|fact| self.root_owners[&fact.origin].clone())
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .collect(),
+                });
+                continue;
+            }
+            let preferred = facts
+                .iter()
+                .copied()
+                .min_by(|left, right| canonical_typedef_fact_cmp(left, right))
+                .unwrap();
+            let owner = self.root_owners[&preferred.origin].clone();
+            updates.extend(
+                facts
+                    .into_iter()
+                    .map(|fact| (fact.origin.clone(), owner.clone())),
+            );
+        }
+        for (origin, owner) in updates {
+            self.root_owners.insert(origin, owner);
+        }
+        conflicts
     }
 
     fn fact_authority_namespace<'a>(
@@ -4905,6 +5034,32 @@ impl Snapshot {
         let declarations = DeclarationIndex::new(&self.facts);
         let facts_by_origin: HashMap<_, _> =
             self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+        let canonical_typedefs = if self.header_partition_policy {
+            CanonicalTypedefIndex::new(
+                &self.facts,
+                &self.canonical_typedef_origins,
+                &self.route_annotation_signatures(),
+                Some(&self.root_owners),
+            )
+        } else {
+            CanonicalTypedefIndex::default()
+        };
+        let mut owned_canonical_typedef_counts = BTreeMap::<Origin, usize>::new();
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| fact.root && self.root_owners.contains_key(&fact.origin))
+        {
+            if let Some(canonical) = canonical_typedefs.representative(&fact.origin) {
+                *owned_canonical_typedef_counts
+                    .entry(canonical.clone())
+                    .or_default() += 1;
+            }
+        }
+        let owned_canonical_typedef_redeclarations = owned_canonical_typedef_counts
+            .into_iter()
+            .filter_map(|(canonical, count)| (count > 1).then_some(canonical))
+            .collect::<BTreeSet<_>>();
         let source_fact_name = |fact: &Fact| {
             source_names.map_or_else(
                 || fact.name.clone(),
@@ -5265,8 +5420,13 @@ impl Snapshot {
                             .any(|fact| defines_local_type(name, fact)));
                 if !excluded {
                     let authority = self.authority_candidates(&roots.types, &declarations);
-                    let root =
-                        choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
+                    let root = choose_type_root_cached(
+                        name,
+                        &authority,
+                        &facts_index,
+                        &canonical_typedefs,
+                        &mut shape_cache,
+                    )?;
                     let tagged = authority
                         .iter()
                         .any(|fact| self.root_owners.contains_key(&fact.origin));
@@ -5364,8 +5524,13 @@ impl Snapshot {
                     continue;
                 }
                 let authority = self.authority_candidates(&matches, &declarations);
-                let root =
-                    choose_type_root_cached(&name, &authority, &facts_index, &mut shape_cache)?;
+                let root = choose_type_root_cached(
+                    &name,
+                    &authority,
+                    &facts_index,
+                    &canonical_typedefs,
+                    &mut shape_cache,
+                )?;
                 root_names.insert(name);
                 type_roots.push(root);
             }
@@ -5498,6 +5663,7 @@ impl Snapshot {
                             name,
                             &matches,
                             &facts_index,
+                            &canonical_typedefs,
                             &mut shape_cache,
                         ) {
                             Ok(fact) => fact,
@@ -5685,6 +5851,7 @@ impl Snapshot {
                         name,
                         choices,
                         &exact_dependency_facts_index,
+                        &canonical_typedefs,
                         &mut shape_cache,
                     ) {
                         Ok(fact) => fact,
@@ -5695,8 +5862,13 @@ impl Snapshot {
                         Err(error) => return Err(error),
                     },
                     choices => {
-                        match choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)
-                        {
+                        match choose_type_root_cached(
+                            name,
+                            choices,
+                            &facts_index,
+                            &canonical_typedefs,
+                            &mut shape_cache,
+                        ) {
                             Ok(fact) => fact,
                             Err(error) if self.header_partition_policy => {
                                 dependency_diagnostics.block(reference, error.to_string(), source);
@@ -5740,6 +5912,7 @@ impl Snapshot {
                             name,
                             &owned,
                             &facts_index,
+                            &canonical_typedefs,
                             &mut shape_cache,
                         ) {
                             Ok(fact) => fact,
@@ -5829,6 +6002,7 @@ impl Snapshot {
                         &constant.name,
                         choices,
                         &facts_index,
+                        &canonical_typedefs,
                         &mut shape_cache,
                     )?;
                     if root_names.insert(constant.name.clone()) {
@@ -5844,8 +6018,13 @@ impl Snapshot {
             let mut facts_by_name = BTreeMap::new();
             for (name, choices) in grouped {
                 let authority = self.authority_candidates(&choices, &declarations);
-                let selected =
-                    choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
+                let selected = choose_type_root_cached(
+                    name,
+                    &authority,
+                    &facts_index,
+                    &canonical_typedefs,
+                    &mut shape_cache,
+                )?;
                 facts_by_name.insert(name, selected);
             }
             if timing && self.header_partition_policy {
@@ -6398,6 +6577,7 @@ impl Snapshot {
             }
         }
         let mut pointer_interface_aliases = BTreeMap::new();
+        let mut retained_pointer_interface_aliases = BTreeSet::new();
         for fact in &self.facts {
             let FactData::Typedef {
                 target: TypeRef::Pointer { target, .. },
@@ -6417,6 +6597,16 @@ impl Snapshot {
                 .get(target)
                 .cloned()
                 .unwrap_or_else(|| target.clone());
+            if self.header_partition_policy
+                && root_names.contains(&fact.name)
+                && canonical_typedefs
+                    .representative(&fact.origin)
+                    .is_some_and(|canonical| {
+                        owned_canonical_typedef_redeclarations.contains(canonical)
+                    })
+            {
+                retained_pointer_interface_aliases.insert(fact.name.clone());
+            }
             if let Some(previous) =
                 pointer_interface_aliases.insert(fact.name.clone(), projected.clone())
                 && previous != projected
@@ -6427,6 +6617,8 @@ impl Snapshot {
                 )));
             }
         }
+        pointer_interface_aliases
+            .retain(|alias, _| !retained_pointer_interface_aliases.contains(alias));
         let mut pointer_aliases: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for fact in &self.facts {
             let FactData::Typedef {
@@ -8259,16 +8451,23 @@ fn choose_type_root<'a>(
     roots: &[&'a Fact],
     facts_index: &HashMap<&str, Vec<&'a Fact>>,
 ) -> Result<&'a Fact, Error> {
-    choose_type_root_cached(name, roots, facts_index, &mut ShapeCache::default())
+    choose_type_root_cached(
+        name,
+        roots,
+        facts_index,
+        &CanonicalTypedefIndex::default(),
+        &mut ShapeCache::default(),
+    )
 }
 
 fn choose_type_root_cached<'a>(
     name: &str,
     roots: &[&'a Fact],
     facts_index: &HashMap<&str, Vec<&'a Fact>>,
+    canonical_typedefs: &CanonicalTypedefIndex,
     shape_cache: &mut ShapeCache,
 ) -> Result<&'a Fact, Error> {
-    let distinct = distinct_source_declarations(roots);
+    let distinct = distinct_type_source_declarations(roots, canonical_typedefs);
     if let [root] = distinct.as_slice() {
         return emittable_type(name, root);
     }
@@ -9181,6 +9380,81 @@ fn distinct_source_declarations<'a>(roots: &[&'a Fact]) -> Vec<&'a Fact> {
         }
     }
     distinct
+}
+
+fn distinct_type_source_declarations<'a>(
+    roots: &[&'a Fact],
+    canonical_typedefs: &CanonicalTypedefIndex,
+) -> Vec<&'a Fact> {
+    let mut distinct: Vec<&Fact> = vec![];
+    for &root in roots {
+        if let Some(canonical) = canonical_typedefs.representative(&root.origin)
+            && let Some(index) = distinct.iter().position(|existing| {
+                canonical_typedefs.representative(&existing.origin) == Some(canonical)
+            })
+        {
+            if canonical_typedef_fact_cmp(root, distinct[index]).is_lt() {
+                distinct[index] = root;
+            }
+            continue;
+        }
+        if !distinct
+            .iter()
+            .any(|existing| same_source_declaration(existing, root))
+        {
+            distinct.push(root);
+        }
+    }
+    distinct
+}
+
+fn direct_pointer_interface_typedef(fact: &Fact, interface_names: &HashSet<(&str, &str)>) -> bool {
+    let FactData::Typedef {
+        target: TypeRef::Pointer { target, .. },
+    } = &fact.data
+    else {
+        return false;
+    };
+    let (TypeRef::Named { name, .. } | TypeRef::Generic { name, .. }) = target.as_ref() else {
+        return false;
+    };
+    interface_names.contains(&(fact.origin.tu.as_str(), name.as_str()))
+}
+
+fn canonical_typedef_annotations_match(
+    fact: &Fact,
+    expected: &[(RouteAnnotationTarget, Vec<Annotation>)],
+    annotations: &BTreeMap<Origin, Rc<RouteAnnotations>>,
+) -> bool {
+    annotations
+        .get(&fact.origin)
+        .map_or(&[][..], |annotations| annotations.as_slice())
+        == expected
+}
+
+fn canonical_typedef_owner_policies_match(
+    facts: &[&Fact],
+    root_owners: &BTreeMap<Origin, RootOwner>,
+) -> bool {
+    let mut expected = None;
+    for fact in facts.iter().filter(|fact| fact.root) {
+        let Some(owner) = root_owners.get(&fact.origin) else {
+            return false;
+        };
+        if expected.is_some_and(|expected| !same_owner_policy(expected, owner)) {
+            return false;
+        }
+        expected = Some(owner);
+    }
+    true
+}
+
+fn canonical_typedef_fact_cmp(left: &Fact, right: &Fact) -> std::cmp::Ordering {
+    (!left.root)
+        .cmp(&!right.root)
+        .then_with(|| left.spelling.cmp(&right.spelling))
+        .then_with(|| left.expansion.cmp(&right.expansion))
+        .then_with(|| left.origin.cmp(&right.origin))
 }
 
 fn same_source_declaration(left: &Fact, right: &Fact) -> bool {

@@ -7,6 +7,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         included_files: Vec::new(),
         raw_function_link_names: BTreeMap::new(),
         canonical_function_origins: BTreeMap::new(),
+        canonical_typedef_origins: BTreeMap::new(),
         function_link_name_index: FunctionLinkNameIndex::default(),
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
@@ -531,6 +532,346 @@ fn owned_planner_reuses_snapshot_fact_storage() {
         .unwrap();
     assert_eq!(plan.snapshot.facts.as_ptr(), facts);
     assert_eq!(plan.snapshot.facts.capacity(), fact_capacity);
+}
+
+#[test]
+fn canonical_typedef_representative_prefers_rooted_fact() {
+    let mut unrooted = alias(
+        1,
+        "LPDISPATCH",
+        "a-included.h",
+        1,
+        TypeRef::Scalar(Scalar::U32),
+    );
+    unrooted.root = false;
+    let mut rooted = alias(
+        2,
+        "LPDISPATCH",
+        "z-traversed.h",
+        1,
+        TypeRef::Scalar(Scalar::U32),
+    );
+    rooted.root = true;
+
+    assert!(canonical_typedef_fact_cmp(&rooted, &unrooted).is_lt());
+}
+
+#[test]
+fn canonical_pointer_typedef_conflicting_annotations_are_rejected() {
+    helpers::ensure_libclang();
+
+    let error = extract(
+        [Input::new(
+            "conflicting.cpp",
+            "#define W32M(value) __attribute__((annotate(value)))\n\
+             struct __declspec(uuid(\"12345678-1234-5678-90ab-cdef12345678\")) \
+                 __declspec(novtable) IDispatch {\n\
+                 virtual int Invoke() = 0;\n\
+             };\n\
+             typedef IDispatch *LPDISPATCH \
+                 W32M(\"win32metadata:raii_free=CloseFirst\");\n\
+             typedef IDispatch *LPDISPATCH \
+                 W32M(\"win32metadata:raii_free=CloseSecond\");\n",
+        )],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        error.contains("conflicting redeclaration annotation `raii_free` on `LPDISPATCH`"),
+        "{error}"
+    );
+}
+
+#[test]
+fn canonical_pointer_typedef_identity_is_tu_scoped_and_type_exact() {
+    helpers::ensure_libclang();
+
+    let source = "#define W32M(value) __attribute__((annotate(value)))\n\
+                  #define __RPC_unique_pointer W32M(\"_Maybenull_\")\n\
+                  struct IDispatch;\n\
+                  typedef struct IDispatch IDispatch;\n\
+                  typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n\
+                  struct IDispatch { virtual int Invoke() = 0; };\n\
+                  typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n\
+                  namespace First { typedef IDispatch *SAME_POINTER; }\n\
+                  namespace Second { typedef IDispatch *SAME_POINTER; }\n\
+                  namespace Mutable { typedef IDispatch *QUALIFIED_POINTER; }\n\
+                  namespace Immutable { typedef const IDispatch *QUALIFIED_POINTER; }\n\
+                  namespace DispatchTarget { typedef IDispatch *TARGET_POINTER; }\n\
+                  namespace OtherTarget {\n\
+                      struct IOther;\n\
+                      typedef IOther *TARGET_POINTER;\n\
+                  }\n\
+                  namespace AnnotatedFirst {\n\
+                      typedef IDispatch *ANNOTATED_POINTER \
+                          W32M(\"win32metadata:raii_free=CloseFirst\");\n\
+                  }\n\
+                  namespace AnnotatedSecond {\n\
+                      typedef IDispatch *ANNOTATED_POINTER \
+                          W32M(\"win32metadata:raii_free=CloseSecond\");\n\
+                  }\n";
+    let snapshot = extract(
+        [
+            Input::new("first.cpp", source),
+            Input::new("second.cpp", source),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+
+    let aliases = snapshot
+        .facts
+        .iter()
+        .filter(|fact| fact.name == "LPDISPATCH")
+        .collect::<Vec<_>>();
+    assert_eq!(aliases.len(), 4);
+    let first = aliases
+        .iter()
+        .copied()
+        .filter(|fact| fact.origin.tu == "first.cpp")
+        .collect::<Vec<_>>();
+    let second = aliases
+        .iter()
+        .copied()
+        .filter(|fact| fact.origin.tu == "second.cpp")
+        .collect::<Vec<_>>();
+    assert_eq!(first.len(), 2);
+    assert_eq!(second.len(), 2);
+    assert_eq!(
+        snapshot.canonical_typedef_origins[&first[0].origin],
+        snapshot.canonical_typedef_origins[&first[1].origin]
+    );
+    assert_eq!(
+        snapshot.canonical_typedef_origins[&second[0].origin],
+        snapshot.canonical_typedef_origins[&second[1].origin]
+    );
+    assert_ne!(
+        snapshot.canonical_typedef_origins[&first[0].origin],
+        snapshot.canonical_typedef_origins[&second[0].origin]
+    );
+    let route_annotations = snapshot.route_annotation_signatures();
+    let canonical_typedefs = CanonicalTypedefIndex::new(
+        &snapshot.facts,
+        &snapshot.canonical_typedef_origins,
+        &route_annotations,
+        None,
+    );
+    assert_eq!(
+        canonical_typedefs.representative(&first[0].origin),
+        canonical_typedefs.representative(&first[1].origin)
+    );
+    assert_eq!(
+        canonical_typedefs.representative(&second[0].origin),
+        canonical_typedefs.representative(&second[1].origin)
+    );
+    assert_ne!(
+        canonical_typedefs.representative(&first[0].origin),
+        canonical_typedefs.representative(&second[0].origin)
+    );
+
+    for name in [
+        "SAME_POINTER",
+        "QUALIFIED_POINTER",
+        "TARGET_POINTER",
+        "ANNOTATED_POINTER",
+    ] {
+        let facts = snapshot
+            .facts
+            .iter()
+            .filter(|fact| fact.origin.tu == "first.cpp" && fact.name == name)
+            .collect::<Vec<_>>();
+        assert_eq!(facts.len(), 2, "{name}: {facts:#?}");
+        assert_ne!(
+            snapshot.canonical_typedef_origins[&facts[0].origin],
+            snapshot.canonical_typedef_origins[&facts[1].origin],
+            "{name}: {facts:#?}"
+        );
+        assert!(
+            facts
+                .iter()
+                .all(|fact| canonical_typedefs.representative(&fact.origin).is_none()),
+            "{name}: {facts:#?}"
+        );
+    }
+
+    let facts = |name: &str| {
+        snapshot
+            .facts
+            .iter()
+            .filter(|fact| fact.origin.tu == "first.cpp" && fact.name == name)
+            .collect::<Vec<_>>()
+    };
+    let same = facts("SAME_POINTER");
+    assert_eq!(same[0].data, same[1].data);
+    let qualified = facts("QUALIFIED_POINTER");
+    assert_ne!(qualified[0].data, qualified[1].data);
+    let target = facts("TARGET_POINTER");
+    assert_ne!(target[0].data, target[1].data);
+    let annotated = facts("ANNOTATED_POINTER");
+    assert_eq!(annotated[0].data, annotated[1].data);
+    assert_ne!(
+        route_annotations.get(&annotated[0].origin),
+        route_annotations.get(&annotated[1].origin)
+    );
+}
+
+#[test]
+fn canonical_pointer_typedef_owner_survives_normalized_target_variants() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-canonical-owner-unit-{}",
+        std::process::id()
+    ));
+    if scratch.exists() {
+        std::fs::remove_dir_all(&scratch).unwrap();
+    }
+    std::fs::create_dir_all(&scratch).unwrap();
+    let oaidl = scratch.join("oaidl.h");
+    let oleauto = scratch.join("oleauto.h");
+    let api = scratch.join("api.h");
+    std::fs::write(
+        &oaidl,
+        "#pragma once\n\
+         #define __RPC_unique_pointer __attribute__((annotate(\"_Maybenull_\")))\n\
+         struct IUnknown { virtual int QueryInterface() = 0; };\n\
+         struct IDispatch;\n\
+         typedef struct IDispatch IDispatch;\n\
+         typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n\
+         struct __declspec(uuid(\"12345678-1234-5678-90ab-cdef12345678\")) \
+             __declspec(novtable) IDispatch : public IUnknown {\n\
+             virtual int Invoke(int value) = 0;\n\
+         };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &oleauto,
+        "#pragma once\n\
+         #include \"oaidl.h\"\n\
+         typedef /* [unique] */ __RPC_unique_pointer IDispatch *LPDISPATCH;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &api,
+        "#pragma once\n\
+         #include \"oleauto.h\"\n\
+         extern \"C\" LPDISPATCH UseDispatch(LPDISPATCH value);\n",
+    )
+    .unwrap();
+
+    let extract_snapshot = |source: String| {
+        let mut snapshot = extract(
+            [Input::new("aggregate.cpp", source)
+                .with_root_dirs([scratch.to_string_lossy().to_string()])],
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        let definition = snapshot
+            .facts
+            .iter()
+            .find(|fact| {
+                fact.name == "IDispatch"
+                    && fact.definition
+                    && matches!(fact.data, FactData::Interface { .. })
+            })
+            .unwrap()
+            .spelling
+            .clone();
+        let aliases = snapshot
+            .facts
+            .iter()
+            .filter(|fact| fact.name == "LPDISPATCH")
+            .map(|fact| fact.origin.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(aliases.len(), 2);
+        assert_eq!(
+            snapshot.canonical_typedef_origins[&aliases[0]],
+            snapshot.canonical_typedef_origins[&aliases[1]]
+        );
+        let alias = snapshot
+            .facts
+            .iter_mut()
+            .find(|fact| {
+                fact.name == "LPDISPATCH"
+                    && fact.spelling.file == oleauto.to_string_lossy().replace('\\', "/")
+            })
+            .unwrap();
+        let FactData::Typedef {
+            target:
+                TypeRef::Pointer {
+                    target: pointer_target,
+                    ..
+                },
+        } = &mut alias.data
+        else {
+            panic!("LPDISPATCH was not extracted as a pointer typedef");
+        };
+        let TypeRef::Named { declaration, .. } = pointer_target.as_mut() else {
+            panic!("LPDISPATCH did not retain the IDispatch declaration");
+        };
+        declaration.clone_from(&definition);
+        snapshot
+    };
+    let include = |path: &std::path::Path| format!("#include \"{}\"\n", path.to_string_lossy());
+    let forward = extract_snapshot(format!(
+        "{}{}{}",
+        include(&oaidl),
+        include(&oleauto),
+        include(&api)
+    ));
+    let reverse = extract_snapshot(format!(
+        "{}{}{}",
+        include(&api),
+        include(&oleauto),
+        include(&oaidl)
+    ));
+
+    let comole_partition = RootPartition::new("ComOle", "Windows.Win32.System.Ole");
+    let api_partition =
+        RootPartition::new("api", "Example.Api").with_library("UseDispatch", "api.dll");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(oaidl.to_string_lossy(), comole_partition.clone())
+        .with_traversed_header(oleauto.to_string_lossy(), comole_partition.clone())
+        .with_traversed_header(api.to_string_lossy(), api_partition.clone());
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(api.to_string_lossy(), api_partition)
+        .with_traversed_header(oleauto.to_string_lossy(), comole_partition.clone())
+        .with_traversed_header(oaidl.to_string_lossy(), comole_partition);
+    let authorities =
+        NamespaceAuthorities::new().with_exact("IDispatch", "Windows.Win32.System.Com");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Windows.Win32", &references);
+    let emit = |snapshot: Snapshot, policy: &HeaderPartitionPolicy| {
+        let plan = snapshot
+            .plan_header_partitions(policy, &authorities)
+            .unwrap();
+        assert!(plan.audit(&options).unwrap().is_clean());
+        plan.emit_with_options(&options).unwrap()
+    };
+    let partitions = emit(forward, &policy);
+    assert_eq!(partitions, emit(reverse, &reverse_policy));
+    assert_eq!(
+        partitions
+            .values()
+            .map(|rdl| {
+                rdl.matches("type LPDISPATCH = Windows::Win32::System::Com::IDispatch")
+                    .count()
+            })
+            .sum::<usize>(),
+        1,
+        "{partitions:#?}"
+    );
+    assert!(
+        partitions.values().any(|rdl| rdl.contains(
+            "fn UseDispatch(value: Windows::Win32::System::Ole::LPDISPATCH) -> \
+                 Windows::Win32::System::Ole::LPDISPATCH"
+        )),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
 }
 
 #[test]

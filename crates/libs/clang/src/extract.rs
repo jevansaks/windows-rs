@@ -169,6 +169,7 @@ fn extract_impl(
     let mut declaration_guids = BTreeMap::new();
     let mut raw_function_link_names = BTreeMap::new();
     let mut canonical_function_origins = BTreeMap::new();
+    let mut canonical_typedef_origins = BTreeMap::new();
     let mut pointer_callback_aliases = BTreeSet::new();
     let mut pointer_only_class_layouts = BTreeMap::new();
     let mut embeddable_class_layouts = BTreeSet::new();
@@ -185,6 +186,7 @@ fn extract_impl(
             declaration_guids: &mut declaration_guids,
             raw_function_link_names: &mut raw_function_link_names,
             canonical_function_origins: &mut canonical_function_origins,
+            canonical_typedef_origins: &mut canonical_typedef_origins,
             pointer_callback_aliases: &mut pointer_callback_aliases,
             pointer_only_class_layouts: &mut pointer_only_class_layouts,
             embeddable_class_layouts: &mut embeddable_class_layouts,
@@ -335,6 +337,7 @@ fn extract_impl(
     materialize_anonymous_callbacks(&mut facts);
     let declare_handles = identify_declare_handles(&inputs, &facts, &extracted);
     facts.sort();
+    normalize_canonical_typedef_origins(&facts, &mut canonical_typedef_origins);
     for pair in facts.windows(2) {
         if pair[0].origin == pair[1].origin {
             return Err(Error(format!(
@@ -411,6 +414,7 @@ fn extract_impl(
         included_files,
         raw_function_link_names,
         canonical_function_origins,
+        canonical_typedef_origins,
         function_link_name_index,
         declare_handles,
         annotations,
@@ -1850,6 +1854,7 @@ impl TranslationUnit {
             next: 0,
             seen: HashMap::new(),
             canonical_functions: HashMap::new(),
+            canonical_typedefs: HashMap::new(),
             macros: &macros,
             pending_structs: vec![],
             pending_macros: vec![],
@@ -1861,6 +1866,7 @@ impl TranslationUnit {
             declaration_guids: &mut *output.declaration_guids,
             raw_function_link_names: &mut *output.raw_function_link_names,
             canonical_function_origins: &mut *output.canonical_function_origins,
+            canonical_typedef_origins: &mut *output.canonical_typedef_origins,
             pointer_callback_aliases: &mut *output.pointer_callback_aliases,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
@@ -1921,6 +1927,7 @@ struct Traversal<'a> {
     next: u32,
     seen: HashMap<u32, Vec<(CXCursor, Origin)>>,
     canonical_functions: HashMap<u32, Vec<(CXCursor, Origin)>>,
+    canonical_typedefs: HashMap<u32, Vec<(CXCursor, CXType, Origin)>>,
     macros: &'a MacroDefinitions<'a>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
@@ -1932,6 +1939,7 @@ struct Traversal<'a> {
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     raw_function_link_names: &'a mut BTreeMap<Origin, String>,
     canonical_function_origins: &'a mut BTreeMap<Origin, Origin>,
+    canonical_typedef_origins: &'a mut BTreeMap<Origin, Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1947,6 +1955,7 @@ struct ExtractionState<'a> {
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     raw_function_link_names: &'a mut BTreeMap<Origin, String>,
     canonical_function_origins: &'a mut BTreeMap<Origin, Origin>,
+    canonical_typedef_origins: &'a mut BTreeMap<Origin, Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -2383,6 +2392,27 @@ fn extract_child(
                         };
                         traversal
                             .canonical_function_origins
+                            .insert(origin.clone(), canonical_origin);
+                    } else if fact_kind == FactKind::Typedef {
+                        let canonical = unsafe { clang_getCanonicalCursor(child) };
+                        let ty = unsafe {
+                            clang_getCanonicalType(clang_getTypedefDeclUnderlyingType(child))
+                        };
+                        let hash = unsafe { clang_hashCursor(canonical) };
+                        let declarations = traversal.canonical_typedefs.entry(hash).or_default();
+                        let canonical_origin = if let Some((_, _, canonical_origin)) = declarations
+                            .iter()
+                            .find(|(declaration, declaration_ty, _)| unsafe {
+                                clang_equalCursors(*declaration, canonical) != 0
+                                    && clang_equalTypes(*declaration_ty, ty) != 0
+                            }) {
+                            canonical_origin.clone()
+                        } else {
+                            declarations.push((canonical, ty, origin.clone()));
+                            origin.clone()
+                        };
+                        traversal
+                            .canonical_typedef_origins
                             .insert(origin.clone(), canonical_origin);
                     }
                     if clang_flag_enum {
@@ -3891,6 +3921,38 @@ fn cursor_locations(cursor: CXCursor) -> Option<(Location, Location, bool, bool)
             clang_Location_isFromMainFile(location) != 0,
             clang_Location_isInSystemHeader(location) != 0,
         ))
+    }
+}
+
+fn normalize_canonical_typedef_origins(
+    facts: &[Fact],
+    canonical_origins: &mut BTreeMap<Origin, Origin>,
+) {
+    let facts_by_origin: HashMap<_, _> = facts.iter().map(|fact| (&fact.origin, fact)).collect();
+    let mut groups: BTreeMap<Origin, Vec<Origin>> = BTreeMap::new();
+    for (origin, canonical) in canonical_origins.iter() {
+        groups
+            .entry(canonical.clone())
+            .or_default()
+            .push(origin.clone());
+    }
+    for origins in groups.into_values() {
+        let canonical = origins
+            .iter()
+            .min_by(|left, right| {
+                let left_fact = facts_by_origin[left];
+                let right_fact = facts_by_origin[right];
+                left_fact
+                    .spelling
+                    .cmp(&right_fact.spelling)
+                    .then_with(|| left_fact.expansion.cmp(&right_fact.expansion))
+                    .then_with(|| left.cmp(right))
+            })
+            .unwrap()
+            .clone();
+        for origin in origins {
+            canonical_origins.insert(origin, canonical.clone());
+        }
     }
 }
 
