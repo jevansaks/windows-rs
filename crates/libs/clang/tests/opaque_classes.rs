@@ -1013,6 +1013,236 @@ fn selected_native_geometry_classes_emit_as_pointer_dependencies() {
 }
 
 #[test]
+fn selected_protected_storage_class_keeps_native_identity_over_external_short_name() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("protected-storage-identity");
+    let header = scratch.join("gdiplus.h");
+    std::fs::write(
+        &header,
+        r#"
+            typedef unsigned char BYTE;
+            typedef unsigned int ARGB;
+            typedef int INT;
+
+            namespace ABI { namespace Windows { namespace UI {
+                struct Color {
+                    BYTE A;
+                    BYTE R;
+                    BYTE G;
+                    BYTE B;
+                };
+            } } }
+
+            namespace Gdiplus {
+                class Color {
+                public:
+                    Color();
+                    Color(ARGB value);
+                    static ARGB MakeARGB(BYTE a, BYTE r, BYTE g, BYTE b);
+                protected:
+                    ARGB Argb;
+                };
+
+                struct ColorMap {
+                    Color oldColor;
+                    Color newColor;
+                };
+
+                namespace DllExports {
+                    extern "C" INT __stdcall GdipUseColorMap(
+                        const ColorMap* map,
+                        ABI::Windows::UI::Color* external);
+                    extern "C" INT __stdcall GdipTakeColor(Color value);
+                    extern "C" INT __stdcall GdipTakeColorMap(ColorMap value);
+                }
+            }
+        "#,
+    )
+    .unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    assert!(
+        snapshot.unsupported().any(|(fact, _)| fact.name == "Color"),
+        "the native class should remain unsupported outside selected planning"
+    );
+
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("gdiplus", "Windows.Win32.Graphics.GdiPlus")
+            .with_library("GdipUseColorMap", "gdiplus.dll")
+            .with_library("GdipTakeColor", "gdiplus.dll")
+            .with_library("GdipTakeColorMap", "gdiplus.dll"),
+    );
+    let references = references();
+    assert_eq!(
+        references.types().get("Color").unwrap().namespace,
+        "Windows.UI"
+    );
+    let functions = BTreeSet::from(["GdipUseColorMap".to_string()]);
+    let mut options = EmitOptions::new("Windows.Win32", references.types());
+    options.functions = Some(&functions);
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let rdl = output(&partitions, "Windows.Win32.Graphics.GdiPlus");
+
+    assert!(rdl.contains("struct Color"), "{rdl}");
+    assert!(rdl.contains("Argb: ARGB"), "{rdl}");
+    assert!(rdl.contains("oldColor: Color"), "{rdl}");
+    assert!(rdl.contains("newColor: Color"), "{rdl}");
+    assert!(rdl.contains("external: *mut Windows::UI::Color"), "{rdl}");
+    assert!(!rdl.contains("oldColor: Windows::UI::Color"), "{rdl}");
+    assert!(!rdl.contains("newColor: Windows::UI::Color"), "{rdl}");
+
+    let winmd = scratch.join("protected-storage.winmd");
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    let namespace = "Windows.Win32.Graphics.GdiPlus";
+    assert_eq!(
+        index.expect(namespace, "ARGB").underlying_type(),
+        Some(Type::U32)
+    );
+    assert_eq!(
+        index
+            .expect(namespace, "Color")
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>(),
+        [("Argb".to_string(), Type::value_named(namespace, "ARGB"))]
+    );
+    assert_eq!(
+        index
+            .expect(namespace, "ColorMap")
+            .fields()
+            .map(|field| (field.name().to_string(), field.ty()))
+            .collect::<Vec<_>>(),
+        [
+            (
+                "oldColor".to_string(),
+                Type::value_named(namespace, "Color")
+            ),
+            (
+                "newColor".to_string(),
+                Type::value_named(namespace, "Color")
+            ),
+        ]
+    );
+    let Item::Fn(function) = index.expect_item(namespace, "GdipUseColorMap") else {
+        panic!("GdipUseColorMap was not emitted as a function");
+    };
+    assert_eq!(
+        function.signature(&[]).types,
+        [
+            Type::PtrConst(Box::new(Type::value_named(namespace, "ColorMap")), 1),
+            Type::PtrMut(Box::new(Type::value_named("Windows.UI", "Color")), 1),
+        ]
+    );
+
+    for function in ["GdipTakeColor", "GdipTakeColorMap"] {
+        let functions = BTreeSet::from([function.to_string()]);
+        let mut options = EmitOptions::new("Windows.Win32", references.types());
+        options.functions = Some(&functions);
+        options.library = Some("gdiplus.dll");
+        let error = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap()
+            .audit(&options)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("pointer-only native class `Color` is used by value"),
+            "{function}: {error}"
+        );
+    }
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn selected_nonrepresentable_native_class_does_not_use_external_short_name() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("unsupported-native-short-name");
+    let header = scratch.join("native.h");
+    std::fs::write(
+        &header,
+        "namespace Native {\n\
+             class Color {\n\
+             public:\n\
+                 virtual void Reset();\n\
+             protected:\n\
+                 unsigned int Argb;\n\
+             };\n\
+             struct ColorMap { Color value; };\n\
+             extern \"C\" int __stdcall UseNativeColorMap(ColorMap* value);\n\
+         }\n",
+    )
+    .unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("native", "Windows.Win32.Native"),
+    );
+    let references = references();
+    assert_eq!(
+        references.types().get("Color").unwrap().namespace,
+        "Windows.UI"
+    );
+    let functions = BTreeSet::from(["UseNativeColorMap".to_string()]);
+    let mut options = EmitOptions::new("Windows.Win32", references.types());
+    options.functions = Some(&functions);
+    options.library = Some("native.dll");
+    let error = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .audit(&options)
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("unsupported type `Color`"), "{error}");
+    assert!(
+        error.contains("class is not a public data-only record"),
+        "{error}"
+    );
+    assert!(!error.contains("Windows.UI.Color"), "{error}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn selected_native_class_and_owned_pod_same_name_keep_exact_routes() {
     helpers::ensure_libclang();
 

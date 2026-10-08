@@ -1286,6 +1286,7 @@ pub struct Snapshot {
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: BTreeSet<Origin>,
     clang_flag_enums: BTreeSet<Origin>,
     root_owners: BTreeMap<Origin, RootOwner>,
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
@@ -1364,6 +1365,7 @@ impl PartialEq for Snapshot {
             && self.annotations == other.annotations
             && self.declaration_guids == other.declaration_guids
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
+            && self.embeddable_class_layouts == other.embeddable_class_layouts
             && self.clang_flag_enums == other.clang_flag_enums
             && self.root_owners == other.root_owners
             && self.constant_root_owners == other.constant_root_owners
@@ -4590,7 +4592,7 @@ impl Snapshot {
         for fact in &self.facts {
             if is_flat_dependency(fact) {
                 facts_index.entry(&fact.name).or_default().push(fact);
-            } else if self.header_partition_policy && is_type_fact(fact) {
+            } else if self.header_partition_policy && is_type_declaration_fact(fact) {
                 exact_dependency_facts_index
                     .entry(&fact.name)
                     .or_default()
@@ -5034,7 +5036,7 @@ impl Snapshot {
                         .any(|fact| {
                             fact.origin.tu == tu
                                 && fact.spelling == *declaration
-                                && is_type_fact(fact)
+                                && is_type_declaration_fact(fact)
                                 && !self.suppressed_type_origins.contains(&fact.origin)
                                 && ((self.pointer_only_class_layouts.contains_key(&fact.origin)
                                     && matches!(fact.data, FactData::Record { .. }))
@@ -5086,7 +5088,7 @@ impl Snapshot {
                             .filter(|fact| {
                                 fact.origin.tu == tu
                                     && fact.spelling == *declaration
-                                    && is_type_fact(fact)
+                                    && is_type_declaration_fact(fact)
                             }),
                     );
                     exact_non_flat = !matches.is_empty();
@@ -5404,6 +5406,7 @@ impl Snapshot {
             facts_index: &facts_index,
             planned_types: &facts_by_name,
             pointer_only_class_layouts: &self.pointer_only_class_layouts,
+            embeddable_class_layouts: &self.embeddable_class_layouts,
             display_names,
         };
         let validation_time = timing.then(std::time::Instant::now);
@@ -5452,6 +5455,7 @@ impl Snapshot {
                 &constant.root.tu,
                 &layout,
                 &mut BTreeSet::new(),
+                NativeClassValueUse::Abi,
             )?;
         }
         if timing {
@@ -7089,6 +7093,18 @@ fn is_type_fact(fact: &Fact) -> bool {
     )
 }
 
+fn is_type_declaration_fact(fact: &Fact) -> bool {
+    matches!(
+        fact.kind,
+        FactKind::Class
+            | FactKind::Enum
+            | FactKind::EnumFlag
+            | FactKind::Struct
+            | FactKind::Typedef
+            | FactKind::Union
+    )
+}
+
 fn fact_data_kind(data: &FactData) -> &'static str {
     match data {
         FactData::Callback { .. } => "Callback",
@@ -8387,35 +8403,82 @@ struct LayoutContext<'a, 'facts> {
     facts_index: &'a HashMap<&'facts str, Vec<&'facts Fact>>,
     planned_types: &'a BTreeMap<&'facts str, &'facts Fact>,
     pointer_only_class_layouts: &'a BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: &'a BTreeSet<Origin>,
     display_names: Option<&'a BTreeMap<String, String>>,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum NativeClassValueUse {
+    Abi,
+    RecordLayout,
+}
+
 fn validate_fact_value_abi(fact: &Fact, layout: &LayoutContext<'_, '_>) -> Result<(), Error> {
-    let validate =
-        |ty| validate_pointer_only_class_value(ty, &fact.origin.tu, layout, &mut BTreeSet::new());
     match &fact.data {
         FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
-            validate(result)?;
+            validate_pointer_only_class_value(
+                result,
+                &fact.origin.tu,
+                layout,
+                &mut BTreeSet::new(),
+                NativeClassValueUse::Abi,
+            )?;
             for param in params {
-                validate(&param.ty)?;
+                validate_pointer_only_class_value(
+                    &param.ty,
+                    &fact.origin.tu,
+                    layout,
+                    &mut BTreeSet::new(),
+                    NativeClassValueUse::Abi,
+                )?;
             }
         }
         FactData::Record { base, fields, .. } => {
             if let Some(base) = base {
-                validate(base)?;
+                validate_pointer_only_class_value(
+                    base,
+                    &fact.origin.tu,
+                    layout,
+                    &mut BTreeSet::new(),
+                    NativeClassValueUse::RecordLayout,
+                )?;
             }
             for field in fields {
-                validate(&field.ty)?;
+                validate_pointer_only_class_value(
+                    &field.ty,
+                    &fact.origin.tu,
+                    layout,
+                    &mut BTreeSet::new(),
+                    NativeClassValueUse::RecordLayout,
+                )?;
             }
         }
         FactData::Interface { base, methods, .. } => {
             if let Some(base) = base {
-                validate(base)?;
+                validate_pointer_only_class_value(
+                    base,
+                    &fact.origin.tu,
+                    layout,
+                    &mut BTreeSet::new(),
+                    NativeClassValueUse::Abi,
+                )?;
             }
             for method in methods {
-                validate(&method.result)?;
+                validate_pointer_only_class_value(
+                    &method.result,
+                    &fact.origin.tu,
+                    layout,
+                    &mut BTreeSet::new(),
+                    NativeClassValueUse::Abi,
+                )?;
                 for param in &method.params {
-                    validate(&param.ty)?;
+                    validate_pointer_only_class_value(
+                        &param.ty,
+                        &fact.origin.tu,
+                        layout,
+                        &mut BTreeSet::new(),
+                        NativeClassValueUse::Abi,
+                    )?;
                 }
             }
         }
@@ -8429,6 +8492,7 @@ fn validate_pointer_only_class_value(
     tu: &str,
     layout: &LayoutContext<'_, '_>,
     seen: &mut BTreeSet<Origin>,
+    use_kind: NativeClassValueUse,
 ) -> Result<(), Error> {
     match ty {
         TypeRef::Pointer { .. }
@@ -8440,21 +8504,27 @@ fn validate_pointer_only_class_value(
         | TypeRef::Scalar(_)
         | TypeRef::Generic { .. } => Ok(()),
         TypeRef::FunctionPointer { params, result, .. } => {
-            validate_pointer_only_class_value(result, tu, layout, seen)?;
+            validate_pointer_only_class_value(result, tu, layout, seen, NativeClassValueUse::Abi)?;
             for param in params {
-                validate_pointer_only_class_value(param, tu, layout, seen)?;
+                validate_pointer_only_class_value(
+                    param,
+                    tu,
+                    layout,
+                    seen,
+                    NativeClassValueUse::Abi,
+                )?;
             }
             Ok(())
         }
         TypeRef::Array { target, .. } => {
-            validate_pointer_only_class_value(target, tu, layout, seen)
+            validate_pointer_only_class_value(target, tu, layout, seen, use_kind)
         }
         TypeRef::InlineRecord(record) => {
             if let Some(base) = &record.base {
-                validate_pointer_only_class_value(base, tu, layout, seen)?;
+                validate_pointer_only_class_value(base, tu, layout, seen, use_kind)?;
             }
             for field in &record.fields {
-                validate_pointer_only_class_value(&field.ty, tu, layout, seen)?;
+                validate_pointer_only_class_value(&field.ty, tu, layout, seen, use_kind)?;
             }
             Ok(())
         }
@@ -8479,7 +8549,10 @@ fn validate_pointer_only_class_value(
             } else {
                 return Ok(());
             };
-            if let Some(pointer_only_layout) = layout.pointer_only_class_layouts.get(&fact.origin) {
+            if let Some(pointer_only_layout) = layout.pointer_only_class_layouts.get(&fact.origin)
+                && !(use_kind == NativeClassValueUse::RecordLayout
+                    && layout.embeddable_class_layouts.contains(&fact.origin))
+            {
                 let name = layout
                     .display_names
                     .and_then(|names| names.get(&fact.name))
@@ -8503,7 +8576,13 @@ fn validate_pointer_only_class_value(
             let result = match &fact.data {
                 FactData::Record { base, fields, .. } => {
                     if let Some(base) = base {
-                        validate_pointer_only_class_value(base, &fact.origin.tu, layout, seen)?;
+                        validate_pointer_only_class_value(
+                            base,
+                            &fact.origin.tu,
+                            layout,
+                            seen,
+                            use_kind,
+                        )?;
                     }
                     for field in fields {
                         validate_pointer_only_class_value(
@@ -8511,13 +8590,18 @@ fn validate_pointer_only_class_value(
                             &fact.origin.tu,
                             layout,
                             seen,
+                            use_kind,
                         )?;
                     }
                     Ok(())
                 }
-                FactData::Typedef { target } => {
-                    validate_pointer_only_class_value(target, &fact.origin.tu, layout, seen)
-                }
+                FactData::Typedef { target } => validate_pointer_only_class_value(
+                    target,
+                    &fact.origin.tu,
+                    layout,
+                    seen,
+                    use_kind,
+                ),
                 _ => Ok(()),
             };
             seen.remove(&fact.origin);

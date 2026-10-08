@@ -69,6 +69,15 @@ fn pointer_only_native_class_layouts_match_x64_and_x86() {
                 ("Types", pointer_size * 16, pointer_size, pointer_size),
             ],
         );
+        assert_layout(&snapshot, "ProtectedColor", 4, 4, &[("Argb", 0, 4, 4)]);
+        assert!(
+            snapshot
+                .facts
+                .iter()
+                .filter(|fact| fact.name == "ProtectedColor")
+                .all(|fact| snapshot.embeddable_class_layouts.contains(&fact.origin)),
+            "ProtectedColor did not retain an embeddable layout for {target}"
+        );
 
         for name in ["Empty", "PrivateGeometry", "VirtualGeometry"] {
             assert!(
@@ -203,6 +212,13 @@ const SOURCE: &str = r#"
             INT Count;
             PointF* Points;
             BYTE* Types;
+        };
+
+        class ProtectedColor {
+        public:
+            ProtectedColor();
+        protected:
+            unsigned int Argb;
         };
 
         class Empty {};

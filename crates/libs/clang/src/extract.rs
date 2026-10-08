@@ -168,6 +168,7 @@ fn extract_impl(
     let mut annotations = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
     let mut pointer_only_class_layouts = BTreeMap::new();
+    let mut embeddable_class_layouts = BTreeSet::new();
     let mut clang_flag_enums = BTreeSet::new();
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
@@ -180,6 +181,7 @@ fn extract_impl(
             annotations: &mut annotations,
             declaration_guids: &mut declaration_guids,
             pointer_only_class_layouts: &mut pointer_only_class_layouts,
+            embeddable_class_layouts: &mut embeddable_class_layouts,
             clang_flag_enums: &mut clang_flag_enums,
         };
         let (result, metrics) =
@@ -387,6 +389,7 @@ fn extract_impl(
         annotations,
         declaration_guids,
         pointer_only_class_layouts,
+        embeddable_class_layouts,
         clang_flag_enums,
         root_owners,
         constant_root_owners: BTreeMap::new(),
@@ -1436,6 +1439,7 @@ impl TranslationUnit {
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
+            embeddable_class_layouts: &mut *output.embeddable_class_layouts,
             clang_flag_enums: &mut *output.clang_flag_enums,
             error: None,
             validate_annotations,
@@ -1498,6 +1502,7 @@ struct Traversal<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
     error: Option<Error>,
     validate_annotations: bool,
@@ -1509,6 +1514,7 @@ struct ExtractionState<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
 }
 
@@ -1825,11 +1831,15 @@ fn extract_child(
                                 .pointer_only_class_layouts
                                 .insert(origin.clone(), layout);
                         } else if matches!(data, FactData::Unsupported { .. })
-                            && let Some(layout) = pointer_only_class_layout(child, traversal.macros)
+                            && let Some((layout, embeddable)) =
+                                pointer_only_class_layout(child, traversal.macros)
                         {
                             traversal
                                 .pointer_only_class_layouts
                                 .insert(origin.clone(), layout);
+                            if embeddable {
+                                traversal.embeddable_class_layouts.insert(origin.clone());
+                            }
                         }
                     }
                     let index = traversal.facts.len();
@@ -3541,26 +3551,32 @@ fn is_data_class(cursor: CXCursor) -> bool {
         })
 }
 
-fn pointer_only_class_layout(cursor: CXCursor, macros: &MacroDefinitions) -> Option<FactData> {
-    let cursor = pointer_only_class_definition(cursor)?;
+fn pointer_only_class_layout(
+    cursor: CXCursor,
+    macros: &MacroDefinitions,
+) -> Option<(FactData, bool)> {
+    let (cursor, embeddable) = pointer_only_class_definition(cursor)?;
     let mut record =
         inline_record_with_pointer_class_layouts(cursor, false, Some(macros), true).ok()?;
     name_indirect_inline_records(
         &mut record,
         cx_string(unsafe { clang_getCursorSpelling(cursor) }).trim_start_matches('_'),
     );
-    Some(FactData::Record {
-        base: record.base,
-        fields: record.fields,
-        size: record.size,
-        align: record.align,
-        packing: record.packing,
-        alignment: record.alignment,
-        union: record.union,
-    })
+    Some((
+        FactData::Record {
+            base: record.base,
+            fields: record.fields,
+            size: record.size,
+            align: record.align,
+            packing: record.packing,
+            alignment: record.alignment,
+            union: record.union,
+        },
+        embeddable,
+    ))
 }
 
-fn pointer_only_class_definition(cursor: CXCursor) -> Option<CXCursor> {
+fn pointer_only_class_definition(cursor: CXCursor) -> Option<(CXCursor, bool)> {
     let cursor = cursor_definition(cursor);
     if unsafe { clang_isCursorDefinition(cursor) } == 0
         || unsafe { clang_isPODType(clang_getCursorType(cursor)) } != 0
@@ -3574,9 +3590,6 @@ fn pointer_only_class_definition(cursor: CXCursor) -> Option<CXCursor> {
         .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_FieldDecl)
         .collect();
     if fields.is_empty()
-        || fields
-            .iter()
-            .any(|field| unsafe { clang_getCXXAccessSpecifier(*field) } != CX_CXXPublic)
         || children.iter().any(|child| unsafe {
             clang_getCursorKind(*child) == CXCursor_CXXBaseSpecifier
                 || (matches!(
@@ -3587,7 +3600,13 @@ fn pointer_only_class_definition(cursor: CXCursor) -> Option<CXCursor> {
     {
         return None;
     }
-    Some(cursor)
+    let all_public = fields
+        .iter()
+        .all(|field| unsafe { clang_getCXXAccessSpecifier(*field) } == CX_CXXPublic);
+    let all_protected = fields
+        .iter()
+        .all(|field| unsafe { clang_getCXXAccessSpecifier(*field) } == CX_CXXProtected);
+    (all_public || all_protected).then_some((cursor, all_protected))
 }
 
 fn external_link_name(cursor: CXCursor) -> String {
@@ -6109,7 +6128,7 @@ fn type_ref_preserving_pointer_class_layouts(ty: CXType) -> Option<TypeRef> {
         && unsafe { clang_isCursorDefinition(cursor_definition(declaration)) } != 0
         && !is_data_class(declaration)
     {
-        if let Some(definition) = pointer_only_class_definition(declaration) {
+        if let Some((definition, _)) = pointer_only_class_definition(declaration) {
             let name = cx_string(unsafe { clang_getCursorSpelling(definition) });
             let (declaration, _, _, _) = cursor_locations(definition)?;
             return Some(TypeRef::Pointer {

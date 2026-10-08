@@ -174,13 +174,18 @@ flags setting, or pointer-level override for that enum still fails the audit. Un
 declarations remain excluded.
 
 If a selected function reaches a non-POD native class, header planning can retain its field layout
-as a pointer-only dependency. The class must have public instance fields, no base classes, and no
-virtual methods or destructor. Constructors, non-virtual methods, and private copy operations are
-not emitted. The extracted fact remains unsupported until this selected dependency path is
-planned, so legacy and unselected emission keep their prior behavior. Pointer and reference uses
-are allowed; by-value uses through typedefs, arrays, callback signatures, or containing records
-fail preflight. Partition exclusions still take precedence and report the normal owner-excluded
-dependency diagnostic.
+as a pointer-only dependency. The class must have uniformly public or uniformly protected instance
+fields, no base classes, and no virtual member functions. Constructors, non-virtual methods, and
+private copy operations are not emitted. The extracted fact remains unsupported until this selected
+dependency path is planned, so legacy and unselected emission keep their prior behavior. Pointer
+and reference uses are allowed. A protected-only class layout may also be used as storage inside an
+emitted record, but direct by-value ABI uses still fail preflight. A containing record passed by
+value also fails transitively. Public-field classes and `native_opaque` classes remain invalid
+through typedefs, arrays, callback signatures, or containing records. An exact native declaration
+also takes precedence over an unrelated external metadata type with the same leaf name; a
+nonrepresentable native declaration reports a dependency blocker rather than binding the external
+type. Partition exclusions still take precedence and report the normal owner-excluded dependency
+diagnostic.
 
 The valueless `win32metadata:native_opaque` annotation marks a named C++ class definition whose
 source name is part of the native API but whose implementation is not metadata. The class emits as
