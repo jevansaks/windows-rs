@@ -181,10 +181,12 @@ change non-header emission.
 Within one translation unit, Clang may represent a declaration spelled through a function-name
 macro and a later unaliased declaration as redeclarations of one native function. Planning uses
 `clang_getCanonicalCursor` equality for that relation. If the projected signatures, annotations,
-and output routes also match, only the unaliased export is retained. A lone source alias still emits
-with its recovered public name and native import name. Declarations from separate translation
-units, incompatible declarations, and declarations with different DLL, owner, or namespace routes
-remain separate.
+and output routes also match, only the unaliased export is retained. A unique import-library
+annotation on the retained export may match an earlier unannotated alias on that canonical route. A
+lone source alias still emits with its recovered public name and native import name. An annotated
+alias with an unannotated export, declarations from separate translation units, incompatible
+declarations, conflicting import libraries, and declarations with different owner or namespace
+routes remain separate.
 
 An `associated_enum` annotation on a selected root adds the matching enum provider from its
 annotation-compatible redeclarations to dependency closure. Those redeclarations may come from

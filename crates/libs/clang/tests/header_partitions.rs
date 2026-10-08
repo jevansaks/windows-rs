@@ -3534,7 +3534,8 @@ fn retained_function_alias_identity_is_import_option_independent() {
     let alias = scratch.join("alias.h");
     std::fs::write(
         &export,
-        "__attribute__((annotate(\"win32metadata:supported_os=windows6.0.6000\")))\n\
+        "#include \"alias.h\"\n\
+         __attribute__((annotate(\"win32metadata:supported_os=windows6.0.6000\")))\n\
          __attribute__((annotate(\"win32metadata:import_library=clfsw32.dll\")))\n\
          extern \"C\" unsigned LsnBlockOffset(unsigned lsn);\n",
     )
@@ -3546,7 +3547,7 @@ fn retained_function_alias_identity_is_import_option_independent() {
          extern \"C\" unsigned ClfsLsnBlockOffset(unsigned lsn);\n",
     )
     .unwrap();
-    let snapshot = aggregate_snapshot(&scratch, &[&export, &alias]);
+    let snapshot = aggregate_snapshot(&scratch, &[&export]);
     let owner = RootPartition::new("fs", "Example.FileSystem");
     let policy = HeaderPartitionPolicy::new()
         .with_traversed_header(export.to_string_lossy(), owner.clone())
@@ -3564,26 +3565,79 @@ fn retained_function_alias_identity_is_import_option_independent() {
         .unwrap();
     let mut options = EmitOptions::new("Example.Common", &references);
     options.native_imports = Some(&imports);
-    let retained = plan.retained_function_source_identities(&options).unwrap();
-    assert_eq!(retained.len(), 1);
-    assert_eq!(retained[0].name, "LsnBlockOffset");
-    assert_eq!(retained[0].link_name, "LsnBlockOffset");
-
     let without_imports = EmitOptions::new("Example.Common", &references);
     let retained = plan
         .retained_function_source_identities(&without_imports)
         .unwrap();
     assert_eq!(retained.len(), 1);
     assert_eq!(retained[0].name, "LsnBlockOffset");
+    assert_eq!(retained[0].link_name, "LsnBlockOffset");
 
-    let rdl = plan
-        .emit_with_options(&without_imports)
+    let retained = plan.retained_function_source_identities(&options).unwrap();
+    assert_eq!(retained.len(), 1);
+    assert_eq!(retained[0].name, "LsnBlockOffset");
+    assert_eq!(retained[0].link_name, "LsnBlockOffset");
+
+    let static_partitions = plan.clone().emit_with_options(&without_imports).unwrap();
+    let static_rdl = static_partitions.values().cloned().collect::<String>();
+    assert_eq!(
+        static_rdl.matches("fn LsnBlockOffset(").count(),
+        1,
+        "{static_rdl}"
+    );
+    assert!(
+        !static_rdl.contains("fn ClfsLsnBlockOffset("),
+        "{static_rdl}"
+    );
+    assert!(
+        static_rdl.contains("#[library(\"clfsw32.dll\")]"),
+        "{static_rdl}"
+    );
+
+    let imported_rdl = plan
+        .clone()
+        .emit_with_options(&options)
         .unwrap()
         .values()
         .cloned()
         .collect::<String>();
-    assert_eq!(rdl.matches("fn LsnBlockOffset(").count(), 1, "{rdl}");
-    assert!(!rdl.contains("fn ClfsLsnBlockOffset("), "{rdl}");
+    assert_eq!(
+        imported_rdl.matches("fn LsnBlockOffset(").count(),
+        1,
+        "{imported_rdl}"
+    );
+    assert!(
+        !imported_rdl.contains("fn ClfsLsnBlockOffset("),
+        "{imported_rdl}"
+    );
+
+    let winmd = scratch.join("alias-first.winmd");
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(static_partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+    assert_eq!(
+        index
+            .get_item("Example.FileSystem", "LsnBlockOffset")
+            .count(),
+        1
+    );
+    assert_eq!(
+        index
+            .get_item("Example.FileSystem", "ClfsLsnBlockOffset")
+            .count(),
+        0
+    );
+    let Item::Fn(function) = index.expect_item("Example.FileSystem", "LsnBlockOffset") else {
+        panic!("Example.FileSystem.LsnBlockOffset was not emitted as a function");
+    };
+    let import = function.impl_map().unwrap();
+    assert_eq!(import.import_scope().name(), "clfsw32.dll");
+    assert_eq!(import.import_name(), "LsnBlockOffset");
 
     std::fs::remove_dir_all(scratch).unwrap();
 }

@@ -266,6 +266,80 @@ fn canonical_function_alias_requires_matching_native_imports() {
 }
 
 #[test]
+fn canonical_function_alias_uses_unique_later_native_import() {
+    let alias = function(1, "Alias", "Export", Scalar::I32);
+    let export = function(2, "Export", "Export", Scalar::I32);
+    let alias_origin = alias.origin.clone();
+    let export_origin = export.origin.clone();
+    let canonical = alias_origin.clone();
+    let mut snapshot = snapshot(vec![alias, export]);
+    snapshot
+        .canonical_function_origins
+        .insert(alias_origin.clone(), canonical.clone());
+    snapshot
+        .canonical_function_origins
+        .insert(export_origin.clone(), canonical);
+    snapshot.annotations.insert(
+        AnnotationTarget::Declaration(export_origin),
+        vec![Annotation::ImportLibrary("export.dll".to_string())],
+    );
+
+    assert_eq!(
+        snapshot.redundant_canonical_function_aliases(snapshot.facts.iter(), None),
+        BTreeSet::from([alias_origin])
+    );
+}
+
+#[test]
+fn canonical_function_alias_does_not_supply_library_to_export() {
+    let alias = function(1, "Alias", "Export", Scalar::I32);
+    let export = function(2, "Export", "Export", Scalar::I32);
+    let canonical = alias.origin.clone();
+    let mut snapshot = snapshot(vec![alias, export]);
+    for fact in &snapshot.facts {
+        snapshot
+            .canonical_function_origins
+            .insert(fact.origin.clone(), canonical.clone());
+    }
+    snapshot.annotations.insert(
+        AnnotationTarget::Declaration(snapshot.facts[0].origin.clone()),
+        vec![Annotation::ImportLibrary("alias.dll".to_string())],
+    );
+
+    assert!(
+        snapshot
+            .redundant_canonical_function_aliases(snapshot.facts.iter(), None)
+            .is_empty()
+    );
+}
+
+#[test]
+fn canonical_function_alias_keeps_matching_pair_despite_third_library() {
+    let matching_alias = function(1, "MatchingAlias", "Export", Scalar::I32);
+    let export = function(2, "Export", "Export", Scalar::I32);
+    let conflicting_alias = function(3, "ConflictingAlias", "Export", Scalar::I32);
+    let matching_origin = matching_alias.origin.clone();
+    let canonical = matching_origin.clone();
+    let mut snapshot = snapshot(vec![matching_alias, export, conflicting_alias]);
+    for fact in &snapshot.facts {
+        snapshot
+            .canonical_function_origins
+            .insert(fact.origin.clone(), canonical.clone());
+    }
+    for (index, library) in [(0, "export.dll"), (1, "export.dll"), (2, "other.dll")] {
+        snapshot.annotations.insert(
+            AnnotationTarget::Declaration(snapshot.facts[index].origin.clone()),
+            vec![Annotation::ImportLibrary(library.to_string())],
+        );
+    }
+
+    assert_eq!(
+        snapshot.redundant_canonical_function_aliases(snapshot.facts.iter(), None),
+        BTreeSet::from([matching_origin])
+    );
+}
+
+#[test]
 fn projection_lookup_preserves_alias_cycles_and_shared_location_visits() {
     let mut first = alias(1, "FIRST", "types.h", 1, TypeRef::Void);
     let second = alias(2, "SECOND", "types.h", 2, named(&first));

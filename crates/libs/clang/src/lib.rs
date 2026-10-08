@@ -4736,13 +4736,13 @@ impl Snapshot {
                 .copied()
                 .filter(|function| function_source_name_matches_link_name(function, source_names))
                 .collect();
-            for alias in functions {
+            for alias in &functions {
                 if function_source_name_matches_link_name(alias, source_names) {
                     continue;
                 }
                 for export in &exports {
                     if function_declarations_compatible(alias, export)
-                        && self.function_routes_match(alias, export)
+                        && self.function_routes_match(alias, export, &functions)
                     {
                         redundant.insert(alias.origin.clone());
                         break;
@@ -4753,7 +4753,17 @@ impl Snapshot {
         redundant
     }
 
-    fn function_routes_match(&self, left: &Fact, right: &Fact) -> bool {
+    fn function_routes_match(
+        &self,
+        left: &Fact,
+        right: &Fact,
+        canonical_functions: &[&Fact],
+    ) -> bool {
+        self.function_non_library_routes_match(left, right)
+            && self.function_import_libraries_match(left, right, canonical_functions)
+    }
+
+    fn function_non_library_routes_match(&self, left: &Fact, right: &Fact) -> bool {
         let owners_match = match (
             self.root_owners.get(&left.origin),
             self.root_owners.get(&right.origin),
@@ -4775,38 +4785,72 @@ impl Snapshot {
                         .map(|owner| &owner.namespace)
                 })
         };
-        namespace(left) == namespace(right)
-            && self.function_import_libraries_match(left, right)
-            && self.function_annotations_match(left, right)
+        namespace(left) == namespace(right) && self.function_annotations_match(left, right)
     }
 
-    fn function_import_libraries_match(&self, left: &Fact, right: &Fact) -> bool {
-        let library = |fact: &Fact| {
-            let FactData::Function { link_name, .. } = &fact.data else {
-                return None;
-            };
-            annotations_for(
-                &self.annotations,
-                &AnnotationTarget::Declaration(fact.origin.clone()),
-            )
-            .iter()
-            .find_map(|annotation| match annotation {
-                Annotation::ImportLibrary(library) => Some(library.as_str()),
-                _ => None,
-            })
-            .or_else(|| {
-                self.root_owners
-                    .get(&fact.origin)?
-                    .libraries
-                    .get(link_name)
-                    .map(String::as_str)
-            })
-        };
-        match (library(left), library(right)) {
+    fn function_import_libraries_match(
+        &self,
+        left: &Fact,
+        right: &Fact,
+        canonical_functions: &[&Fact],
+    ) -> bool {
+        match (
+            self.function_import_library(left),
+            self.function_import_library(right),
+        ) {
             (None, None) => true,
             (Some(left), Some(right)) => left.eq_ignore_ascii_case(right),
-            _ => false,
+            (Some(_), None) => false,
+            (None, Some(right)) => self
+                .inherited_function_import_library(left, canonical_functions)
+                .is_ok_and(|left| left.is_some_and(|left| left.eq_ignore_ascii_case(right))),
         }
+    }
+
+    fn inherited_function_import_library<'a>(
+        &'a self,
+        fact: &Fact,
+        canonical_functions: &[&Fact],
+    ) -> Result<Option<&'a str>, ()> {
+        let mut resolved = None;
+        for candidate in canonical_functions {
+            if !function_declarations_compatible(fact, candidate)
+                || !self.function_non_library_routes_match(fact, candidate)
+            {
+                continue;
+            }
+            let Some(candidate) = self.function_import_library(candidate) else {
+                continue;
+            };
+            match resolved {
+                None => resolved = Some(candidate),
+                Some(current) if current.eq_ignore_ascii_case(candidate) => {}
+                Some(_) => return Err(()),
+            }
+        }
+        Ok(resolved)
+    }
+
+    fn function_import_library<'a>(&'a self, fact: &Fact) -> Option<&'a str> {
+        let FactData::Function { link_name, .. } = &fact.data else {
+            return None;
+        };
+        annotations_for(
+            &self.annotations,
+            &AnnotationTarget::Declaration(fact.origin.clone()),
+        )
+        .iter()
+        .find_map(|annotation| match annotation {
+            Annotation::ImportLibrary(library) => Some(library.as_str()),
+            _ => None,
+        })
+        .or_else(|| {
+            self.root_owners
+                .get(&fact.origin)?
+                .libraries
+                .get(link_name)
+                .map(String::as_str)
+        })
     }
 
     fn function_annotations_match(&self, left: &Fact, right: &Fact) -> bool {

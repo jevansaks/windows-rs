@@ -50,8 +50,10 @@ keys or distinct raw decorations that collapse to one normalized key.
 Within one Clang translation unit, a macro-recovered function alias and an unaliased export emit as
 one function only when `clang_getCanonicalCursor` identifies the same declaration, their projected
 signatures and annotations match, and they have the same route. The unaliased export name wins. A
-lone alias, declarations from separate translation units, and declarations with different routes
-remain independent.
+later import-library annotation on that export may match an earlier unannotated alias on the same
+route, so the native include order does not change the result. A lone alias, an annotated alias with
+an unannotated export, declarations from separate translation units, conflicting import libraries,
+and declarations with different routes remain independent.
 After applying a header policy, `HeaderPartitionPlan::retained_function_source_identities` returns
 only the canonical root functions retained by the same `EmitOptions` used for emission. This omits
 dependency-only and owner- or caller-excluded functions while preserving each selected declaration's
