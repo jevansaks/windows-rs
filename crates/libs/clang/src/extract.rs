@@ -216,6 +216,8 @@ fn extract_impl(
         }
         extracted.push(result);
     }
+    normalize_source_annotations(&facts, &mut annotations)?;
+    let source_annotations = annotations.clone();
     merge_redeclaration_annotations(&facts, &mut annotations)?;
     let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
@@ -418,6 +420,7 @@ fn extract_impl(
         function_link_name_index,
         declare_handles,
         annotations,
+        source_annotations,
         declaration_guids,
         pointer_callback_aliases,
         pointer_only_class_layouts,
@@ -2092,7 +2095,7 @@ fn extract_child(
     traversal.next += 1;
     let kind = unsafe { clang_getCursorKind(child) };
     if kind == CXCursor_AnnotateAttr {
-        if !traversal.validate_annotations {
+        if !traversal.validate_annotations || !source_owned_annotation(cursor_parent, child) {
             return;
         }
         let spelling = cx_string(unsafe { clang_getCursorSpelling(child) });
@@ -2450,6 +2453,7 @@ fn extract_child(
 fn has_win32metadata_annotation(cursor: CXCursor) -> bool {
     cursor_children(cursor).into_iter().any(|child| {
         (unsafe { clang_getCursorKind(child) }) == CXCursor_AnnotateAttr
+            && source_owned_annotation(cursor, child)
             && cx_string(unsafe { clang_getCursorSpelling(child) }).starts_with("win32metadata:")
     })
 }
@@ -2955,6 +2959,89 @@ fn cursor_expansion_extent(cursor: CXCursor) -> Option<(String, u32, u32)> {
         clang_getExpansionLocation,
     )?;
     (start.file == end.file).then_some((start.file, start.offset, end.offset))
+}
+
+fn source_owned_annotation(declaration: CXCursor, attribute: CXCursor) -> bool {
+    // Attribute parents are invalid and inherited attributes are exposed as direct children.
+    // Expansion locations remain stable. Leading attributes are owned only until a declaration
+    // boundary separates them from the cursor extent.
+    let declaration_range = unsafe { clang_getCursorExtent(declaration) };
+    let Some((declaration_file, declaration_start)) =
+        expansion_file_offset(unsafe { clang_getRangeStart(declaration_range) })
+    else {
+        return false;
+    };
+    let Some((end_file, declaration_end)) =
+        expansion_file_offset(unsafe { clang_getRangeEnd(declaration_range) })
+    else {
+        return false;
+    };
+    let Some((attribute_file, attribute_offset)) =
+        expansion_file_offset(unsafe { clang_getCursorLocation(attribute) })
+    else {
+        return false;
+    };
+    if unsafe {
+        clang_File_isEqual(declaration_file, end_file) == 0
+            || clang_File_isEqual(declaration_file, attribute_file) == 0
+    } {
+        return false;
+    }
+    if (declaration_start..declaration_end).contains(&attribute_offset) {
+        return true;
+    }
+    attribute_offset < declaration_start
+        && !source_range_has_declaration_boundary(
+            unsafe { clang_Cursor_getTranslationUnit(declaration) },
+            declaration_file,
+            attribute_offset,
+            declaration_start,
+        )
+}
+
+fn expansion_file_offset(location: CXSourceLocation) -> Option<(CXFile, u32)> {
+    unsafe {
+        let mut file = std::ptr::null_mut();
+        let mut offset = 0;
+        clang_getExpansionLocation(
+            location,
+            &mut file,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut offset,
+        );
+        (!file.is_null()).then_some((file, offset))
+    }
+}
+
+fn source_range_has_declaration_boundary(
+    tu: CXTranslationUnit,
+    file: CXFile,
+    start: u32,
+    end: u32,
+) -> bool {
+    if start >= end {
+        return false;
+    }
+    let range = unsafe {
+        clang_getRange(
+            clang_getLocationForOffset(tu, file, start),
+            clang_getLocationForOffset(tu, file, end),
+        )
+    };
+    let mut tokens = std::ptr::null_mut();
+    let mut count = 0;
+    unsafe { clang_tokenize(tu, range, &mut tokens, &mut count) };
+    let result = (0..count).any(|index| {
+        let token = unsafe { *tokens.add(index as usize) };
+        (unsafe { clang_getTokenKind(token) }) == CXToken_Punctuation
+            && matches!(
+                cx_string(unsafe { clang_getTokenSpelling(tu, token) }).as_str(),
+                ";" | "{" | "}" | ","
+            )
+    });
+    unsafe { clang_disposeTokens(tu, tokens, count) };
+    result
 }
 
 fn source_function_name(
@@ -5261,7 +5348,9 @@ fn parse_raw_annotation(spelling: &str) -> Option<RawAnnotation> {
 fn expanded_raw_annotations(cursor: CXCursor) -> Vec<RawAnnotation> {
     let mut result = vec![];
     for child in cursor_children(cursor) {
-        if unsafe { clang_getCursorKind(child) } != CXCursor_AnnotateAttr {
+        if unsafe { clang_getCursorKind(child) } != CXCursor_AnnotateAttr
+            || !source_owned_annotation(cursor, child)
+        {
             continue;
         }
         let spelling = cx_string(unsafe { clang_getCursorSpelling(child) });
@@ -5555,6 +5644,20 @@ fn insert_annotations(
     annotations.entry(target).or_default().extend(values);
 }
 
+fn normalize_source_annotations(
+    facts: &[Fact],
+    annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+) -> Result<(), Error> {
+    let facts_by_origin: HashMap<_, _> = facts.iter().map(|fact| (&fact.origin, fact)).collect();
+    for (target, values) in annotations {
+        let Some(fact) = facts_by_origin.get(annotation_target_origin(target)) else {
+            continue;
+        };
+        *values = merge_annotation_values(std::mem::take(values), &fact.name)?;
+    }
+    Ok(())
+}
+
 fn merge_redeclaration_annotations(
     facts: &[Fact],
     annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
@@ -5592,16 +5695,29 @@ fn merge_redeclaration_annotations(
                 continue;
             }
             let origins: BTreeSet<_> = group.iter().map(|fact| fact.origin.clone()).collect();
-            let mut slots: BTreeMap<AnnotationSlot, Vec<Annotation>> = BTreeMap::new();
+            let mut slots: BTreeMap<AnnotationSlot, BTreeMap<Origin, Vec<Annotation>>> =
+                BTreeMap::new();
             for (target, values) in annotations.iter() {
-                if origins.contains(annotation_target_origin(target)) {
+                let origin = annotation_target_origin(target);
+                if origins.contains(origin) {
                     slots
                         .entry(annotation_target_slot(target))
                         .or_default()
-                        .extend(values.iter().cloned());
+                        .insert(origin.clone(), values.clone());
                 }
             }
-            for (slot, values) in slots {
+            for (slot, by_origin) in slots {
+                if group[0].kind == FactKind::Typedef
+                    && origins
+                        .iter()
+                        .map(|origin| by_origin.get(origin).map_or(&[][..], Vec::as_slice))
+                        .collect::<BTreeSet<_>>()
+                        .len()
+                        > 1
+                {
+                    continue;
+                }
+                let values = by_origin.into_values().flatten().collect();
                 let values = merge_annotation_values(values, name)?;
                 for origin in &origins {
                     annotations.insert(
@@ -7217,5 +7333,154 @@ fn cx_string(value: CXString) -> String {
         };
         clang_disposeString(value);
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_owned_annotation_uses_exact_source_interval() {
+        helpers::ensure_libclang();
+        let root = std::env::temp_dir().join(format!(
+            "windows-clang-source-owned-annotation-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let first = root.join("first.h");
+        let second = root.join("second.h");
+        std::fs::write(
+            &first,
+            r#"
+                typedef void* LPVOID;
+                typedef __attribute__((annotate(
+                    "win32metadata:raii_free=CloseFirst"))) LPVOID HINTERNET;
+            "#,
+        )
+        .unwrap();
+        std::fs::write(
+            &second,
+            r#"
+                typedef void* LPVOID;
+                typedef __attribute__((annotate(
+                    "win32metadata:raii_free=CloseSecond"))) LPVOID HINTERNET;
+            "#,
+        )
+        .unwrap();
+        let input = Input::new(
+            root.join("combined.cpp").to_string_lossy(),
+            "#include \"first.h\"\n\
+             #include \"second.h\"\n\
+             __attribute__((annotate(\"win32metadata:supported_os=PrefixFirst\")))\n\
+             int Prefix();\n\
+             __attribute__((annotate(\"win32metadata:supported_os=PrefixSecond\")))\n\
+             int Prefix();\n",
+        );
+        let include = format!("-I{}", root.display());
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let unit = TranslationUnit::parse(
+            &index,
+            &input,
+            &[
+                "-x",
+                "c++",
+                "-fms-extensions",
+                "--target=x86_64-pc-windows-msvc",
+                &include,
+            ],
+        )
+        .unwrap();
+        let declarations: Vec<_> =
+            cursor_children(unsafe { clang_getTranslationUnitCursor(unit.0) })
+                .into_iter()
+                .filter(|cursor| {
+                    (unsafe { clang_getCursorKind(*cursor) }) == CXCursor_TypedefDecl
+                        && cx_string(unsafe { clang_getCursorSpelling(*cursor) }) == "HINTERNET"
+                })
+                .collect();
+        assert_eq!(declarations.len(), 2);
+        let first_path = normalize_name(&first.to_string_lossy());
+        let second_path = normalize_name(&second.to_string_lossy());
+        let attributes = |declaration| {
+            cursor_children(declaration)
+                .into_iter()
+                .filter(|cursor| unsafe { clang_getCursorKind(*cursor) == CXCursor_AnnotateAttr })
+                .map(|attribute| {
+                    let parent = unsafe { clang_getCursorSemanticParent(attribute) };
+                    let lexical_parent = unsafe { clang_getCursorLexicalParent(attribute) };
+                    assert_eq!(unsafe { clang_getCursorKind(parent) }, CXCursor_InvalidFile);
+                    assert_eq!(
+                        unsafe { clang_getCursorKind(lexical_parent) },
+                        CXCursor_InvalidFile
+                    );
+                    let (spelling, expansion, _, _) = cursor_locations(attribute).unwrap();
+                    assert_eq!(spelling, expansion);
+                    (
+                        cx_string(unsafe { clang_getCursorSpelling(attribute) }),
+                        expansion.file,
+                        source_owned_annotation(declaration, attribute),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            attributes(declarations[0]),
+            [(
+                "win32metadata:raii_free=CloseFirst".to_string(),
+                first_path.clone(),
+                true,
+            )]
+        );
+        assert_eq!(
+            attributes(declarations[1]),
+            [
+                (
+                    "win32metadata:raii_free=CloseFirst".to_string(),
+                    first_path,
+                    false,
+                ),
+                (
+                    "win32metadata:raii_free=CloseSecond".to_string(),
+                    second_path,
+                    true,
+                ),
+            ]
+        );
+        let combined_path = normalize_name(&input.name);
+        let prefixes: Vec<_> = cursor_children(unsafe { clang_getTranslationUnitCursor(unit.0) })
+            .into_iter()
+            .filter(|cursor| {
+                (unsafe { clang_getCursorKind(*cursor) }) == CXCursor_FunctionDecl
+                    && cx_string(unsafe { clang_getCursorSpelling(*cursor) }) == "Prefix"
+            })
+            .collect();
+        assert_eq!(prefixes.len(), 2);
+        assert_eq!(
+            attributes(prefixes[0]),
+            [(
+                "win32metadata:supported_os=PrefixFirst".to_string(),
+                combined_path.clone(),
+                true,
+            )]
+        );
+        assert_eq!(
+            attributes(prefixes[1]),
+            [
+                (
+                    "win32metadata:supported_os=PrefixFirst".to_string(),
+                    combined_path.clone(),
+                    false,
+                ),
+                (
+                    "win32metadata:supported_os=PrefixSecond".to_string(),
+                    combined_path,
+                    true,
+                ),
+            ]
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

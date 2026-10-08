@@ -1446,6 +1446,7 @@ pub struct Snapshot {
     function_link_name_index: FunctionLinkNameIndex,
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    source_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
@@ -1701,6 +1702,7 @@ impl PartialEq for Snapshot {
             && self.function_link_name_index == other.function_link_name_index
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
+            && self.source_annotations == other.source_annotations
             && self.declaration_guids == other.declaration_guids
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
@@ -2096,7 +2098,7 @@ impl Snapshot {
         if routes.is_some() {
             let declarations = TypedefDeclarationIndex::new(&self.facts);
             let planned_types: Vec<_> = plan.types.iter().map(|planned| planned.fact).collect();
-            let annotations = self.route_annotation_signatures();
+            let annotations = self.source_annotation_signatures();
             populate_retained_canonical_raw_pointers(
                 &planned_types,
                 &declarations,
@@ -2932,16 +2934,19 @@ impl Snapshot {
             }
         }
         if !associated_enum_remaps.is_empty() {
-            for (target, annotations) in &mut self.annotations {
-                for annotation in annotations {
-                    let Annotation::AssociatedEnum(name) = annotation else {
-                        continue;
-                    };
-                    let Some(remap) = associated_enum_remaps.get(&(target.clone(), name.clone()))
-                    else {
-                        continue;
-                    };
-                    name.clone_from(remap);
+            for annotations in [&mut self.annotations, &mut self.source_annotations] {
+                for (target, annotations) in annotations {
+                    for annotation in annotations {
+                        let Annotation::AssociatedEnum(name) = annotation else {
+                            continue;
+                        };
+                        let Some(remap) =
+                            associated_enum_remaps.get(&(target.clone(), name.clone()))
+                        else {
+                            continue;
+                        };
+                        name.clone_from(remap);
+                    }
                 }
             }
         }
@@ -3009,9 +3014,86 @@ impl Snapshot {
             constants.push(constant);
         }
         self.constants = constants;
+        conflicts.extend(self.source_annotation_partition_conflicts());
         conflicts.sort();
         conflicts.dedup();
         Ok(conflicts)
+    }
+
+    fn source_annotation_partition_conflicts(&self) -> Vec<PartitionConflict> {
+        let facts_by_origin: HashMap<_, _> =
+            self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+        let declarations = DeclarationIndex::new(&self.facts);
+        let signatures = self.source_annotation_signatures();
+        let empty = Rc::new(Vec::new());
+        let mut candidates: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| fact.root && fact.kind == FactKind::Typedef)
+        {
+            candidates.entry(&fact.name).or_default().push(fact);
+        }
+        let mut conflicts = vec![];
+        for (name, candidates) in candidates {
+            let mut groups: Vec<Vec<&Fact>> = vec![];
+            for candidate in candidates {
+                if let Some(group) = groups.iter_mut().find(|group| {
+                    group.iter().all(|fact| {
+                        extract::annotation_declarations_compatible(
+                            fact,
+                            candidate,
+                            &facts_by_origin,
+                        )
+                    })
+                }) {
+                    group.push(candidate);
+                } else {
+                    groups.push(vec![candidate]);
+                }
+            }
+            for group in groups {
+                let distinct_signatures: BTreeSet<_> = group
+                    .iter()
+                    .map(|fact| {
+                        signatures
+                            .get(&fact.origin)
+                            .cloned()
+                            .unwrap_or_else(|| empty.clone())
+                    })
+                    .collect();
+                if distinct_signatures.len() <= 1 {
+                    continue;
+                }
+                let namespaces: BTreeSet<_> = group
+                    .iter()
+                    .filter_map(|fact| {
+                        let owner = self.root_owners.get(&fact.origin)?;
+                        Some(
+                            self.fact_authority_namespace(fact, &declarations)
+                                .unwrap_or(&owner.namespace)
+                                .clone(),
+                        )
+                    })
+                    .collect();
+                if namespaces.len() > 1 {
+                    continue;
+                }
+                let owners = group
+                    .iter()
+                    .filter_map(|fact| self.root_owners.get(&fact.origin).cloned())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                conflicts.push(PartitionConflict {
+                    name: name.to_string(),
+                    kind: PartitionItemKind::Type,
+                    reason: PartitionConflictReason::AmbiguousOwners,
+                    owners,
+                });
+            }
+        }
+        conflicts
     }
 
     fn into_partitioned_planning_snapshot(
@@ -4174,7 +4256,7 @@ impl Snapshot {
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<(String, OutputKind), RouteCandidate<'a>>, Error> {
         let declarations = DeclarationIndex::new(&self.facts);
-        let annotation_signatures = self.route_annotation_signatures();
+        let annotation_signatures = self.source_annotation_signatures();
         let empty_annotations = Rc::new(Vec::new());
         let route_context = RouteClaimContext {
             annotations: &annotation_signatures,
@@ -4491,9 +4573,9 @@ impl Snapshot {
         Ok(())
     }
 
-    fn route_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
+    fn source_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
         let mut result: BTreeMap<Origin, RouteAnnotations> = BTreeMap::new();
-        for (target, annotations) in &self.annotations {
+        for (target, annotations) in &self.source_annotations {
             let (origin, target) = route_annotation_target(target);
             let annotations: Vec<_> = annotations
                 .iter()

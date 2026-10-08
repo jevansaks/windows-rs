@@ -11,6 +11,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         function_link_name_index: FunctionLinkNameIndex::default(),
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
+        source_annotations: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
         pointer_callback_aliases: BTreeSet::new(),
         pointer_only_class_layouts: BTreeMap::new(),
