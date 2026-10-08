@@ -15,6 +15,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         pointer_only_class_layouts: BTreeMap::new(),
         embeddable_class_layouts: BTreeSet::new(),
         clang_flag_enums: BTreeSet::new(),
+        recovery_suppressed_origins: BTreeSet::new(),
         root_owners: BTreeMap::new(),
         constant_root_owners: BTreeMap::new(),
         root_partitions: BTreeMap::new(),

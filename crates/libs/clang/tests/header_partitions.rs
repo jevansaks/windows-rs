@@ -1188,6 +1188,141 @@ fn traversed_headers_select_roots_and_route_dependencies_to_default() {
 }
 
 #[test]
+fn midl_recovery_suppression_survives_header_rerooting() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("midl-recovery-rerooting");
+    let midl = scratch.join("mfobjects.h");
+    let dependency = scratch.join("dependency.h");
+    std::fs::write(
+        &midl,
+        "/* File created by MIDL compiler version 8.01.0628 */\n\
+         typedef unsigned long DWORD;\n\
+         enum __MIDL_generated_media_events { MEError = 1 };\n\
+         typedef DWORD MediaEventType;\n\
+         typedef struct __MIDL_generated_handle { int _; } *PUBLIC_HANDLE;\n\
+         enum __MIDL_referenced_media_events { MERunning = 2 };\n\
+         extern \"C\" void UseMediaEvent(__MIDL_referenced_media_events event);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &dependency,
+        "typedef struct INCLUDED_DEPENDENCY { int value; } INCLUDED_DEPENDENCY;\n",
+    )
+    .unwrap();
+
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!(
+                "#include \"{}\"\n#include \"{}\"\n",
+                midl.to_string_lossy(),
+                dependency.to_string_lossy()
+            ),
+        )
+        .with_roots([midl.to_string_lossy().to_string()])],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+
+    let generated = snapshot
+        .facts()
+        .iter()
+        .find(|fact| {
+            fact.name == "__MIDL_generated_media_events"
+                && matches!(fact.data, FactData::Enum { .. })
+        })
+        .unwrap();
+    assert!(!generated.root);
+    assert!(
+        snapshot
+            .facts()
+            .iter()
+            .filter(|fact| fact.name == "INCLUDED_DEPENDENCY")
+            .all(|fact| !fact.root)
+    );
+    assert!(
+        snapshot.facts().iter().any(|fact| {
+            fact.name == "__MIDL_referenced_media_events"
+                && fact.root
+                && matches!(fact.data, FactData::Enum { .. })
+        }),
+        "{}",
+        snapshot.dump()
+    );
+
+    let references = BTreeMap::new();
+    let mut legacy_options = EmitOptions::new("Example.Legacy", &references);
+    legacy_options.library = Some("mfplat.dll");
+    let legacy = snapshot.emit_with_options(&legacy_options).unwrap();
+    assert!(
+        legacy.contains("const MEError: MediaEventType = 1;"),
+        "{legacy}"
+    );
+    assert!(
+        legacy.contains("type PUBLIC_HANDLE = *mut void;"),
+        "{legacy}"
+    );
+    assert!(
+        !legacy.contains("enum __MIDL_generated_media_events"),
+        "{legacy}"
+    );
+    assert!(!legacy.contains("__MIDL_generated_handle"), "{legacy}");
+    assert!(
+        legacy.contains("enum __MIDL_referenced_media_events"),
+        "{legacy}"
+    );
+    assert!(legacy.contains("fn UseMediaEvent("), "{legacy}");
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(
+            midl.to_string_lossy(),
+            RootPartition::new("media", "Example.Media"),
+        )
+        .with_traversed_header(
+            dependency.to_string_lossy(),
+            RootPartition::new("dependency", "Example.Dependency"),
+        );
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("mfplat.dll");
+    let plan = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let first = plan.clone().emit_with_options(&options).unwrap();
+    let second = plan.emit_with_options(&options).unwrap();
+    assert_eq!(first, second);
+
+    let media = output(&first, "Example.Media");
+    assert!(
+        media.contains("const MEError: MediaEventType = 1;"),
+        "{media}"
+    );
+    assert_eq!(media.matches("MEError").count(), 1, "{media}");
+    assert!(media.contains("type PUBLIC_HANDLE = *mut void;"), "{media}");
+    assert!(
+        !media.contains("enum __MIDL_generated_media_events"),
+        "{media}"
+    );
+    assert!(!media.contains("__MIDL_generated_handle"), "{media}");
+    assert!(
+        media.contains("enum __MIDL_referenced_media_events"),
+        "{media}"
+    );
+    assert!(media.contains("fn UseMediaEvent("), "{media}");
+    assert!(
+        media.contains("event: __MIDL_referenced_media_events"),
+        "{media}"
+    );
+    assert!(
+        output(&first, "Example.Dependency").contains("struct INCLUDED_DEPENDENCY"),
+        "{first:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn associated_enums_from_included_headers_follow_the_annotated_root() {
     helpers::ensure_libclang();
 

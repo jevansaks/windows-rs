@@ -317,7 +317,7 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
-    recover_midl_artifacts(&inputs, &mut facts, &mut constants);
+    let recovery_suppressed_origins = recover_midl_artifacts(&inputs, &mut facts, &mut constants);
     if timing {
         eprintln!(
             "windows-clang timing phase=midl-recovery target={} elapsed_ms={:.3}",
@@ -412,6 +412,7 @@ fn extract_impl(
         pointer_only_class_layouts,
         embeddable_class_layouts,
         clang_flag_enums,
+        recovery_suppressed_origins,
         root_owners,
         constant_root_owners: BTreeMap::new(),
         root_partitions: owners,
@@ -813,8 +814,13 @@ fn identify_declare_handles(
     result.into_iter().collect()
 }
 
-fn recover_midl_artifacts(inputs: &[Input], facts: &mut [Fact], constants: &mut Vec<Constant>) {
+fn recover_midl_artifacts(
+    inputs: &[Input],
+    facts: &mut [Fact],
+    constants: &mut Vec<Constant>,
+) -> BTreeSet<Origin> {
     let mut sources = HashMap::new();
+    let mut suppressed_origins = BTreeSet::new();
     let reference_counts = reference_counts(facts, constants);
     let mut named_typedefs = HashSet::new();
     let mut typedefs_by_file: HashMap<(String, String), Vec<usize>> = HashMap::new();
@@ -915,6 +921,7 @@ fn recover_midl_artifacts(inputs: &[Input], facts: &mut [Fact], constants: &mut 
             (TypeRef::Scalar(enum_repr), enum_repr)
         };
         facts[enum_index].root = false;
+        suppressed_origins.insert(origin.clone());
         constants.extend(variants.into_iter().map(|variant| Constant {
             root: origin.clone(),
             definition: origin.clone(),
@@ -967,6 +974,7 @@ fn recover_midl_artifacts(inputs: &[Input], facts: &mut [Fact], constants: &mut 
     }
     for (alias_index, record_index, mutable, alias) in opaque_recoveries {
         facts[record_index].root = false;
+        suppressed_origins.insert(facts[record_index].origin.clone());
         let FactData::Typedef { target } = &mut facts[alias_index].data else {
             unreachable!()
         };
@@ -975,6 +983,7 @@ fn recover_midl_artifacts(inputs: &[Input], facts: &mut [Fact], constants: &mut 
             tag: alias,
         };
     }
+    suppressed_origins
 }
 
 fn midl_generated_name(name: &str) -> bool {

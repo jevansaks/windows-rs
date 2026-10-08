@@ -1449,6 +1449,8 @@ pub struct Snapshot {
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
     clang_flag_enums: BTreeSet<Origin>,
+    // Origins replaced by recovery output and ineligible for later root promotion.
+    recovery_suppressed_origins: BTreeSet<Origin>,
     root_owners: BTreeMap<Origin, RootOwner>,
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
@@ -1629,6 +1631,7 @@ impl PartialEq for Snapshot {
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
             && self.embeddable_class_layouts == other.embeddable_class_layouts
             && self.clang_flag_enums == other.clang_flag_enums
+            && self.recovery_suppressed_origins == other.recovery_suppressed_origins
             && self.root_owners == other.root_owners
             && self.constant_root_owners == other.constant_root_owners
             && self.root_partitions == other.root_partitions
@@ -2684,7 +2687,7 @@ impl Snapshot {
                 conflicts.push(conflict);
             }
             self.root_owners.insert(fact.origin.clone(), owner);
-            if !excluded {
+            if !excluded && !self.recovery_suppressed_origins.contains(&fact.origin) {
                 fact.root = true;
             }
         }
