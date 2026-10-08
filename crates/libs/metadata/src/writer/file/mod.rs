@@ -22,7 +22,8 @@ pub struct File {
 
     TypeRef: HashMap<String, HashMap<String, TypeRef>>,
     TypeSpec: HashMap<BlobId, TypeSpec>,
-    AssemblyRef: HashMap<String, AssemblyRef>,
+    AssemblyRef: HashMap<AssemblyRefIdentity, AssemblyRef>,
+    reference_assemblies: HashMap<(String, String), AssemblyRefIdentity>,
     ModuleRef: HashMap<String, ModuleRef>,
     MemberRef: HashMap<rec::MemberRef, MemberRef>,
 
@@ -30,6 +31,66 @@ pub struct File {
     Constant: BTreeMap<HasConstant, rec::Constant>,
     Attribute: BTreeMap<HasAttribute, Vec<rec::Attribute>>,
     GenericParam: BTreeMap<TypeOrMethodDef, Vec<rec::GenericParam>>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
+pub(crate) struct AssemblyRefIdentity {
+    major_version: u16,
+    minor_version: u16,
+    build_number: u16,
+    revision_number: u16,
+    flags: u32,
+    public_key_or_token: Vec<u8>,
+    name: String,
+    culture: String,
+    hash_value: Vec<u8>,
+}
+
+impl AssemblyRefIdentity {
+    fn system() -> Self {
+        Self {
+            major_version: 4,
+            minor_version: 0,
+            build_number: 0,
+            revision_number: 0,
+            flags: 0,
+            public_key_or_token: vec![0xB7, 0x7A, 0x5C, 0x56, 0x19, 0x34, 0xE0, 0x89],
+            name: "mscorlib".to_string(),
+            culture: String::new(),
+            hash_value: vec![],
+        }
+    }
+
+    fn external(name: &str) -> Self {
+        Self {
+            major_version: 0xFF,
+            minor_version: 0xFF,
+            build_number: 0xFF,
+            revision_number: 0xFF,
+            flags: AssemblyFlags::WindowsRuntime.0,
+            public_key_or_token: vec![],
+            name: name.to_string(),
+            culture: String::new(),
+            hash_value: vec![],
+        }
+    }
+}
+
+impl From<reader::AssemblyRef<'_>> for AssemblyRefIdentity {
+    fn from(value: reader::AssemblyRef<'_>) -> Self {
+        let (major_version, minor_version, build_number, revision_number) = value.version();
+        Self {
+            major_version,
+            minor_version,
+            build_number,
+            revision_number,
+            flags: value.flags().0,
+            public_key_or_token: value.public_key_or_token().to_vec(),
+            name: value.name().to_string(),
+            culture: value.culture().to_string(),
+            hash_value: value.hash_value().to_vec(),
+        }
+    }
 }
 
 impl File {
@@ -64,6 +125,13 @@ impl File {
     /// Sets the reference index used to resolve external `TypeRef` scopes.
     pub fn set_reference(&mut self, reference: reader::Index) {
         self.reference = Some(reference);
+    }
+
+    pub(crate) fn set_reference_assemblies(
+        &mut self,
+        references: BTreeMap<(String, String), AssemblyRefIdentity>,
+    ) {
+        self.reference_assemblies = references.into_iter().collect();
     }
 
     pub fn reference(&self) -> Option<&reader::Index> {
@@ -101,32 +169,32 @@ impl File {
     }
 
     fn AssemblyRef(&mut self, assembly_name: &str) -> AssemblyRef {
-        if let Some(pos) = self.AssemblyRef.get(assembly_name) {
+        let identity = if assembly_name == "System" {
+            AssemblyRefIdentity::system()
+        } else {
+            AssemblyRefIdentity::external(assembly_name)
+        };
+        self.assembly_ref(identity)
+    }
+
+    fn assembly_ref(&mut self, identity: AssemblyRefIdentity) -> AssemblyRef {
+        if let Some(pos) = self.AssemblyRef.get(&identity) {
             return *pos;
         }
 
-        let pos = AssemblyRef(if assembly_name == "System" {
-            self.records.AssemblyRef.push_pos(rec::AssemblyRef {
-                Name: self.strings.insert("mscorlib"),
-                MajorVersion: 4,
-                PublicKeyOrToken: self
-                    .blobs
-                    .insert(&[0xB7, 0x7A, 0x5C, 0x56, 0x19, 0x34, 0xE0, 0x89]),
-                ..Default::default()
-            })
-        } else {
-            self.records.AssemblyRef.push_pos(rec::AssemblyRef {
-                Name: self.strings.insert(assembly_name),
-                MajorVersion: 0xFF,
-                MinorVersion: 0xFF,
-                BuildNumber: 0xFF,
-                RevisionNumber: 0xFF,
-                Flags: AssemblyFlags::WindowsRuntime,
-                ..Default::default()
-            })
-        });
+        let pos = AssemblyRef(self.records.AssemblyRef.push_pos(rec::AssemblyRef {
+            MajorVersion: identity.major_version,
+            MinorVersion: identity.minor_version,
+            BuildNumber: identity.build_number,
+            RevisionNumber: identity.revision_number,
+            Flags: AssemblyFlags(identity.flags),
+            PublicKeyOrToken: self.blobs.insert(&identity.public_key_or_token),
+            Name: self.strings.insert(&identity.name),
+            Culture: self.strings.insert(&identity.culture).0,
+            HashValue: self.blobs.insert(&identity.hash_value).0,
+        }));
 
-        self.AssemblyRef.insert(assembly_name.to_string(), pos);
+        self.AssemblyRef.insert(identity, pos);
         pos
     }
 
@@ -162,14 +230,19 @@ impl File {
                 ResolutionScope: ResolutionScope::TypeRef(enclosing),
             }))
         } else {
-            let assembly_name = self
-                .reference
-                .as_ref()
-                .and_then(|r| r.assembly_name(namespace, name))
-                .map(str::to_string);
+            let assembly = self
+                .reference_assemblies
+                .get(&(namespace.to_string(), name.to_string()))
+                .cloned()
+                .or_else(|| {
+                    self.reference
+                        .as_ref()
+                        .and_then(|r| r.assembly_name(namespace, name))
+                        .map(AssemblyRefIdentity::external)
+                });
 
-            let scope = if let Some(assembly_name) = assembly_name {
-                ResolutionScope::AssemblyRef(self.AssemblyRef(&assembly_name))
+            let scope = if let Some(assembly) = assembly {
+                ResolutionScope::AssemblyRef(self.assembly_ref(assembly))
             } else if namespace == "System" {
                 ResolutionScope::AssemblyRef(self.AssemblyRef("System"))
             } else {

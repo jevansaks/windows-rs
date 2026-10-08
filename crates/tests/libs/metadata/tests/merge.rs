@@ -13,6 +13,19 @@ fn winmd(dir: &std::path::Path, name: &str, rdl: &str) -> String {
     out.to_string_lossy().into_owned()
 }
 
+fn winmd_with_default_refs(dir: &std::path::Path, name: &str, rdl: &str) -> String {
+    let rdl_path = dir.join(format!("{name}.rdl"));
+    std::fs::write(&rdl_path, rdl).unwrap();
+    let out = dir.join(format!("{name}.winmd"));
+    windows_rdl::reader()
+        .input(&rdl_path)
+        .reference_default()
+        .output(&out)
+        .write()
+        .unwrap();
+    out.to_string_lossy().into_owned()
+}
+
 fn explicit_layout_winmd(dir: &std::path::Path, name: &str) -> String {
     let mut file = writer::File::new(name);
     let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
@@ -51,6 +64,65 @@ fn nested_field_offsets(index: &reader::Index, namespace: &str, name: &str) -> V
     let outer = index.expect(namespace, name);
     let inner = index.nested(outer).next().unwrap();
     inner.fields().map(|field| field.offset()).collect()
+}
+
+fn type_ref<'a>(index: &'a reader::Index, namespace: &str, name: &str) -> reader::TypeRef<'a> {
+    index
+        .type_refs()
+        .find(|ty| ty.namespace() == namespace && ty.name() == name)
+        .unwrap()
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct AssemblyIdentity {
+    version: (u16, u16, u16, u16),
+    flags: u32,
+    public_key_or_token: Vec<u8>,
+    name: String,
+    culture: String,
+    hash_value: Vec<u8>,
+}
+
+fn assembly_identity(ty: reader::TypeRef) -> Option<AssemblyIdentity> {
+    let assembly = ty.assembly()?;
+    Some(AssemblyIdentity {
+        version: assembly.version(),
+        flags: assembly.flags().0,
+        public_key_or_token: assembly.public_key_or_token().to_vec(),
+        name: assembly.name().to_string(),
+        culture: assembly.culture().to_string(),
+        hash_value: assembly.hash_value().to_vec(),
+    })
+}
+
+fn external_type_winmd(dir: &std::path::Path, name: &str, assembly_name: &str) -> String {
+    let mut reference = writer::File::new(assembly_name);
+    let value_type = writer::TypeDefOrRef::TypeRef(reference.TypeRef("System", "ValueType"));
+    reference.TypeDef(
+        "External",
+        "VALUE",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+    );
+    let reference = reader::Index::new(vec![reader::File::new(reference.into_stream()).unwrap()]);
+
+    let mut file = writer::File::new(name);
+    file.set_reference(reference);
+    let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+    file.TypeDef(
+        "Test",
+        "CONSUMER",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+    );
+    file.Field(
+        "value",
+        &Type::value_named("External", "VALUE"),
+        FieldAttributes::Public,
+    );
+    let out = dir.join(format!("{name}.winmd"));
+    std::fs::write(&out, file.into_stream()).unwrap();
+    out.to_string_lossy().into_owned()
 }
 
 #[test]
@@ -234,6 +306,158 @@ fn arch_merge_preserves_nonzero_field_layouts() {
             .collect::<Vec<_>>(),
         [Some(4), Some(12)],
         "architecture merge must preserve the input offsets rather than inventing zero"
+    );
+}
+
+#[test]
+fn arch_merge_preserves_external_type_ref_scope() {
+    let dir = std::env::temp_dir().join("win_merge_external_type_ref");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let source =
+        "#[win32] mod Test { struct EXTERNAL_RESULT { value: Windows::Foundation::HResult, } }";
+    let x64 = winmd_with_default_refs(&dir, "x64", source);
+    let arm = winmd_with_default_refs(&dir, "arm", source);
+    let x86 = winmd_with_default_refs(&dir, "x86", source);
+
+    let mut expected = None;
+    for input in [&x64, &arm, &x86] {
+        let index = reader::Index::read(input).unwrap();
+        let identity =
+            assembly_identity(type_ref(&index, "Windows.Foundation", "HResult")).unwrap();
+        assert_eq!(identity.name, "Windows");
+        if let Some(expected) = &expected {
+            assert_eq!(&identity, expected);
+        } else {
+            expected = Some(identity);
+        }
+    }
+
+    let merged = dir.join("merged.winmd");
+    merge()
+        .arch_input(&x64, 2)
+        .arch_input(&arm, 4)
+        .arch_input(&x86, 1)
+        .output(&merged)
+        .merge()
+        .unwrap();
+
+    let index = reader::Index::read(merged).unwrap();
+    assert_eq!(
+        assembly_identity(type_ref(&index, "Windows.Foundation", "HResult")),
+        expected,
+        "architecture merge must preserve the external assembly identity"
+    );
+}
+
+#[test]
+fn arch_merge_prefers_local_type_ref_scope() {
+    let dir = std::env::temp_dir().join("win_merge_local_type_ref");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let local = winmd(
+        &dir,
+        "local",
+        "#[win32] mod Windows { mod Foundation { struct HResult { value: i32, } } }",
+    );
+    let source =
+        "#[win32] mod Test { struct EXTERNAL_RESULT { value: Windows::Foundation::HResult, } }";
+    let x64 = winmd_with_default_refs(&dir, "x64", source);
+    let arm = winmd_with_default_refs(&dir, "arm", source);
+    let x86 = winmd_with_default_refs(&dir, "x86", source);
+
+    let merged = dir.join("merged.winmd");
+    merge()
+        .input(&local)
+        .arch_input(&x64, 2)
+        .arch_input(&arm, 4)
+        .arch_input(&x86, 1)
+        .output(&merged)
+        .merge()
+        .unwrap();
+
+    let index = reader::Index::read(merged).unwrap();
+    assert_eq!(
+        index.get("Windows.Foundation", "HResult").count(),
+        1,
+        "the local definition must remain unique"
+    );
+    let reference = type_ref(&index, "Windows.Foundation", "HResult");
+    assert!(
+        matches!(reference.scope(), reader::ResolutionScope::Module(_)),
+        "a local definition must win over external assembly candidates: {:?}",
+        reference.scope()
+    );
+}
+
+#[test]
+fn arch_merge_rejects_conflicting_external_type_ref_scopes() {
+    let dir = std::env::temp_dir().join("win_merge_conflicting_type_ref");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let x64 = external_type_winmd(&dir, "x64", "External.One");
+    let arm = external_type_winmd(&dir, "arm", "External.One");
+    let x86 = external_type_winmd(&dir, "x86", "External.Two");
+    let merged = dir.join("merged.winmd");
+    let error = merge()
+        .arch_input(&x64, 2)
+        .arch_input(&arm, 4)
+        .arch_input(&x86, 1)
+        .output(&merged)
+        .merge()
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("conflicting assembly references for `External.VALUE`"),
+        "{error}"
+    );
+    assert!(error.contains("External.One"), "{error}");
+    assert!(error.contains("External.Two"), "{error}");
+}
+
+#[test]
+fn arch_merge_preserves_cross_namespace_native_typedef_alias() {
+    let dir = std::env::temp_dir().join("win_merge_native_typedef_alias");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let source = "#[win32] mod Windows { mod Win32 { \
+        mod Foundation { type LPVOID = *mut void; } \
+        mod Networking { mod WinHttp { \
+            type HINTERNET = Windows::Win32::Foundation::LPVOID; \
+        } } \
+    } }";
+    let x64 = winmd(&dir, "x64", source);
+    let arm = winmd(&dir, "arm", source);
+    let x86 = winmd(&dir, "x86", source);
+    let expected = Some(Type::value_named("Windows.Win32.Foundation", "LPVOID"));
+
+    for input in [&x64, &arm, &x86] {
+        let index = reader::Index::read(input).unwrap();
+        assert_eq!(
+            index
+                .expect("Windows.Win32.Networking.WinHttp", "HINTERNET")
+                .underlying_type(),
+            expected
+        );
+    }
+
+    let merged = dir.join("merged.winmd");
+    merge()
+        .arch_input(&x64, 2)
+        .arch_input(&arm, 4)
+        .arch_input(&x86, 1)
+        .output(&merged)
+        .merge()
+        .unwrap();
+
+    let index = reader::Index::read(merged).unwrap();
+    assert_eq!(
+        index
+            .expect("Windows.Win32.Networking.WinHttp", "HINTERNET")
+            .underlying_type(),
+        expected,
+        "architecture merge must not flatten a native typedef alias"
     );
 }
 

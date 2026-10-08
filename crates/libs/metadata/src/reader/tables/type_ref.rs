@@ -19,6 +19,18 @@ impl<'a> TypeRef<'a> {
         self.str(2)
     }
 
+    pub fn assembly(&self) -> Option<AssemblyRef<'a>> {
+        match self.scope() {
+            ResolutionScope::AssemblyRef(assembly) => Some(assembly),
+            ResolutionScope::TypeRef(enclosing) => enclosing.assembly(),
+            _ => None,
+        }
+    }
+
+    pub fn assembly_name(&self) -> Option<&'a str> {
+        self.assembly().map(|assembly| assembly.name())
+    }
+
     /// Gets the logical type name, including the full enclosing TypeRef path.
     pub fn qualified_name(&self) -> TypeName {
         if let ResolutionScope::TypeRef(enclosing) = self.scope() {

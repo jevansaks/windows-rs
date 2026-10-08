@@ -114,7 +114,17 @@ impl Merger {
         let files = read_inputs(&self.input)?;
         let index = reader::Index::new(files);
 
+        let mut arch_groups: Vec<(reader::Index, i32)> = Vec::with_capacity(self.arch_inputs.len());
+        for (path, arch_bits) in &self.arch_inputs {
+            let files = read_inputs(std::slice::from_ref(path))?;
+            arch_groups.push((reader::Index::new(files), *arch_bits));
+        }
+
+        let reference_assemblies = merge_reference_assemblies(
+            std::iter::once(&index).chain(arch_groups.iter().map(|(index, _)| index)),
+        )?;
         let mut file = writer::File::new(name);
+        file.set_reference_assemblies(reference_assemblies);
 
         if self.union_enums {
             let mut groups: BTreeMap<(String, String), Vec<reader::TypeDef<'_>>> = BTreeMap::new();
@@ -174,13 +184,6 @@ impl Merger {
         if !self.arch_inputs.is_empty() {
             let all_arches_mask: i32 = self.arch_inputs.iter().fold(0, |acc, (_, arch)| acc | arch);
 
-            let mut arch_groups: Vec<(reader::Index, i32)> =
-                Vec::with_capacity(self.arch_inputs.len());
-            for (path, arch_bits) in &self.arch_inputs {
-                let files = read_inputs(std::slice::from_ref(path))?;
-                arch_groups.push((reader::Index::new(files), *arch_bits));
-            }
-
             let mut groups: BTreeMap<
                 (String, String),
                 Vec<(&reader::Index, reader::TypeDef<'_>, i32)>,
@@ -233,6 +236,45 @@ impl Merger {
         std::fs::write(&self.output, bytes)
             .map_err(|e| Error::new(format!("failed to write `{}`: {e}", self.output.display())))
     }
+}
+
+fn merge_reference_assemblies<'a>(
+    indexes: impl IntoIterator<Item = &'a reader::Index>,
+) -> Result<BTreeMap<(String, String), writer::AssemblyRefIdentity>, Error> {
+    let indexes: Vec<_> = indexes.into_iter().collect();
+    let local_types: BTreeSet<_> = indexes
+        .iter()
+        .flat_map(|index| index.types())
+        .map(|ty| {
+            let name = ty.qualified_name();
+            (name.namespace, name.name)
+        })
+        .collect();
+    let mut candidates: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    for index in indexes {
+        for ty in index.type_refs() {
+            let Some(assembly) = ty.assembly() else {
+                continue;
+            };
+            let name = ty.qualified_name();
+            let key = (name.namespace, name.name);
+            if !local_types.contains(&key) {
+                candidates.entry(key).or_default().insert(assembly.into());
+            }
+        }
+    }
+
+    let mut result = BTreeMap::new();
+    for (name, assemblies) in candidates {
+        if assemblies.len() != 1 {
+            return Err(Error::new(format!(
+                "conflicting assembly references for `{}.{}`: {assemblies:?}",
+                name.0, name.1
+            )));
+        }
+        result.insert(name, assemblies.into_iter().next().unwrap());
+    }
+    Ok(result)
 }
 
 fn read_inputs(inputs: &[PathBuf]) -> Result<Vec<reader::File>, Error> {

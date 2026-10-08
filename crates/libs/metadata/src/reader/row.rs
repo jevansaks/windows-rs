@@ -72,6 +72,10 @@ pub trait AsRow<'a>: Copy {
         self.file().usize(self.pos(), Self::TABLE, column)
     }
 
+    fn u64(&self, column: usize) -> u64 {
+        self.file().u64(self.pos(), Self::TABLE, column)
+    }
+
     fn str(&self, column: usize) -> &'a str {
         self.file().str(self.pos(), Self::TABLE, column)
     }
