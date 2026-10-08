@@ -8,6 +8,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
+        pointer_callback_aliases: BTreeSet::new(),
         pointer_only_class_layouts: BTreeMap::new(),
         embeddable_class_layouts: BTreeSet::new(),
         clang_flag_enums: BTreeSet::new(),

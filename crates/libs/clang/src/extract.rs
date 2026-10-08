@@ -167,6 +167,7 @@ fn extract_impl(
     let mut constants = vec![];
     let mut annotations = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
+    let mut pointer_callback_aliases = BTreeSet::new();
     let mut pointer_only_class_layouts = BTreeMap::new();
     let mut embeddable_class_layouts = BTreeSet::new();
     let mut clang_flag_enums = BTreeSet::new();
@@ -180,6 +181,7 @@ fn extract_impl(
             constants: &mut constants,
             annotations: &mut annotations,
             declaration_guids: &mut declaration_guids,
+            pointer_callback_aliases: &mut pointer_callback_aliases,
             pointer_only_class_layouts: &mut pointer_only_class_layouts,
             embeddable_class_layouts: &mut embeddable_class_layouts,
             clang_flag_enums: &mut clang_flag_enums,
@@ -388,6 +390,7 @@ fn extract_impl(
         declare_handles,
         annotations,
         declaration_guids,
+        pointer_callback_aliases,
         pointer_only_class_layouts,
         embeddable_class_layouts,
         clang_flag_enums,
@@ -1601,6 +1604,7 @@ impl TranslationUnit {
             constants: &mut *output.constants,
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
+            pointer_callback_aliases: &mut *output.pointer_callback_aliases,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
             clang_flag_enums: &mut *output.clang_flag_enums,
@@ -1664,6 +1668,7 @@ struct Traversal<'a> {
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
@@ -1676,6 +1681,7 @@ struct ExtractionState<'a> {
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
@@ -1988,6 +1994,12 @@ fn extract_child(
                     } else {
                         fact_data(child, fact_kind, traversal.macros)
                     };
+                    if fact_kind == FactKind::Typedef
+                        && matches!(data, FactData::Callback { .. })
+                        && typedef_is_function_pointer_alias(child)
+                    {
+                        traversal.pointer_callback_aliases.insert(origin.clone());
+                    }
                     if fact_kind == FactKind::Class {
                         if let Some(layout) = native_opaque_class_layout(child) {
                             traversal
@@ -4543,6 +4555,15 @@ fn annotation_result_type(cursor: CXCursor) -> Option<CXType> {
 
 fn typedef_is_callback(cursor: CXCursor) -> bool {
     annotation_result_type(cursor).is_some()
+}
+
+fn typedef_is_function_pointer_alias(cursor: CXCursor) -> bool {
+    let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+    ty.kind == CXType_Pointer
+        && matches!(
+            unsafe { clang_getPointeeType(ty) }.kind,
+            CXType_FunctionProto | CXType_FunctionNoProto
+        )
 }
 
 fn native_opaque_annotation_target_allowed(target: CXCursor, attribute: CXCursor) -> bool {

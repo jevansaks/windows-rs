@@ -62,6 +62,9 @@ overrides replace the default candidates for selected declarations, including in
 compile variants. Call the consuming `emit_with_options` for normal generation; it audits
 internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report without
 emission because auditing before emission repeats planning and clones the snapshot.
+`RootPartition::with_preserved_auto_function_pointer_level` restores the implicit pointer level for
+uses of a bare function typedef. A pointer typedef promoted to a delegate already contains that
+source pointer, so its uses keep only their authored outer pointer depth.
 Dependency declarations remain available for closure without becoming public roots. When
 equivalent compile variants exist, an owner whose typedef projection reaches an excluded type is
 omitted if another unsuppressed projection can own that output.

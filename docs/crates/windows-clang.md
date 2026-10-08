@@ -490,6 +490,12 @@ have the same meaning.
 | Interface pointer typedefs | Project to the RDL interface type with encoded pointer semantics. |
 | Other typedefs, including pointer typedefs | Preserve the name and emit its definition. |
 
+Bare function typedefs and function-pointer typedefs both emit RDL delegates. Their source shapes
+remain distinct during partition settings. `with_preserved_auto_function_pointer_level` adds the
+implicit pointer level only when a selected name denotes a bare function typedef. A pointer typedef
+promoted to a delegate already represents its source pointer, and an explicit pointer to that alias
+remains one pointer outside the delegate.
+
 Lowercase `boolean` is part of MIDL's predefined type vocabulary and has an unsigned 8-bit
 representation, so it becomes `u8`, not RDL `bool`. Uppercase `BOOLEAN` is a named Windows API
 typedef and remains `type BOOLEAN = u8`; references to it retain the `BOOLEAN` name. This preserves

@@ -1287,6 +1287,7 @@ pub struct Snapshot {
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: BTreeMap<Origin, String>,
+    pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
     clang_flag_enums: BTreeSet<Origin>,
@@ -1429,6 +1430,7 @@ impl PartialEq for Snapshot {
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
             && self.declaration_guids == other.declaration_guids
+            && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
             && self.embeddable_class_layouts == other.embeddable_class_layouts
             && self.clang_flag_enums == other.clang_flag_enums
@@ -3373,6 +3375,19 @@ impl Snapshot {
             })
             .map(|fact| (fact.spelling.clone(), fact.name.clone()))
             .collect();
+        let mut pointer_callback_aliases = PointerCallbackAliases::new();
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| self.pointer_callback_aliases.contains(&fact.origin))
+        {
+            pointer_callback_aliases
+                .entry(fact.origin.tu.clone())
+                .or_default()
+                .entry(fact.spelling.clone())
+                .or_default()
+                .insert(fact.name.clone());
+        }
         for fact in &mut self.facts {
             let owner = self.root_owners.get(&fact.origin).or_else(|| {
                 self.root_partitions
@@ -3394,6 +3409,8 @@ impl Snapshot {
                 preserve_auto_function_pointer_levels(
                     &mut fact.data,
                     &owner.preserved_auto_function_pointer_levels,
+                    &fact.origin.tu,
+                    &pointer_callback_aliases,
                 );
             }
         }
@@ -3411,6 +3428,8 @@ impl Snapshot {
                 preserve_auto_function_pointer_level(
                     &mut constant.ty,
                     &owner.preserved_auto_function_pointer_levels,
+                    &constant.root.tu,
+                    &pointer_callback_aliases,
                 );
             }
         }
@@ -6880,41 +6899,81 @@ fn remap_fact_types(
     }
 }
 
-fn preserve_auto_function_pointer_levels(data: &mut FactData, names: &BTreeSet<String>) {
+type PointerCallbackAliases = BTreeMap<String, BTreeMap<Location, BTreeSet<String>>>;
+
+fn preserve_auto_function_pointer_levels(
+    data: &mut FactData,
+    names: &BTreeSet<String>,
+    tu: &str,
+    pointer_callback_aliases: &PointerCallbackAliases,
+) {
     match data {
         FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
             for param in params {
-                preserve_auto_function_pointer_level(&mut param.ty, names);
+                preserve_auto_function_pointer_level(
+                    &mut param.ty,
+                    names,
+                    tu,
+                    pointer_callback_aliases,
+                );
             }
-            preserve_auto_function_pointer_level(result, names);
+            preserve_auto_function_pointer_level(result, names, tu, pointer_callback_aliases);
         }
         FactData::Interface { base, methods, .. } => {
             if let Some(base) = base {
-                preserve_auto_function_pointer_level(base, names);
+                preserve_auto_function_pointer_level(base, names, tu, pointer_callback_aliases);
             }
             for method in methods {
                 for param in &mut method.params {
-                    preserve_auto_function_pointer_level(&mut param.ty, names);
+                    preserve_auto_function_pointer_level(
+                        &mut param.ty,
+                        names,
+                        tu,
+                        pointer_callback_aliases,
+                    );
                 }
-                preserve_auto_function_pointer_level(&mut method.result, names);
+                preserve_auto_function_pointer_level(
+                    &mut method.result,
+                    names,
+                    tu,
+                    pointer_callback_aliases,
+                );
             }
         }
         FactData::Record { base, fields, .. } => {
             if let Some(base) = base {
-                preserve_auto_function_pointer_level(base, names);
+                preserve_auto_function_pointer_level(base, names, tu, pointer_callback_aliases);
             }
             for field in fields {
-                preserve_auto_function_pointer_level(&mut field.ty, names);
+                preserve_auto_function_pointer_level(
+                    &mut field.ty,
+                    names,
+                    tu,
+                    pointer_callback_aliases,
+                );
             }
         }
-        FactData::Typedef { target } => preserve_auto_function_pointer_level(target, names),
+        FactData::Typedef { target } => {
+            preserve_auto_function_pointer_level(target, names, tu, pointer_callback_aliases);
+        }
         _ => {}
     }
 }
 
-fn preserve_auto_function_pointer_level(ty: &mut TypeRef, names: &BTreeSet<String>) {
+fn preserve_auto_function_pointer_level(
+    ty: &mut TypeRef,
+    names: &BTreeSet<String>,
+    tu: &str,
+    pointer_callback_aliases: &PointerCallbackAliases,
+) {
     match ty {
-        TypeRef::Named { name, .. } if names.contains(name) => {
+        TypeRef::Named { name, declaration }
+            if names.contains(name)
+                && !pointer_callback_aliases
+                    .get(tu)
+                    .and_then(|aliases| aliases.get(declaration))
+                    .is_some_and(|aliases| aliases.contains(name)) =>
+        {
             *ty = TypeRef::Pointer {
                 mutable: true,
                 target: Box::new(ty.clone()),
@@ -6922,24 +6981,31 @@ fn preserve_auto_function_pointer_level(ty: &mut TypeRef, names: &BTreeSet<Strin
         }
         TypeRef::Generic { args, .. } => {
             for arg in args {
-                preserve_auto_function_pointer_level(arg, names);
+                preserve_auto_function_pointer_level(arg, names, tu, pointer_callback_aliases);
             }
         }
         TypeRef::Pointer { target, .. }
         | TypeRef::Reference { target, .. }
-        | TypeRef::Array { target, .. } => preserve_auto_function_pointer_level(target, names),
+        | TypeRef::Array { target, .. } => {
+            preserve_auto_function_pointer_level(target, names, tu, pointer_callback_aliases);
+        }
         TypeRef::FunctionPointer { params, result, .. } => {
             for param in params {
-                preserve_auto_function_pointer_level(param, names);
+                preserve_auto_function_pointer_level(param, names, tu, pointer_callback_aliases);
             }
-            preserve_auto_function_pointer_level(result, names);
+            preserve_auto_function_pointer_level(result, names, tu, pointer_callback_aliases);
         }
         TypeRef::InlineRecord(record) => {
             if let Some(base) = &mut record.base {
-                preserve_auto_function_pointer_level(base, names);
+                preserve_auto_function_pointer_level(base, names, tu, pointer_callback_aliases);
             }
             for field in &mut record.fields {
-                preserve_auto_function_pointer_level(&mut field.ty, names);
+                preserve_auto_function_pointer_level(
+                    &mut field.ty,
+                    names,
+                    tu,
+                    pointer_callback_aliases,
+                );
             }
         }
         _ => {}
