@@ -69,8 +69,11 @@ fn nested_field_offsets(index: &reader::Index, namespace: &str, name: &str) -> V
 fn type_ref<'a>(index: &'a reader::Index, namespace: &str, name: &str) -> reader::TypeRef<'a> {
     index
         .type_refs()
-        .find(|ty| ty.namespace() == namespace && ty.name() == name)
-        .unwrap()
+        .find(|ty| {
+            let qualified = ty.qualified_name();
+            qualified.namespace == namespace && qualified.name == name
+        })
+        .unwrap_or_else(|| panic!("missing TypeRef {namespace}.{name}"))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -120,6 +123,66 @@ fn external_type_winmd(dir: &std::path::Path, name: &str, assembly_name: &str) -
         &Type::value_named("External", "VALUE"),
         FieldAttributes::Public,
     );
+    let out = dir.join(format!("{name}.winmd"));
+    std::fs::write(&out, file.into_stream()).unwrap();
+    out.to_string_lossy().into_owned()
+}
+
+fn named_type_definitions_winmd(dir: &std::path::Path, name: &str, assembly_name: &str) -> String {
+    let mut file = writer::File::new(assembly_name);
+    let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+    file.TypeDef(
+        "N",
+        "T",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+    );
+    file.Field("value", &Type::I32, FieldAttributes::Public);
+
+    let outer = file.TypeDef(
+        "N",
+        "Outer",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+    );
+    let inner = file.TypeDef(
+        "",
+        "Inner",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::NestedPublic,
+    );
+    file.NestedClass(inner, outer);
+    file.Field("value", &Type::I32, FieldAttributes::Public);
+
+    let out = dir.join(format!("{name}.winmd"));
+    std::fs::write(&out, file.into_stream()).unwrap();
+    out.to_string_lossy().into_owned()
+}
+
+fn named_type_consumer_winmd(
+    dir: &std::path::Path,
+    name: &str,
+    reference: &str,
+    fields: &[(&str, &str, &str)],
+) -> String {
+    let reference = reader::Index::read(reference).unwrap();
+    let mut file = writer::File::new(name);
+    file.set_reference(reference);
+    let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+    file.TypeDef(
+        "Test",
+        "CONSUMER",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+    );
+    for (field, namespace, ty) in fields {
+        file.Field(
+            field,
+            &Type::value_named(namespace, ty),
+            FieldAttributes::Public,
+        );
+    }
+
     let out = dir.join(format!("{name}.winmd"));
     std::fs::write(&out, file.into_stream()).unwrap();
     out.to_string_lossy().into_owned()
@@ -355,11 +418,17 @@ fn arch_merge_prefers_local_type_ref_scope() {
     let dir = std::env::temp_dir().join("win_merge_local_type_ref");
     std::fs::create_dir_all(&dir).unwrap();
 
-    let local = winmd(
-        &dir,
-        "local",
-        "#[win32] mod Windows { mod Foundation { struct HResult { value: i32, } } }",
+    let mut local_file = writer::File::new("Windows");
+    let value_type = writer::TypeDefOrRef::TypeRef(local_file.TypeRef("System", "ValueType"));
+    local_file.TypeDef(
+        "Windows.Foundation",
+        "HResult",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
     );
+    local_file.Field("value", &Type::I32, FieldAttributes::Public);
+    let local = dir.join("local.winmd");
+    std::fs::write(&local, local_file.into_stream()).unwrap();
     let source =
         "#[win32] mod Test { struct EXTERNAL_RESULT { value: Windows::Foundation::HResult, } }";
     let x64 = winmd_with_default_refs(&dir, "x64", source);
@@ -414,6 +483,104 @@ fn arch_merge_rejects_conflicting_external_type_ref_scopes() {
     );
     assert!(error.contains("External.One"), "{error}");
     assert!(error.contains("External.Two"), "{error}");
+}
+
+#[test]
+fn merge_localizes_included_assembly_type_refs() {
+    let dir = std::env::temp_dir().join("win_merge_included_type_ref");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let included = named_type_definitions_winmd(&dir, "included", "Included");
+    let consumer = named_type_consumer_winmd(
+        &dir,
+        "consumer",
+        &included,
+        &[("top", "N", "T"), ("nested", "N", "Outer/Inner")],
+    );
+    let merged = dir.join("merged.winmd");
+    merge()
+        .input(&included)
+        .input(&consumer)
+        .output(&merged)
+        .merge()
+        .unwrap();
+
+    let index = reader::Index::read(merged).unwrap();
+    for name in ["T", "Outer", "Outer/Inner"] {
+        assert_eq!(
+            type_ref(&index, "N", name).assembly(),
+            None,
+            "included type {name} must resolve to the merged module"
+        );
+    }
+}
+
+#[test]
+fn merge_rejects_unrelated_local_and_external_type_refs() {
+    let dir = std::env::temp_dir().join("win_merge_unrelated_type_ref");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let local = named_type_definitions_winmd(&dir, "local", "Local");
+    let foreign = named_type_definitions_winmd(&dir, "foreign", "Foreign");
+    let consumer = named_type_consumer_winmd(&dir, "consumer", &foreign, &[("value", "N", "T")]);
+    let error = merge()
+        .input(&local)
+        .input(&consumer)
+        .output(dir.join("merged.winmd"))
+        .merge()
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("N.T"), "{error}");
+    assert!(error.contains("Foreign"), "{error}");
+    assert!(error.contains("Local"), "{error}");
+}
+
+#[test]
+fn merge_rejects_unrelated_nested_local_and_external_type_refs() {
+    let dir = std::env::temp_dir().join("win_merge_unrelated_nested_type_ref");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let local = named_type_definitions_winmd(&dir, "local", "Local");
+    let foreign = named_type_definitions_winmd(&dir, "foreign", "Foreign");
+    let consumer =
+        named_type_consumer_winmd(&dir, "consumer", &foreign, &[("value", "N", "Outer/Inner")]);
+    let error = merge()
+        .input(&local)
+        .input(&consumer)
+        .output(dir.join("merged.winmd"))
+        .merge()
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("N.Outer"), "{error}");
+    assert!(error.contains("N.Outer/Inner"), "{error}");
+    assert!(error.contains("Foreign"), "{error}");
+    assert!(error.contains("Local"), "{error}");
+}
+
+#[test]
+fn writer_reference_preserves_system_sentinel_identity() {
+    let mut reference = writer::File::new("System");
+    let value_type = writer::TypeDefOrRef::TypeRef(reference.TypeRef("System", "ValueType"));
+    reference.TypeDef(
+        "Sentinel",
+        "VALUE",
+        value_type,
+        TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+    );
+    let reference = reader::Index::new(vec![reader::File::new(reference.into_stream()).unwrap()]);
+
+    let mut file = writer::File::new("consumer");
+    file.set_reference(reference);
+    file.TypeRef("System", "Object");
+    file.TypeRef("Sentinel", "VALUE");
+    let index = reader::Index::new(vec![reader::File::new(file.into_stream()).unwrap()]);
+
+    let system = assembly_identity(type_ref(&index, "System", "Object")).unwrap();
+    let sentinel = assembly_identity(type_ref(&index, "Sentinel", "VALUE")).unwrap();
+    assert_eq!(sentinel, system);
+    assert_eq!(sentinel.name, "mscorlib");
 }
 
 #[test]

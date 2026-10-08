@@ -47,6 +47,14 @@ pub(crate) struct AssemblyRefIdentity {
 }
 
 impl AssemblyRefIdentity {
+    fn named(name: &str) -> Self {
+        if name == "System" {
+            Self::system()
+        } else {
+            Self::external(name)
+        }
+    }
+
     fn system() -> Self {
         Self {
             major_version: 4,
@@ -73,6 +81,10 @@ impl AssemblyRefIdentity {
             culture: String::new(),
             hash_value: vec![],
         }
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -169,12 +181,7 @@ impl File {
     }
 
     fn AssemblyRef(&mut self, assembly_name: &str) -> AssemblyRef {
-        let identity = if assembly_name == "System" {
-            AssemblyRefIdentity::system()
-        } else {
-            AssemblyRefIdentity::external(assembly_name)
-        };
-        self.assembly_ref(identity)
+        self.assembly_ref(AssemblyRefIdentity::named(assembly_name))
     }
 
     fn assembly_ref(&mut self, identity: AssemblyRefIdentity) -> AssemblyRef {
@@ -238,7 +245,7 @@ impl File {
                     self.reference
                         .as_ref()
                         .and_then(|r| r.assembly_name(namespace, name))
-                        .map(AssemblyRefIdentity::external)
+                        .map(AssemblyRefIdentity::named)
                 });
 
             let scope = if let Some(assembly) = assembly {

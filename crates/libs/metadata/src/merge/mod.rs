@@ -242,15 +242,21 @@ fn merge_reference_assemblies<'a>(
     indexes: impl IntoIterator<Item = &'a reader::Index>,
 ) -> Result<BTreeMap<(String, String), writer::AssemblyRefIdentity>, Error> {
     let indexes: Vec<_> = indexes.into_iter().collect();
-    let local_types: BTreeSet<_> = indexes
-        .iter()
-        .flat_map(|index| index.types())
-        .map(|ty| {
-            let name = ty.qualified_name();
-            (name.namespace, name.name)
-        })
-        .collect();
-    let mut candidates: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    let mut local_types: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    for index in &indexes {
+        for ty in index.types() {
+            for ty in std::iter::once(ty).chain(index.nested_recursive(ty)) {
+                local_types
+                    .entry({
+                        let name = ty.qualified_name();
+                        (name.namespace, name.name)
+                    })
+                    .or_default()
+                    .insert(ty.file().assembly_name().map(str::to_string));
+            }
+        }
+    }
+    let mut candidates: BTreeMap<_, BTreeSet<writer::AssemblyRefIdentity>> = BTreeMap::new();
     for index in indexes {
         for ty in index.type_refs() {
             let Some(assembly) = ty.assembly() else {
@@ -258,23 +264,43 @@ fn merge_reference_assemblies<'a>(
             };
             let name = ty.qualified_name();
             let key = (name.namespace, name.name);
-            if !local_types.contains(&key) {
-                candidates.entry(key).or_default().insert(assembly.into());
-            }
+            candidates.entry(key).or_default().insert(assembly.into());
         }
     }
 
     let mut result = BTreeMap::new();
+    let mut conflicts = vec![];
     for (name, assemblies) in candidates {
+        if let Some(local_assemblies) = local_types.get(&name) {
+            let external_assemblies: BTreeSet<_> = assemblies
+                .iter()
+                .filter(|assembly| !local_assemblies.contains(&Some(assembly.name().to_string())))
+                .cloned()
+                .collect();
+            if external_assemblies.is_empty() {
+                continue;
+            }
+            conflicts.push(format!(
+                "cannot preserve both local and external references for `{}.{}`: local assemblies \
+                 {local_assemblies:?}, external assemblies {external_assemblies:?}",
+                name.0, name.1
+            ));
+            continue;
+        }
         if assemblies.len() != 1 {
-            return Err(Error::new(format!(
+            conflicts.push(format!(
                 "conflicting assembly references for `{}.{}`: {assemblies:?}",
                 name.0, name.1
-            )));
+            ));
+            continue;
         }
         result.insert(name, assemblies.into_iter().next().unwrap());
     }
-    Ok(result)
+    if conflicts.is_empty() {
+        Ok(result)
+    } else {
+        Err(Error::new(conflicts.join("\n")))
+    }
 }
 
 fn read_inputs(inputs: &[PathBuf]) -> Result<Vec<reader::File>, Error> {

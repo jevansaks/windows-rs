@@ -150,10 +150,13 @@ return is spelled `INT_PTR` on 64-bit but legacy `int` on x86. A plain `i32`/`i6
 qualify: the explicit native-sized spelling is required as semantic evidence.
 
 Present `FieldLayout` rows are copied to the merged field. External TypeRefs retain the source
-AssemblyRef version, flags, public key or token, name, culture, and hash. A local TypeDef with the
-same qualified name takes precedence because the merged assembly defines that type. If no local
-definition exists and inputs name different assemblies for the same qualified type, the merge
-returns an error instead of choosing one reference.
+AssemblyRef version, flags, public key or token, name, culture, and hash. An external TypeRef becomes
+local only when the merged inputs include its qualified TypeDef from the referenced assembly.
+Unrelated local and external types with the same qualified name are rejected because the writer
+cannot represent both scopes in its qualified-name TypeRef cache. If no local definition exists and
+inputs name different assemblies for the same qualified type, the merge also returns an error
+instead of choosing one reference. The legacy writer reference index still treats an assembly named
+`System` as the `mscorlib` sentinel rather than synthesizing a Windows Runtime `System` assembly.
 
 The merge is deterministic: it stages through `BTreeMap`s and insertion-ordered `Vec`s, with no
 `HashMap` reaching the output.
@@ -208,7 +211,8 @@ Run `cargo test -p windows-metadata`; see also the workspace test crates. The ar
 collapse/split rules are pinned by `arch_roundtrip.rs` (divergent fields, callbacks, forced
 alignment, enum constant values, subset-present divergence), `merge_layout.rs` (offset-only
 variants and absent-versus-zero offsets), and `merge.rs` (native-sized callback reconciliation,
-external AssemblyRef identity, local reference precedence, and reference conflicts).
+external AssemblyRef identity, matching-assembly localization, nested and unrelated reference
+conflicts, and the legacy `System` sentinel).
 `method_params.rs` authors metadata directly with `writer::File` and covers dense, absent, return,
 sparse, out-of-order, duplicate, and out-of-range parameter rows. It also covers all four raw
 directions and verifies that optional, reserved, retval, and count attributes remain independent
