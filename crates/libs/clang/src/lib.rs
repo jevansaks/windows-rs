@@ -7423,7 +7423,7 @@ impl ScopedDeclarationIndex {
 }
 
 fn partition_collision_symbol(fact: &Fact) -> bool {
-    fact.kind != FactKind::Namespace
+    fact.kind != FactKind::Namespace && !matches!(fact.data, FactData::Unsupported { .. })
 }
 
 fn remap_fact_types(

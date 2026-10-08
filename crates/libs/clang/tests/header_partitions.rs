@@ -411,6 +411,113 @@ fn namespace_containers_do_not_enter_partition_symbol_collisions() {
 }
 
 #[test]
+fn unsupported_variable_diagnostics_do_not_enter_partition_symbol_collisions() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("unsupported-variable-collisions");
+    let diagnostic = scratch.join("diagnostic.h");
+    let types = scratch.join("types.h");
+    std::fs::write(
+        &diagnostic,
+        "#pragma once\nstatic const char SHARED_VALUE[3] = \"ABC\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &types,
+        "#pragma once\n\
+         typedef struct SHARED_VALUE { int value; } SHARED_VALUE;\n\
+         void UseSharedValue(SHARED_VALUE value);\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let types_input = Input::new(
+        "types.cpp",
+        format!("#include \"{}\"\n", types.to_string_lossy()),
+    )
+    .with_root_dirs(roots.clone());
+    let baseline = extract(
+        [types_input.clone()],
+        &[
+            "-x",
+            "c",
+            "-std=c11",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let baseline_policy = HeaderPartitionPolicy::new().with_traversed_header_for_input(
+        "types.cpp",
+        types.to_string_lossy(),
+        RootPartition::new("types", "Example.Types"),
+    );
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("test.dll");
+    let baseline = baseline
+        .plan_header_partitions(&baseline_policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+
+    let snapshot = extract(
+        [
+            Input::new(
+                "diagnostic.cpp",
+                format!("#include \"{}\"\n", diagnostic.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+            types_input,
+        ],
+        &[
+            "-x",
+            "c",
+            "-std=c11",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+    let (unsupported, reason) = snapshot
+        .unsupported()
+        .find(|(fact, _)| fact.name == "SHARED_VALUE")
+        .unwrap();
+    assert!(unsupported.root, "{unsupported:#?}");
+    assert_eq!(unsupported.kind, windows_clang::FactKind::Variable);
+    assert!(reason.contains("not NUL-terminated"), "{reason}");
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "diagnostic.cpp",
+            diagnostic.to_string_lossy(),
+            RootPartition::new("diagnostic", "Example.Diagnostics"),
+        )
+        .with_traversed_header_for_input(
+            "types.cpp",
+            types.to_string_lossy(),
+            RootPartition::new("types", "Example.Types"),
+        );
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+
+    assert_eq!(
+        output(&baseline, "Example.Types"),
+        output(&partitions, "Example.Types")
+    );
+    assert!(
+        partitions
+            .values()
+            .all(|rdl| !rdl.contains("__partition_") && !rdl.contains("Example.Diagnostics")),
+        "{partitions:#?}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn identified_native_namespaced_interfaces_remain_public_roots() {
     helpers::ensure_libclang();
 
