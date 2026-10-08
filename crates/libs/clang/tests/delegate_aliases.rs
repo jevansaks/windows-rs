@@ -154,8 +154,18 @@ typedef struct RPC_DISPATCH_TABLE {
 fn pointer_callback_aliases_keep_delegate_identity_and_source_depth() {
     helpers::ensure_libclang();
 
+    for (arch, target) in [
+        ("x86", "i686-pc-windows-msvc"),
+        ("x64", "x86_64-pc-windows-msvc"),
+        ("arm64", "aarch64-pc-windows-msvc"),
+    ] {
+        assert_target_contracts(arch, target);
+    }
+}
+
+fn assert_target_contracts(arch: &str, target: &str) {
     let scratch = std::env::temp_dir().join(format!(
-        "windows-clang-delegate-aliases-{}",
+        "windows-clang-delegate-aliases-{arch}-{}",
         std::process::id()
     ));
     if scratch.exists() {
@@ -175,7 +185,7 @@ fn pointer_callback_aliases_keep_delegate_identity_and_source_depth() {
             "-x",
             "c++",
             "-fms-extensions",
-            "--target=x86_64-pc-windows-msvc",
+            &format!("--target={target}"),
         ],
     )
     .unwrap();
@@ -198,7 +208,7 @@ fn pointer_callback_aliases_keep_delegate_identity_and_source_depth() {
     let rdl = partitions.values().cloned().collect::<String>();
     assert_rdl_contracts(&rdl);
 
-    let winmd = scratch.join("delegate-aliases.winmd");
+    let winmd = scratch.join(format!("delegate-aliases-{arch}.winmd"));
     windows_rdl::reader()
         .input_texts(partitions.values())
         .reference_default()
