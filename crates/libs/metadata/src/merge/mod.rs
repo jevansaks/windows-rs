@@ -252,7 +252,7 @@ fn merge_reference_assemblies<'a>(
                         (name.namespace, name.name)
                     })
                     .or_default()
-                    .insert(ty.file().assembly_name().map(str::to_string));
+                    .insert(ty.assembly().map(Into::into));
             }
         }
     }
@@ -274,7 +274,12 @@ fn merge_reference_assemblies<'a>(
         if let Some(local_assemblies) = local_types.get(&name) {
             let external_assemblies: BTreeSet<_> = assemblies
                 .iter()
-                .filter(|assembly| !local_assemblies.contains(&Some(assembly.name().to_string())))
+                .filter(|assembly| {
+                    !local_assemblies
+                        .iter()
+                        .flatten()
+                        .any(|definition| assembly.matches_definition(definition))
+                })
                 .cloned()
                 .collect();
             if external_assemblies.is_empty() {
@@ -1101,4 +1106,153 @@ fn write_supported_architecture_attr(
         writer::AttributeType::MemberRef(ctor_ref),
         &[(String::new(), Value::I32(arch_bits))],
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assembly_identity(
+        name: &str,
+        version: (u16, u16, u16, u16),
+        flags: AssemblyFlags,
+        public_key: &[u8],
+    ) -> writer::AssemblyIdentity {
+        writer::AssemblyIdentity {
+            major_version: version.0,
+            minor_version: version.1,
+            build_number: version.2,
+            revision_number: version.3,
+            flags: flags.0,
+            public_key: public_key.to_vec(),
+            name: name.to_string(),
+            culture: String::new(),
+        }
+    }
+
+    fn assembly_ref_identity(
+        name: &str,
+        version: (u16, u16, u16, u16),
+        flags: AssemblyFlags,
+        public_key_or_token: &[u8],
+    ) -> writer::AssemblyRefIdentity {
+        writer::AssemblyRefIdentity {
+            major_version: version.0,
+            minor_version: version.1,
+            build_number: version.2,
+            revision_number: version.3,
+            flags: flags.0,
+            public_key_or_token: public_key_or_token.to_vec(),
+            name: name.to_string(),
+            culture: String::new(),
+            hash_value: vec![],
+        }
+    }
+
+    fn definition_index(identity: writer::AssemblyIdentity) -> reader::Index {
+        let mut file = writer::File::new(&identity.name);
+        file.set_assembly_identity(identity);
+        let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+        file.TypeDef(
+            "N",
+            "T",
+            value_type,
+            TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+        );
+        file.Field("value", &Type::I32, FieldAttributes::Public);
+        reader::Index::new(vec![reader::File::new(file.into_stream()).unwrap()])
+    }
+
+    fn reference_index(identity: writer::AssemblyRefIdentity) -> reader::Index {
+        let mut file = writer::File::new("Consumer");
+        file.set_reference_assemblies(BTreeMap::from([(
+            ("N".to_string(), "T".to_string()),
+            identity,
+        )]));
+        let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
+        file.TypeDef(
+            "Test",
+            "CONSUMER",
+            value_type,
+            TypeAttributes::SequentialLayout | TypeAttributes::Sealed | TypeAttributes::Public,
+        );
+        file.Field(
+            "value",
+            &Type::value_named("N", "T"),
+            FieldAttributes::Public,
+        );
+        reader::Index::new(vec![reader::File::new(file.into_stream()).unwrap()])
+    }
+
+    fn reference_is_localized(
+        definition: writer::AssemblyIdentity,
+        reference: writer::AssemblyRefIdentity,
+    ) -> Result<bool, Error> {
+        let definition = definition_index(definition);
+        let reference = reference_index(reference);
+        let assemblies = merge_reference_assemblies([&definition, &reference])?;
+        Ok(!assemblies.contains_key(&("N".to_string(), "T".to_string())))
+    }
+
+    #[test]
+    fn localizes_matching_clr_assembly_identity() {
+        let definition =
+            assembly_identity("Common", (1, 2, 3, 4), AssemblyFlags::PublicKey, b"abc");
+        let reference = assembly_ref_identity(
+            "Common",
+            (1, 2, 3, 4),
+            AssemblyFlags(0),
+            &[0x9d, 0xd8, 0xd0, 0x9c, 0x6c, 0xc2, 0x50, 0x78],
+        );
+        assert!(matches!(
+            reference_is_localized(definition, reference),
+            Ok(true)
+        ));
+    }
+
+    #[test]
+    fn rejects_clr_assembly_version_mismatch() {
+        let definition =
+            assembly_identity("Common", (1, 2, 3, 4), AssemblyFlags::PublicKey, b"abc");
+        let reference = assembly_ref_identity(
+            "Common",
+            (2, 2, 3, 4),
+            AssemblyFlags(0),
+            &[0x9d, 0xd8, 0xd0, 0x9c, 0x6c, 0xc2, 0x50, 0x78],
+        );
+        assert!(reference_is_localized(definition, reference).is_err());
+    }
+
+    #[test]
+    fn rejects_clr_assembly_key_mismatch() {
+        let definition =
+            assembly_identity("Common", (1, 2, 3, 4), AssemblyFlags::PublicKey, b"abc");
+        let reference = assembly_ref_identity("Common", (1, 2, 3, 4), AssemblyFlags(0), &[0; 8]);
+        assert!(reference_is_localized(definition, reference).is_err());
+    }
+
+    #[test]
+    fn localizes_windows_runtime_wildcard_version() {
+        let definition =
+            assembly_identity("Common", (1, 2, 3, 4), AssemblyFlags::WindowsRuntime, &[]);
+        let reference = assembly_ref_identity(
+            "Common",
+            (0xFF, 0xFF, 0xFF, 0xFF),
+            AssemblyFlags::WindowsRuntime,
+            &[],
+        );
+        assert!(matches!(
+            reference_is_localized(definition, reference),
+            Ok(true)
+        ));
+    }
+
+    #[test]
+    fn rejects_windows_runtime_concrete_version_mismatch() {
+        let definition =
+            assembly_identity("Common", (1, 2, 3, 4), AssemblyFlags::WindowsRuntime, &[]);
+        let reference =
+            assembly_ref_identity("Common", (2, 2, 3, 4), AssemblyFlags::WindowsRuntime, &[]);
+        assert!(reference_is_localized(definition, reference).is_err());
+    }
 }

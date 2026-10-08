@@ -1,5 +1,6 @@
 use super::*;
 
+mod assembly;
 mod assembly_ref;
 mod attribute;
 mod class_layout;

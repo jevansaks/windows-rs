@@ -35,15 +35,27 @@ pub struct File {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub(crate) struct AssemblyRefIdentity {
-    major_version: u16,
-    minor_version: u16,
-    build_number: u16,
-    revision_number: u16,
-    flags: u32,
-    public_key_or_token: Vec<u8>,
-    name: String,
-    culture: String,
-    hash_value: Vec<u8>,
+    pub(crate) major_version: u16,
+    pub(crate) minor_version: u16,
+    pub(crate) build_number: u16,
+    pub(crate) revision_number: u16,
+    pub(crate) flags: u32,
+    pub(crate) public_key_or_token: Vec<u8>,
+    pub(crate) name: String,
+    pub(crate) culture: String,
+    pub(crate) hash_value: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
+pub(crate) struct AssemblyIdentity {
+    pub(crate) major_version: u16,
+    pub(crate) minor_version: u16,
+    pub(crate) build_number: u16,
+    pub(crate) revision_number: u16,
+    pub(crate) flags: u32,
+    pub(crate) public_key: Vec<u8>,
+    pub(crate) name: String,
+    pub(crate) culture: String,
 }
 
 impl AssemblyRefIdentity {
@@ -83,8 +95,61 @@ impl AssemblyRefIdentity {
         }
     }
 
-    pub(crate) fn name(&self) -> &str {
-        &self.name
+    pub(crate) fn matches_definition(&self, definition: &AssemblyIdentity) -> bool {
+        if !self.name.eq_ignore_ascii_case(&definition.name)
+            || !self.culture.eq_ignore_ascii_case(&definition.culture)
+        {
+            return false;
+        }
+
+        let reference_is_winrt = self.flags & AssemblyFlags::WindowsRuntime.0 != 0;
+        let definition_is_winrt = definition.flags & AssemblyFlags::WindowsRuntime.0 != 0;
+        if reference_is_winrt != definition_is_winrt {
+            return false;
+        }
+
+        let reference_version = (
+            self.major_version,
+            self.minor_version,
+            self.build_number,
+            self.revision_number,
+        );
+        let definition_version = (
+            definition.major_version,
+            definition.minor_version,
+            definition.build_number,
+            definition.revision_number,
+        );
+        const WINRT_VERSION_WILDCARD: (u16, u16, u16, u16) = (0xFF, 0xFF, 0xFF, 0xFF);
+        if reference_version != definition_version
+            && (!reference_is_winrt
+                || (reference_version != WINRT_VERSION_WILDCARD
+                    && definition_version != WINRT_VERSION_WILDCARD))
+        {
+            return false;
+        }
+
+        if self.flags & AssemblyFlags::PublicKey.0 != 0 {
+            self.public_key_or_token == definition.public_key
+        } else {
+            self.public_key_or_token == public_key_token(&definition.public_key)
+        }
+    }
+}
+
+impl From<reader::Assembly<'_>> for AssemblyIdentity {
+    fn from(value: reader::Assembly<'_>) -> Self {
+        let (major_version, minor_version, build_number, revision_number) = value.version();
+        Self {
+            major_version,
+            minor_version,
+            build_number,
+            revision_number,
+            flags: value.flags().0,
+            public_key: value.public_key().to_vec(),
+            name: value.name().to_string(),
+            culture: value.culture().to_string(),
+        }
     }
 }
 
@@ -103,6 +168,69 @@ impl From<reader::AssemblyRef<'_>> for AssemblyRefIdentity {
             hash_value: value.hash_value().to_vec(),
         }
     }
+}
+
+fn public_key_token(public_key: &[u8]) -> Vec<u8> {
+    if public_key.is_empty() {
+        return vec![];
+    }
+    let hash = sha1(public_key);
+    hash[12..].iter().rev().copied().collect()
+}
+
+fn sha1(input: &[u8]) -> [u8; 20] {
+    let mut h: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+    let bit_len = (input.len() as u64) * 8;
+    let padded_len = (input.len() + 1 + 8 + 63) & !63;
+    let mut message = vec![0u8; padded_len];
+    message[..input.len()].copy_from_slice(input);
+    message[input.len()] = 0x80;
+    message[padded_len - 8..].copy_from_slice(&bit_len.to_be_bytes());
+
+    for chunk in message.chunks(64) {
+        let mut words = [0u32; 80];
+        for (index, word) in words[..16].iter_mut().enumerate() {
+            *word = u32::from_be_bytes(chunk[index * 4..index * 4 + 4].try_into().unwrap());
+        }
+        for index in 16..80 {
+            words[index] =
+                (words[index - 3] ^ words[index - 8] ^ words[index - 14] ^ words[index - 16])
+                    .rotate_left(1);
+        }
+
+        let (mut a, mut b, mut c, mut d, mut e) = (h[0], h[1], h[2], h[3], h[4]);
+        for (index, &word) in words.iter().enumerate() {
+            let (f, k): (u32, u32) = match index {
+                0..=19 => ((b & c) | (!b & d), 0x5A82_7999),
+                20..=39 => (b ^ c ^ d, 0x6ED9_EBA1),
+                40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1B_BCDC),
+                _ => (b ^ c ^ d, 0xCA62_C1D6),
+            };
+            let next = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(word);
+            e = d;
+            d = c;
+            c = b.rotate_left(30);
+            b = a;
+            a = next;
+        }
+
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
+    }
+
+    let mut result = [0u8; 20];
+    for (index, &word) in h.iter().enumerate() {
+        result[index * 4..index * 4 + 4].copy_from_slice(&word.to_be_bytes());
+    }
+    result
 }
 
 impl File {
@@ -144,6 +272,22 @@ impl File {
         references: BTreeMap<(String, String), AssemblyRefIdentity>,
     ) {
         self.reference_assemblies = references.into_iter().collect();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_assembly_identity(&mut self, identity: AssemblyIdentity) {
+        let public_key = self.blobs.insert(&identity.public_key).0;
+        let name = self.strings.insert(&identity.name);
+        let culture = self.strings.insert(&identity.culture).0;
+        let assembly = &mut self.records.Assembly[0];
+        assembly.MajorVersion = identity.major_version;
+        assembly.MinorVersion = identity.minor_version;
+        assembly.BuildNumber = identity.build_number;
+        assembly.RevisionNumber = identity.revision_number;
+        assembly.Flags = AssemblyFlags(identity.flags);
+        assembly.PublicKey = public_key;
+        assembly.Name = name;
+        assembly.Culture = culture;
     }
 
     pub fn reference(&self) -> Option<&reader::Index> {

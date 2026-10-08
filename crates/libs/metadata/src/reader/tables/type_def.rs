@@ -19,6 +19,13 @@ impl<'a> TypeDef<'a> {
         self.str(2)
     }
 
+    pub fn assembly(&self) -> Option<Assembly<'a>> {
+        self.file().assembly_name().map(|_| {
+            let row = self.to_row();
+            Assembly::from_row(Row::new(row.index, row.file, 0))
+        })
+    }
+
     /// Gets the logical type name, including the full enclosing TypeDef path.
     pub fn qualified_name(&self) -> TypeName {
         if let Some(enclosing) = self.index().enclosing(*self) {

@@ -151,7 +151,10 @@ qualify: the explicit native-sized spelling is required as semantic evidence.
 
 Present `FieldLayout` rows are copied to the merged field. External TypeRefs retain the source
 AssemblyRef version, flags, public key or token, name, culture, and hash. An external TypeRef becomes
-local only when the merged inputs include its qualified TypeDef from the referenced assembly.
+local only when the merged inputs include its qualified TypeDef from the matching assembly identity.
+CLR identities require the same name, culture, version, content kind, and public key token. A full
+public key is hashed to its token when the AssemblyRef uses token form. Windows Runtime identities
+use the same checks except that the conventional `255.255.255.255` version is an explicit wildcard.
 Unrelated local and external types with the same qualified name are rejected because the writer
 cannot represent both scopes in its qualified-name TypeRef cache. If no local definition exists and
 inputs name different assemblies for the same qualified type, the merge also returns an error
@@ -212,7 +215,8 @@ collapse/split rules are pinned by `arch_roundtrip.rs` (divergent fields, callba
 alignment, enum constant values, subset-present divergence), `merge_layout.rs` (offset-only
 variants and absent-versus-zero offsets), and `merge.rs` (native-sized callback reconciliation,
 external AssemblyRef identity, matching-assembly localization, nested and unrelated reference
-conflicts, and the legacy `System` sentinel).
+conflicts, CLR version/key mismatches, Windows Runtime wildcard versions, and the legacy `System`
+sentinel).
 `method_params.rs` authors metadata directly with `writer::File` and covers dense, absent, return,
 sparse, out-of-order, duplicate, and out-of-range parameter rows. It also covers all four raw
 directions and verifies that optional, reserved, retval, and count attributes remain independent
