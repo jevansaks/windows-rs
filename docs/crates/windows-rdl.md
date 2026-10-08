@@ -103,8 +103,10 @@ different parents or namespaces do not alias.
 Most attributes name a metadata attribute type directly. Some attributes use short pseudo-attribute
 names. The reader expands those names to full metadata attributes. See `PSEUDO_ATTRS` in
 `windows-rdl`. Pseudo attributes resolve against `Windows.Win32.Foundation.Metadata`. The reader
-and writer also recognize the former `Windows.Win32.Metadata` namespace. If both namespaces define
-the same required pseudo-attribute type, the reader reports the ambiguity instead of choosing one.
+and writer also recognize the former `Windows.Win32.Metadata` namespace. Local input definitions
+take precedence over reference definitions. If both namespaces define the same required
+pseudo-attribute type within the selected provenance tier, the reader reports the ambiguity instead
+of choosing one.
 
 Struct bit fields use their own syntax. A run of bit fields packed into one backing integer is
 written as a C-like block on that field. Each member uses `Name: width`. Anonymous padding uses

@@ -496,10 +496,29 @@ impl Encoder<'_> {
         attr: &syn::Attribute,
         pseudo: &PseudoAttr,
     ) -> Result<Option<AttributeInfo>, Error> {
-        let mut matches = METADATA_NAMESPACES.iter().filter_map(|namespace| {
-            self.find_in_reference(namespace, pseudo.metadata)
-                .or_else(|| self.find_in_index(namespace, pseudo.metadata))
-        });
+        let local = self.unique_pseudo_attribute_type(
+            attr,
+            METADATA_NAMESPACES
+                .iter()
+                .filter_map(|namespace| self.find_in_index(namespace, pseudo.metadata)),
+        )?;
+        if local.is_some() {
+            return Ok(local);
+        }
+
+        self.unique_pseudo_attribute_type(
+            attr,
+            METADATA_NAMESPACES
+                .iter()
+                .filter_map(|namespace| self.find_in_reference(namespace, pseudo.metadata)),
+        )
+    }
+
+    fn unique_pseudo_attribute_type(
+        &self,
+        attr: &syn::Attribute,
+        mut matches: impl Iterator<Item = AttributeInfo>,
+    ) -> Result<Option<AttributeInfo>, Error> {
         let info = matches.next();
         if matches.next().is_some() {
             return self.err(attr, "pseudo-attribute type is ambiguous");

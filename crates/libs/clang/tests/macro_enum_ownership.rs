@@ -4,7 +4,7 @@ use windows_clang::{
     EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition, extract,
 };
 use windows_metadata::{
-    Type, Value,
+    HasAttributes, Type, Value,
     reader::{Index, Item},
 };
 
@@ -44,6 +44,40 @@ fn constant_value(index: &Index, namespace: &str, name: &str) -> Value {
         panic!("{namespace}.{name} was not emitted as a constant");
     };
     field.constant().unwrap().value()
+}
+
+#[test]
+fn local_metadata_seed_pseudo_type_overrides_default_reference_alias() {
+    let scratch = scratch("metadata-pseudo-provenance");
+    let winmd = scratch.join("metadata-pseudo-provenance.winmd");
+
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_text(
+            r#"
+                #[win32]
+                mod Example {
+                    #[scoped]
+                    #[repr(i32)]
+                    enum Flags {
+                        Value = 1,
+                    }
+                }
+            "#,
+        )
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+
+    let index = Index::read(&winmd).unwrap();
+    let attribute = index
+        .expect("Example", "Flags")
+        .find_attribute("ScopedEnumAttribute")
+        .unwrap();
+    assert_eq!(attribute.namespace(), "Windows.Win32.Foundation.Metadata");
+
+    std::fs::remove_dir_all(scratch).unwrap();
 }
 
 fn write_source(path: &Path) {

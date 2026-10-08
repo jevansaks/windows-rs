@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use windows_metadata as metadata;
 use windows_metadata::HasAttributes;
 
+const CANONICAL_METADATA_NAMESPACE: &str = "Windows.Win32.Foundation.Metadata";
 const METADATA_NAMESPACE: &str = "Windows.Win32.Metadata";
 
 struct AttributeSpec {
@@ -607,7 +608,61 @@ fn missing_parameter_pseudo_attribute_type_is_reported() {
 }
 
 #[test]
-fn ambiguous_parameter_pseudo_attribute_type_is_reported() {
+fn local_parameter_pseudo_attribute_type_overrides_reference_alias() {
+    let scratch = scratch("local_parameter_pseudo");
+    let reference = scratch.join("reference.winmd");
+    let output = scratch.join("output.winmd");
+    write_attribute_definitions(&reference);
+
+    windows_rdl::reader()
+        .input_text(
+            r#"
+                #[win32]
+                mod Test {
+                    interface I {
+                        fn Method(
+                            &self,
+                            count: u32,
+                            #[len_param(0)] values: *const u32,
+                        );
+                    }
+                }
+
+                #[win32]
+                mod Windows {
+                    mod Win32 {
+                        mod Foundation {
+                            mod Metadata {
+                                attribute NativeArrayInfoAttribute {
+                                    fn();
+                                    CountParamIndex: i16,
+                                }
+                            }
+                        }
+                    }
+                }
+            "#,
+        )
+        .reference(&reference)
+        .output(&output)
+        .write()
+        .unwrap();
+
+    let index = metadata::reader::Index::read(&output).unwrap();
+    let method = index.expect("Test", "I").methods().next().unwrap();
+    let attribute = method.params_by_sequence(2).unwrap().params()[1]
+        .unwrap()
+        .find_attribute("NativeArrayInfoAttribute")
+        .unwrap();
+    assert_eq!(attribute.namespace(), CANONICAL_METADATA_NAMESPACE);
+    assert_eq!(
+        attribute.value(),
+        [("CountParamIndex".to_string(), metadata::Value::I16(0))]
+    );
+}
+
+#[test]
+fn multiple_local_parameter_pseudo_attribute_types_are_ambiguous() {
     let output = scratch("ambiguous_parameter_pseudo").join("output.winmd");
     let error = windows_rdl::reader()
         .input_text(
