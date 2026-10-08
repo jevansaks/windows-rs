@@ -463,6 +463,13 @@ fn apply_macro_enum_overrides(
             ))
         })
         .collect();
+    let windows_metadata_namespaces: HashSet<_> = facts
+        .iter()
+        .filter(|fact| {
+            fact.kind == FactKind::Namespace && fact.name == "Windows" && fact.parent.is_none()
+        })
+        .map(|fact| fact.origin.clone())
+        .collect();
     let mut enum_members: HashMap<_, Vec<_>> = HashMap::new();
     for (fact_index, fact) in facts.iter().enumerate() {
         let FactData::Enum {
@@ -474,7 +481,11 @@ fn apply_macro_enum_overrides(
         else {
             continue;
         };
-        if *scoped || fact.parent.is_some() {
+        let windows_metadata_enum = fact
+            .parent
+            .as_ref()
+            .is_some_and(|parent| windows_metadata_namespaces.contains(parent));
+        if *scoped || (fact.parent.is_some() && !windows_metadata_enum) {
             continue;
         }
         for (variant_index, variant) in variants.iter().enumerate() {
@@ -491,6 +502,7 @@ fn apply_macro_enum_overrides(
                     *repr,
                     fact.spelling.offset,
                     variant.value,
+                    windows_metadata_enum,
                 ));
         }
     }
@@ -503,7 +515,9 @@ fn apply_macro_enum_overrides(
         {
             continue;
         }
-        let Some([(fact_index, variant_index, repr, enum_offset, enum_value)]) = enum_members
+        let Some(
+            [(fact_index, variant_index, repr, enum_offset, enum_value, windows_metadata_enum)],
+        ) = enum_members
             .get(&(
                 constant.root.tu.clone(),
                 source_file_key(&constant.spelling.file),
@@ -514,7 +528,14 @@ fn apply_macro_enum_overrides(
             continue;
         };
         let value = if constant.spelling.offset < *enum_offset {
-            macro_before_enum_matches(constant, *repr, *enum_value, &scalar_aliases).then_some(None)
+            macro_before_enum_matches(
+                constant,
+                *repr,
+                *enum_value,
+                *windows_metadata_enum,
+                &scalar_aliases,
+            )
+            .then_some(None)
         } else {
             macro_after_enum_value(
                 constant,
@@ -564,6 +585,7 @@ fn macro_before_enum_matches(
     constant: &Constant,
     repr: Scalar,
     variant_value: i64,
+    allow_different_widths: bool,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,
 ) -> bool {
     let Some(source) = macro_scalar_type(&constant.ty, &constant.root.tu, scalar_aliases, None)
@@ -576,7 +598,7 @@ fn macro_before_enum_matches(
     let Some((enum_width, enum_value)) = normalized_enum_value(repr, variant_value) else {
         return false;
     };
-    source_width == enum_width && source_value == enum_value
+    source_value == enum_value && (source_width == enum_width || allow_different_widths)
 }
 
 fn macro_after_enum_value(

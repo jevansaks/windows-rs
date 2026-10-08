@@ -265,6 +265,213 @@ fn write_source(path: &Path) {
 }
 
 #[test]
+fn windows_metadata_enum_owns_matching_native_macro_across_widths() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("windows-metadata-domain");
+    let header = scratch.join("provider.h");
+    std::fs::write(
+        &header,
+        r#"
+            #define VK_ZOOM 0xFB
+            #pragma push_macro("VK_ZOOM")
+            #undef VK_ZOOM
+            namespace Windows {
+                enum VIRTUAL_KEY : unsigned short {
+                    VK_ZOOM = 251
+                };
+            }
+            #pragma pop_macro("VK_ZOOM")
+
+            #define VK_SAME_WIDTH ((unsigned short)7)
+            #pragma push_macro("VK_SAME_WIDTH")
+            #undef VK_SAME_WIDTH
+            namespace Windows {
+                enum SAME_WIDTH_KEY : unsigned short {
+                    VK_SAME_WIDTH = 7
+                };
+            }
+            #pragma pop_macro("VK_SAME_WIDTH")
+
+            #define OTHER_DOMAIN_VALUE ((unsigned short)8)
+            #pragma push_macro("OTHER_DOMAIN_VALUE")
+            #undef OTHER_DOMAIN_VALUE
+            namespace Other {
+                enum OTHER_DOMAIN_KEY : unsigned short {
+                    OTHER_DOMAIN_VALUE = 8
+                };
+            }
+            #pragma pop_macro("OTHER_DOMAIN_VALUE")
+
+            #define VK_DIFFERENT 9
+            #pragma push_macro("VK_DIFFERENT")
+            #undef VK_DIFFERENT
+            namespace Windows {
+                enum DIFFERENT_KEY : unsigned short {
+                    VK_DIFFERENT = 10
+                };
+            }
+            #pragma pop_macro("VK_DIFFERENT")
+
+            typedef void* TEST_HANDLE;
+            #define VK_HANDLE ((TEST_HANDLE)11)
+            #pragma push_macro("VK_HANDLE")
+            #undef VK_HANDLE
+            namespace Windows {
+                enum HANDLE_KEY : unsigned short {
+                    VK_HANDLE = 11
+                };
+            }
+            #pragma pop_macro("VK_HANDLE")
+
+            #define VK_NEGATIVE (-1)
+            #pragma push_macro("VK_NEGATIVE")
+            #undef VK_NEGATIVE
+            namespace Windows {
+                enum NEGATIVE_KEY : unsigned short {
+                    VK_NEGATIVE = 0xffff
+                };
+            }
+            #pragma pop_macro("VK_NEGATIVE")
+        "#,
+    )
+    .unwrap();
+    let snapshot = extract(
+        [Input::new(
+            "aggregate.cpp",
+            format!("#include \"{}\"\n", header.to_string_lossy()),
+        )
+        .with_roots([header.to_string_lossy().to_string()])],
+        &[
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ],
+    )
+    .unwrap();
+
+    for name in ["VK_ZOOM", "VK_SAME_WIDTH"] {
+        assert!(
+            snapshot
+                .constants()
+                .iter()
+                .all(|constant| constant.name != name),
+            "{name}: {}",
+            snapshot.dump()
+        );
+    }
+    for name in [
+        "OTHER_DOMAIN_VALUE",
+        "VK_DIFFERENT",
+        "VK_HANDLE",
+        "VK_NEGATIVE",
+    ] {
+        assert!(
+            snapshot
+                .constants()
+                .iter()
+                .any(|constant| constant.name == name),
+            "{name}: {}",
+            snapshot.dump()
+        );
+    }
+    let handle = snapshot
+        .constants()
+        .iter()
+        .find(|constant| constant.name == "VK_HANDLE")
+        .unwrap();
+    assert!(
+        matches!(
+            &handle.ty,
+            windows_clang::TypeRef::Named { name, .. } if name == "TEST_HANDLE"
+        ),
+        "{handle:#?}"
+    );
+
+    let policy = HeaderPartitionPolicy::new().with_traversed_header(
+        header.to_string_lossy(),
+        RootPartition::new("provider", "Example.Metadata"),
+    );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example", &references);
+    let partitions = snapshot
+        .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let rdl = partitions.values().next().unwrap();
+    assert!(rdl.contains("VK_ZOOM = 251"), "{rdl}");
+    assert!(rdl.contains("VK_SAME_WIDTH = 7"), "{rdl}");
+    assert!(!rdl.contains("const VK_ZOOM:"), "{rdl}");
+    assert!(!rdl.contains("const VK_SAME_WIDTH:"), "{rdl}");
+    for name in [
+        "OTHER_DOMAIN_VALUE",
+        "VK_DIFFERENT",
+        "VK_HANDLE",
+        "VK_NEGATIVE",
+    ] {
+        assert!(rdl.contains(&format!("const {name}:")), "{name}: {rdl}");
+    }
+
+    let winmd = scratch.join("windows-metadata-domain.winmd");
+    windows_rdl::reader()
+        .input_text(METADATA_RDL)
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&winmd)
+        .write()
+        .unwrap();
+    let index = Index::read(&winmd).unwrap();
+    let namespace = "Example.Metadata";
+    assert_eq!(
+        enum_value(&index, namespace, "VIRTUAL_KEY", "VK_ZOOM"),
+        Value::U16(251)
+    );
+    assert_eq!(
+        enum_value(&index, namespace, "SAME_WIDTH_KEY", "VK_SAME_WIDTH"),
+        Value::U16(7)
+    );
+    assert!(index.get_item(namespace, "VK_ZOOM").next().is_none());
+    assert!(index.get_item(namespace, "VK_SAME_WIDTH").next().is_none());
+    assert_eq!(
+        enum_value(&index, namespace, "OTHER_DOMAIN_KEY", "OTHER_DOMAIN_VALUE"),
+        Value::U16(8)
+    );
+    assert_eq!(
+        constant_value(&index, namespace, "OTHER_DOMAIN_VALUE"),
+        Value::U16(8)
+    );
+    assert_eq!(
+        enum_value(&index, namespace, "DIFFERENT_KEY", "VK_DIFFERENT"),
+        Value::U16(10)
+    );
+    assert_eq!(
+        constant_value(&index, namespace, "VK_DIFFERENT"),
+        Value::I32(9)
+    );
+    assert_eq!(
+        enum_value(&index, namespace, "HANDLE_KEY", "VK_HANDLE"),
+        Value::U16(11)
+    );
+    let Item::Const(handle) = index.expect_item(namespace, "VK_HANDLE") else {
+        panic!("{namespace}.VK_HANDLE was not emitted as a constant");
+    };
+    assert_eq!(handle.ty(), Type::value_named(namespace, "TEST_HANDLE"));
+    assert_eq!(handle.constant().unwrap().value(), Value::I32(11));
+    assert_eq!(
+        enum_value(&index, namespace, "NEGATIVE_KEY", "VK_NEGATIVE"),
+        Value::U16(u16::MAX)
+    );
+    assert_eq!(
+        constant_value(&index, namespace, "VK_NEGATIVE"),
+        Value::I32(-1)
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn macro_enum_ownership_survives_header_planning_and_physical_metadata() {
     helpers::ensure_libclang();
 

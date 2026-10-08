@@ -642,10 +642,12 @@ value namespace.
 
 A macro defined before the member is treated as the same source symbol only when its integer type
 resolves directly or through scalar typedefs to the enum's width and their mathematical values are
-equal. Signed positive values may match unsigned values of the same width, but negative
-reinterpretation and width changes do not match. Explicitly associated constants remain separate
-providers. Scoped enums, C++ namespace members, ambiguous candidates, typed pointer or handle
-constants, and declarations from different headers or translation units also remain separate.
+equal. Signed positive values may match unsigned values of the same width. An unscoped enum
+directly inside the top-level `Windows` metadata namespace may also match a different integer width
+when the macro's mathematical value equals the value represented by the enum. Negative
+reinterpretation does not match. Explicitly associated constants remain separate providers. Scoped
+enums, members of other C++ namespaces, ambiguous candidates, typed pointer or handle constants,
+and declarations from different headers or translation units also remain separate.
 
 RDL can encode a type definition and a member of the namespace's `Apis` class with the same
 projected name. The extractor therefore preserves a type and object-like macro with the same public
