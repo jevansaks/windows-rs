@@ -251,6 +251,16 @@ an owner's remap, exclusion, override, or library maps do not create a conflict.
 planned declaration supplies the output partition and physical header, while every candidate remains
 available in an ambiguity report.
 
+Free-function declarations from separate extraction inputs may differ in parameter names and SAL
+parameter annotations. They share one root only when their native parent path, linker name, calling
+convention, variadic and noreturn state, and exact parameter and result type bindings match. An
+exact or wildcard namespace authority selects a declaration only when that destination namespace
+was already one of the declaration's logical owner candidates. Rewriting an unrelated owner to the
+authority namespace does not make its declaration authoritative. The selected declaration supplies
+the parameter annotations without merging them, while every compatible declaration still
+contributes owner and import-library claims. If no unique authoritative declaration exists, or any
+callable ABI or type binding differs, planning reports an ambiguous function root.
+
 When equivalent roots resolve to different namespaces, header planning keeps one public identity per
 namespace if each exact source declaration belongs to one effective namespace. Ordinary declarations
 use their spelling location for this classification. Macro-generated declarations use their

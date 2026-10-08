@@ -23,6 +23,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         projected_type_names: BTreeMap::new(),
         namespace_authorities: BTreeMap::new(),
         fact_namespace_authorities: BTreeMap::new(),
+        matched_namespace_authorities: BTreeSet::new(),
         constant_namespace_authorities: BTreeMap::new(),
         header_partition_policy: false,
         header_authority_partition: None,

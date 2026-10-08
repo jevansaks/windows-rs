@@ -3301,6 +3301,330 @@ fn wildcard_authority_collapses_equivalent_logical_routes() {
 }
 
 #[test]
+fn compatible_function_redeclarations_use_namespace_authority() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("compatible-function-authority");
+    let common = scratch.join("common.h");
+    let fallback = scratch.join("fallback.h");
+    let authority = scratch.join("authority.h");
+    std::fs::write(&common, "typedef unsigned short CLIPFORMAT;\n").unwrap();
+    std::fs::write(
+        &fallback,
+        format!(
+            "#include \"{}\"\n\
+             #define W32M(text) __attribute__((annotate(text)))\n\
+             W32M(\"win32metadata:set_last_error\")\n\
+             extern \"C\" unsigned long CLIPFORMAT_UserSize(\n\
+                 unsigned long *flags, unsigned long offset, CLIPFORMAT *value);\n",
+            common.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        &authority,
+        format!(
+            "#include \"{}\"\n\
+             #define IN __attribute__((annotate(\"_In_\")))\n\
+             extern \"C\" unsigned long CLIPFORMAT_UserSize(\n\
+                 IN unsigned long *flags, IN unsigned long offset, IN CLIPFORMAT *value);\n",
+            common.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let input = |name: &str, header: &Path| {
+        Input::new(name, format!("#include \"{}\"\n", header.to_string_lossy()))
+            .with_root_dirs(roots.clone())
+    };
+    let forward = extract(
+        [
+            input("fallback.cpp", &fallback),
+            input("authority.cpp", &authority),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let reverse = extract(
+        [
+            input("authority.cpp", &authority),
+            input("fallback.cpp", &fallback),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let fallback_function = forward
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "CLIPFORMAT_UserSize" && fact.origin.tu == "fallback.cpp")
+        .unwrap();
+    let authority_function = forward
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "CLIPFORMAT_UserSize" && fact.origin.tu == "authority.cpp")
+        .unwrap();
+    let FactData::Function {
+        params: fallback_params,
+        ..
+    } = &fallback_function.data
+    else {
+        panic!("fallback declaration is not a function");
+    };
+    let FactData::Function {
+        params: authority_params,
+        ..
+    } = &authority_function.data
+    else {
+        panic!("authority declaration is not a function");
+    };
+    assert!(!fallback_params[1].annotation.input);
+    assert!(authority_params[1].annotation.input);
+
+    let fallback_partition = RootPartition::new("fallback", "Example.Fallback")
+        .with_library("CLIPFORMAT_UserSize", "ole32.dll");
+    let authority_partition = RootPartition::new("authority", "Example.System.Com.Marshal")
+        .with_library("CLIPFORMAT_UserSize", "ole32.dll");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "fallback.cpp",
+            fallback.to_string_lossy(),
+            fallback_partition.clone(),
+        )
+        .with_traversed_header_for_input(
+            "authority.cpp",
+            authority.to_string_lossy(),
+            authority_partition.clone(),
+        );
+    let reverse_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "authority.cpp",
+            authority.to_string_lossy(),
+            authority_partition,
+        )
+        .with_traversed_header_for_input(
+            "fallback.cpp",
+            fallback.to_string_lossy(),
+            fallback_partition,
+        );
+    let authorities =
+        NamespaceAuthorities::new().with_exact("CLIPFORMAT_UserSize", "Example.System.Com.Marshal");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = forward
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+
+    assert!(plan.audit(&options).unwrap().is_clean());
+    let partitions = plan.emit_with_options(&options).unwrap();
+    let reverse_partitions = reverse
+        .plan_header_partitions(&reverse_policy, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    assert_eq!(partitions, reverse_partitions);
+    let route = partitions
+        .keys()
+        .find(|partition| partition.namespace == "Example.System.Com.Marshal")
+        .unwrap();
+    assert_eq!(route.partition, "authority");
+    assert_eq!(route.header, authority.to_string_lossy().replace('\\', "/"));
+    let rdl = output(&partitions, "Example.System.Com.Marshal");
+    assert_eq!(rdl.matches("fn CLIPFORMAT_UserSize").count(), 1, "{rdl}");
+    assert_eq!(rdl.matches("#[in]").count(), 2, "{rdl}");
+    assert!(
+        rdl.contains("#[library(\"ole32.dll\", set_last_error)]"),
+        "{rdl}"
+    );
+
+    let unmatched_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "fallback.cpp",
+            fallback.to_string_lossy(),
+            RootPartition::new("fallback", "Example.Fallback"),
+        )
+        .with_traversed_header_for_input(
+            "authority.cpp",
+            authority.to_string_lossy(),
+            RootPartition::new("other", "Example.Other"),
+        );
+    let error = forward
+        .plan_header_partitions(
+            &unmatched_policy,
+            &NamespaceAuthorities::new().with_exact("CLIPFORMAT_UserSize", "Example.Unmatched"),
+        )
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ambiguous function root `CLIPFORMAT_UserSize`"),
+        "{error}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn incompatible_function_redeclarations_remain_ambiguous() {
+    helpers::ensure_libclang();
+
+    let cases = [
+        (
+            "parameter-type",
+            "extern \"C\" int Shared(unsigned value);\n",
+            "extern \"C\" int Shared(unsigned long long value);\n",
+        ),
+        (
+            "result-type",
+            "extern \"C\" int Shared(unsigned value);\n",
+            "extern \"C\" long long Shared(unsigned value);\n",
+        ),
+        (
+            "calling-convention",
+            "extern \"C\" int __cdecl Shared(unsigned value);\n",
+            "extern \"C\" int __stdcall Shared(unsigned value);\n",
+        ),
+        (
+            "variadic",
+            "extern \"C\" int Shared(unsigned value);\n",
+            "extern \"C\" int Shared(unsigned value, ...);\n",
+        ),
+        (
+            "noreturn",
+            "extern \"C\" void Shared(void);\n",
+            "extern \"C\" __declspec(noreturn) void Shared(void);\n",
+        ),
+        (
+            "native-binding",
+            "struct TOKEN { int value; };\nextern \"C\" int Shared(TOKEN *value);\n",
+            "struct TOKEN { int value; };\nextern \"C\" int Shared(TOKEN *value);\n",
+        ),
+    ];
+    for (case, fallback_declaration, authority_declaration) in cases {
+        let scratch = scratch(&format!("incompatible-function-{case}"));
+        let fallback = scratch.join("fallback.h");
+        let authority = scratch.join("authority.h");
+        std::fs::write(&fallback, fallback_declaration).unwrap();
+        std::fs::write(&authority, authority_declaration).unwrap();
+        let roots = [scratch.to_string_lossy().to_string()];
+        let snapshot = extract(
+            [
+                Input::new(
+                    "fallback.cpp",
+                    format!("#include \"{}\"\n", fallback.to_string_lossy()),
+                )
+                .with_root_dirs(roots.clone()),
+                Input::new(
+                    "authority.cpp",
+                    format!("#include \"{}\"\n", authority.to_string_lossy()),
+                )
+                .with_root_dirs(roots),
+            ],
+            &[
+                "-x",
+                "c++",
+                "-fms-extensions",
+                "--target=i686-pc-windows-msvc",
+            ],
+        )
+        .unwrap();
+        let policy = HeaderPartitionPolicy::new()
+            .with_traversed_header_for_input(
+                "fallback.cpp",
+                fallback.to_string_lossy(),
+                RootPartition::new("fallback", "Example.Fallback"),
+            )
+            .with_traversed_header_for_input(
+                "authority.cpp",
+                authority.to_string_lossy(),
+                RootPartition::new("authority", "Example.Authority"),
+            );
+        let references = BTreeMap::new();
+        let error = snapshot
+            .plan_header_partitions(
+                &policy,
+                &NamespaceAuthorities::new().with_exact("Shared", "Example.Authority"),
+            )
+            .unwrap()
+            .emit_with_options(&EmitOptions::new("Example.Common", &references))
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("ambiguous function root `Shared`"),
+            "{case}: {error}"
+        );
+        std::fs::remove_dir_all(scratch).unwrap();
+    }
+}
+
+#[test]
+fn compatible_function_redeclarations_preserve_library_conflicts() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("compatible-function-library-conflict");
+    let fallback = scratch.join("fallback.h");
+    let authority = scratch.join("authority.h");
+    std::fs::write(&fallback, "extern \"C\" int Shared(unsigned value);\n").unwrap();
+    std::fs::write(
+        &authority,
+        "#define IN __attribute__((annotate(\"_In_\")))\n\
+         extern \"C\" int Shared(IN unsigned value);\n",
+    )
+    .unwrap();
+    let roots = [scratch.to_string_lossy().to_string()];
+    let snapshot = extract(
+        [
+            Input::new(
+                "fallback.cpp",
+                format!("#include \"{}\"\n", fallback.to_string_lossy()),
+            )
+            .with_root_dirs(roots.clone()),
+            Input::new(
+                "authority.cpp",
+                format!("#include \"{}\"\n", authority.to_string_lossy()),
+            )
+            .with_root_dirs(roots),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "fallback.cpp",
+            fallback.to_string_lossy(),
+            RootPartition::new("fallback", "Example.Fallback")
+                .with_library("Shared", "fallback.dll"),
+        )
+        .with_traversed_header_for_input(
+            "authority.cpp",
+            authority.to_string_lossy(),
+            RootPartition::new("authority", "Example.Authority")
+                .with_library("Shared", "authority.dll"),
+        );
+    let authorities = NamespaceAuthorities::new().with_exact("Shared", "Example.Authority");
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let plan = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap();
+    let audit = plan.audit(&options).unwrap();
+
+    assert_eq!(audit.conflicts().len(), 1, "{audit}");
+    assert_eq!(audit.conflicts()[0].name, "Shared");
+    assert_eq!(
+        audit.conflicts()[0].reason,
+        PartitionConflictReason::AmbiguousOwners
+    );
+    let error = plan.emit_with_options(&options).unwrap_err();
+    assert!(error.to_string().contains("Shared"), "{error}");
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn relevant_function_library_difference_remains_a_route_conflict() {
     helpers::ensure_libclang();
 

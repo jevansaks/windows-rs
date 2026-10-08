@@ -1302,6 +1302,7 @@ pub struct Snapshot {
     projected_type_names: BTreeMap<Origin, String>,
     namespace_authorities: BTreeMap<String, String>,
     fact_namespace_authorities: BTreeMap<Origin, String>,
+    matched_namespace_authorities: BTreeSet<Origin>,
     constant_namespace_authorities: BTreeMap<(Origin, String), String>,
     header_partition_policy: bool,
     header_authority_partition: Option<String>,
@@ -1444,6 +1445,7 @@ impl PartialEq for Snapshot {
             && self.projected_type_names == other.projected_type_names
             && self.namespace_authorities == other.namespace_authorities
             && self.fact_namespace_authorities == other.fact_namespace_authorities
+            && self.matched_namespace_authorities == other.matched_namespace_authorities
             && self.constant_namespace_authorities == other.constant_namespace_authorities
             && self.header_partition_policy == other.header_partition_policy
             && self.header_authority_partition == other.header_authority_partition
@@ -1667,6 +1669,17 @@ impl Snapshot {
                     .get(&fact.name)
                     .map(|namespace| (fact.origin.clone(), namespace.clone()))
             })
+            .collect();
+        self.matched_namespace_authorities = self
+            .facts
+            .iter()
+            .filter(|fact| {
+                self.fact_namespace_authorities
+                    .get(&fact.origin)
+                    .zip(self.root_owners.get(&fact.origin))
+                    .is_some_and(|(namespace, owner)| owner.namespace == *namespace)
+            })
+            .map(|fact| fact.origin.clone())
             .collect();
         self.constant_namespace_authorities = self
             .constants
@@ -2389,6 +2402,7 @@ impl Snapshot {
         self.partition_exclusions.clear();
         self.forced_flags.clear();
         self.suppressed_type_origins.clear();
+        self.matched_namespace_authorities.clear();
         self.header_partition_policy = true;
         self.header_authority_partition
             .clone_from(&policy.authority_partition);
@@ -2456,6 +2470,8 @@ impl Snapshot {
                 .namespace_authorities
                 .get(&fact.name)
                 .map(String::as_str);
+            let authority_matches = namespace
+                .is_some_and(|namespace| selected.iter().any(|owner| owner.namespace == namespace));
             let (owner, conflict) = resolve_header_owner(&fact.name, kind, selected, namespace)?;
             if !excluded && let Some(conflict) = conflict {
                 conflicts.push(conflict);
@@ -2463,6 +2479,10 @@ impl Snapshot {
             self.root_owners.insert(fact.origin.clone(), owner);
             if !excluded {
                 fact.root = true;
+                if authority_matches {
+                    self.matched_namespace_authorities
+                        .insert(fact.origin.clone());
+                }
             }
         }
 
@@ -3502,6 +3522,23 @@ impl Snapshot {
         }
     }
 
+    fn function_authority_candidates<'a>(
+        &self,
+        facts: &[&'a Fact],
+        declarations: &DeclarationIndex<'_>,
+    ) -> Vec<&'a Fact> {
+        let matching: Vec<_> = facts
+            .iter()
+            .copied()
+            .filter(|fact| self.matched_namespace_authorities.contains(&fact.origin))
+            .collect();
+        if matching.is_empty() {
+            self.authority_candidates(facts, declarations)
+        } else {
+            matching
+        }
+    }
+
     fn fact_authority_namespace<'a>(
         &'a self,
         fact: &Fact,
@@ -3861,8 +3898,14 @@ impl Snapshot {
                     .get(&fact.origin)
                     .cloned()
                     .unwrap_or_else(|| empty_annotations.clone());
-                let claim =
-                    self.fact_route_claim(fact, owner, annotations, &plan.flag_enums, options)?;
+                let claim = self.fact_route_claim(
+                    fact,
+                    fact,
+                    owner,
+                    annotations,
+                    &plan.flag_enums,
+                    options,
+                )?;
                 if !suppressed || !projected_fact_keys.contains(&fact_key) {
                     fact_claims
                         .entry(fact_key)
@@ -3956,15 +3999,24 @@ impl Snapshot {
         }
         for planned in &plan.functions {
             let function = planned.fact;
-            let claims = fact_claims
-                .get(&(
-                    &function.name,
-                    function.kind,
-                    function.definition,
-                    &function.data,
-                ))
-                .cloned()
-                .unwrap_or_default();
+            let mut claims = BTreeSet::new();
+            for &declaration in &planned.declarations {
+                let Some(owner) = self.root_owners.get(&declaration.origin) else {
+                    continue;
+                };
+                let annotations = annotation_signatures
+                    .get(&declaration.origin)
+                    .cloned()
+                    .unwrap_or_else(|| empty_annotations.clone());
+                claims.insert(self.fact_route_claim(
+                    function,
+                    declaration,
+                    owner,
+                    annotations,
+                    &plan.flag_enums,
+                    options,
+                )?);
+            }
             let namespace = self
                 .fact_authority_namespace(function, &declarations)
                 .cloned();
@@ -4060,6 +4112,7 @@ impl Snapshot {
             for owner in owners {
                 claims.insert(self.fact_route_claim(
                     fact,
+                    fact,
                     &owner,
                     annotations.clone(),
                     context.flag_enums,
@@ -4072,6 +4125,7 @@ impl Snapshot {
             .get(&fact.origin)
             .map(|owner| {
                 self.fact_route_claim(
+                    fact,
                     fact,
                     owner,
                     annotations,
@@ -4123,6 +4177,7 @@ impl Snapshot {
                 .cloned()
                 .unwrap_or_else(|| context.empty_annotations.clone());
             let claim = self.fact_route_claim(
+                planned.fact,
                 planned.fact,
                 &owner,
                 annotations,
@@ -4209,6 +4264,7 @@ impl Snapshot {
     fn fact_route_claim<'a>(
         &'a self,
         fact: &'a Fact,
+        declaration: &'a Fact,
         owner: &RootOwner,
         annotations: Rc<RouteAnnotations>,
         flag_enums: &BTreeSet<(String, String)>,
@@ -4224,8 +4280,9 @@ impl Snapshot {
                 },
                 annotations,
                 uuid: self.fact_uuid(fact),
-                flags: flag_enums.contains(&(fact.origin.tu.clone(), fact.name.clone())),
-                native_import: self.resolve_native_import(fact, Some(owner), options)?,
+                flags: flag_enums
+                    .contains(&(declaration.origin.tu.clone(), declaration.name.clone())),
+                native_import: self.resolve_native_import(declaration, Some(owner), options)?,
             },
         })
     }
@@ -4388,6 +4445,30 @@ impl Snapshot {
             })
             .copied()
             .ok_or_else(|| Error(format!("missing constant root `{name}`")))
+    }
+
+    fn choose_common_function_root<'a>(
+        &self,
+        name: &str,
+        roots: &[&'a Fact],
+        declarations: &DeclarationIndex<'_>,
+        facts_by_origin: &HashMap<&Origin, &Fact>,
+    ) -> Result<(&'a Fact, Vec<&'a Fact>), Error> {
+        let distinct = distinct_source_declarations(roots);
+        let compatible = distinct.first().is_some_and(|first| {
+            distinct
+                .iter()
+                .all(|fact| common_callable_declarations_compatible(first, fact, facts_by_origin))
+        });
+        match choose_function_root(name, &distinct) {
+            Ok(root) => Ok((root, if compatible { distinct } else { vec![root] })),
+            Err(error) if !compatible => Err(error),
+            Err(_) => {
+                let authority = self.function_authority_candidates(&distinct, declarations);
+                let root = choose_function_root(name, &authority)?;
+                Ok((root, distinct))
+            }
+        }
     }
 
     fn authoritative_owner(
@@ -4854,7 +4935,12 @@ impl Snapshot {
                 }
                 let split_names = by_link_name.len() > 1;
                 for (link_name, roots) in by_link_name {
-                    let fact = choose_function_root(name, &roots)?;
+                    let (fact, declarations) = self.choose_common_function_root(
+                        name,
+                        &roots,
+                        &declarations,
+                        &facts_by_origin,
+                    )?;
                     functions.push(PlannedFunction {
                         name: if split_names {
                             link_name.to_string()
@@ -4862,6 +4948,7 @@ impl Snapshot {
                             fact.name.clone()
                         },
                         fact,
+                        declarations,
                     });
                 }
             }
@@ -6200,6 +6287,7 @@ struct PlannedConstant<'a> {
 struct PlannedFunction<'a> {
     fact: &'a Fact,
     name: String,
+    declarations: Vec<&'a Fact>,
 }
 
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
@@ -8570,6 +8658,75 @@ fn choose_function_root<'a>(name: &str, roots: &[&'a Fact]) -> Result<&'a Fact, 
     Err(Error(format!(
         "ambiguous function root `{name}`: {choices}"
     )))
+}
+
+fn common_callable_declarations_compatible(
+    left: &Fact,
+    right: &Fact,
+    facts_by_origin: &HashMap<&Origin, &Fact>,
+) -> bool {
+    fn parents_match(left: &Fact, right: &Fact, facts_by_origin: &HashMap<&Origin, &Fact>) -> bool {
+        let mut left = left.parent.as_ref();
+        let mut right = right.parent.as_ref();
+        loop {
+            match (left, right) {
+                (None, None) => return true,
+                (Some(left_origin), Some(right_origin)) => {
+                    let (Some(left_fact), Some(right_fact)) = (
+                        facts_by_origin.get(left_origin),
+                        facts_by_origin.get(right_origin),
+                    ) else {
+                        return left_origin == right_origin;
+                    };
+                    if left_fact.kind != right_fact.kind || left_fact.name != right_fact.name {
+                        return false;
+                    }
+                    left = left_fact.parent.as_ref();
+                    right = right_fact.parent.as_ref();
+                }
+                _ => return false,
+            }
+        }
+    }
+
+    if left.kind != right.kind
+        || left.name != right.name
+        || left.definition != right.definition
+        || !parents_match(left, right, facts_by_origin)
+    {
+        return false;
+    }
+    let (
+        FactData::Function {
+            link_name: left_link_name,
+            convention: left_convention,
+            params: left_params,
+            result: left_result,
+            variadic: left_variadic,
+            noreturn: left_noreturn,
+        },
+        FactData::Function {
+            link_name: right_link_name,
+            convention: right_convention,
+            params: right_params,
+            result: right_result,
+            variadic: right_variadic,
+            noreturn: right_noreturn,
+        },
+    ) = (&left.data, &right.data)
+    else {
+        return false;
+    };
+    left_link_name == right_link_name
+        && left_convention == right_convention
+        && left_params.len() == right_params.len()
+        && left_params
+            .iter()
+            .zip(right_params)
+            .all(|(left, right)| left.ty == right.ty)
+        && left_result == right_result
+        && left_variadic == right_variadic
+        && left_noreturn == right_noreturn
 }
 
 fn distinct_source_declarations<'a>(roots: &[&'a Fact]) -> Vec<&'a Fact> {
