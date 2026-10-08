@@ -51,15 +51,17 @@ translation unit, including headers that produced no extracted fact or constant.
 the corresponding `Input::name` identity and have deterministic per-input ordering.
 
 An aggregate translation unit can be routed after extraction with `HeaderPartitionPolicy` and
-`Snapshot::plan_header_partitions`. The policy maps traversed physical headers to logical
-`RootPartition` candidates. Input-qualified entries support the same physical header parsed under
-different compile definitions without making the extraction input a logical partition. Header
-selectors are case-insensitive path suffixes; emitted partition headers and owner settings use the
-resolved physical source path. Named header overrides replace the default candidates for selected
-declarations, including input-qualified compile variants. Call the consuming `emit_with_options`
-for normal generation; it audits internally and refuses to emit a dirty plan. Use `audit` only when
-a caller needs the report without emission because auditing before emission repeats planning and
-clones the snapshot.
+`Snapshot::into_header_partition_plan`. This consuming path moves the extracted snapshot into the
+plan and avoids retaining a cloned copy during planning. `Snapshot::plan_header_partitions` remains
+available when the caller must keep using the original snapshot. Both paths produce the same plan.
+The policy maps traversed physical headers to logical `RootPartition` candidates. Input-qualified
+entries support the same physical header parsed under different compile definitions without making
+the extraction input a logical partition. Header selectors are case-insensitive path suffixes;
+emitted partition headers and owner settings use the resolved physical source path. Named header
+overrides replace the default candidates for selected declarations, including input-qualified
+compile variants. Call the consuming `emit_with_options` for normal generation; it audits
+internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report without
+emission because auditing before emission repeats planning and clones the snapshot.
 Dependency declarations remain available for closure without becoming public roots. When
 equivalent compile variants exist, an owner whose typedef projection reaches an excluded type is
 omitted if another unsuppressed projection can own that output.

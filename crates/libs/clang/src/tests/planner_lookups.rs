@@ -321,6 +321,51 @@ fn planner_fixture_preserves_output_and_conflict_order() {
 }
 
 #[test]
+fn owned_planner_matches_borrowed_output_and_audit() {
+    let (snapshot, policy, authorities) = fixture(32, 4);
+    let references = references();
+    let options = EmitOptions::new("Windows.Win32", &references);
+    let borrowed_output = snapshot
+        .plan_header_partitions(&policy, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    let owned_output = snapshot
+        .clone()
+        .into_header_partition_plan(&policy, &authorities)
+        .unwrap()
+        .emit_with_options(&options)
+        .unwrap();
+    assert_eq!(owned_output, borrowed_output);
+
+    let ambiguous =
+        policy.with_traversed_header("public.h", RootPartition::new("other", "Example.Other"));
+    let borrowed_audit = snapshot
+        .plan_header_partitions(&ambiguous, &authorities)
+        .unwrap()
+        .audit(&options)
+        .unwrap();
+    let owned_audit = snapshot
+        .into_header_partition_plan(&ambiguous, &authorities)
+        .unwrap()
+        .audit(&options)
+        .unwrap();
+    assert_eq!(owned_audit, borrowed_audit);
+}
+
+#[test]
+fn owned_planner_reuses_snapshot_fact_storage() {
+    let (snapshot, policy, authorities) = fixture(32, 4);
+    let facts = snapshot.facts.as_ptr();
+    let fact_capacity = snapshot.facts.capacity();
+    let plan = snapshot
+        .into_header_partition_plan(&policy, &authorities)
+        .unwrap();
+    assert_eq!(plan.snapshot.facts.as_ptr(), facts);
+    assert_eq!(plan.snapshot.facts.capacity(), fact_capacity);
+}
+
+#[test]
 #[ignore = "bounded planner timing fixture; run with --release --ignored --nocapture"]
 fn planner_lookup_scaling() {
     use std::hash::{DefaultHasher, Hash, Hasher};

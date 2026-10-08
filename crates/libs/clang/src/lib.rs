@@ -1540,11 +1540,22 @@ impl Snapshot {
         policy: &HeaderPartitionPolicy,
         authorities: &NamespaceAuthorities,
     ) -> Result<HeaderPartitionPlan, Error> {
-        let mut snapshot = self.clone();
-        snapshot.apply_namespace_authorities(authorities)?;
-        let root_conflicts = snapshot.apply_header_partition_policy(policy)?;
+        self.clone().into_header_partition_plan(policy, authorities)
+    }
+
+    /// Consumes the snapshot while preparing a header partition plan.
+    ///
+    /// Use this after the caller finishes inspecting the extracted snapshot to avoid cloning the
+    /// complete snapshot before planning.
+    pub fn into_header_partition_plan(
+        mut self,
+        policy: &HeaderPartitionPolicy,
+        authorities: &NamespaceAuthorities,
+    ) -> Result<HeaderPartitionPlan, Error> {
+        self.apply_namespace_authorities(authorities)?;
+        let root_conflicts = self.apply_header_partition_policy(policy)?;
         Ok(HeaderPartitionPlan {
-            snapshot,
+            snapshot: self,
             root_conflicts,
         })
     }
