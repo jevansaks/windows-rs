@@ -1381,9 +1381,59 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::try_map_ordered_bounded;
+    use super::{
+        DeclarationIdentity, Fact, FactData, FactKind, Location, Origin, plan_canonical_completion,
+        try_map_ordered_bounded,
+    };
+    use std::collections::{BTreeSet, HashMap};
     use std::sync::Barrier;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    fn completion_fact(tu: &str, local: u32, definition: bool, materialized: bool) -> Fact {
+        let location = Location {
+            file: "shared.h".to_string(),
+            offset: 1,
+        };
+        Fact {
+            origin: Origin {
+                tu: tu.to_string(),
+                local,
+            },
+            parent: None,
+            kind: FactKind::Struct,
+            name: "SHARED".to_string(),
+            spelling: location.clone(),
+            expansion: location,
+            definition,
+            main_file: false,
+            root: false,
+            system: false,
+            data: if materialized {
+                FactData::Record {
+                    base: None,
+                    fields: vec![],
+                    size: 1,
+                    align: 1,
+                    packing: None,
+                    alignment: None,
+                    union: false,
+                }
+            } else {
+                FactData::None
+            },
+        }
+    }
+
+    fn completion_identity() -> DeclarationIdentity {
+        DeclarationIdentity {
+            kind: FactKind::Struct,
+            name: "SHARED".to_string(),
+            canonical: Location {
+                file: "shared.h".to_string(),
+                offset: 1,
+            },
+        }
+    }
 
     #[test]
     fn ordered_bounded_map_preserves_order_and_worker_limit() {
@@ -1432,6 +1482,83 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error, "first");
+    }
+
+    #[test]
+    fn canonical_completion_skips_same_tu_satisfied_forward_declaration() {
+        let facts = vec![
+            completion_fact("first.cpp", 0, false, true),
+            completion_fact("first.cpp", 1, true, true),
+            completion_fact("second.cpp", 0, true, false),
+        ];
+        let identity = completion_identity();
+        let identities = facts
+            .iter()
+            .map(|fact| (fact.origin.clone(), identity.clone()))
+            .collect::<HashMap<_, _>>();
+        let plan =
+            plan_canonical_completion(&facts, &BTreeSet::from([0, 1]), &identities, [(1, 2)], 2);
+
+        assert!(plan.seeds.iter().all(BTreeSet::is_empty));
+        assert_eq!(plan.metrics.active_incomplete_facts, 1);
+        assert_eq!(plan.metrics.same_tu_satisfied_facts, 1);
+        assert_eq!(plan.metrics.unsatisfied_identities, 0);
+        assert_eq!(plan.metrics.complete_provider_facts, 0);
+        assert_eq!(plan.metrics.complete_provider_tus, 0);
+    }
+
+    #[test]
+    fn canonical_completion_uses_all_definitions_but_not_forward_candidates() {
+        let facts = vec![
+            completion_fact("root.cpp", 0, false, true),
+            completion_fact("first.cpp", 0, false, false),
+            completion_fact("first.cpp", 1, true, false),
+            completion_fact("second.cpp", 0, true, false),
+        ];
+        let identity = completion_identity();
+        let identities = facts
+            .iter()
+            .map(|fact| (fact.origin.clone(), identity.clone()))
+            .collect::<HashMap<_, _>>();
+        let plan = plan_canonical_completion(
+            &facts,
+            &BTreeSet::from([0]),
+            &identities,
+            [(1, 1), (1, 2), (2, 3)],
+            3,
+        );
+
+        assert!(plan.seeds[0].is_empty());
+        assert_eq!(plan.seeds[1], BTreeSet::from([2]));
+        assert_eq!(plan.seeds[2], BTreeSet::from([3]));
+        assert_eq!(plan.metrics.active_incomplete_facts, 1);
+        assert_eq!(plan.metrics.same_tu_satisfied_facts, 0);
+        assert_eq!(plan.metrics.unsatisfied_identities, 1);
+        assert_eq!(plan.metrics.incomplete_candidates_skipped, 1);
+        assert_eq!(plan.metrics.complete_provider_facts, 2);
+        assert_eq!(plan.metrics.complete_provider_tus, 2);
+    }
+
+    #[test]
+    fn canonical_completion_leaves_missing_definition_unsatisfied() {
+        let facts = vec![
+            completion_fact("root.cpp", 0, false, true),
+            completion_fact("provider.cpp", 0, false, false),
+        ];
+        let identity = completion_identity();
+        let identities = facts
+            .iter()
+            .map(|fact| (fact.origin.clone(), identity.clone()))
+            .collect::<HashMap<_, _>>();
+        let plan =
+            plan_canonical_completion(&facts, &BTreeSet::from([0]), &identities, [(1, 1)], 2);
+
+        assert!(plan.seeds.iter().all(BTreeSet::is_empty));
+        assert_eq!(plan.metrics.active_incomplete_facts, 1);
+        assert_eq!(plan.metrics.same_tu_satisfied_facts, 0);
+        assert_eq!(plan.metrics.unsatisfied_identities, 1);
+        assert_eq!(plan.metrics.incomplete_candidates_skipped, 1);
+        assert_eq!(plan.metrics.complete_provider_facts, 0);
     }
 }
 
@@ -3139,6 +3266,92 @@ fn complete_fact_request(
     })
 }
 
+#[derive(Default)]
+struct CanonicalCompletionMetrics {
+    active_incomplete_facts: usize,
+    same_tu_satisfied_facts: usize,
+    unsatisfied_identities: usize,
+    incomplete_candidates_skipped: usize,
+    complete_provider_facts: usize,
+    complete_provider_tus: usize,
+}
+
+struct CanonicalCompletionPlan {
+    seeds: Vec<BTreeSet<usize>>,
+    metrics: CanonicalCompletionMetrics,
+}
+
+fn plan_canonical_completion(
+    facts: &[Fact],
+    active: &BTreeSet<usize>,
+    identity_by_origin: &HashMap<Origin, DeclarationIdentity>,
+    pending: impl IntoIterator<Item = (usize, usize)>,
+    input_count: usize,
+) -> CanonicalCompletionPlan {
+    let mut active_complete = BTreeSet::new();
+    for fact_index in active {
+        let fact = &facts[*fact_index];
+        if fact.definition
+            && !matches!(fact.data, FactData::None)
+            && let Some(identity) = identity_by_origin.get(&fact.origin)
+        {
+            active_complete.insert((fact.origin.tu.clone(), identity.clone()));
+        }
+    }
+
+    let mut providers: BTreeMap<DeclarationIdentity, Vec<(usize, usize)>> = BTreeMap::new();
+    let mut incomplete_candidates_skipped = 0;
+    for (input_index, fact_index) in pending {
+        let fact = &facts[fact_index];
+        let Some(identity) = identity_by_origin.get(&fact.origin) else {
+            continue;
+        };
+        if fact.definition {
+            providers
+                .entry(identity.clone())
+                .or_default()
+                .push((input_index, fact_index));
+        } else {
+            incomplete_candidates_skipped += 1;
+        }
+    }
+
+    let mut seeds = vec![BTreeSet::new(); input_count];
+    let mut metrics = CanonicalCompletionMetrics {
+        incomplete_candidates_skipped,
+        ..Default::default()
+    };
+    let mut unsatisfied_identities = BTreeSet::new();
+    let mut provider_facts = BTreeSet::new();
+    let mut provider_tus = BTreeSet::new();
+    for fact_index in active {
+        let fact = &facts[*fact_index];
+        if !fact_needs_definition_completion(fact) {
+            continue;
+        }
+        let Some(identity) = identity_by_origin.get(&fact.origin) else {
+            continue;
+        };
+        metrics.active_incomplete_facts += 1;
+        if active_complete.contains(&(fact.origin.tu.clone(), identity.clone())) {
+            metrics.same_tu_satisfied_facts += 1;
+            continue;
+        }
+        unsatisfied_identities.insert((fact.origin.tu.clone(), identity.clone()));
+        if let Some(candidates) = providers.get(identity) {
+            for (input_index, provider_index) in candidates {
+                seeds[*input_index].insert(*provider_index);
+                provider_facts.insert((*input_index, *provider_index));
+                provider_tus.insert(*input_index);
+            }
+        }
+    }
+    metrics.unsatisfied_identities = unsatisfied_identities.len();
+    metrics.complete_provider_facts = provider_facts.len();
+    metrics.complete_provider_tus = provider_tus.len();
+    CanonicalCompletionPlan { seeds, metrics }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn complete_reachable_facts(
     library: &Library,
@@ -3181,10 +3394,9 @@ fn complete_reachable_facts(
     let mut rounds = 0;
     let mut reparsed_tus = 0;
     let mut materialized_facts = 0;
+    let mut planning_rounds = 0;
     loop {
         let mut pending_by_declaration: BTreeMap<(String, String, Location), Vec<(usize, usize)>> =
-            BTreeMap::new();
-        let mut pending_by_identity: BTreeMap<DeclarationIdentity, Vec<(usize, usize)>> =
             BTreeMap::new();
         for (input_index, extraction) in extracted.iter().enumerate() {
             for pending in &extraction.pending_facts {
@@ -3197,15 +3409,25 @@ fn complete_reachable_facts(
                     ))
                     .or_default()
                     .push((input_index, pending.index));
-                if let Some(identity) = identity_by_origin.get(&fact.origin) {
-                    pending_by_identity
-                        .entry(identity.clone())
-                        .or_default()
-                        .push((input_index, pending.index));
-                }
             }
         }
-        let mut seeds = vec![BTreeSet::new(); inputs.len()];
+        let mut plan = plan_canonical_completion(
+            facts,
+            &active,
+            &identity_by_origin,
+            extracted
+                .iter()
+                .enumerate()
+                .flat_map(|(input_index, extraction)| {
+                    extraction
+                        .pending_facts
+                        .iter()
+                        .map(move |pending| (input_index, pending.index))
+                }),
+            inputs.len(),
+        );
+        planning_rounds += 1;
+        let mut constant_seed_facts = 0;
         for (tu, declaration) in &constant_declarations {
             if let Some(pending) = pending_by_declaration.get(&(
                 tu.clone(),
@@ -3213,30 +3435,35 @@ fn complete_reachable_facts(
                 declaration.declaration.clone(),
             )) {
                 for (input_index, fact_index) in pending {
-                    seeds[*input_index].insert(*fact_index);
+                    constant_seed_facts +=
+                        usize::from(plan.seeds[*input_index].insert(*fact_index));
                 }
             }
         }
-        for fact_index in &active {
-            let fact = &facts[*fact_index];
-            if !fact_needs_definition_completion(fact) {
-                continue;
-            }
-            if let Some(identity) = identity_by_origin.get(&fact.origin)
-                && let Some(pending) = pending_by_identity.get(identity)
-            {
-                for (input_index, pending_index) in pending {
-                    seeds[*input_index].insert(*pending_index);
-                }
-            }
+        let requested_tus = plan.seeds.iter().filter(|seeds| !seeds.is_empty()).count();
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=dependency-completion-plan target={} planning_round={} active_incomplete_facts={} same_tu_satisfied_facts={} unsatisfied_identities={} incomplete_candidates_skipped={} complete_provider_facts={} complete_provider_tus={} constant_seed_facts={} requested_tus={}",
+                target.unwrap(),
+                planning_rounds,
+                plan.metrics.active_incomplete_facts,
+                plan.metrics.same_tu_satisfied_facts,
+                plan.metrics.unsatisfied_identities,
+                plan.metrics.incomplete_candidates_skipped,
+                plan.metrics.complete_provider_facts,
+                plan.metrics.complete_provider_tus,
+                constant_seed_facts,
+                requested_tus,
+            );
         }
         let requests: Vec<_> = extracted
             .iter()
             .enumerate()
-            .filter(|(input_index, _)| !seeds[*input_index].is_empty())
-            .map(|(input_index, extraction)| FactCompletionRequest {
+            .zip(plan.seeds)
+            .filter(|(_, seeds)| !seeds.is_empty())
+            .map(|((input_index, extraction), seeds)| FactCompletionRequest {
                 input_index,
-                seeds: seeds[input_index].clone(),
+                seeds,
                 pending: extraction.pending_facts.clone(),
             })
             .collect();
@@ -3327,8 +3554,9 @@ fn complete_reachable_facts(
             .map(|extraction| extraction.pending_facts.len())
             .sum();
         eprintln!(
-            "windows-clang timing phase=dependency-completion-total target={} rounds={} reparsed_tus={} materialized_facts={} retained_unreachable_facts={} elapsed_ms={:.3}",
+            "windows-clang timing phase=dependency-completion-total target={} planning_rounds={} rounds={} reparsed_tus={} materialized_facts={} retained_unreachable_facts={} elapsed_ms={:.3}",
             target.unwrap(),
+            planning_rounds,
             rounds,
             reparsed_tus,
             materialized_facts,

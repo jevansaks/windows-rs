@@ -442,3 +442,66 @@ fn partitioned_closure_retains_parenthesized_string_aliases() {
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
+
+#[test]
+fn partitioned_closure_materializes_all_conflicting_complete_providers() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("conflicting-providers");
+    let forward = scratch.join("forward.h");
+    let definition = scratch.join("definition.h");
+    let provider = scratch.join("provider.h");
+    std::fs::write(
+        &forward,
+        "struct PROFILED;\ntypedef PROFILED* ROOT_ALIAS;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &definition,
+        "#include \"forward.h\"\nstruct PROFILED { FIELD_TYPE value; };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &provider,
+        "#include \"definition.h\"\ntypedef unsigned PROVIDER_ROOT;\n",
+    )
+    .unwrap();
+    let include = format!("-I{}", scratch.display());
+    let mut first = input("first.cpp", &provider, "first", "Closure.First");
+    first.arguments.push("-DFIELD_TYPE=int".to_string());
+    let mut second = input("second.cpp", &provider, "second", "Closure.Second");
+    second.arguments.push("-DFIELD_TYPE=long long".to_string());
+    let snapshot = extract_partitioned_with_options(
+        [
+            input("forward.cpp", &forward, "forward", "Closure.Forward"),
+            first,
+            second,
+        ],
+        &[
+            "-x",
+            "c++",
+            include.as_str(),
+            "--target=x86_64-pc-windows-msvc",
+        ],
+        &ExtractionOptions::new().with_parallelism(3),
+    )
+    .unwrap();
+
+    let sizes: Vec<_> = ["first.cpp", "second.cpp"]
+        .into_iter()
+        .map(|tu| {
+            let provider = snapshot
+                .facts()
+                .iter()
+                .find(|fact| fact.origin.tu == tu && fact.name == "PROFILED" && fact.definition)
+                .unwrap();
+            match &provider.data {
+                FactData::Record { size, .. } => *size,
+                data => panic!("{tu} provider was not materialized: {data:?}"),
+            }
+        })
+        .collect();
+    assert_eq!(sizes, [4, 8]);
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
