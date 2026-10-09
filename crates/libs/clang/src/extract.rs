@@ -113,11 +113,13 @@ fn extract_impl(
     let target = timing.then(|| timing_target(args));
     let total_time = timing.then(std::time::Instant::now);
     let extraction_time = timing.then(std::time::Instant::now);
+    let prune_dependencies = !partition_inputs.is_empty();
     let extraction_context = ExtractionContext {
         args,
         input_arguments: &input_arguments,
         timing,
         validate_annotations,
+        prune_dependencies,
     };
     let extracted_inputs = if options.parallelism() <= 1 || inputs.len() <= 1 {
         inputs
@@ -147,14 +149,18 @@ fn extract_impl(
             );
             let metrics = extracted.metrics.as_ref().unwrap();
             eprintln!(
-                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} macro_index_ms={:.3} traversal_ms={:.3} deferred_ms={:.3} elapsed_ms={:.3}",
+                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} retained_macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} deferred_facts={} materialized_deferred_facts={} retained_deferred_facts={} macro_index_ms={:.3} traversal_ms={:.3} deferred_ms={:.3} elapsed_ms={:.3}",
                 target.as_deref().unwrap(),
                 input.name,
                 metrics.macro_definitions,
+                metrics.retained_macro_definitions,
                 metrics.macro_expansion_files,
                 metrics.cursors,
                 metrics.facts,
                 metrics.constants,
+                metrics.deferred_facts,
+                metrics.materialized_deferred_facts,
+                metrics.retained_deferred_facts,
                 metrics.macro_index_ms,
                 metrics.traversal_ms,
                 metrics.deferred_ms,
@@ -207,9 +213,27 @@ fn extract_impl(
         .map(|(target, annotations)| (target.clone(), annotations.clone()))
         .collect();
     merge_redeclaration_annotations(&facts, &mut annotations)?;
-    let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
-    decode_selected_macro_definitions(&mut facts, &mut extracted, &annotation_macros);
+    let mut selected_macro_definitions = annotation_macro_names(&annotations);
+    selected_macro_definitions.extend(
+        facts
+            .iter()
+            .filter(|fact| fact.root && fact.kind == FactKind::Macro)
+            .map(|fact| fact.name.clone()),
+    );
+    complete_selected_macro_definitions(
+        &library,
+        &index,
+        &inputs,
+        &input_arguments,
+        args,
+        options,
+        &mut facts,
+        &mut extracted,
+        &selected_macro_definitions,
+        timing,
+        target.as_deref(),
+    )?;
     if timing {
         eprintln!(
             "windows-clang timing phase=parse-extract-total target={} input_tus={} workers={} cursors={} facts={} constants={} elapsed_ms={:.3}",
@@ -292,7 +316,27 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
-    decode_reachable_structs(&mut facts, &constants, &mut extracted);
+    if prune_dependencies {
+        complete_reachable_facts(
+            &library,
+            &index,
+            &inputs,
+            &input_arguments,
+            args,
+            options,
+            &annotations,
+            &mut facts,
+            &constants,
+            &mut extracted,
+            &mut pointer_callback_aliases,
+            &mut pointer_only_class_layouts,
+            &mut embeddable_class_layouts,
+            timing,
+            target.as_deref(),
+        )?;
+    } else {
+        decode_reachable_structs(&mut facts, &constants, &mut extracted);
+    }
     if timing {
         eprintln!(
             "windows-clang timing phase=deferred-records target={} elapsed_ms={:.3}",
@@ -1211,6 +1255,7 @@ struct ExtractionContext<'a> {
     input_arguments: &'a BTreeMap<String, Vec<String>>,
     timing: bool,
     validate_annotations: bool,
+    prune_dependencies: bool,
 }
 
 fn extract_input(
@@ -1253,6 +1298,7 @@ fn extract_input(
         &mut output,
         context.timing,
         context.validate_annotations,
+        context.prune_dependencies,
     )?;
     extracted.source_diagnostics = source_diagnostics;
     Ok(ExtractedInput {
@@ -1397,10 +1443,14 @@ struct Evaluated {
 
 struct ExtractionMetrics {
     macro_definitions: usize,
+    retained_macro_definitions: usize,
     macro_expansion_files: usize,
     cursors: u32,
     facts: usize,
     constants: usize,
+    deferred_facts: usize,
+    materialized_deferred_facts: usize,
+    retained_deferred_facts: usize,
     macro_index_ms: f64,
     traversal_ms: f64,
     deferred_ms: f64,
@@ -1644,6 +1694,7 @@ impl TranslationUnit {
         output: &mut ExtractionState<'_>,
         timing: bool,
         validate_annotations: bool,
+        prune_dependencies: bool,
     ) -> Result<(Extracted, Option<ExtractionMetrics>), Error> {
         let total_time = timing.then(std::time::Instant::now);
         let phase_time = timing.then(std::time::Instant::now);
@@ -1654,6 +1705,7 @@ impl TranslationUnit {
         let phase_time = timing.then(std::time::Instant::now);
         let initial_facts = output.facts.len();
         let initial_constants = output.constants.len();
+        let mut declaration_identities = BTreeMap::new();
         let mut traversal = Traversal {
             tu: &input.name,
             roots: &input.roots,
@@ -1663,9 +1715,11 @@ impl TranslationUnit {
             next: 0,
             seen: HashMap::new(),
             macros: &macros,
+            pending_facts: vec![],
             pending_structs: vec![],
             pending_macros: vec![],
             declare_handle_expansions: vec![],
+            declaration_identities: &mut declaration_identities,
             facts: &mut *output.facts,
             constants: &mut *output.constants,
             annotations: &mut *output.annotations,
@@ -1676,6 +1730,7 @@ impl TranslationUnit {
             clang_flag_enums: &mut *output.clang_flag_enums,
             error: None,
             validate_annotations,
+            prune_dependencies,
         };
         extract_children(
             unsafe { clang_getTranslationUnitCursor(self.0) },
@@ -1689,34 +1744,55 @@ impl TranslationUnit {
         let cursors = traversal.next;
         let fact_count = traversal.facts.len() - initial_facts;
         let constant_count = traversal.constants.len() - initial_constants;
+        let pending_facts = std::mem::take(&mut traversal.pending_facts);
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         let declare_handle_expansions = std::mem::take(&mut traversal.declare_handle_expansions);
         drop(traversal);
         let phase_time = timing.then(std::time::Instant::now);
+        let local_annotation_macros = annotation_macro_names(output.annotations);
+        let mut retained_macros = local_annotation_macros.clone();
+        retained_macros.extend(
+            output.facts[initial_facts..]
+                .iter()
+                .filter(|fact| fact.root && fact.kind == FactKind::Macro)
+                .map(|fact| fact.name.clone()),
+        );
+        let deferred_facts = pending_facts.len();
+        let (pending_facts, active_facts) =
+            materialize_local_fact_closure(output, pending_facts, &declaration_identities, &macros);
         let pending_structs = pending_structs
             .into_iter()
             .map(|(index, cursor)| (index, fact_data(cursor, FactKind::Struct, &macros)))
             .collect();
         let pending_macros = pending_macros
             .into_iter()
-            .map(|(index, cursor)| {
+            .filter_map(|(index, cursor)| {
                 let name = &output.facts[index].name;
+                if local_annotation_macros.contains(name) {
+                    output.facts[index].data = fact_data(cursor, FactKind::Macro, &macros);
+                    return None;
+                }
                 let data = macros.definition_order(cursor, name).map_or_else(
                     || DeferredMacro::Data(fact_data(cursor, FactKind::Macro, &macros)),
                     DeferredMacro::Definition,
                 );
-                (index, data)
+                Some((index, data))
             })
             .collect();
-        let macros = macros.into_owned();
+        let macros = macros.retain_owned(&retained_macros);
+        let retained_macro_definitions = macros.definitions.len();
         let deferred_ms = elapsed_ms(phase_time);
         let metrics = timing.then(|| ExtractionMetrics {
             macro_definitions: macro_definition_count,
+            retained_macro_definitions,
             macro_expansion_files: macro_expansion_file_count,
             cursors,
             facts: fact_count,
             constants: constant_count,
+            deferred_facts,
+            materialized_deferred_facts: deferred_facts - pending_facts.len(),
+            retained_deferred_facts: pending_facts.len(),
             macro_index_ms,
             traversal_ms,
             deferred_ms,
@@ -1725,10 +1801,13 @@ impl TranslationUnit {
         Ok((
             Extracted {
                 macros,
+                pending_facts,
                 pending_structs,
                 pending_macros,
                 declare_handle_expansions,
                 source_diagnostics: vec![],
+                declaration_identities,
+                active_facts,
             },
             metrics,
         ))
@@ -1750,9 +1829,11 @@ struct Traversal<'a> {
     next: u32,
     seen: HashMap<u32, Vec<(CXCursor, Origin)>>,
     macros: &'a TranslationUnitMacros<'a>,
+    pending_facts: Vec<(usize, CXCursor, FactKind)>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
+    declaration_identities: &'a mut BTreeMap<Origin, DeclarationIdentity>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
@@ -1763,6 +1844,7 @@ struct Traversal<'a> {
     clang_flag_enums: &'a mut BTreeSet<Origin>,
     error: Option<Error>,
     validate_annotations: bool,
+    prune_dependencies: bool,
 }
 
 struct ExtractionState<'a> {
@@ -1778,21 +1860,46 @@ struct ExtractionState<'a> {
 
 struct Extracted {
     macros: MacroDefinitions,
+    pending_facts: Vec<PendingFact>,
     pending_structs: Vec<(usize, FactData)>,
     pending_macros: Vec<(usize, DeferredMacro)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
     source_diagnostics: Vec<ErrorDiagnostic>,
+    declaration_identities: BTreeMap<Origin, DeclarationIdentity>,
+    active_facts: BTreeSet<usize>,
 }
 
 impl Extracted {
     fn offset_fact_indices(&mut self, offset: usize) {
+        for pending in &mut self.pending_facts {
+            pending.index += offset;
+        }
         for (index, _) in &mut self.pending_structs {
             *index += offset;
         }
+        self.active_facts = self
+            .active_facts
+            .iter()
+            .map(|index| index + offset)
+            .collect();
         for (index, _) in &mut self.pending_macros {
             *index += offset;
         }
     }
+}
+
+#[derive(Clone)]
+struct PendingFact {
+    index: usize,
+    kind: FactKind,
+    spelling: Location,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DeclarationIdentity {
+    kind: FactKind,
+    name: String,
+    canonical: Location,
 }
 
 enum DeferredMacro {
@@ -1909,6 +2016,19 @@ fn extract_child(
     let local = traversal.next;
     traversal.next += 1;
     let kind = unsafe { clang_getCursorKind(child) };
+    if traversal.prune_dependencies
+        && matches!(kind, CXCursor_FunctionDecl | CXCursor_VarDecl)
+        && let Some((spelling, _, _, _)) = cursor_locations(child)
+        && !traversal.is_root(&spelling.file)
+        && !has_win32metadata_annotation(child)
+    {
+        if traversal.validate_annotations
+            && let Err(error) = validate_annotation_descendants(child)
+        {
+            traversal.error = Some(error);
+        }
+        return;
+    }
     if kind == CXCursor_AnnotateAttr {
         if !traversal.validate_annotations {
             return;
@@ -1923,6 +2043,7 @@ fn extract_child(
     }
     let mut child_parent = None;
     let mut repeated = false;
+    let mut declaration_only_children = false;
 
     let mut name = if matches!(
         kind,
@@ -2093,30 +2214,52 @@ fn extract_child(
                     {
                         return;
                     }
-                    let deferred_struct = !root && fact_kind == FactKind::Struct;
+                    let deferred_fact = traversal.prune_dependencies
+                        && !root
+                        && matches!(
+                            fact_kind,
+                            FactKind::Class
+                                | FactKind::Enum
+                                | FactKind::Struct
+                                | FactKind::Typedef
+                                | FactKind::Union
+                        );
+                    let deferred_struct =
+                        !traversal.prune_dependencies && !root && fact_kind == FactKind::Struct;
+                    if traversal.prune_dependencies
+                        && matches!(
+                            fact_kind,
+                            FactKind::Class | FactKind::Enum | FactKind::Struct | FactKind::Union
+                        )
+                        && let Some(canonical) = canonical_declaration_location(child)
+                    {
+                        traversal.declaration_identities.insert(
+                            origin.clone(),
+                            DeclarationIdentity {
+                                kind: fact_kind,
+                                name: name.clone(),
+                                canonical,
+                            },
+                        );
+                    }
                     let deferred_macro = !root && fact_kind == FactKind::Macro;
-                    let data = if deferred_struct || deferred_macro {
+                    declaration_only_children = deferred_fact;
+                    let data = if deferred_fact || deferred_struct || deferred_macro {
                         FactData::None
                     } else {
                         fact_data(child, fact_kind, traversal.macros)
                     };
-                    if fact_kind == FactKind::Typedef
-                        && matches!(data, FactData::Callback { .. })
-                        && typedef_is_function_pointer_alias(child)
-                    {
-                        traversal.pointer_callback_aliases.insert(origin.clone());
-                    }
-                    if fact_kind == FactKind::Class
-                        && matches!(data, FactData::Unsupported { .. })
-                        && let Some((layout, embeddable)) =
-                            pointer_only_class_layout(child, traversal.macros)
-                    {
-                        traversal
-                            .pointer_only_class_layouts
-                            .insert(origin.clone(), layout);
-                        if embeddable {
-                            traversal.embeddable_class_layouts.insert(origin.clone());
-                        }
+                    if !deferred_fact {
+                        apply_materialized_fact_metadata(
+                            child,
+                            fact_kind,
+                            &origin,
+                            &data,
+                            traversal.macros,
+                            traversal.pointer_callback_aliases,
+                            traversal.pointer_only_class_layouts,
+                            traversal.embeddable_class_layouts,
+                        );
                     }
                     let index = traversal.facts.len();
                     let declaration_guid = matches!(fact_kind, FactKind::Class | FactKind::Struct)
@@ -2157,6 +2300,16 @@ fn extract_child(
                         traversal.error = Some(error);
                         return;
                     }
+                    if deferred_fact
+                        && traversal.validate_annotations
+                        && let Err(error) = validate_annotation_descendants(child)
+                    {
+                        traversal.error = Some(error);
+                        return;
+                    }
+                    if deferred_fact {
+                        traversal.pending_facts.push((index, child, fact_kind));
+                    }
                     if deferred_struct {
                         traversal.pending_structs.push((index, child));
                     }
@@ -2169,8 +2322,139 @@ fn extract_child(
     }
 
     if !repeated {
-        extract_children(child, child_parent.as_ref().or(parent), traversal);
+        if declaration_only_children {
+            extract_declaration_children(child, child_parent.as_ref().or(parent), traversal);
+        } else if cursor_may_contain_declarations_or_annotations(kind) {
+            extract_children(child, child_parent.as_ref().or(parent), traversal);
+        }
     }
+}
+
+fn extract_declaration_children(
+    cursor: CXCursor,
+    parent: Option<&Origin>,
+    traversal: &mut Traversal<'_>,
+) {
+    struct Visit<'parent, 'traversal, 'facts> {
+        parent: Option<&'parent Origin>,
+        traversal: &'traversal mut Traversal<'facts>,
+        panic: Option<Box<dyn std::any::Any + Send>>,
+    }
+
+    extern "C" fn visit(
+        cursor: CXCursor,
+        parent_cursor: CXCursor,
+        data: CXClientData,
+    ) -> CXChildVisitResult {
+        let visit = unsafe { &mut *(data as *mut Visit<'_, '_, '_>) };
+        let kind = unsafe { clang_getCursorKind(cursor) };
+        if fact_kind(kind).is_none()
+            && !matches!(
+                kind,
+                CXCursor_UnexposedDecl
+                    | CXCursor_Namespace
+                    | CXCursor_LinkageSpec
+                    | CXCursor_ClassTemplate
+                    | CXCursor_FunctionTemplate
+            )
+        {
+            return CXChildVisit_Continue;
+        }
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            extract_child(cursor, parent_cursor, visit.parent, visit.traversal);
+        })) {
+            Ok(()) if visit.traversal.error.is_none() => CXChildVisit_Continue,
+            Ok(()) => CXChildVisit_Break,
+            Err(panic) => {
+                visit.panic = Some(panic);
+                CXChildVisit_Break
+            }
+        }
+    }
+
+    let mut state = Visit {
+        parent,
+        traversal,
+        panic: None,
+    };
+    unsafe {
+        clang_visitChildren(cursor, visit, &mut state as *mut _ as CXClientData);
+    }
+    if let Some(panic) = state.panic {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+fn validate_annotation_descendants(cursor: CXCursor) -> Result<(), Error> {
+    struct Visit {
+        error: Option<Error>,
+        panic: Option<Box<dyn std::any::Any + Send>>,
+    }
+
+    extern "C" fn visit(
+        cursor: CXCursor,
+        parent: CXCursor,
+        data: CXClientData,
+    ) -> CXChildVisitResult {
+        let visit = unsafe { &mut *(data as *mut Visit) };
+        if visit.error.is_some() || visit.panic.is_some() {
+            return CXChildVisit_Break;
+        }
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if unsafe { clang_getCursorKind(cursor) } != CXCursor_AnnotateAttr {
+                return CXChildVisit_Recurse;
+            }
+            let spelling = cx_string(unsafe { clang_getCursorSpelling(cursor) });
+            if spelling.starts_with("win32metadata:")
+                && let Err(error) = validate_win32metadata_annotation(parent, cursor, &spelling)
+            {
+                visit.error = Some(error);
+                CXChildVisit_Break
+            } else {
+                CXChildVisit_Continue
+            }
+        })) {
+            Ok(result) => result,
+            Err(panic) => {
+                visit.panic = Some(panic);
+                CXChildVisit_Break
+            }
+        }
+    }
+
+    let mut state = Visit {
+        error: None,
+        panic: None,
+    };
+    unsafe {
+        clang_visitChildren(cursor, visit, &mut state as *mut _ as CXClientData);
+    }
+    if let Some(panic) = state.panic {
+        std::panic::resume_unwind(panic);
+    }
+    state.error.map_or(Ok(()), Err)
+}
+
+fn cursor_may_contain_declarations_or_annotations(kind: CXCursorKind) -> bool {
+    matches!(
+        kind,
+        CXCursor_UnexposedDecl
+            | CXCursor_StructDecl
+            | CXCursor_UnionDecl
+            | CXCursor_ClassDecl
+            | CXCursor_EnumDecl
+            | CXCursor_FieldDecl
+            | CXCursor_EnumConstantDecl
+            | CXCursor_FunctionDecl
+            | CXCursor_VarDecl
+            | CXCursor_ParmDecl
+            | CXCursor_TypedefDecl
+            | CXCursor_CXXMethod
+            | CXCursor_Namespace
+            | CXCursor_LinkageSpec
+            | CXCursor_ClassTemplate
+            | CXCursor_FunctionTemplate
+    )
 }
 
 fn has_win32metadata_annotation(cursor: CXCursor) -> bool {
@@ -2330,6 +2614,885 @@ fn unique_synthetic_name(stem: &str, used: &mut BTreeSet<String>) -> String {
     name
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DeclarationRef {
+    name: String,
+    declaration: Location,
+}
+
+fn materialize_local_fact_closure(
+    output: &mut ExtractionState<'_>,
+    pending: Vec<(usize, CXCursor, FactKind)>,
+    declaration_identities: &BTreeMap<Origin, DeclarationIdentity>,
+    macros: &TranslationUnitMacros,
+) -> (Vec<PendingFact>, BTreeSet<usize>) {
+    let mut pending: Vec<_> = pending.into_iter().map(Some).collect();
+    let pending_positions: HashMap<_, _> = pending
+        .iter()
+        .enumerate()
+        .filter_map(|(position, pending)| pending.as_ref().map(|(index, _, _)| (*index, position)))
+        .collect();
+    let mut facts_by_declaration: BTreeMap<(String, Location), Vec<usize>> = BTreeMap::new();
+    let mut facts_by_identity: BTreeMap<DeclarationIdentity, Vec<usize>> = BTreeMap::new();
+    let mut facts_by_name: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    let mut facts_by_origin = HashMap::new();
+    for (index, fact) in output.facts.iter().enumerate() {
+        facts_by_declaration
+            .entry((fact.name.clone(), fact.spelling.clone()))
+            .or_default()
+            .push(index);
+        facts_by_name
+            .entry(fact.name.clone())
+            .or_default()
+            .push(index);
+        facts_by_origin.insert(fact.origin.clone(), index);
+        if let Some(identity) = declaration_identities.get(&fact.origin) {
+            facts_by_identity
+                .entry(identity.clone())
+                .or_default()
+                .push(index);
+        }
+    }
+    let mut annotation_names: HashMap<Origin, BTreeSet<String>> = HashMap::new();
+    for (target, annotations) in output.annotations.iter() {
+        for annotation in annotations {
+            let (Annotation::AlsoUsableFor(name)
+            | Annotation::AssociatedEnum(name)
+            | Annotation::NativeInheritance(name)) = annotation
+            else {
+                continue;
+            };
+            annotation_names
+                .entry(annotation_target_origin(target).clone())
+                .or_default()
+                .insert(name.clone());
+        }
+    }
+
+    let mut queue = std::collections::VecDeque::new();
+    for (index, fact) in output.facts.iter().enumerate() {
+        if fact.root || fact.kind == FactKind::Function {
+            queue.push_back(index);
+        }
+    }
+    let mut constant_declarations = BTreeSet::new();
+    for constant in output.constants.iter() {
+        type_declarations(&constant.ty, &mut constant_declarations);
+    }
+    for declaration in constant_declarations {
+        if let Some(indices) =
+            facts_by_declaration.get(&(declaration.name, declaration.declaration))
+        {
+            queue.extend(indices);
+        }
+    }
+    for target in output.annotations.keys() {
+        if let Some(index) = facts_by_origin.get(annotation_target_origin(target)) {
+            queue.push_back(*index);
+        }
+    }
+    let mut visited = HashSet::new();
+    while let Some(index) = queue.pop_front() {
+        if !visited.insert(index) {
+            continue;
+        }
+        let origin = output.facts[index].origin.clone();
+        if let Some(parent) = output.facts[index]
+            .parent
+            .as_ref()
+            .and_then(|parent| facts_by_origin.get(parent))
+        {
+            queue.push_back(*parent);
+        }
+        if let Some(position) = pending_positions.get(&index)
+            && let Some((_, cursor, kind)) = pending[*position].take()
+        {
+            let data = fact_data(cursor, kind, macros);
+            apply_materialized_fact_metadata(
+                cursor,
+                kind,
+                &origin,
+                &data,
+                macros,
+                output.pointer_callback_aliases,
+                output.pointer_only_class_layouts,
+                output.embeddable_class_layouts,
+            );
+            output.facts[index].data = data;
+        }
+        if fact_needs_definition_completion(&output.facts[index])
+            && let Some(identity) = declaration_identities.get(&origin)
+            && let Some(indices) = facts_by_identity.get(identity)
+        {
+            queue.extend(indices);
+        }
+
+        let mut declarations = BTreeSet::new();
+        fact_type_declarations(&output.facts[index].data, &mut declarations);
+        for declaration in declarations {
+            if let Some(indices) =
+                facts_by_declaration.get(&(declaration.name, declaration.declaration))
+            {
+                queue.extend(indices);
+            }
+        }
+        let mut names = BTreeSet::new();
+        fact_semantic_type_names(&output.facts[index].data, &mut names);
+        if let Some(annotation_names) = annotation_names.get(&origin) {
+            names.extend(annotation_names.iter().cloned());
+        }
+        for name in names {
+            if let Some(indices) = facts_by_name.get(&name) {
+                queue.extend(indices);
+            }
+        }
+    }
+
+    let pending = pending
+        .into_iter()
+        .flatten()
+        .map(|(index, _, kind)| PendingFact {
+            index,
+            kind,
+            spelling: output.facts[index].spelling.clone(),
+        })
+        .collect();
+    (pending, visited.into_iter().collect())
+}
+
+fn fact_needs_definition_completion(fact: &Fact) -> bool {
+    !fact.definition
+        && matches!(
+            fact.data,
+            FactData::Enum { .. } | FactData::Interface { .. } | FactData::Record { .. }
+        )
+}
+
+fn fact_type_declarations(data: &FactData, declarations: &mut BTreeSet<DeclarationRef>) {
+    let mut visit = |ty| type_declarations(ty, declarations);
+    match data {
+        FactData::Typedef { target } => visit(target),
+        FactData::Callback { params, result, .. } | FactData::Function { params, result, .. } => {
+            visit(result);
+            for param in params {
+                visit(&param.ty);
+            }
+        }
+        FactData::Record { base, fields, .. } => {
+            if let Some(base) = base {
+                visit(base);
+            }
+            for field in fields {
+                visit(&field.ty);
+            }
+        }
+        FactData::Interface { base, methods, .. } => {
+            if let Some(base) = base {
+                visit(base);
+            }
+            for method in methods {
+                visit(&method.result);
+                for param in &method.params {
+                    visit(&param.ty);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn fact_semantic_type_names(data: &FactData, names: &mut BTreeSet<String>) {
+    match data {
+        FactData::PropertyKey { ty, .. } => {
+            names.insert((*ty).to_string());
+        }
+        FactData::EnumFlag { target } => {
+            names.insert(target.clone());
+        }
+        _ => {}
+    }
+}
+
+fn type_declarations(ty: &TypeRef, declarations: &mut BTreeSet<DeclarationRef>) {
+    match ty {
+        TypeRef::Named { name, declaration } => {
+            declarations.insert(DeclarationRef {
+                name: name.clone(),
+                declaration: declaration.clone(),
+            });
+        }
+        TypeRef::Generic {
+            name,
+            declaration,
+            args,
+        } => {
+            declarations.insert(DeclarationRef {
+                name: name.clone(),
+                declaration: declaration.clone(),
+            });
+            for arg in args {
+                type_declarations(arg, declarations);
+            }
+        }
+        TypeRef::Array { target, .. }
+        | TypeRef::Pointer { target, .. }
+        | TypeRef::Reference { target, .. } => type_declarations(target, declarations),
+        TypeRef::FunctionPointer { params, result, .. } => {
+            type_declarations(result, declarations);
+            for param in params {
+                type_declarations(param, declarations);
+            }
+        }
+        TypeRef::InlineRecord(record) => {
+            if let Some(base) = &record.base {
+                type_declarations(base, declarations);
+            }
+            for field in &record.fields {
+                type_declarations(&field.ty, declarations);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[derive(Clone)]
+struct FactCompletionRequest {
+    input_index: usize,
+    seeds: BTreeSet<usize>,
+    pending: Vec<PendingFact>,
+}
+
+struct FactMaterialization {
+    index: usize,
+    data: FactData,
+    pointer_callback_alias: bool,
+    pointer_only_class_layout: Option<(FactData, bool)>,
+}
+
+struct FactCompletion {
+    input_index: usize,
+    materializations: Vec<FactMaterialization>,
+    activated: BTreeSet<usize>,
+    elapsed_ms: f64,
+}
+
+fn semantic_annotation_names(
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+) -> HashMap<Origin, BTreeSet<String>> {
+    let mut result: HashMap<Origin, BTreeSet<String>> = HashMap::new();
+    for (target, annotations) in annotations {
+        for annotation in annotations {
+            let (Annotation::AlsoUsableFor(name)
+            | Annotation::AssociatedEnum(name)
+            | Annotation::NativeInheritance(name)) = annotation
+            else {
+                continue;
+            };
+            result
+                .entry(annotation_target_origin(target).clone())
+                .or_default()
+                .insert(name.clone());
+        }
+    }
+    result
+}
+
+fn cursor_at_location(
+    translation_unit: &TranslationUnit,
+    declaration: &Location,
+) -> Option<CXCursor> {
+    let file_name = CString::new(declaration.file.as_str()).ok()?;
+    let file = unsafe { clang_getFile(translation_unit.0, file_name.as_ptr()) };
+    if file.is_null() {
+        return None;
+    }
+    let source =
+        unsafe { clang_getLocationForOffset(translation_unit.0, file, declaration.offset) };
+    let cursor = unsafe { clang_getCursor(translation_unit.0, source) };
+    if unsafe { clang_Cursor_isNull(cursor) } != 0 {
+        None
+    } else {
+        Some(cursor)
+    }
+}
+
+fn cursor_matches_pending_fact(cursor: CXCursor, fact: &Fact, pending: &PendingFact) -> bool {
+    fact_kind(unsafe { clang_getCursorKind(cursor) }) == Some(pending.kind)
+        && cx_string(unsafe { clang_getCursorSpelling(cursor) }) == fact.name
+        && cursor_locations(cursor).is_some_and(|(spelling, expansion, _, _)| {
+            spelling == fact.spelling && expansion == fact.expansion
+        })
+        && (unsafe { clang_isCursorDefinition(cursor) } != 0) == fact.definition
+}
+
+fn cursor_for_pending_fact(
+    translation_unit: &TranslationUnit,
+    fact: &Fact,
+    pending: &PendingFact,
+) -> Result<CXCursor, Error> {
+    if let Some(cursor) = cursor_at_location(translation_unit, &pending.spelling)
+        && cursor_matches_pending_fact(cursor, fact, pending)
+    {
+        return Ok(cursor);
+    }
+
+    struct Visit<'a> {
+        fact: &'a Fact,
+        pending: &'a PendingFact,
+        found: Option<CXCursor>,
+        ambiguous: bool,
+        panic: Option<Box<dyn std::any::Any + Send>>,
+    }
+
+    extern "C" fn visit(
+        cursor: CXCursor,
+        _parent: CXCursor,
+        data: CXClientData,
+    ) -> CXChildVisitResult {
+        let visit = unsafe { &mut *(data as *mut Visit<'_>) };
+        if visit.ambiguous || visit.panic.is_some() {
+            return CXChildVisit_Break;
+        }
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if cursor_matches_pending_fact(cursor, visit.fact, visit.pending) {
+                if visit
+                    .found
+                    .is_some_and(|found| unsafe { clang_equalCursors(found, cursor) == 0 })
+                {
+                    visit.ambiguous = true;
+                    CXChildVisit_Break
+                } else {
+                    visit.found = Some(cursor);
+                    CXChildVisit_Continue
+                }
+            } else {
+                CXChildVisit_Recurse
+            }
+        })) {
+            Ok(result) => result,
+            Err(panic) => {
+                visit.panic = Some(panic);
+                CXChildVisit_Break
+            }
+        }
+    }
+
+    let mut state = Visit {
+        fact,
+        pending,
+        found: None,
+        ambiguous: false,
+        panic: None,
+    };
+    unsafe {
+        clang_visitChildren(
+            clang_getTranslationUnitCursor(translation_unit.0),
+            visit,
+            &mut state as *mut _ as CXClientData,
+        );
+    }
+    if let Some(panic) = state.panic {
+        std::panic::resume_unwind(panic);
+    }
+    match (state.found, state.ambiguous) {
+        (Some(cursor), false) => Ok(cursor),
+        (_, true) => Err(Error(format!(
+            "declaration `{}` at {}:{} is ambiguous after reparsing",
+            fact.name, fact.spelling.file, fact.spelling.offset
+        ))),
+        _ => Err(Error(format!(
+            "could not reopen declaration `{}` at {}:{}",
+            fact.name, fact.spelling.file, fact.spelling.offset
+        ))),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn complete_fact_request(
+    index: &Index,
+    request: &FactCompletionRequest,
+    inputs: &[Input],
+    input_arguments: &BTreeMap<String, Vec<String>>,
+    args: &[&str],
+    facts: &[Fact],
+    declaration_identities: &BTreeMap<Origin, DeclarationIdentity>,
+    annotation_names: &HashMap<Origin, BTreeSet<String>>,
+    timing: bool,
+) -> Result<FactCompletion, Error> {
+    let started = timing.then(std::time::Instant::now);
+    let input = &inputs[request.input_index];
+    let local_arguments = input_arguments.get(&input.name);
+    let arguments: Vec<_> = args
+        .iter()
+        .copied()
+        .chain(local_arguments.into_iter().flatten().map(String::as_str))
+        .collect();
+    let translation_unit = TranslationUnit::parse(index, input, &arguments)?;
+    let macros = macro_definitions(&translation_unit, unsafe {
+        clang_getTranslationUnitCursor(translation_unit.0)
+    });
+    let pending_by_index: HashMap<_, _> = request
+        .pending
+        .iter()
+        .map(|pending| (pending.index, pending))
+        .collect();
+    let mut facts_by_declaration: BTreeMap<(String, Location), Vec<usize>> = BTreeMap::new();
+    let mut facts_by_identity: BTreeMap<DeclarationIdentity, Vec<usize>> = BTreeMap::new();
+    let mut facts_by_name: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    let mut facts_by_origin = HashMap::new();
+    for (fact_index, fact) in facts
+        .iter()
+        .enumerate()
+        .filter(|(_, fact)| fact.origin.tu == input.name)
+    {
+        facts_by_declaration
+            .entry((fact.name.clone(), fact.spelling.clone()))
+            .or_default()
+            .push(fact_index);
+        facts_by_name
+            .entry(fact.name.clone())
+            .or_default()
+            .push(fact_index);
+        facts_by_origin.insert(fact.origin.clone(), fact_index);
+        if let Some(identity) = declaration_identities.get(&fact.origin) {
+            facts_by_identity
+                .entry(identity.clone())
+                .or_default()
+                .push(fact_index);
+        }
+    }
+
+    let mut queue: std::collections::VecDeque<_> = request.seeds.iter().copied().collect();
+    let mut visited = HashSet::new();
+    let mut materializations: BTreeMap<usize, FactMaterialization> = BTreeMap::new();
+    while let Some(fact_index) = queue.pop_front() {
+        if !visited.insert(fact_index) {
+            continue;
+        }
+        let fact = &facts[fact_index];
+        if let Some(parent) = fact
+            .parent
+            .as_ref()
+            .and_then(|parent| facts_by_origin.get(parent))
+        {
+            queue.push_back(*parent);
+        }
+        if let Some(pending) = pending_by_index.get(&fact_index) {
+            let cursor = cursor_for_pending_fact(&translation_unit, fact, pending)?;
+            let data = fact_data(cursor, pending.kind, &macros);
+            let pointer_callback_alias = pending.kind == FactKind::Typedef
+                && matches!(data, FactData::Callback { .. })
+                && typedef_is_function_pointer_alias(cursor);
+            let pointer_only_class_layout = (pending.kind == FactKind::Class
+                && matches!(data, FactData::Unsupported { .. }))
+            .then(|| pointer_only_class_layout(cursor, &macros))
+            .flatten();
+            materializations.insert(
+                fact_index,
+                FactMaterialization {
+                    index: fact_index,
+                    data,
+                    pointer_callback_alias,
+                    pointer_only_class_layout,
+                },
+            );
+        }
+        let data = materializations
+            .get(&fact_index)
+            .map_or(&fact.data, |materialization| &materialization.data);
+        if !fact.definition
+            && matches!(
+                data,
+                FactData::Enum { .. } | FactData::Interface { .. } | FactData::Record { .. }
+            )
+            && let Some(identity) = declaration_identities.get(&fact.origin)
+            && let Some(indices) = facts_by_identity.get(identity)
+        {
+            queue.extend(indices);
+        }
+        let mut declarations = BTreeSet::new();
+        fact_type_declarations(data, &mut declarations);
+        for declaration in declarations {
+            if let Some(indices) =
+                facts_by_declaration.get(&(declaration.name, declaration.declaration))
+            {
+                queue.extend(indices);
+            }
+        }
+        let mut names = BTreeSet::new();
+        fact_semantic_type_names(data, &mut names);
+        if let Some(annotation_names) = annotation_names.get(&fact.origin) {
+            names.extend(annotation_names.iter().cloned());
+        }
+        for name in names {
+            if let Some(indices) = facts_by_name.get(&name) {
+                queue.extend(indices);
+            }
+        }
+    }
+
+    Ok(FactCompletion {
+        input_index: request.input_index,
+        materializations: materializations.into_values().collect(),
+        activated: visited.into_iter().collect(),
+        elapsed_ms: elapsed_ms(started),
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn complete_reachable_facts(
+    library: &Library,
+    index: &Index,
+    inputs: &[Input],
+    input_arguments: &BTreeMap<String, Vec<String>>,
+    args: &[&str],
+    options: &ExtractionOptions,
+    annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    facts: &mut [Fact],
+    constants: &[Constant],
+    extracted: &mut [Extracted],
+    pointer_callback_aliases: &mut BTreeSet<Origin>,
+    pointer_only_class_layouts: &mut BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: &mut BTreeSet<Origin>,
+    timing: bool,
+    target: Option<&str>,
+) -> Result<(), Error> {
+    let started = timing.then(std::time::Instant::now);
+    let annotation_names = semantic_annotation_names(annotations);
+    let identity_by_origin: HashMap<_, _> = extracted
+        .iter()
+        .flat_map(|extraction| extraction.declaration_identities.iter())
+        .map(|(origin, identity)| (origin.clone(), identity.clone()))
+        .collect();
+    let mut active: BTreeSet<_> = extracted
+        .iter()
+        .flat_map(|extraction| extraction.active_facts.iter().copied())
+        .collect();
+    let mut constant_declarations = BTreeSet::new();
+    for constant in constants {
+        let mut declarations = BTreeSet::new();
+        type_declarations(&constant.ty, &mut declarations);
+        constant_declarations.extend(
+            declarations
+                .into_iter()
+                .map(|declaration| (constant.root.tu.clone(), declaration)),
+        );
+    }
+    let mut rounds = 0;
+    let mut reparsed_tus = 0;
+    let mut materialized_facts = 0;
+    loop {
+        let mut pending_by_declaration: BTreeMap<(String, String, Location), Vec<(usize, usize)>> =
+            BTreeMap::new();
+        let mut pending_by_identity: BTreeMap<DeclarationIdentity, Vec<(usize, usize)>> =
+            BTreeMap::new();
+        for (input_index, extraction) in extracted.iter().enumerate() {
+            for pending in &extraction.pending_facts {
+                let fact = &facts[pending.index];
+                pending_by_declaration
+                    .entry((
+                        fact.origin.tu.clone(),
+                        fact.name.clone(),
+                        fact.spelling.clone(),
+                    ))
+                    .or_default()
+                    .push((input_index, pending.index));
+                if let Some(identity) = identity_by_origin.get(&fact.origin) {
+                    pending_by_identity
+                        .entry(identity.clone())
+                        .or_default()
+                        .push((input_index, pending.index));
+                }
+            }
+        }
+        let mut seeds = vec![BTreeSet::new(); inputs.len()];
+        for (tu, declaration) in &constant_declarations {
+            if let Some(pending) = pending_by_declaration.get(&(
+                tu.clone(),
+                declaration.name.clone(),
+                declaration.declaration.clone(),
+            )) {
+                for (input_index, fact_index) in pending {
+                    seeds[*input_index].insert(*fact_index);
+                }
+            }
+        }
+        for fact_index in &active {
+            let fact = &facts[*fact_index];
+            if !fact_needs_definition_completion(fact) {
+                continue;
+            }
+            if let Some(identity) = identity_by_origin.get(&fact.origin)
+                && let Some(pending) = pending_by_identity.get(identity)
+            {
+                for (input_index, pending_index) in pending {
+                    seeds[*input_index].insert(*pending_index);
+                }
+            }
+        }
+        let requests: Vec<_> = extracted
+            .iter()
+            .enumerate()
+            .filter(|(input_index, _)| !seeds[*input_index].is_empty())
+            .map(|(input_index, extraction)| FactCompletionRequest {
+                input_index,
+                seeds: seeds[input_index].clone(),
+                pending: extraction.pending_facts.clone(),
+            })
+            .collect();
+        if requests.is_empty() {
+            break;
+        }
+        rounds += 1;
+        reparsed_tus += requests.len();
+        let complete = |index: &Index, request: &FactCompletionRequest| {
+            complete_fact_request(
+                index,
+                request,
+                inputs,
+                input_arguments,
+                args,
+                facts,
+                &extracted[request.input_index].declaration_identities,
+                &annotation_names,
+                timing,
+            )
+        };
+        let completions = if options.parallelism() <= 1 || requests.len() <= 1 {
+            requests
+                .iter()
+                .map(|request| complete(index, request))
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            let shared_library = library.shared();
+            try_map_ordered_bounded(
+                &requests,
+                options.parallelism(),
+                || Library::from_shared(shared_library.clone()),
+                |_, request| {
+                    let request_index = Index::new()?;
+                    complete(&request_index, request)
+                },
+            )?
+        };
+        let mut round_materialized = 0;
+        for completion in completions {
+            if timing {
+                eprintln!(
+                    "windows-clang timing phase=dependency-completion-tu target={} round={} tu={:?} facts={} elapsed_ms={:.3}",
+                    target.unwrap(),
+                    rounds,
+                    inputs[completion.input_index].name,
+                    completion.materializations.len(),
+                    completion.elapsed_ms,
+                );
+            }
+            let materialized: HashSet<_> = completion
+                .materializations
+                .iter()
+                .map(|materialization| materialization.index)
+                .collect();
+            active.extend(completion.activated.iter().copied());
+            extracted[completion.input_index]
+                .active_facts
+                .extend(completion.activated);
+            for materialization in completion.materializations {
+                let origin = facts[materialization.index].origin.clone();
+                if materialization.pointer_callback_alias {
+                    pointer_callback_aliases.insert(origin.clone());
+                }
+                if let Some((layout, embeddable)) = materialization.pointer_only_class_layout {
+                    pointer_only_class_layouts.insert(origin.clone(), layout);
+                    if embeddable {
+                        embeddable_class_layouts.insert(origin);
+                    }
+                }
+                facts[materialization.index].data = materialization.data;
+            }
+            extracted[completion.input_index]
+                .pending_facts
+                .retain(|pending| !materialized.contains(&pending.index));
+            round_materialized += materialized.len();
+        }
+        if round_materialized == 0 {
+            return Err(Error(
+                "reachable declarations could not be materialized".to_string(),
+            ));
+        }
+        materialized_facts += round_materialized;
+    }
+    if timing {
+        let retained_facts: usize = extracted
+            .iter()
+            .map(|extraction| extraction.pending_facts.len())
+            .sum();
+        eprintln!(
+            "windows-clang timing phase=dependency-completion-total target={} rounds={} reparsed_tus={} materialized_facts={} retained_unreachable_facts={} elapsed_ms={:.3}",
+            target.unwrap(),
+            rounds,
+            reparsed_tus,
+            materialized_facts,
+            retained_facts,
+            elapsed_ms(started),
+        );
+    }
+    for extraction in extracted {
+        extraction.pending_facts.clear();
+        extraction.declaration_identities.clear();
+        extraction.active_facts.clear();
+    }
+    Ok(())
+}
+
+struct MacroCompletionRequest {
+    input_index: usize,
+    definitions: Vec<MacroDefinitionRequest>,
+}
+
+struct MacroDefinitionRequest {
+    fact_index: usize,
+    name: String,
+    order: usize,
+    spelling: Location,
+}
+
+struct MacroCompletion {
+    input_index: usize,
+    definitions: Vec<(usize, FactData)>,
+    macros: MacroDefinitions,
+    elapsed_ms: f64,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn complete_selected_macro_definitions(
+    library: &Library,
+    index: &Index,
+    inputs: &[Input],
+    input_arguments: &BTreeMap<String, Vec<String>>,
+    args: &[&str],
+    options: &ExtractionOptions,
+    facts: &mut [Fact],
+    extracted: &mut [Extracted],
+    selected: &BTreeSet<String>,
+    timing: bool,
+    target: Option<&str>,
+) -> Result<(), Error> {
+    let total_time = timing.then(std::time::Instant::now);
+    let mut requests = vec![];
+    for (input_index, extraction) in extracted.iter_mut().enumerate() {
+        let mut definitions = vec![];
+        for (index, deferred) in std::mem::take(&mut extraction.pending_macros) {
+            if !selected.contains(facts[index].name.as_str()) {
+                continue;
+            }
+            match deferred {
+                DeferredMacro::Definition(order) => {
+                    definitions.push(MacroDefinitionRequest {
+                        fact_index: index,
+                        name: facts[index].name.clone(),
+                        order,
+                        spelling: facts[index].spelling.clone(),
+                    });
+                }
+                DeferredMacro::Data(data) => facts[index].data = data,
+            }
+        }
+        if !definitions.is_empty() {
+            requests.push(MacroCompletionRequest {
+                input_index,
+                definitions,
+            });
+        }
+    }
+    if requests.is_empty() {
+        return Ok(());
+    }
+
+    let complete = |index: &Index, request: &MacroCompletionRequest| {
+        let started = timing.then(std::time::Instant::now);
+        let input = &inputs[request.input_index];
+        let local_arguments = input_arguments.get(&input.name);
+        let arguments: Vec<_> = args
+            .iter()
+            .copied()
+            .chain(local_arguments.into_iter().flatten().map(String::as_str))
+            .collect();
+        let translation_unit = TranslationUnit::parse(index, input, &arguments)?;
+        let macros = macro_definitions(&translation_unit, unsafe {
+            clang_getTranslationUnitCursor(translation_unit.0)
+        });
+        let definitions = request
+            .definitions
+            .iter()
+            .map(|definition| {
+                let data = macros
+                    .fact_data_at(&definition.name, definition.order, &definition.spelling)
+                    .ok_or_else(|| {
+                        Error(format!(
+                            "macro definition `{}` in input `{}` changed during extraction",
+                            definition.name, input.name
+                        ))
+                    })?;
+                Ok((definition.fact_index, data))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let names = request
+            .definitions
+            .iter()
+            .map(|definition| definition.name.clone())
+            .collect();
+        Ok(MacroCompletion {
+            input_index: request.input_index,
+            definitions,
+            macros: macros.retain_owned(&names),
+            elapsed_ms: elapsed_ms(started),
+        })
+    };
+    let completions = if options.parallelism() <= 1 || requests.len() <= 1 {
+        requests
+            .iter()
+            .map(|request| complete(index, request))
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        let shared_library = library.shared();
+        try_map_ordered_bounded(
+            &requests,
+            options.parallelism(),
+            || Library::from_shared(shared_library.clone()),
+            |_, request| {
+                let input_index = Index::new()?;
+                complete(&input_index, request)
+            },
+        )?
+    };
+    for completion in completions {
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=macro-completion-tu target={} tu={:?} definitions={} elapsed_ms={:.3}",
+                target.unwrap(),
+                inputs[completion.input_index].name,
+                completion.definitions.len(),
+                completion.elapsed_ms,
+            );
+        }
+        for (index, data) in completion.definitions {
+            facts[index].data = data;
+        }
+        extracted[completion.input_index]
+            .macros
+            .extend(completion.macros);
+    }
+    if timing {
+        eprintln!(
+            "windows-clang timing phase=macro-completion-total target={} input_tus={} elapsed_ms={:.3}",
+            target.unwrap(),
+            requests.len(),
+            elapsed_ms(total_time),
+        );
+    }
+    Ok(())
+}
+
 fn decode_reachable_structs(
     facts: &mut [Fact],
     constants: &[Constant],
@@ -2369,31 +3532,6 @@ fn decode_reachable_structs(
                 }
             }
             facts[fact_index].data = data;
-        }
-    }
-}
-
-fn decode_selected_macro_definitions(
-    facts: &mut [Fact],
-    extracted: &mut [Extracted],
-    selected: &BTreeSet<String>,
-) {
-    let mut roots: HashSet<_> = facts
-        .iter()
-        .filter(|fact| fact.root && fact.kind == FactKind::Macro)
-        .map(|fact| fact.name.clone())
-        .collect();
-    roots.extend(selected.iter().cloned());
-    for extraction in extracted {
-        for (index, deferred) in std::mem::take(&mut extraction.pending_macros) {
-            if roots.contains(facts[index].name.as_str()) {
-                facts[index].data = match deferred {
-                    DeferredMacro::Definition(order) => {
-                        extraction.macros.fact_data(&facts[index].name, order)
-                    }
-                    DeferredMacro::Data(data) => data,
-                };
-            }
         }
     }
 }
@@ -2627,43 +3765,73 @@ impl TranslationUnitMacros<'_> {
         })
     }
 
-    fn into_owned(self) -> MacroDefinitions {
-        MacroDefinitions {
-            definitions: self
+    fn fact_data_at(&self, name: &str, order: usize, spelling: &Location) -> Option<FactData> {
+        let definitions = self.definitions.get(name)?;
+        let definition = definitions
+            .iter()
+            .find(|definition| {
+                definition.order == order && definition.spelling.as_ref() == Some(spelling)
+            })
+            .or_else(|| {
+                let mut matching = definitions
+                    .iter()
+                    .filter(|definition| definition.spelling.as_ref() == Some(spelling));
+                let definition = matching.next()?;
+                matching.next().is_none().then_some(definition)
+            })?;
+        Some(FactData::Macro {
+            function_like: definition.function_like,
+            tokens: definition.tokens().to_vec(),
+        })
+    }
+
+    fn retain_owned(&self, names: &BTreeSet<String>) -> MacroDefinitions {
+        fn retain(
+            source: &TranslationUnitMacros<'_>,
+            name: &str,
+            result: &mut HashMap<String, MacroDefinition>,
+        ) {
+            if result.contains_key(name) {
+                return;
+            }
+            let Some(definition) = source
                 .definitions
-                .into_iter()
-                .map(|(name, definitions)| {
-                    let definitions = definitions
-                        .into_iter()
-                        .map(|definition| {
-                            let tokens = definition.tokens.into_inner().unwrap_or_else(|| {
-                                cursor_tokens(definition.cursor)
-                                    .into_iter()
-                                    .map(|(_, token)| token)
-                                    .skip(1)
-                                    .collect()
-                            });
-                            MacroDefinition {
-                                order: definition.order,
-                                function_like: definition.function_like,
-                                tokens,
-                            }
-                        })
-                        .collect();
-                    (name, definitions)
-                })
-                .collect(),
+                .get(name)
+                .and_then(|definitions| definitions.last())
+            else {
+                return;
+            };
+            let tokens = definition.tokens().to_vec();
+            let alias = match strip_macro_parentheses(&tokens) {
+                [alias] if source.definitions.contains_key(alias) => Some(alias.clone()),
+                _ => None,
+            };
+            result.insert(
+                name.to_string(),
+                MacroDefinition {
+                    function_like: definition.function_like,
+                    tokens,
+                },
+            );
+            if let Some(alias) = alias {
+                retain(source, &alias, result);
+            }
         }
+
+        let mut definitions = HashMap::new();
+        for name in names {
+            retain(self, name, &mut definitions);
+        }
+        MacroDefinitions { definitions }
     }
 }
 
 #[derive(Default)]
 struct MacroDefinitions {
-    definitions: HashMap<String, Vec<MacroDefinition>>,
+    definitions: HashMap<String, MacroDefinition>,
 }
 
 struct MacroDefinition {
-    order: usize,
     function_like: bool,
     tokens: Vec<String>,
 }
@@ -2674,23 +3842,13 @@ impl MacroDefinitions {
     }
 
     fn final_definition(&self, name: &str) -> Option<(&[String], bool)> {
-        let definition = self.definitions.get(name)?.last()?;
+        let definition = self.definitions.get(name)?;
         Some((&definition.tokens, definition.function_like))
     }
 
-    fn fact_data(&self, name: &str, order: usize) -> FactData {
-        let definition = self
-            .definitions
-            .get(name)
-            .and_then(|definitions| {
-                definitions
-                    .iter()
-                    .find(|definition| definition.order == order)
-            })
-            .unwrap();
-        FactData::Macro {
-            function_like: definition.function_like,
-            tokens: definition.tokens.clone(),
+    fn extend(&mut self, other: Self) {
+        for (name, definition) in other.definitions {
+            self.definitions.entry(name).or_insert(definition);
         }
     }
 }
@@ -3090,6 +4248,16 @@ fn macro_may_be_integer(tokens: &[String]) -> bool {
             .any(|token| string_literal(token).is_some() || matches!(token.as_str(), "{" | "}"))
 }
 
+fn strip_macro_parentheses(mut tokens: &[String]) -> &[String] {
+    while tokens.len() >= 2
+        && tokens.first().is_some_and(|token| token == "(")
+        && tokens.last().is_some_and(|token| token == ")")
+    {
+        tokens = &tokens[1..tokens.len() - 1];
+    }
+    tokens
+}
+
 fn string_macro_value(
     name: &str,
     macros: &MacroDefinitions,
@@ -3102,9 +4270,7 @@ fn string_macro_value(
     if function_like {
         return None;
     }
-    while tokens.len() >= 2 && tokens.first()? == "(" && tokens.last()? == ")" {
-        tokens = &tokens[1..tokens.len() - 1];
-    }
+    tokens = strip_macro_parentheses(tokens);
     if let [alias] = tokens
         && macros.contains_key(alias)
     {
@@ -3565,6 +4731,15 @@ fn cursor_locations(cursor: CXCursor) -> Option<(Location, Location, bool, bool)
     }
 }
 
+fn canonical_declaration_location(cursor: CXCursor) -> Option<Location> {
+    let canonical = unsafe { clang_getCanonicalCursor(cursor) };
+    if unsafe { clang_Cursor_isNull(canonical) } != 0 {
+        None
+    } else {
+        cursor_locations(canonical).map(|(spelling, _, _, _)| spelling)
+    }
+}
+
 type LocationFn = unsafe fn(CXSourceLocation, *mut CXFile, *mut u32, *mut u32, *mut u32);
 
 fn source_location(location: CXSourceLocation, get: LocationFn) -> Option<Location> {
@@ -3597,6 +4772,34 @@ fn fact_kind(kind: CXCursorKind) -> Option<FactKind> {
         CXCursor_UnionDecl => FactKind::Union,
         _ => return None,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_materialized_fact_metadata(
+    cursor: CXCursor,
+    kind: FactKind,
+    origin: &Origin,
+    data: &FactData,
+    macros: &TranslationUnitMacros,
+    pointer_callback_aliases: &mut BTreeSet<Origin>,
+    pointer_only_class_layouts: &mut BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: &mut BTreeSet<Origin>,
+) {
+    if kind == FactKind::Typedef
+        && matches!(data, FactData::Callback { .. })
+        && typedef_is_function_pointer_alias(cursor)
+    {
+        pointer_callback_aliases.insert(origin.clone());
+    }
+    if kind == FactKind::Class
+        && matches!(data, FactData::Unsupported { .. })
+        && let Some((layout, embeddable)) = pointer_only_class_layout(cursor, macros)
+    {
+        pointer_only_class_layouts.insert(origin.clone(), layout);
+        if embeddable {
+            embeddable_class_layouts.insert(origin.clone());
+        }
+    }
 }
 
 fn fact_data(cursor: CXCursor, kind: FactKind, macros: &TranslationUnitMacros) -> FactData {

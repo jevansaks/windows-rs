@@ -111,6 +111,25 @@ The vector order remains the extraction authority used by callable selection eve
 finish out of order. A separate batch or worker API is not needed for independent translation
 units.
 
+Explicit partition roots also bound retained extraction data. Each partitioned worker fully
+decodes its roots and follows exact declaration locations through typedefs, records, interfaces,
+callbacks, parameters, results, arrays, references, and pointer wrappers. Parent declarations and
+explicit associated enum, constant, and flag targets remain in the closure. Same-leaf names do not
+select ordinary type dependencies. Annotation-bearing declarations and enum flag markers remain
+decoded to preserve validation, redeclaration compatibility, and flags semantics.
+
+Macro token storage is limited to root or annotation-selected definitions and the single-token
+alias chains needed to resolve them, including parenthesized aliases. Forward declarations and
+selected macro definitions that
+need another input are completed by bounded reparses of only the affected original translation
+units. Reopened declarations must match the recorded kind, name, spelling and expansion locations,
+and definition state. Completed results merge in original input order. Missing or ambiguous exact
+dependencies remain planning errors.
+
+This payload pruning applies only to `extract_partitioned_with_options`, where all roots are known
+during extraction. `extract_with_options` preserves its legacy traversed-header capture because a
+later `HeaderPartitionPolicy` may promote any visited header.
+
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
 `included_files` returns `IncludedFile` records for the physical files visited in each original
@@ -449,9 +468,10 @@ indexing path.
 
 The implementation has four stages:
 
-1. Parse and traverse each translation unit in a bounded worker, freeze its facts, source
-   locations, annotations, macro data, and constants, then release its AST.
-2. Select roots and compute the dependency closure from the complete fact graph.
+1. Parse and traverse each translation unit in a bounded worker, freeze AST-independent source
+   facts, annotations, constants, and required macro data, then release its AST.
+2. Merge worker results in input order. Partitioned extraction completes exact root dependencies
+   and forward definitions with bounded targeted reparses when another input is required.
 3. Resolve equivalent declarations, external references, and unsupported constructs.
 4. Project the plan to RDL without mutating or discovering declarations during emission.
 

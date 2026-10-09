@@ -46,6 +46,15 @@ input order. Zero and one select serial extraction. For a large partitioned capt
 ordered `Vec<PartitionedInput>` to `extract_partitioned_with_options` and set `parallelism` to the
 desired bounded worker count; no separate batching API is required.
 
+Partitioned extraction uses its explicit roots to decode only root payloads and their exact
+transitive declaration dependencies. Annotation-bearing declarations and enum flag markers remain
+decoded so validation and redeclaration semantics are unchanged. Workers retain macro tokens only
+for root or annotation-selected definitions and the alias chains needed to resolve them. If a
+reachable definition is available only through another input, reconciliation reparses only the
+affected input and reopens the recorded source identity. Plain `extract_with_options` keeps its
+legacy traversed-header behavior because a later `HeaderPartitionPolicy` may promote a header that
+was not an extraction root.
+
 `Input::with_excluded_source_dirs` and `Clang::exclude_path` omit declarations spelled beneath
 toolchain resource directories while retaining those files in inclusion provenance.
 
