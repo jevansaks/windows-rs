@@ -148,3 +148,82 @@ fn shared_typedef_identity_is_independent_of_translation_units() {
         }
     }
 }
+
+#[test]
+fn mixed_owned_and_unowned_typedef_observations_keep_input_scope() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("input")
+        .join("typedef_identity");
+    let first = root.join("first.h").to_string_lossy().to_string();
+    let second = root.join("second.h").to_string_lossy().to_string();
+    let shared = root.join("shared.h").to_string_lossy().to_string();
+    let source = format!("#include \"{first}\"\n#include \"{second}\"\n");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "unowned.cpp",
+            &first,
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header_for_input(
+            "owned.cpp",
+            &second,
+            RootPartition::new("second", "Example.Second"),
+        )
+        .with_traversed_header_for_input(
+            "owned.cpp",
+            &shared,
+            RootPartition::new("owner", "Example.Owner"),
+        );
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.library = Some("test.dll");
+    for reverse in [false, true] {
+        let mut inputs = vec![
+            Input::new("unowned.cpp", source.clone()).with_roots([first.clone()]),
+            Input::new("owned.cpp", source.clone()).with_roots([second.clone(), shared.clone()]),
+        ];
+        if reverse {
+            inputs.reverse();
+        }
+        let snapshot = extract(inputs, &["-x", "c++", "--target=x86_64-pc-windows-msvc"]).unwrap();
+        let partitions = snapshot
+            .plan_header_partitions(&policy, &NamespaceAuthorities::new())
+            .unwrap()
+            .emit_with_options(&options)
+            .unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "windows-clang-mixed-typedef-identity-{reverse}-{}.winmd",
+            std::process::id()
+        ));
+        windows_rdl::reader()
+            .input_texts(partitions.values())
+            .reference_default()
+            .output(&path)
+            .write()
+            .unwrap();
+        let index = windows_metadata::reader::Index::read(&path).unwrap();
+        let Item::Fn(first) = index.expect_item("Example.First", "First") else {
+            panic!()
+        };
+        let Item::Fn(second) = index.expect_item("Example.Second", "Second") else {
+            panic!()
+        };
+        let first_signature = first.signature(&[]).types;
+        let second_signature = second.signature(&[]).types;
+        let field = index
+            .expect("Example.Second", "SECOND_RECORD")
+            .fields()
+            .next()
+            .unwrap()
+            .ty();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(
+            first_signature,
+            [Type::value_named("Example.Owner", "LPVOID")]
+        );
+        assert_eq!(second_signature, [Type::PtrMut(Box::new(Type::Void), 1)]);
+        assert_eq!(field, Type::PtrMut(Box::new(Type::Void), 1));
+    }
+}

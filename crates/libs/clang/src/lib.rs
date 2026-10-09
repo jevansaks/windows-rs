@@ -7013,9 +7013,10 @@ fn populate_retained_canonical_raw_pointers<'a>(
             continue;
         };
         if local_declarations.iter().all(|local| {
-            aliases.iter().any(|alias| {
-                same_typedef_bridge_identity(alias, local, facts_by_origin, annotations)
-            })
+            !root_owners.contains_key(&local.origin)
+                && aliases.iter().any(|alias| {
+                    same_typedef_bridge_identity(alias, local, facts_by_origin, annotations)
+                })
         }) {
             retained.retain_translation_unit(local_declarations[0]);
         }
