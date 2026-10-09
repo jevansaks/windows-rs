@@ -338,10 +338,10 @@ fn definitions_and_by_value_validation_keep_existing_behavior() {
 }
 
 #[test]
-fn annotated_native_opaque_classes_preserve_pointer_identity() {
+fn forward_classes_preserve_pointer_identity() {
     helpers::ensure_libclang();
 
-    let scratch = scratch("annotated-native-opaque");
+    let scratch = scratch("forward-classes");
     let first_types = scratch.join("first_types.h");
     let first_api = scratch.join("first_api.h");
     let first_definition = scratch.join("first_definition.h");
@@ -351,69 +351,45 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
     std::fs::write(
         &first_types,
         "#define W32M(text) __attribute__((annotate(text)))\n\
-         class W32M(\"win32metadata:native_opaque\") NativeOpaque {};\n\
-         class NativeOpaque;\n\
-         class AliasedOpaque;\n\
-         class W32M(\"win32metadata:native_opaque\") NativeDerived : public NativeOpaque {\n\
-         public:\n\
-             virtual void Reset();\n\
-             unsigned hidden;\n\
-         };\n\
+         class NativeEmpty;\n\
+         class AliasedEmpty;\n\
+         class AnotherEmpty;\n\
          class PlainImplementation {\n\
          public:\n\
              virtual ~PlainImplementation();\n\
              unsigned hidden;\n\
          };\n\
-         typedef AliasedOpaque NATIVE_OPAQUE_ALIAS;\n\
-         typedef NativeOpaque* NATIVE_OPAQUE_PTR;\n",
+         typedef AliasedEmpty NATIVE_EMPTY_ALIAS;\n\
+         typedef NativeEmpty* NATIVE_EMPTY_PTR;\n",
     )
     .unwrap();
-    std::fs::write(
-        &first_definition,
-        "#define W32M(text) __attribute__((annotate(text)))\n\
-         class W32M(\"win32metadata:native_opaque\") AliasedOpaque {\n\
-         public:\n\
-             virtual void Hidden();\n\
-             unsigned hidden;\n\
-         };\n",
-    )
-    .unwrap();
-    std::fs::write(
-        &dependency_types,
-        "#define W32M(text) __attribute__((annotate(text)))\n\
-         class W32M(\"win32metadata:native_opaque\") DependencyOpaque {};\n",
-    )
-    .unwrap();
+    std::fs::write(&first_definition, "class AliasedEmpty;\n").unwrap();
+    std::fs::write(&dependency_types, "class DependencyEmpty;\n").unwrap();
     std::fs::write(
         &first_api,
         format!(
             "#include \"{}\"\n\
              #include \"{}\"\n\
              extern \"C\" int __stdcall FirstUse(\n\
-                 W32M(\"win32metadata:in\") NativeOpaque* value,\n\
-                 W32M(\"win32metadata:in\") const NativeOpaque* input,\n\
-                 W32M(\"win32metadata:out\") NativeOpaque** output,\n\
-                 W32M(\"win32metadata:in\") NATIVE_OPAQUE_PTR alias,\n\
-                 W32M(\"win32metadata:in\") NATIVE_OPAQUE_ALIAS* class_alias,\n\
-                 W32M(\"win32metadata:in\") NativeDerived* derived,\n\
-                 W32M(\"win32metadata:in\") DependencyOpaque* dependency,\n\
+                 W32M(\"win32metadata:in\") NativeEmpty* value,\n\
+                 W32M(\"win32metadata:in\") const NativeEmpty* input,\n\
+                 W32M(\"win32metadata:out\") NativeEmpty** output,\n\
+                 W32M(\"win32metadata:in\") NATIVE_EMPTY_PTR alias,\n\
+                 W32M(\"win32metadata:in\") NATIVE_EMPTY_ALIAS* class_alias,\n\
+                 W32M(\"win32metadata:in\") AnotherEmpty* another,\n\
+                 W32M(\"win32metadata:in\") DependencyEmpty* dependency,\n\
                  W32M(\"win32metadata:in\") PlainImplementation* plain);\n",
             first_types.to_string_lossy(),
             dependency_types.to_string_lossy()
         ),
     )
     .unwrap();
-    std::fs::write(
-        &second_types,
-        "#define W32M(text) __attribute__((annotate(text)))\n\
-         class W32M(\"win32metadata:native_opaque\") NativeOpaque {};\n",
-    )
-    .unwrap();
+    std::fs::write(&second_types, "class NativeEmpty;\n").unwrap();
     std::fs::write(
         &second_api,
         format!(
             "#include \"{}\"\n\
-             extern \"C\" int __stdcall SecondUse(NativeOpaque** value);\n",
+             extern \"C\" int __stdcall SecondUse(NativeEmpty** value);\n",
             second_types.to_string_lossy()
         ),
     )
@@ -451,11 +427,11 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
         ],
     )
     .unwrap();
-    for name in ["NativeOpaque", "AliasedOpaque", "NativeDerived"] {
+    for name in ["NativeEmpty", "AliasedEmpty", "AnotherEmpty"] {
         let fact = snapshot
             .facts()
             .iter()
-            .find(|fact| fact.origin.tu == "first.cpp" && fact.name == name && fact.definition)
+            .find(|fact| fact.origin.tu == "first.cpp" && fact.name == name && !fact.definition)
             .unwrap();
         let FactData::Record {
             base,
@@ -533,29 +509,26 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
         .map(|(_, rdl)| rdl.as_str())
         .collect::<String>();
 
-    for name in ["NativeOpaque", "NativeDerived", "AliasedOpaque"] {
+    for name in ["NativeEmpty", "AnotherEmpty", "AliasedEmpty"] {
         assert!(first.contains(&format!("struct {name}")), "{first}");
     }
-    assert_eq!(first.matches("struct NativeOpaque").count(), 1, "{first}");
-    assert_eq!(second.matches("struct NativeOpaque").count(), 1, "{second}");
+    assert_eq!(first.matches("struct NativeEmpty").count(), 1, "{first}");
+    assert_eq!(second.matches("struct NativeEmpty").count(), 1, "{second}");
     assert!(
-        first.contains("type NATIVE_OPAQUE_PTR = *mut NativeOpaque"),
+        first.contains("type NATIVE_EMPTY_PTR = *mut NativeEmpty"),
         "{first}"
     );
     assert!(
-        first.contains("type NATIVE_OPAQUE_ALIAS = AliasedOpaque"),
+        first.contains("type NATIVE_EMPTY_ALIAS = AliasedEmpty"),
         "{first}"
     );
     assert!(
-        first.contains("#[out] output: *mut *mut NativeOpaque"),
+        first.contains("#[out] output: *mut *mut NativeEmpty"),
         "{first}"
     );
+    assert!(first.contains("#[in] input: *const NativeEmpty"), "{first}");
     assert!(
-        first.contains("#[in] input: *const NativeOpaque"),
-        "{first}"
-    );
-    assert!(
-        first.contains("dependency: *mut Windows::Win32::DependencyOpaque"),
+        first.contains("dependency: *mut Windows::Win32::DependencyEmpty"),
         "{first}"
     );
     assert!(first.contains("plain: *mut void"), "{first}");
@@ -567,10 +540,10 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
     ] {
         assert!(!first.contains(hidden), "{first}");
     }
-    assert!(common.contains("struct DependencyOpaque"), "{common}");
-    assert!(!first.contains("struct DependencyOpaque"), "{first}");
+    assert!(common.contains("struct DependencyEmpty"), "{common}");
+    assert!(!first.contains("struct DependencyEmpty"), "{first}");
 
-    let winmd = scratch.join("native-opaque.winmd");
+    let winmd = scratch.join("forward-classes.winmd");
     windows_rdl::reader()
         .input_texts(partitions.values())
         .reference_default()
@@ -579,11 +552,11 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
         .unwrap();
     let index = windows_metadata::reader::Index::read(&winmd).unwrap();
     for (namespace, name) in [
-        ("Example.First", "NativeOpaque"),
-        ("Example.First", "NativeDerived"),
-        ("Example.First", "AliasedOpaque"),
-        ("Example.Second", "NativeOpaque"),
-        ("Windows.Win32", "DependencyOpaque"),
+        ("Example.First", "NativeEmpty"),
+        ("Example.First", "AnotherEmpty"),
+        ("Example.First", "AliasedEmpty"),
+        ("Example.Second", "NativeEmpty"),
+        ("Windows.Win32", "DependencyEmpty"),
     ] {
         let ty = index.expect(namespace, name);
         assert_eq!(ty.fields().count(), 0, "{namespace}.{name}");
@@ -595,16 +568,16 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
     }
     assert_eq!(
         index
-            .expect("Example.First", "NATIVE_OPAQUE_ALIAS")
+            .expect("Example.First", "NATIVE_EMPTY_ALIAS")
             .underlying_type(),
-        Some(Type::value_named("Example.First", "AliasedOpaque"))
+        Some(Type::value_named("Example.First", "AliasedEmpty"))
     );
     assert_eq!(
         index
-            .expect("Example.First", "NATIVE_OPAQUE_PTR")
+            .expect("Example.First", "NATIVE_EMPTY_PTR")
             .underlying_type(),
         Some(Type::PtrMut(
-            Box::new(Type::value_named("Example.First", "NativeOpaque")),
+            Box::new(Type::value_named("Example.First", "NativeEmpty")),
             1
         ))
     );
@@ -616,28 +589,28 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
         first_use.signature(&[]).types,
         [
             Type::PtrMut(
-                Box::new(Type::value_named("Example.First", "NativeOpaque")),
+                Box::new(Type::value_named("Example.First", "NativeEmpty")),
                 1
             ),
             Type::PtrConst(
-                Box::new(Type::value_named("Example.First", "NativeOpaque")),
+                Box::new(Type::value_named("Example.First", "NativeEmpty")),
                 1
             ),
             Type::PtrMut(
-                Box::new(Type::value_named("Example.First", "NativeOpaque")),
+                Box::new(Type::value_named("Example.First", "NativeEmpty")),
                 2
             ),
-            Type::value_named("Example.First", "NATIVE_OPAQUE_PTR"),
+            Type::value_named("Example.First", "NATIVE_EMPTY_PTR"),
             Type::PtrMut(
-                Box::new(Type::value_named("Example.First", "NATIVE_OPAQUE_ALIAS")),
+                Box::new(Type::value_named("Example.First", "NATIVE_EMPTY_ALIAS")),
                 1
             ),
             Type::PtrMut(
-                Box::new(Type::value_named("Example.First", "NativeDerived")),
+                Box::new(Type::value_named("Example.First", "AnotherEmpty")),
                 1
             ),
             Type::PtrMut(
-                Box::new(Type::value_named("Windows.Win32", "DependencyOpaque")),
+                Box::new(Type::value_named("Windows.Win32", "DependencyEmpty")),
                 1
             ),
             Type::PtrMut(Box::new(Type::Void), 1),
@@ -649,7 +622,7 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
     assert_eq!(
         second_use.signature(&[]).types,
         [Type::PtrMut(
-            Box::new(Type::value_named("Example.Second", "NativeOpaque")),
+            Box::new(Type::value_named("Example.Second", "NativeEmpty")),
             2
         )]
     );
@@ -658,79 +631,47 @@ fn annotated_native_opaque_classes_preserve_pointer_identity() {
 }
 
 #[test]
-fn native_opaque_annotation_contract_and_by_value_uses_are_rejected() {
+fn unsupported_annotations_and_incomplete_class_by_value_uses_are_rejected() {
     helpers::ensure_libclang();
 
-    for (name, declaration) in [
-        (
-            "payload",
-            "class W32M(\"win32metadata:native_opaque=value\") NativeOpaque {};",
-        ),
-        (
-            "struct",
-            "struct W32M(\"win32metadata:native_opaque\") NativeOpaque {};",
-        ),
-        (
-            "forward",
-            "class W32M(\"win32metadata:native_opaque\") NativeOpaque;",
-        ),
-        (
-            "forward_then_definition",
-            "class W32M(\"win32metadata:native_opaque\") NativeOpaque;\n\
-             class NativeOpaque {};",
-        ),
-    ] {
-        let error = extract(
-            [Input::new(
-                format!("{name}.hpp"),
-                format!("#define W32M(text) __attribute__((annotate(text)))\n{declaration}\n"),
-            )],
-            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
-        )
-        .unwrap_err()
-        .to_string();
-        let expected = if name == "payload" {
-            "win32metadata annotation `native_opaque` does not accept a value"
-        } else {
-            "win32metadata annotation `native_opaque` is not valid on this declaration"
-        };
-        assert!(error.contains(expected), "{error}");
-    }
+    let error = extract(
+        [Input::new(
+            "unsupported.hpp",
+            "#define W32M(text) __attribute__((annotate(text)))\n\
+             class W32M(\"win32metadata:unsupported_key\") OpaqueValue;\n",
+        )],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("unknown win32metadata annotation `unsupported_key`"),
+        "{error}"
+    );
 
     for (name, usage) in [
         (
             "direct",
-            "extern \"C\" void UseNativeOpaque(NativeOpaque value);",
+            "extern \"C\" void UseOpaqueValue(OpaqueValue value);",
         ),
         (
             "alias",
-            "typedef NativeOpaque NativeAlias;\n\
-             extern \"C\" void UseNativeOpaque(NativeAlias value);",
+            "typedef OpaqueValue NativeAlias;\n\
+             extern \"C\" void UseOpaqueValue(NativeAlias value);",
         ),
         (
             "callback",
-            "typedef void (*NativeCallback)(NativeOpaque value);\n\
-             extern \"C\" void UseNativeOpaque(NativeCallback callback);",
+            "typedef void (*NativeCallback)(OpaqueValue value);\n\
+             extern \"C\" void UseOpaqueValue(NativeCallback callback);",
         ),
-        ("return", "extern \"C\" NativeOpaque UseNativeOpaque();"),
-        (
-            "record",
-            "struct NativeHolder { NativeOpaque value; };\n\
-             extern \"C\" void UseNativeOpaque(NativeHolder* holder);",
-        ),
-        (
-            "array",
-            "struct NativeArrayHolder { NativeOpaque values[2]; };\n\
-             extern \"C\" void UseNativeOpaque(NativeArrayHolder* holder);",
-        ),
+        ("return", "extern \"C\" OpaqueValue UseOpaqueValue();"),
     ] {
-        let scratch = scratch(&format!("native-opaque-by-value-{name}"));
+        let scratch = scratch(&format!("incomplete-class-by-value-{name}"));
         let header = scratch.join("native.h");
         std::fs::write(
             &header,
             format!(
-                "#define W32M(text) __attribute__((annotate(text)))\n\
-                 class W32M(\"win32metadata:native_opaque\") NativeOpaque {{}};\n\
+                "class OpaqueValue;\n\
                  {usage}\n"
             ),
         )
@@ -749,7 +690,7 @@ fn native_opaque_annotation_contract_and_by_value_uses_are_rejected() {
             RootPartition::new("native", "Example.Native"),
         );
         let references = references();
-        let functions = BTreeSet::from(["UseNativeOpaque".to_string()]);
+        let functions = BTreeSet::from(["UseOpaqueValue".to_string()]);
         let mut options = EmitOptions::new("Windows.Win32", references.types());
         options.functions = Some(&functions);
         options.library = Some("native.dll");
@@ -760,10 +701,7 @@ fn native_opaque_annotation_contract_and_by_value_uses_are_rejected() {
             .unwrap_err()
             .to_string();
         assert!(
-            error.contains(
-                "native_opaque class `NativeOpaque` is used by value in translation unit \
-                 `aggregate.cpp`"
-            ),
+            error.contains("incomplete record `OpaqueValue` is used by value"),
             "{name}: {error}"
         );
         std::fs::remove_dir_all(scratch).unwrap();

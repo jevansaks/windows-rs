@@ -2013,21 +2013,16 @@ fn extract_child(
                     {
                         traversal.pointer_callback_aliases.insert(origin.clone());
                     }
-                    if fact_kind == FactKind::Class {
-                        if let Some(layout) = native_opaque_class_layout(child) {
-                            traversal
-                                .pointer_only_class_layouts
-                                .insert(origin.clone(), layout);
-                        } else if matches!(data, FactData::Unsupported { .. })
-                            && let Some((layout, embeddable)) =
-                                pointer_only_class_layout(child, traversal.macros)
-                        {
-                            traversal
-                                .pointer_only_class_layouts
-                                .insert(origin.clone(), layout);
-                            if embeddable {
-                                traversal.embeddable_class_layouts.insert(origin.clone());
-                            }
+                    if fact_kind == FactKind::Class
+                        && matches!(data, FactData::Unsupported { .. })
+                        && let Some((layout, embeddable)) =
+                            pointer_only_class_layout(child, traversal.macros)
+                    {
+                        traversal
+                            .pointer_only_class_layouts
+                            .insert(origin.clone(), layout);
+                        if embeddable {
+                            traversal.embeddable_class_layouts.insert(origin.clone());
                         }
                     }
                     let index = traversal.facts.len();
@@ -3570,11 +3565,6 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
             )
         }
         FactKind::Class | FactKind::Struct | FactKind::Union => {
-            if kind == FactKind::Class
-                && let Some(layout) = native_opaque_class_layout(cursor)
-            {
-                return layout;
-            }
             if matches!(kind, FactKind::Class | FactKind::Struct) && is_interface(cursor) {
                 return interface_fact(cursor, macros);
             }
@@ -3671,39 +3661,6 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
         }
         _ => FactData::None,
     }
-}
-
-fn native_opaque_class_layout(cursor: CXCursor) -> Option<FactData> {
-    let definition = native_opaque_class_definition(cursor)?;
-    if unsafe {
-        clang_isCursorDefinition(cursor) == 0 || clang_equalCursors(definition, cursor) == 0
-    } {
-        return None;
-    }
-    Some(FactData::Record {
-        base: None,
-        fields: vec![],
-        size: i64::from(CXTypeLayoutError_Incomplete),
-        align: i64::from(CXTypeLayoutError_Incomplete),
-        packing: None,
-        alignment: None,
-        union: false,
-    })
-}
-
-fn native_opaque_class_definition(cursor: CXCursor) -> Option<CXCursor> {
-    let definition = cursor_definition(cursor);
-    if unsafe { clang_getCursorKind(definition) } != CXCursor_ClassDecl
-        || unsafe { clang_isCursorDefinition(definition) } == 0
-        || is_interface(definition)
-        || cursor_uuid(definition).is_some()
-        || !expanded_raw_annotations(definition, None)
-            .iter()
-            .any(|annotation| annotation.key == "native_opaque" && annotation.value.is_none())
-    {
-        return None;
-    }
-    Some(definition)
 }
 
 fn is_data_class(cursor: CXCursor) -> bool {
@@ -4432,7 +4389,6 @@ fn validate_win32metadata_annotation(
             | "reserved"
             | "retval"
             | "com_out_ptr"
-            | "native_opaque"
             | "const"
             | "ansi"
             | "unicode"
@@ -4456,8 +4412,6 @@ fn validate_win32metadata_annotation(
             raw.key
         ))
     } else if !annotation_target_allowed(&raw.key, target_kind)
-        || (raw.key == "native_opaque"
-            && !native_opaque_annotation_target_allowed(target, attribute))
         || (raw.key == "associated_enum"
             && target_kind == CXCursor_TypedefDecl
             && !typedef_is_callback(target))
@@ -4535,7 +4489,6 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
         "native_inheritance" | "struct_size_field" => {
             matches!(target, CXCursor_ClassDecl | CXCursor_StructDecl)
         }
-        "native_opaque" => target == CXCursor_ClassDecl,
         "native_encoding" => matches!(target, CXCursor_FieldDecl | CXCursor_VarDecl),
         "const" => matches!(target, CXCursor_ParmDecl | CXCursor_FieldDecl),
         "ansi" | "unicode" => matches!(
@@ -4583,25 +4536,6 @@ fn typedef_is_function_pointer_alias(cursor: CXCursor) -> bool {
             unsafe { clang_getPointeeType(ty) }.kind,
             CXType_FunctionProto | CXType_FunctionNoProto
         )
-}
-
-fn native_opaque_annotation_target_allowed(target: CXCursor, attribute: CXCursor) -> bool {
-    let definition = cursor_definition(target);
-    if unsafe { clang_getCursorKind(definition) } != CXCursor_ClassDecl
-        || unsafe { clang_isCursorDefinition(definition) } == 0
-        || cx_string(unsafe { clang_getCursorSpelling(definition) }).is_empty()
-        || is_interface(definition)
-        || cursor_uuid(definition).is_some()
-    {
-        return false;
-    }
-    let Some((_, expansion, _, _)) = cursor_locations(attribute) else {
-        return false;
-    };
-    let Some((file, start, end)) = cursor_expansion_extent(definition) else {
-        return false;
-    };
-    expansion.file.eq_ignore_ascii_case(&file) && (start..end).contains(&expansion.offset)
 }
 
 fn annotation_error(cursor: CXCursor, message: &str) -> Error {
@@ -4757,7 +4691,6 @@ fn annotation_value(raw: RawAnnotation) -> Option<Annotation> {
         "reserved" => Annotation::Reserved,
         "com_out_ptr" => Annotation::ComOutPtr,
         "retval" => Annotation::Retval,
-        "native_opaque" => return None,
         _ => return None,
     })
 }
@@ -6399,14 +6332,6 @@ fn type_ref_preserving_pointer_class_layouts(ty: CXType) -> Option<TypeRef> {
         return type_ref(ty);
     }
     let declaration = unsafe { clang_getTypeDeclaration(pointee) };
-    if let Some(definition) = native_opaque_class_definition(declaration) {
-        let name = cx_string(unsafe { clang_getCursorSpelling(definition) });
-        let (declaration, _, _, _) = cursor_locations(definition)?;
-        return Some(TypeRef::Pointer {
-            mutable: unsafe { clang_isConstQualifiedType(pointee) } == 0,
-            target: Box::new(TypeRef::Named { name, declaration }),
-        });
-    }
     if unsafe { clang_Cursor_isNull(declaration) } == 0
         && unsafe { clang_getCursorKind(declaration) } == CXCursor_ClassDecl
         && !is_interface(declaration)
@@ -6485,14 +6410,6 @@ fn type_ref(ty: CXType) -> Option<TypeRef> {
             });
         }
         let declaration = unsafe { clang_getTypeDeclaration(pointee) };
-        if let Some(definition) = native_opaque_class_definition(declaration) {
-            let name = cx_string(unsafe { clang_getCursorSpelling(definition) });
-            let (declaration, _, _, _) = cursor_locations(definition)?;
-            return Some(TypeRef::Pointer {
-                mutable: unsafe { clang_isConstQualifiedType(pointee) } == 0,
-                target: Box::new(TypeRef::Named { name, declaration }),
-            });
-        }
         if unsafe { clang_Cursor_isNull(declaration) } == 0
             && unsafe { clang_getCursorKind(declaration) } == CXCursor_ClassDecl
             && !is_interface(declaration)

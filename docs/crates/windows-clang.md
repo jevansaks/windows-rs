@@ -94,6 +94,20 @@ unit owns a separate libclang index until the translation unit is dropped. Resul
 collected in input order. Only original extraction translation units use this setting; synthetic
 constant-probe translation units keep their existing bounded probe scheduling.
 
+For a large partitioned capture, put every natural translation unit in one ordered
+`Vec<PartitionedInput>` and use the same bounded worker setting:
+
+```rust,no_run
+let workers = std::thread::available_parallelism().map_or(1, usize::from);
+let options = windows_clang::ExtractionOptions::new().with_parallelism(workers);
+let snapshot =
+    windows_clang::extract_partitioned_with_options(inputs, &args, &options).unwrap();
+```
+
+The vector order remains the extraction authority used by callable selection even though parsing
+finishes out of order. A separate batch or worker API is not needed for independent translation
+units.
+
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
 `included_files` returns `IncludedFile` records for the physical files visited in each original
@@ -185,18 +199,11 @@ private copy operations are not emitted. The extracted fact remains unsupported 
 dependency path is planned, so legacy and unselected emission keep their prior behavior. Pointer
 and reference uses are allowed. A protected-only class layout may also be used as storage inside an
 emitted record, but direct by-value ABI uses still fail preflight. A containing record passed by
-value also fails transitively. Public-field classes and `native_opaque` classes remain invalid
-through typedefs, arrays, callback signatures, or containing records. An exact native declaration
-also takes precedence over an unrelated external metadata type with the same leaf name; a
-nonrepresentable native declaration reports a dependency blocker rather than binding the external
-type. Partition exclusions still take precedence and report the normal owner-excluded dependency
-diagnostic.
-
-The valueless `win32metadata:native_opaque` annotation marks a named C++ class definition whose
-source name is part of the native API but whose implementation is not metadata. The class emits as
-an empty nominal type only when used through pointers or references. Its fields, methods, base
-classes, size, alignment, and native inheritance are not projected. Direct and indirect by-value
-uses fail preflight. Unannotated non-data classes keep their opaque `void` pointer projection.
+value also fails transitively. Public-field classes remain invalid through typedefs, arrays,
+callback signatures, or containing records. An exact native declaration also takes precedence over
+an unrelated external metadata type with the same leaf name; a nonrepresentable native declaration
+reports a dependency blocker rather than binding the external type. Partition exclusions still
+take precedence and report the normal owner-excluded dependency diagnostic.
 
 Use `with_traversed_header_for_input(input, header, partition)` when one physical header is parsed
 in several extraction inputs with different compile definitions. The input selector matches
@@ -468,10 +475,11 @@ inferred for an unannotated binary buffer.
 ### Win32 metadata annotations
 
 Headers can add metadata policy with Clang `annotate` attributes whose payload begins with
-`win32metadata:`. Emitted annotation values are stored in the `Snapshot` sidecar by declaration
-origin and member slot, merged across compatible redeclarations, and emitted with the selected
-owning declaration. Extraction-only annotations may instead control fact classification.
-Annotation collection does not change defining-header ownership.
+`win32metadata:`. Annotation values are stored in the `Snapshot` sidecar by declaration origin and
+member slot. Non-function declarations merge annotations across compatible redeclarations. A free
+function keeps each physical declaration's annotations separate, and input-order selection chooses
+the emitted declaration wholesale. Annotation collection does not change defining-header
+ownership.
 
 The primary vocabulary controls:
 
@@ -485,19 +493,14 @@ The primary vocabulary controls:
 | Parameter buffer sizes | `array_count_param`, `array_count_const`, `memory_size_param` |
 | Field buffer sizes | `array_count_field` |
 | String and value metadata | `ansi`, `unicode`, `native_encoding`, `const` |
-| Native opaque classes | `native_opaque` |
 | Type and result policy | `agile`, `native_inheritance`, `struct_size_field`, `supported_os` |
 
 `raii_free` may list one cleanup provider followed by numeric or object-like macro invalid-handle
 sentinels. Symbolic sentinels are resolved in the source macro environment. `associated_constant`
 adds only the named provider constant to the dependency closure. `supported_os` is repeatable.
-Compatible redeclarations union repeatable annotations. Singleton conflicts are errors except for
-`import_library`, which uses deterministic source-order first-wins behavior.
-
-`native_opaque` is valueless and valid only on a named, non-COM C++ class definition without a
-UUID. Place the attribute after the `class` keyword and before the name. It is an extraction
-control and does not produce an RDL attribute. Clang-propagated copies on redeclarations are
-accepted, but spelling the marker on a forward declaration is an error.
+Compatible non-function redeclarations union repeatable annotations. Singleton conflicts are
+errors. Free-function annotations follow the selected physical declaration; import-library claims
+from all callable declarations still participate in route conflict detection.
 
 Unknown keys, missing or unexpected values, invalid declaration targets, unresolved symbolic
 sentinels, and missing associated-constant providers are extraction errors. A consumer that
@@ -579,14 +582,12 @@ resolve to a COM interface once another translation unit supplies its virtual de
 Incompatible declaration kinds remain ambiguous.
 
 Defined POD C++ classes with public instance fields and no inheritance, methods, constructors,
-destructors, conversions, or function templates use the checked record-layout path. Other
-defined non-interface C++ classes remain opaque. A definition marked `native_opaque` instead uses
-the named empty-record representation for pointer and reference types while discarding its C++
-implementation details. A forward-only non-UUID class uses the same named representation without
-an annotation, so pointer parameters, return values, and typedef aliases retain their source type
-identity. If an unannotated definition is available, it still controls classification: public
-data-only definitions become records, while behavioral definitions remain opaque. Neither empty
-projection infers fields, packing, alignment, or inheritance, and by-value uses fail validation.
+destructors, conversions, or function templates use the checked record-layout path. Other defined
+non-interface C++ classes remain opaque. A forward-only non-UUID class uses a named empty-record
+representation, so pointer parameters, return values, and typedef aliases retain their source type
+identity. If a definition is available, it controls classification: public data-only definitions
+become records, while behavioral definitions remain opaque. Neither empty projection infers fields,
+packing, alignment, or inheritance, and by-value uses fail validation.
 
 UUID attributes do not by themselves make a declaration a coclass. Defined UUID-bearing structs
 and public data-only classes use the record-layout path and retain the UUID as a `GuidAttribute` on

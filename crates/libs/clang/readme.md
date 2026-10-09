@@ -41,7 +41,9 @@ symbol-to-DLL-only callers.
 `Clang::parallelism` bounds concurrent parsing of original translation units. The lower-level
 `extract_with_options` and `extract_partitioned_with_options` functions accept the same setting
 through `ExtractionOptions`. Results, diagnostics, and inclusion records retain extraction input
-order. Zero and one select serial parsing.
+order. Zero and one select serial parsing. For a large partitioned capture, pass the ordered
+`Vec<PartitionedInput>` to `extract_partitioned_with_options` and set `parallelism` to the desired
+bounded worker count; no separate batching API is required.
 
 `Input::with_excluded_source_dirs` and `Clang::exclude_path` omit declarations spelled beneath
 toolchain resource directories while retaining those files in inclusion provenance.
@@ -77,12 +79,9 @@ Headers may transport metadata policy with Clang `annotate` attributes whose pay
 `win32metadata:`. The extractor validates this vocabulary and carries it through `Snapshot`
 planning into RDL and WinMD attributes. Unknown, malformed, or misplaced annotations are errors.
 Callback conventions come from the callback declarator. Pointer aliases inherit from the exact
-bare function typedef they alias, not from referenced return, parameter, or record types.
-The valueless `native_opaque` marker may appear on a named C++ class definition. It preserves only
-the class's nominal identity as an empty type for pointer and reference use. Fields, methods, base
-classes, layout, and native inheritance are not projected, and any by-value use is an error.
-Captured SAL keeps ordinary NUL-terminated strings and double-NUL multistrings as separate
-parameter facts through `ParamAnnotation`.
+bare function typedef they alias, not from referenced return, parameter, or record types. Captured
+SAL keeps ordinary NUL-terminated strings and double-NUL multistrings as separate parameter facts
+through `ParamAnnotation`.
 
 Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
 to stderr without changing the generated RDL.
