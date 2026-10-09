@@ -476,9 +476,14 @@ fn same_interface_name_can_emit_in_distinct_namespaces() {
     let mut options = EmitOptions::new("Example.Common", &references);
     options.library = Some("example.dll");
     let common_error = snapshot.emit_with_options(&options).unwrap_err();
-    assert_eq!(
-        common_error.to_string(),
-        "interface `IResourceManager` has conflicting UUID attributes"
+    let common_error = common_error.to_string();
+    assert!(
+        common_error.contains("ambiguous type root `IResourceManager`"),
+        "{common_error}"
+    );
+    assert!(
+        common_error.contains("interface `IResourceManager` has conflicting UUID attributes"),
+        "{common_error}"
     );
     let partitions = snapshot.emit_partitioned_with_options(&options).unwrap();
 
@@ -538,9 +543,14 @@ fn same_namespace_interface_uuid_conflict_is_still_an_error() {
     let error = snapshot
         .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
         .unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "interface `IResourceManager` has conflicting UUID attributes"
+    let error = error.to_string();
+    assert!(
+        error.contains("ambiguous type root `IResourceManager`"),
+        "{error}"
+    );
+    assert!(
+        error.contains("interface `IResourceManager` has conflicting UUID attributes"),
+        "{error}"
     );
 }
 

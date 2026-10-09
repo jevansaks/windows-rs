@@ -364,8 +364,8 @@ struct __declspec(uuid(\"12345678-1234-abcd-9876-0123456789ab\")) IGuid {
     assert!(rdl.contains("#[len_param(6)] text: *mut i8"));
     assert!(
         rdl.contains(
-            "extern \"C\" fn Strings(narrow: PCSTR, #[out] wide: PWSTR, \
-         #[len_param(3)] counted: PCSTR, count: u32)"
+            "extern \"C\" fn Strings(narrow: *const i8, wide: *mut u16, \
+         #[len_param(3)] counted: *const i8, count: u32)"
         ),
         "{rdl}"
     );

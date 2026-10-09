@@ -296,6 +296,17 @@ exclusions, remaps, and namespace authorities are applied. The same native name 
 once in each distinct namespace. Candidates routed to the same namespace must still agree in type
 and value and are coalesced to one output. Non-partitioned emission keeps its global name grouping.
 
+`HeaderPartitionPlan::audit` exposes root-selection outcomes through
+`PartitionAudit::diagnostics`. Each `PlanningDiagnostic` identifies the root kind and whether the
+conflict was resolved or blocked. Resolved entries include compatible same-route declarations,
+existing ownership or namespace-authority selection, and same-name declarations retained in
+distinct namespace routes. Blocked type, value, constant, and selected-function roots make the
+audit non-clean. Emission sorts and deduplicates all independent blocked root diagnostics and
+returns them together before dependency closure. Route ownership conflicts remain available
+through `PartitionAudit::conflicts` when root planning produces a complete plan. If root blockers
+prevent dependency closure, the audit contains the preprocessing and root-selection inventory;
+route claims that require the completed plan are not evaluated.
+
 Free-function declarations with the same planned name are grouped by native linker name. Distinct
 linker names remain separate aliases. Within one linker-name group, the declaration from the
 earliest extraction input supplies the whole callable declaration. Source location breaks ties only
@@ -579,9 +590,11 @@ typedef and remains `type BOOLEAN = u8`; references to it retain the `BOOLEAN` n
 the distinction between canonical language vocabulary and an API-authored typedef without treating
 arbitrary byte values as Rust booleans.
 
-Explicit null-terminated SAL on a direct character pointer selects the same string vocabulary after
-applying the existing scalar canonicalization to its pointee. For example, `_In_z_ const WCHAR *`
-becomes `PCWSTR`. Without the null-terminated fact, `WCHAR *` keeps its raw pointer shape.
+Null-terminated SAL on a direct character pointer does not synthesize a named string typedef.
+`_In_z_ const char *` remains `*const i8`, and `_In_z_ const WCHAR *` remains `*const u16`.
+`ParamAnnotation::null_terminated` still records the header contract along with direction,
+optionality, and size information. A parameter actually declared with `PCSTR`, `PSTR`, `PCWSTR`,
+`PWSTR`, or a recognized legacy string alias keeps the canonical named string vocabulary.
 
 For example, the headers declare `PBYTE`, `PDWORD`, and `PORHKEY` in API signatures. RDL retains
 those names and separately records their representations:

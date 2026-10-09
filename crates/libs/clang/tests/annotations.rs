@@ -10,6 +10,7 @@ const STRING_TYPES_RDL: &str = r#"
     #[win32]
     mod Windows {
         mod Win32 {
+            type PCSTR = *const i8;
             type PCWSTR = *const u16;
             type PWSTR = *mut u16;
         }
@@ -18,6 +19,10 @@ const STRING_TYPES_RDL: &str = r#"
 
 fn string_references() -> BTreeMap<String, TypeReference> {
     BTreeMap::from([
+        (
+            "PCSTR".to_string(),
+            TypeReference::new("Windows.Win32", "PCSTR", TypeReferenceKind::Type),
+        ),
         (
             "PCWSTR".to_string(),
             TypeReference::new("Windows.Win32", "PCWSTR", TypeReferenceKind::Type),
@@ -96,6 +101,7 @@ fn captured_double_null_sal_remains_distinct() {
     let single = function_parameter(&snapshot, "SingleString");
     assert!(!single.annotation.null_null_terminated);
     assert!(single.annotation.null_terminated);
+    assert!(single.annotation.output);
 
     let binary = function_parameter(&snapshot, "BinaryBuffer");
     assert!(!binary.annotation.null_null_terminated);
@@ -118,10 +124,7 @@ fn captured_double_null_sal_remains_distinct() {
         !rdl.contains("SingleString(#[null_null_terminated]"),
         "{rdl}"
     );
-    assert!(
-        rdl.contains("SingleString(#[out] value: Windows::Win32::PWSTR)"),
-        "{rdl}"
-    );
+    assert!(rdl.contains("SingleString(value: *mut u16)"), "{rdl}");
     assert!(
         !rdl.contains("BinaryBuffer(#[null_null_terminated]"),
         "{rdl}"
@@ -178,13 +181,15 @@ fn captured_double_null_sal_remains_distinct() {
 }
 
 #[test]
-fn null_terminated_named_scalars_use_physical_string_types() {
+fn null_terminated_raw_pointers_remain_physical() {
     helpers::ensure_libclang();
 
     let source = r#"
         #define SAL(text) __attribute__((annotate(text)))
         typedef unsigned short WCHAR;
         typedef unsigned long DWORD;
+        typedef const char* PCSTR;
+        typedef const WCHAR* PCWSTR;
 
         extern "C" void Strings(
             SAL("_In_z_") const WCHAR* named_const,
@@ -197,7 +202,9 @@ fn null_terminated_named_scalars_use_physical_string_types() {
             SAL("_In_opt_z_") const WCHAR* optional,
             unsigned count,
             SAL("_In_reads_or_z_(count)") const WCHAR* counted,
-            SAL("_Post_") SAL("_NullNull_terminated_") WCHAR* multi);
+            SAL("_Post_") SAL("_NullNull_terminated_") WCHAR* multi,
+            PCSTR actual_narrow,
+            PCWSTR actual_wide);
     "#;
     let snapshot = extract(
         [Input::new("named-strings.hpp", source)],
@@ -209,22 +216,39 @@ fn null_terminated_named_scalars_use_physical_string_types() {
         ],
     )
     .unwrap();
+    let function = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "Strings")
+        .unwrap();
+    let FactData::Function { params, .. } = &function.data else {
+        panic!("Strings was not extracted as a function");
+    };
+    for index in [0, 1, 2, 3, 7, 9] {
+        assert!(params[index].annotation.null_terminated);
+    }
+    assert!(params[0].annotation.input);
+    assert!(params[1].annotation.output);
+    assert!(params[7].annotation.optional);
+    assert!(params[9].annotation.size.is_some());
     let references = string_references();
     let mut options = EmitOptions::new("NamedStrings", &references);
     options.library = Some("test.dll");
     let rdl = snapshot.emit_with_options(&options).unwrap();
 
     for expected in [
-        "named_const: Windows::Win32::PCWSTR",
-        "#[out] named_mut: Windows::Win32::PWSTR",
-        "direct_const: Windows::Win32::PCWSTR",
-        "#[out] direct_mut: Windows::Win32::PWSTR",
+        "named_const: *const u16",
+        "named_mut: *mut u16",
+        "direct_const: *const u16",
+        "direct_mut: *mut u16",
         "unterminated_const: *const u16",
         "unterminated_mut: *mut u16",
         "noncharacter: *const u32",
-        "#[opt] optional: Windows::Win32::PCWSTR",
-        "#[len_param(8)] counted: Windows::Win32::PCWSTR",
+        "#[opt] optional: *const u16",
+        "#[len_param(8)] counted: *const u16",
         "#[null_null_terminated] multi: *mut u16",
+        "actual_narrow: Windows::Win32::PCSTR",
+        "actual_wide: Windows::Win32::PCWSTR",
     ] {
         assert!(rdl.contains(expected), "{expected}\n{rdl}");
     }
@@ -248,33 +272,23 @@ fn null_terminated_named_scalars_use_physical_string_types() {
     assert_eq!(
         function.signature(&[]).types,
         [
-            MetadataType::value_named("Windows.Win32", "PCWSTR"),
-            MetadataType::value_named("Windows.Win32", "PWSTR"),
-            MetadataType::value_named("Windows.Win32", "PCWSTR"),
-            MetadataType::value_named("Windows.Win32", "PWSTR"),
+            MetadataType::PtrConst(Box::new(MetadataType::U16), 1),
+            MetadataType::PtrMut(Box::new(MetadataType::U16), 1),
+            MetadataType::PtrConst(Box::new(MetadataType::U16), 1),
+            MetadataType::PtrMut(Box::new(MetadataType::U16), 1),
             MetadataType::PtrConst(Box::new(MetadataType::U16), 1),
             MetadataType::PtrMut(Box::new(MetadataType::U16), 1),
             MetadataType::PtrConst(Box::new(MetadataType::U32), 1),
-            MetadataType::value_named("Windows.Win32", "PCWSTR"),
+            MetadataType::PtrConst(Box::new(MetadataType::U16), 1),
             MetadataType::U32,
-            MetadataType::value_named("Windows.Win32", "PCWSTR"),
+            MetadataType::PtrConst(Box::new(MetadataType::U16), 1),
             MetadataType::PtrMut(Box::new(MetadataType::U16), 1),
+            MetadataType::value_named("Windows.Win32", "PCSTR"),
+            MetadataType::value_named("Windows.Win32", "PCWSTR"),
         ]
     );
-    let params = function.params_by_sequence(11).unwrap();
+    let params = function.params_by_sequence(13).unwrap();
     let params = params.params();
-    assert!(
-        params[1]
-            .unwrap()
-            .flags()
-            .contains(windows_metadata::ParamAttributes::Out)
-    );
-    assert!(
-        params[3]
-            .unwrap()
-            .flags()
-            .contains(windows_metadata::ParamAttributes::Out)
-    );
     assert!(
         params[7]
             .unwrap()

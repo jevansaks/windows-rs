@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use windows_clang::{
-    EmitOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities,
-    PartitionConflictReason, PartitionItemKind, RdlPartition, RootPartition, Snapshot, TypeRef,
-    TypeReference, TypeReferenceKind, extract, extract_partitioned,
+    EmitOptions, ExtractionOptions, FactData, HeaderPartitionPolicy, Input, NamespaceAuthorities,
+    PartitionConflictReason, PartitionItemKind, PlanningDiagnosticKind, PlanningDiagnosticStatus,
+    RdlPartition, RootPartition, Snapshot, TypeRef, TypeReference, TypeReferenceKind, extract,
+    extract_partitioned, extract_with_options,
 };
 use windows_metadata::{
     Type, Value,
@@ -138,6 +139,284 @@ fn colliding_ntstatus_snapshot(name: &str) -> (PathBuf, Snapshot, HeaderPartitio
             RootPartition::new("second", "Example.Second"),
         );
     (scratch, snapshot, policy)
+}
+
+#[test]
+fn independent_root_errors_are_aggregated_deterministically() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("root-error-aggregation");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(
+        &first,
+        "#define DEFINE_GUID(name, ...)\n\
+         typedef unsigned TYPE_CONFLICT;\n\
+         #define CONSTANT_CONFLICT 1\n\
+         DEFINE_GUID(VALUE_CONFLICT, 0x11111111, 0x1111, 0x1111, 0x11, 0x11, 0x11, \
+             0x11, 0x11, 0x11, 0x11, 0x11)\n\
+         extern \"C\" int FunctionConflict(int value);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &second,
+        "#define DEFINE_GUID(name, ...)\n\
+         typedef unsigned short TYPE_CONFLICT;\n\
+         #define CONSTANT_CONFLICT 2\n\
+         DEFINE_GUID(VALUE_CONFLICT, 0x22222222, 0x2222, 0x2222, 0x22, 0x22, 0x22, \
+             0x22, 0x22, 0x22, 0x22, 0x22)\n\
+         extern \"C\" void FunctionConflict(int value);\n",
+    )
+    .unwrap();
+    let make_inputs = || {
+        vec![
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs([scratch.to_string_lossy().to_string()]),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs([scratch.to_string_lossy().to_string()]),
+        ]
+    };
+    let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+    let serial = extract_with_options(
+        make_inputs(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(1),
+    )
+    .unwrap();
+    let parallel = extract_with_options(
+        make_inputs(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    let mut reversed_inputs = make_inputs();
+    reversed_inputs.reverse();
+    let reversed = extract_with_options(
+        reversed_inputs,
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    assert_eq!(serial.dump(), parallel.dump());
+    assert_eq!(serial.dump(), reversed.dump());
+
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("shared", "Example.Shared"),
+        )
+        .with_traversed_header_for_input(
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("shared", "Example.Shared"),
+        );
+    let authorities = NamespaceAuthorities::new().with_exact("TYPE_CONFLICT", "Example.Shared");
+    let references = BTreeMap::new();
+    let functions = BTreeSet::from([
+        "FunctionConflict".to_string(),
+        "MissingFunction".to_string(),
+    ]);
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&functions);
+
+    let inspect = |snapshot: &Snapshot| {
+        let plan = snapshot
+            .plan_header_partitions(&policy, &authorities)
+            .unwrap();
+        let audit = plan.audit(&options).unwrap();
+        assert!(!audit.is_clean());
+        let blocked: BTreeSet<_> = audit
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.status == PlanningDiagnosticStatus::Blocked)
+            .map(|diagnostic| diagnostic.kind)
+            .collect();
+        assert!(blocked.contains(&PlanningDiagnosticKind::TypeRoot));
+        assert!(blocked.contains(&PlanningDiagnosticKind::ValueRoot));
+        assert!(blocked.contains(&PlanningDiagnosticKind::ConstantRoot));
+        assert!(blocked.contains(&PlanningDiagnosticKind::FunctionRoot));
+        let error = plan.emit_with_options(&options).unwrap_err().to_string();
+        assert!(error.starts_with("root planning failed with "), "{error}");
+        for expected in [
+            "ambiguous constant root `CONSTANT_CONFLICT`",
+            "selected function `MissingFunction` was not found",
+            "ambiguous type root `TYPE_CONFLICT`",
+            "ambiguous value root `VALUE_CONFLICT`",
+        ] {
+            assert!(error.contains(expected), "{expected}\n{error}");
+        }
+        (audit.diagnostics().to_vec(), error)
+    };
+    let expected = inspect(&serial);
+    assert_eq!(expected, inspect(&parallel));
+    assert_eq!(expected, inspect(&reversed));
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn constant_root_conflict_inventory_distinguishes_route_outcomes() {
+    helpers::ensure_libclang();
+
+    let scratch = scratch("constant-root-conflict-inventory");
+    let first = scratch.join("first.h");
+    let second = scratch.join("second.h");
+    std::fs::write(&first, "#define ROUTED_CONSTANT 1\n").unwrap();
+    std::fs::write(&second, "#define ROUTED_CONSTANT 2\n").unwrap();
+    let make_snapshot = |reverse| {
+        let mut inputs = vec![
+            Input::new(
+                "first.cpp",
+                format!("#include \"{}\"\n", first.to_string_lossy()),
+            )
+            .with_root_dirs([scratch.to_string_lossy().to_string()]),
+            Input::new(
+                "second.cpp",
+                format!("#include \"{}\"\n", second.to_string_lossy()),
+            )
+            .with_root_dirs([scratch.to_string_lossy().to_string()]),
+        ];
+        if reverse {
+            inputs.reverse();
+        }
+        extract(inputs, &["-x", "c++", "--target=x86_64-pc-windows-msvc"]).unwrap()
+    };
+    let distinct_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("first", "Example.First"),
+        )
+        .with_traversed_header_for_input(
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("second", "Example.Second"),
+        );
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let inspect_distinct = |snapshot: &Snapshot| {
+        let plan = snapshot
+            .plan_header_partitions(&distinct_policy, &NamespaceAuthorities::new())
+            .unwrap();
+        let audit = plan.audit(&options).unwrap();
+        assert!(audit.is_clean(), "{audit}");
+        let diagnostic = audit
+            .diagnostics()
+            .iter()
+            .find(|diagnostic| {
+                diagnostic.name == "ROUTED_CONSTANT"
+                    && diagnostic.kind == PlanningDiagnosticKind::ConstantRoot
+            })
+            .unwrap();
+        assert_eq!(diagnostic.status, PlanningDiagnosticStatus::Resolved);
+        assert!(
+            diagnostic.message.contains("distinct namespace routes"),
+            "{diagnostic:#?}"
+        );
+        let output = plan.emit_with_options(&options).unwrap();
+        assert_eq!(
+            output
+                .values()
+                .map(|rdl| rdl.matches("const ROUTED_CONSTANT").count())
+                .sum::<usize>(),
+            2
+        );
+        (audit.diagnostics().to_vec(), output)
+    };
+    let expected = inspect_distinct(&make_snapshot(false));
+    assert_eq!(expected, inspect_distinct(&make_snapshot(true)));
+
+    let missing = BTreeSet::from(["MissingFunction".to_string()]);
+    let mut blocked_options = EmitOptions::new("Example.Common", &references);
+    blocked_options.functions = Some(&missing);
+    let inspect_blocked = |snapshot: &Snapshot| {
+        let plan = snapshot
+            .plan_header_partitions(&distinct_policy, &NamespaceAuthorities::new())
+            .unwrap();
+        let audit = plan.audit(&blocked_options).unwrap();
+        assert!(!audit.is_clean());
+        assert!(audit.diagnostics().iter().any(|diagnostic| {
+            diagnostic.name == "ROUTED_CONSTANT"
+                && diagnostic.kind == PlanningDiagnosticKind::ConstantRoot
+                && diagnostic.status == PlanningDiagnosticStatus::Resolved
+                && diagnostic.message.contains("distinct namespace routes")
+        }));
+        assert!(audit.diagnostics().iter().any(|diagnostic| {
+            diagnostic.name == "MissingFunction"
+                && diagnostic.kind == PlanningDiagnosticKind::FunctionRoot
+                && diagnostic.status == PlanningDiagnosticStatus::Blocked
+        }));
+        (
+            audit.diagnostics().to_vec(),
+            plan.emit_with_options(&blocked_options)
+                .unwrap_err()
+                .to_string(),
+        )
+    };
+    let blocked = inspect_blocked(&make_snapshot(false));
+    assert_eq!(blocked, inspect_blocked(&make_snapshot(true)));
+
+    let same_route_policy = HeaderPartitionPolicy::new()
+        .with_traversed_header_for_input(
+            "first.cpp",
+            first.to_string_lossy(),
+            RootPartition::new("shared", "Example.Shared"),
+        )
+        .with_traversed_header_for_input(
+            "second.cpp",
+            second.to_string_lossy(),
+            RootPartition::new("shared", "Example.Shared"),
+        );
+    let snapshot = make_snapshot(false);
+    let plan = snapshot
+        .plan_header_partitions(&same_route_policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let audit = plan.audit(&options).unwrap();
+    assert!(!audit.is_clean());
+    assert!(audit.diagnostics().iter().any(|diagnostic| {
+        diagnostic.name == "ROUTED_CONSTANT"
+            && diagnostic.kind == PlanningDiagnosticKind::ConstantRoot
+            && diagnostic.status == PlanningDiagnosticStatus::Blocked
+    }));
+    assert!(
+        plan.emit_with_options(&options)
+            .unwrap_err()
+            .to_string()
+            .contains("ambiguous constant root `ROUTED_CONSTANT`")
+    );
+
+    std::fs::write(&second, "#define ROUTED_CONSTANT 1\n").unwrap();
+    let snapshot = make_snapshot(false);
+    let plan = snapshot
+        .plan_header_partitions(&same_route_policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let audit = plan.audit(&options).unwrap();
+    assert!(audit.is_clean(), "{audit}");
+    assert!(audit.diagnostics().iter().any(|diagnostic| {
+        diagnostic.name == "ROUTED_CONSTANT"
+            && diagnostic.kind == PlanningDiagnosticKind::ConstantRoot
+            && diagnostic.status == PlanningDiagnosticStatus::Resolved
+            && diagnostic
+                .message
+                .contains("coalesced compatible declarations")
+    }));
+    let output = plan.emit_with_options(&options).unwrap();
+    assert_eq!(
+        output
+            .values()
+            .map(|rdl| rdl.matches("const ROUTED_CONSTANT").count())
+            .sum::<usize>(),
+        1
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
 }
 
 #[test]
@@ -4003,11 +4282,17 @@ fn distinct_function_link_names_remain_independent_aliases() {
     let references = BTreeMap::new();
     let mut options = EmitOptions::new("Example.Common", &references);
     options.functions = Some(&selected);
-    let partitions = snapshot
+    let plan = snapshot
         .plan_header_partitions(&policy, &NamespaceAuthorities::new())
-        .unwrap()
-        .emit_with_options(&options)
         .unwrap();
+    let audit = plan.audit(&options).unwrap();
+    assert!(audit.is_clean(), "{audit}");
+    assert!(!audit.diagnostics().iter().any(|diagnostic| {
+        diagnostic.name == "Shared"
+            && diagnostic.kind == PlanningDiagnosticKind::FunctionRoot
+            && diagnostic.message.contains("distinct namespace routes")
+    }));
+    let partitions = plan.emit_with_options(&options).unwrap();
     let rdl = partitions.values().cloned().collect::<String>();
 
     assert_eq!(rdl.matches("fn FirstExport").count(), 1, "{rdl}");

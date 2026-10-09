@@ -73,7 +73,9 @@ emitted partition headers and owner settings use the resolved physical source pa
 overrides replace the default candidates for selected declarations, including input-qualified
 compile variants. Call the consuming `emit_with_options` for normal generation; it audits
 internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report without
-emission because auditing before emission repeats planning and clones the snapshot.
+emission because auditing before emission repeats planning and clones the snapshot. The audit's
+planning diagnostics include resolved same-route or distinct-namespace root conflicts and all
+independent blocked type, value, constant, and selected-function roots.
 `RootPartition::with_preserved_auto_function_pointer_level` restores the implicit pointer level for
 uses of a bare function typedef. A pointer typedef promoted to a delegate already contains that
 source pointer, so its uses keep only their authored outer pointer depth.
@@ -91,7 +93,8 @@ planning into RDL and WinMD attributes. Unknown, malformed, or misplaced annotat
 Callback conventions come from the callback declarator. Pointer aliases inherit from the exact
 bare function typedef they alias, not from referenced return, parameter, or record types. Captured
 SAL keeps ordinary NUL-terminated strings and double-NUL multistrings as separate parameter facts
-through `ParamAnnotation`.
+through `ParamAnnotation`. SAL does not rename a raw character pointer to `PCSTR` or `PCWSTR`;
+actual named string typedef uses retain their canonical names.
 
 Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
 to stderr without changing the generated RDL.

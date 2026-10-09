@@ -189,9 +189,32 @@ pub struct PartitionConflict {
     pub owners: Vec<RootOwner>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PlanningDiagnosticKind {
+    TypeRoot,
+    ValueRoot,
+    ConstantRoot,
+    FunctionRoot,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PlanningDiagnosticStatus {
+    Resolved,
+    Blocked,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PlanningDiagnostic {
+    pub name: String,
+    pub kind: PlanningDiagnosticKind,
+    pub status: PlanningDiagnosticStatus,
+    pub message: String,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PartitionAudit {
     conflicts: Vec<PartitionConflict>,
+    diagnostics: Vec<PlanningDiagnostic>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -516,19 +539,32 @@ impl HeaderPartitionPolicy {
 impl PartitionAudit {
     pub fn is_clean(&self) -> bool {
         self.conflicts.is_empty()
+            && self
+                .diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.status == PlanningDiagnosticStatus::Resolved)
     }
 
     pub fn conflicts(&self) -> &[PartitionConflict] {
         &self.conflicts
     }
+
+    pub fn diagnostics(&self) -> &[PlanningDiagnostic] {
+        &self.diagnostics
+    }
 }
 
 impl Display for PartitionAudit {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let blocked = self
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.status == PlanningDiagnosticStatus::Blocked)
+            .count();
         writeln!(
             formatter,
             "header partition planning found {} conflict(s):",
-            self.conflicts.len()
+            self.conflicts.len() + blocked
         )?;
         for conflict in &self.conflicts {
             let kind = match conflict.kind {
@@ -555,6 +591,13 @@ impl Display for PartitionAudit {
                     .join("; ")
             };
             writeln!(formatter, "- {kind} `{}` {reason}: {owners}", conflict.name)?;
+        }
+        for diagnostic in self
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.status == PlanningDiagnosticStatus::Blocked)
+        {
+            writeln!(formatter, "- {}", diagnostic.message)?;
         }
         Ok(())
     }
@@ -1657,6 +1700,9 @@ impl Snapshot {
         &mut self,
         authorities: &NamespaceAuthorities,
     ) -> Result<(), Error> {
+        let target = self.timing_target.clone();
+        let timing = target.is_some();
+        let start = timing.then(std::time::Instant::now);
         self.namespace_authorities = authorities.resolve(
             self.facts
                 .iter()
@@ -1686,6 +1732,16 @@ impl Snapshot {
                     })
             })
             .collect();
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=apply-namespace-authorities target={} names={} facts={} constants={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                self.namespace_authorities.len(),
+                self.fact_namespace_authorities.len(),
+                self.constant_namespace_authorities.len(),
+                elapsed_ms(start)
+            );
+        }
         Ok(())
     }
 
@@ -1694,9 +1750,12 @@ impl Snapshot {
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let target = self.timing_target.clone();
-        let (snapshot, display_names, source_names) =
+        let (snapshot, display_names, source_names, mut diagnostics) =
             self.into_partitioned_planning_snapshot(options);
-        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
+        let mut plan = snapshot
+            .plan_partitioned(options, &display_names, &source_names)
+            .map_err(PlanningError::into_error)?;
+        plan.diagnostics.append(&mut diagnostics);
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let routes = snapshot.resolve_partition_routes(candidates)?;
         snapshot.format_partitioned_plan(plan, options, &routes, &display_names, target.as_deref())
@@ -1753,15 +1812,17 @@ impl Snapshot {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
         let plan_time = timing.then(std::time::Instant::now);
-        let plan = self.plan(PlanningOptions {
-            references: options.references,
-            excluded_types: options.excluded_types.or(options.excluded),
-            excluded_functions: options.excluded_functions.or(options.excluded),
-            excluded_constants: options.excluded_constants.or(options.excluded),
-            selected_functions: options.functions,
-            display_names: None,
-            source_names: None,
-        })?;
+        let plan = self
+            .plan(PlanningOptions {
+                references: options.references,
+                excluded_types: options.excluded_types.or(options.excluded),
+                excluded_functions: options.excluded_functions.or(options.excluded),
+                excluded_constants: options.excluded_constants.or(options.excluded),
+                selected_functions: options.functions,
+                display_names: None,
+                source_names: None,
+            })
+            .map_err(PlanningError::into_error)?;
         if timing {
             eprintln!(
                 "windows-clang timing phase=planning target={target} facts={} constants={} types={} values={} functions={} output_constants={} elapsed_ms={:.3}",
@@ -2730,12 +2791,66 @@ impl Snapshot {
     fn into_partitioned_planning_snapshot(
         mut self,
         options: &EmitOptions<'_>,
-    ) -> (Self, BTreeMap<String, String>, PlanningSourceNames) {
+    ) -> (
+        Self,
+        BTreeMap<String, String>,
+        PlanningSourceNames,
+        Vec<PlanningDiagnostic>,
+    ) {
+        let target = self.timing_target.clone();
+        let timing = target.is_some();
+        let total_time = timing.then(std::time::Instant::now);
+        let mut phase_time = timing.then(std::time::Instant::now);
         self.promote_selected_pointer_class_layouts(options);
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-promote-layouts target={} facts={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                self.facts.len(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
         let source_names = PlanningSourceNames::new(&self);
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-source-names target={} facts={} constants={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                self.facts.len(),
+                self.constants.len(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
         self.apply_partition_type_settings();
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-type-settings target={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
         self.apply_partition_exclusions();
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-exclusions target={} facts={} constants={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                self.facts.len(),
+                self.constants.len(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
         self.apply_partition_remaps();
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-remaps target={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
         let declarations = DeclarationIndex::new(&self.facts);
         let rooted_fact_namespaces: BTreeMap<_, _> = self
             .facts
@@ -2776,6 +2891,16 @@ impl Snapshot {
                 })
                 .collect::<BTreeSet<_>>()
         };
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-owner-map target={} rooted_facts={} retained_pointer_aliases={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                rooted_fact_namespaces.len(),
+                retained_canonical_pointer_declarations.len(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
         let mut variants: BTreeMap<&str, BTreeMap<String, Vec<&Fact>>> = BTreeMap::new();
         for fact in self
             .facts
@@ -2877,7 +3002,7 @@ impl Snapshot {
                 })
             })
             .collect();
-        let constant_collisions: BTreeSet<_> = self
+        let constant_routes = self
             .constants
             .iter()
             .filter_map(|constant| {
@@ -2895,12 +3020,82 @@ impl Snapshot {
                     routes.entry(name).or_default().insert(namespace);
                     routes
                 },
-            )
-            .into_iter()
-            .filter_map(|(name, namespaces)| (namespaces.len() > 1).then_some(name))
+            );
+        let constant_collisions: BTreeSet<_> = constant_routes
+            .iter()
+            .filter(|(_, namespaces)| namespaces.len() > 1)
+            .map(|(name, _)| name.clone())
             .collect();
+        let mut planning_diagnostics = BTreeSet::new();
+        let fact_routes = self
+            .facts
+            .iter()
+            .filter(|fact| fact.root && collisions.contains(&fact.name))
+            .filter_map(|fact| {
+                Some((
+                    (fact.name.clone(), planning_diagnostic_kind_for_fact(fact)?),
+                    rooted_fact_namespaces.get(&fact.origin)?.clone(),
+                ))
+            })
+            .fold(
+                BTreeMap::<_, BTreeSet<_>>::new(),
+                |mut routes, (key, namespace)| {
+                    routes.entry(key).or_default().insert(namespace);
+                    routes
+                },
+            );
+        for ((name, kind), namespaces) in fact_routes {
+            if namespaces.len() > 1 {
+                planning_diagnostics.insert(resolved_planning_diagnostic(
+                    &name,
+                    kind,
+                    format!(
+                        "{} root `{name}` retained distinct namespace routes: {}",
+                        planning_diagnostic_kind_name(kind),
+                        namespaces.into_iter().collect::<Vec<_>>().join(", ")
+                    ),
+                ));
+            }
+        }
+        for (name, namespaces) in &constant_routes {
+            if namespaces.len() > 1 {
+                planning_diagnostics.insert(resolved_planning_diagnostic(
+                    name,
+                    PlanningDiagnosticKind::ConstantRoot,
+                    format!(
+                        "constant root `{name}` retained distinct namespace routes: {}",
+                        namespaces.iter().cloned().collect::<Vec<_>>().join(", ")
+                    ),
+                ));
+            }
+        }
+        let planning_diagnostics = planning_diagnostics.into_iter().collect::<Vec<_>>();
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-collision-analysis target={} type_value_collisions={} constant_collisions={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                collisions.len(),
+                constant_collisions.len(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
         if collisions.is_empty() && constant_collisions.is_empty() {
-            return (self, BTreeMap::new(), source_names);
+            if timing {
+                eprintln!(
+                    "windows-clang timing phase=partition-rewrite target={} scoped_routes=0 elapsed_ms={:.3}",
+                    target.as_deref().unwrap(),
+                    elapsed_ms(phase_time)
+                );
+                eprintln!(
+                    "windows-clang timing phase=into-partitioned-planning-snapshot target={} facts={} constants={} scoped_routes=0 elapsed_ms={:.3}",
+                    target.as_deref().unwrap(),
+                    self.facts.len(),
+                    self.constants.len(),
+                    elapsed_ms(total_time)
+                );
+            }
+            return (self, BTreeMap::new(), source_names, planning_diagnostics);
         }
         let fact_requires_scoping = |fact: &Fact| {
             if collisions.contains(&fact.name) {
@@ -3096,6 +3291,16 @@ impl Snapshot {
             })
             .collect();
         self.projected_type_names.extend(projected_scoped_names);
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-scope-analysis target={} scoped_routes={} scoped_facts={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                scoped_names.len(),
+                fact_namespaces.len(),
+                elapsed_ms(phase_time)
+            );
+            phase_time = Some(std::time::Instant::now());
+        }
 
         for fact in &mut self.facts {
             let original = fact.name.clone();
@@ -3142,7 +3347,25 @@ impl Snapshot {
                 &collisions,
             );
         }
-        (self, display_names, source_names)
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=partition-rewrite target={} facts={} constants={} scoped_routes={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                self.facts.len(),
+                self.constants.len(),
+                scoped_names.len(),
+                elapsed_ms(phase_time)
+            );
+            eprintln!(
+                "windows-clang timing phase=into-partitioned-planning-snapshot target={} facts={} constants={} scoped_routes={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                self.facts.len(),
+                self.constants.len(),
+                scoped_names.len(),
+                elapsed_ms(total_time)
+            );
+        }
+        (self, display_names, source_names, planning_diagnostics)
     }
 
     fn promote_selected_pointer_class_layouts(&mut self, options: &EmitOptions<'_>) {
@@ -3864,17 +4087,56 @@ impl Snapshot {
             .collect()
     }
 
-    fn partition_route_conflicts(
+    fn partition_route_audit(
         &self,
+        plan: &Plan<'_>,
         candidates: &BTreeMap<(String, OutputKind), RouteCandidate<'_>>,
-    ) -> Vec<PartitionConflict> {
-        let mut conflicts = candidates
-            .values()
-            .filter_map(route_candidate_conflict)
-            .collect::<Vec<_>>();
+    ) -> (Vec<PartitionConflict>, Vec<PlanningDiagnostic>) {
+        let constant_names: BTreeSet<_> = plan
+            .constants
+            .iter()
+            .map(|constant| constant.constant.name.as_str())
+            .collect();
+        let function_names: BTreeSet<_> = plan
+            .functions
+            .iter()
+            .map(|function| function.name.as_str())
+            .collect();
+        let diagnostic_kind = |candidate: &RouteCandidate<'_>| match candidate.kind {
+            OutputKind::Type => PlanningDiagnosticKind::TypeRoot,
+            OutputKind::Value if constant_names.contains(candidate.name.as_str()) => {
+                PlanningDiagnosticKind::ConstantRoot
+            }
+            OutputKind::Value if function_names.contains(candidate.name.as_str()) => {
+                PlanningDiagnosticKind::FunctionRoot
+            }
+            OutputKind::Value => PlanningDiagnosticKind::ValueRoot,
+        };
+        let mut conflicts = Vec::new();
+        let mut diagnostics = Vec::new();
+        for candidate in candidates.values() {
+            if let Some(conflict) = route_candidate_conflict(candidate) {
+                conflicts.push(conflict);
+                continue;
+            }
+            if candidate.owners().len() > 1 {
+                let kind = diagnostic_kind(candidate);
+                diagnostics.push(resolved_planning_diagnostic(
+                    &candidate.source_name,
+                    kind,
+                    format!(
+                        "{} root `{}` resolved by existing ownership or namespace authority",
+                        planning_diagnostic_kind_name(kind),
+                        candidate.source_name,
+                    ),
+                ));
+            }
+        }
         conflicts.sort();
         conflicts.dedup();
-        conflicts
+        diagnostics.sort();
+        diagnostics.dedup();
+        (conflicts, diagnostics)
     }
 
     fn partition_route_candidates<'a>(
@@ -4745,7 +5007,7 @@ impl Snapshot {
         options: &EmitOptions<'_>,
         display_names: &BTreeMap<String, String>,
         source_names: &PlanningSourceNames,
-    ) -> Result<Plan<'_>, Error> {
+    ) -> Result<Plan<'_>, PlanningError> {
         let references = scoped_planning_map(options.references, display_names);
         let excluded_types =
             scoped_planning_set(options.excluded_types.or(options.excluded), display_names);
@@ -4768,7 +5030,7 @@ impl Snapshot {
         })
     }
 
-    fn plan(&self, options: PlanningOptions<'_>) -> Result<Plan<'_>, Error> {
+    fn plan(&self, options: PlanningOptions<'_>) -> Result<Plan<'_>, PlanningError> {
         let PlanningOptions {
             references,
             excluded_types,
@@ -4857,6 +5119,7 @@ impl Snapshot {
             is_flat_declaration(fact, &facts_by_origin, references, false)
                 || is_identified_native_interface_root(fact)
         };
+        let mut planning_diagnostics = Vec::new();
         let interfaces: BTreeSet<_> = self
             .facts
             .iter()
@@ -4879,10 +5142,14 @@ impl Snapshot {
                 declared_interface_guids.insert(fact.name.as_str(), guid.as_str())
                 && previous != guid
             {
-                return Err(Error(format!(
-                    "interface `{}` has conflicting UUID attributes",
-                    fact.name
-                )));
+                planning_diagnostics.push(blocked_planning_diagnostic(
+                    &fact.name,
+                    PlanningDiagnosticKind::TypeRoot,
+                    Error(format!(
+                        "interface `{}` has conflicting UUID attributes",
+                        fact.name
+                    )),
+                ));
             }
         }
         let mut interface_guids = BTreeMap::new();
@@ -4907,9 +5174,13 @@ impl Snapshot {
             if let Some(previous) = interface_guids.insert(interface, value.clone())
                 && previous != *value
             {
-                return Err(Error(format!(
-                    "interface `{source_interface}` has conflicting IID declarations"
-                )));
+                planning_diagnostics.push(blocked_planning_diagnostic(
+                    source_interface,
+                    PlanningDiagnosticKind::ValueRoot,
+                    Error(format!(
+                        "interface `{source_interface}` has conflicting IID declarations"
+                    )),
+                ));
             }
         }
 
@@ -5139,32 +5410,79 @@ impl Snapshot {
         let mut type_roots = vec![];
         let mut value_roots = vec![];
         let mut functions = vec![];
-        let mut function_root_errors = vec![];
         let mut constants = vec![];
         let mut root_names = BTreeSet::new();
+        let mut function_candidates = BTreeSet::new();
         let mut shape_cache = ShapeCache::default();
 
         for (name, roots) in roots {
-            if !roots.types.is_empty() && !roots.functions.is_empty() {
-                return Err(Error(format!(
-                    "type and function roots collide on `{name}`"
-                )));
+            for function in &roots.functions {
+                let FactData::Function { link_name, .. } = &function.data else {
+                    unreachable!()
+                };
+                function_candidates.insert(link_name.as_str());
+            }
+            let type_function_collision = !roots.types.is_empty() && !roots.functions.is_empty();
+            if type_function_collision {
+                planning_diagnostics.push(blocked_planning_diagnostic(
+                    name,
+                    PlanningDiagnosticKind::TypeRoot,
+                    Error(format!("type and function roots collide on `{name}`")),
+                ));
             }
             let value = if roots.values.is_empty()
                 || excluded_constants.is_some_and(|excluded| excluded.contains(name))
             {
                 None
             } else {
-                Some(choose_value_root(name, &roots.values)?)
+                match choose_value_root(name, &roots.values) {
+                    Ok(value) => {
+                        if roots.values.len() > 1 {
+                            planning_diagnostics.push(resolved_planning_diagnostic(
+                                name,
+                                PlanningDiagnosticKind::ValueRoot,
+                                format!("value root `{name}` coalesced compatible declarations"),
+                            ));
+                        }
+                        Some(value)
+                    }
+                    Err(error) => {
+                        planning_diagnostics.push(blocked_planning_diagnostic(
+                            name,
+                            PlanningDiagnosticKind::ValueRoot,
+                            error,
+                        ));
+                        None
+                    }
+                }
             };
             let constant = if roots.constants.is_empty() {
                 None
             } else {
-                Some(self.choose_constant_root(name, &roots.constants)?)
+                match self.choose_constant_root(name, &roots.constants) {
+                    Ok(constant) => {
+                        if roots.constants.len() > 1 {
+                            planning_diagnostics.push(resolved_planning_diagnostic(
+                                name,
+                                PlanningDiagnosticKind::ConstantRoot,
+                                format!("constant root `{name}` coalesced compatible declarations"),
+                            ));
+                        }
+                        Some(constant)
+                    }
+                    Err(error) => {
+                        planning_diagnostics.push(blocked_planning_diagnostic(
+                            name,
+                            PlanningDiagnosticKind::ConstantRoot,
+                            error,
+                        ));
+                        None
+                    }
+                }
             };
             let types_alias_value_class =
                 types_alias_value_class(name, &roots.types, &roots.values);
-            if !roots.types.is_empty() && !types_alias_value_class {
+            if !type_function_collision && !roots.types.is_empty() && !types_alias_value_class {
                 let excluded = roots.types.iter().any(|fact| {
                     excluded_declarations.contains(&(fact.origin.tu.clone(), fact.spelling.clone()))
                         || excluded_local_names
@@ -5178,25 +5496,50 @@ impl Snapshot {
                             .iter()
                             .any(|fact| defines_local_type(name, fact)));
                 if !excluded {
+                    let multiple = roots.types.len() > 1;
                     let authority = self.authority_candidates(&roots.types, &declarations);
-                    let root =
-                        choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
-                    let tagged = authority
-                        .iter()
-                        .any(|fact| self.root_owners.contains_key(&fact.origin));
-                    let routed = authority
-                        .iter()
-                        .any(|fact| self.fact_authority_namespace(fact, &declarations).is_some());
-                    if tagged
-                        || routed
-                        || !matches!(root.data, FactData::Typedef { .. })
-                        || (self.root_partitions.is_empty() && !self.header_partition_policy)
+                    let authority_reduced = authority.len() < roots.types.len();
+                    match choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)
                     {
-                        root_names.insert(name.to_string());
-                        type_roots.push(root);
+                        Ok(root) => {
+                            if multiple {
+                                let resolution = if authority_reduced {
+                                    "selected by existing ownership or namespace authority"
+                                } else {
+                                    "coalesced compatible declarations"
+                                };
+                                planning_diagnostics.push(resolved_planning_diagnostic(
+                                    name,
+                                    PlanningDiagnosticKind::TypeRoot,
+                                    format!("type root `{name}` {resolution}"),
+                                ));
+                            }
+                            let tagged = authority
+                                .iter()
+                                .any(|fact| self.root_owners.contains_key(&fact.origin));
+                            let routed = authority.iter().any(|fact| {
+                                self.fact_authority_namespace(fact, &declarations).is_some()
+                            });
+                            if tagged
+                                || routed
+                                || !matches!(root.data, FactData::Typedef { .. })
+                                || (self.root_partitions.is_empty()
+                                    && !self.header_partition_policy)
+                            {
+                                root_names.insert(name.to_string());
+                                type_roots.push(root);
+                            }
+                        }
+                        Err(error) => {
+                            planning_diagnostics.push(blocked_planning_diagnostic(
+                                name,
+                                PlanningDiagnosticKind::TypeRoot,
+                                error,
+                            ));
+                        }
                     }
                 }
-            } else if !roots.functions.is_empty() {
+            } else if !type_function_collision && !roots.functions.is_empty() {
                 let mut by_link_name: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
                 for function in roots.functions {
                     let FactData::Function { link_name, .. } = &function.data else {
@@ -5215,7 +5558,11 @@ impl Snapshot {
                     ) {
                         Ok(selection) => selection,
                         Err(error) => {
-                            function_root_errors.push(error);
+                            planning_diagnostics.push(blocked_planning_diagnostic(
+                                link_name,
+                                PlanningDiagnosticKind::FunctionRoot,
+                                error,
+                            ));
                             continue;
                         }
                     };
@@ -5237,9 +5584,6 @@ impl Snapshot {
             if let Some(constant) = constant {
                 constants.push(constant);
             }
-        }
-        if !function_root_errors.is_empty() {
-            return Err(aggregate_function_root_errors(function_root_errors));
         }
         if self.header_partition_policy {
             // Associated enum names are semantic type dependencies of selected roots.
@@ -5295,25 +5639,53 @@ impl Snapshot {
                     continue;
                 }
                 let authority = self.authority_candidates(&matches, &declarations);
-                let root =
-                    choose_type_root_cached(&name, &authority, &facts_index, &mut shape_cache)?;
-                root_names.insert(name);
-                type_roots.push(root);
+                let authority_reduced = authority.len() < matches.len();
+                match choose_type_root_cached(&name, &authority, &facts_index, &mut shape_cache) {
+                    Ok(root) => {
+                        if matches.len() > 1 {
+                            let resolution = if authority_reduced {
+                                "selected by existing ownership or namespace authority"
+                            } else {
+                                "coalesced compatible declarations"
+                            };
+                            planning_diagnostics.push(resolved_planning_diagnostic(
+                                &name,
+                                PlanningDiagnosticKind::TypeRoot,
+                                format!("associated enum root `{name}` {resolution}"),
+                            ));
+                        }
+                        root_names.insert(name);
+                        type_roots.push(root);
+                    }
+                    Err(error) => {
+                        planning_diagnostics.push(blocked_planning_diagnostic(
+                            name,
+                            PlanningDiagnosticKind::TypeRoot,
+                            error,
+                        ));
+                    }
+                }
             }
         }
         if let Some(selected) = selected_functions {
-            let found: BTreeSet<_> = functions
+            for missing in selected
                 .iter()
-                .filter_map(|function| match &function.fact.data {
-                    FactData::Function { link_name, .. } => Some(link_name.as_str()),
-                    _ => None,
-                })
-                .collect();
-            if let Some(missing) = selected.iter().find(|name| !found.contains(name.as_str())) {
-                return Err(Error(format!(
-                    "selected function `{missing}` was not found"
-                )));
+                .filter(|name| !function_candidates.contains(name.as_str()))
+            {
+                planning_diagnostics.push(blocked_planning_diagnostic(
+                    missing,
+                    PlanningDiagnosticKind::FunctionRoot,
+                    Error(format!("selected function `{missing}` was not found")),
+                ));
             }
+        }
+        planning_diagnostics.sort();
+        planning_diagnostics.dedup();
+        if planning_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.status == PlanningDiagnosticStatus::Blocked)
+        {
+            return Err(PlanningError::RootDiagnostics(planning_diagnostics));
         }
         if timing {
             eprintln!(
@@ -5454,7 +5826,7 @@ impl Snapshot {
                                 dependency_diagnostics.block(reference, error.to_string(), source);
                                 continue;
                             }
-                            Err(error) => return Err(error),
+                            Err(error) => return Err(error.into()),
                         };
                         dependency_diagnostics.resolve(reference);
                         if self.header_partition_policy
@@ -5632,7 +6004,7 @@ impl Snapshot {
                             dependency_diagnostics.block(reference, error.to_string(), source);
                             continue;
                         }
-                        error => return Err(error),
+                        error => return Err(error.into()),
                     },
                     choices if exact_non_flat => match choose_type_root_cached(
                         name,
@@ -5645,7 +6017,7 @@ impl Snapshot {
                             dependency_diagnostics.block(reference, error.to_string(), source);
                             continue;
                         }
-                        Err(error) => return Err(error),
+                        Err(error) => return Err(error.into()),
                     },
                     choices => {
                         match choose_type_root_cached(name, choices, &facts_index, &mut shape_cache)
@@ -5655,7 +6027,7 @@ impl Snapshot {
                                 dependency_diagnostics.block(reference, error.to_string(), source);
                                 continue;
                             }
-                            Err(error) => return Err(error),
+                            Err(error) => return Err(error.into()),
                         }
                     }
                 };
@@ -5686,7 +6058,7 @@ impl Snapshot {
                             dependency_diagnostics.block(reference, error.to_string(), source);
                             continue;
                         }
-                        return Err(error);
+                        return Err(error.into());
                     }
                     if !owned.is_empty() {
                         fact = match choose_type_root_cached(
@@ -5700,7 +6072,7 @@ impl Snapshot {
                                 dependency_diagnostics.block(reference, error.to_string(), source);
                                 continue;
                             }
-                            Err(error) => return Err(error),
+                            Err(error) => return Err(error.into()),
                         };
                     }
                 }
@@ -5712,7 +6084,7 @@ impl Snapshot {
                         dependency_diagnostics.block(reference, error.to_string(), source);
                         continue;
                     }
-                    return Err(error);
+                    return Err(error.into());
                 }
                 if !is_type_fact(fact) {
                     let error = self.unresolved_local_type_error(name, tu, declaration);
@@ -5720,7 +6092,7 @@ impl Snapshot {
                         dependency_diagnostics.block(reference, error.to_string(), source);
                         continue;
                     }
-                    return Err(error);
+                    return Err(error.into());
                 };
                 if canonical_named_type(name).is_some()
                     && matches!(fact.data, FactData::Typedef { .. })
@@ -5769,7 +6141,7 @@ impl Snapshot {
                         elapsed_ms(phase_time),
                     );
                 }
-                return Err(dependency_diagnostics.error());
+                return Err(dependency_diagnostics.error().into());
             }
             let mut grouped: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
             for fact in facts.into_iter().map(|origin| facts_by_origin[&origin]) {
@@ -6260,7 +6632,8 @@ impl Snapshot {
                     &dependency_diagnostics,
                     &blockers,
                     display_names,
-                ));
+                )
+                .into());
             }
         }
         let mut types: Vec<_> = facts_by_name
@@ -6386,7 +6759,8 @@ impl Snapshot {
                 return Err(Error(format!(
                     "interface pointer alias `{}` has conflicting targets",
                     fact.name
-                )));
+                ))
+                .into());
             }
         }
         let mut pointer_aliases: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -6407,7 +6781,8 @@ impl Snapshot {
                     if previous != &projected {
                         return Err(Error(format!(
                             "interface pointer alias `{alias}` has conflicting targets"
-                        )));
+                        ))
+                        .into());
                     }
                 } else {
                     pointer_interface_aliases.insert((*alias).to_string(), projected.clone());
@@ -6469,13 +6844,13 @@ impl Snapshot {
         let mut type_output_names = BTreeSet::new();
         for planned in &types {
             if !type_output_names.insert(planned.name.as_str()) {
-                return Err(Error(format!("duplicate planned name `{}`", planned.name)));
+                return Err(Error(format!("duplicate planned name `{}`", planned.name)).into());
             }
         }
         let mut value_output_names = BTreeSet::new();
         for planned in &values {
             if !value_output_names.insert(planned.name.as_str()) {
-                return Err(Error(format!("duplicate planned name `{}`", planned.name)));
+                return Err(Error(format!("duplicate planned name `{}`", planned.name)).into());
             }
         }
         for planned in &constants {
@@ -6483,14 +6858,15 @@ impl Snapshot {
                 return Err(Error(format!(
                     "duplicate planned name `{}`",
                     planned.constant.name
-                )));
+                ))
+                .into());
             }
         }
         for function in &functions {
             if type_output_names.contains(function.name.as_str())
                 || !value_output_names.insert(function.name.as_str())
             {
-                return Err(Error(format!("duplicate planned name `{}`", function.name)));
+                return Err(Error(format!("duplicate planned name `{}`", function.name)).into());
             }
         }
         constants.sort_by(|left, right| left.constant.name.cmp(&right.constant.name));
@@ -6511,24 +6887,51 @@ impl Snapshot {
             pointer_interface_aliases,
             interface_guids,
             flag_enums,
+            diagnostics: planning_diagnostics,
         })
     }
 }
 
 impl HeaderPartitionPlan {
     pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
-        let (mut snapshot, display_names, source_names) = self
+        let (mut snapshot, display_names, source_names, mut planning_diagnostics) = self
             .snapshot
             .clone()
             .into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
+        let plan = match snapshot.plan_partitioned(options, &display_names, &source_names) {
+            Ok(plan) => plan,
+            Err(PlanningError::RootDiagnostics(mut diagnostics)) => {
+                planning_diagnostics.append(&mut diagnostics);
+                let mut diagnostics = planning_diagnostics;
+                diagnostics.sort();
+                diagnostics.dedup();
+                let mut conflicts = self.root_conflicts.clone();
+                conflicts.sort();
+                conflicts.dedup();
+                return Ok(PartitionAudit {
+                    conflicts,
+                    diagnostics,
+                });
+            }
+            Err(PlanningError::Error(error)) => return Err(error),
+        };
+        planning_diagnostics.extend(plan.diagnostics.iter().cloned());
+        let mut diagnostics = planning_diagnostics;
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
+        let (route_conflicts, route_diagnostics) =
+            snapshot.partition_route_audit(&plan, &candidates);
+        diagnostics.extend(route_diagnostics);
         let mut conflicts = self.root_conflicts.clone();
-        conflicts.extend(snapshot.partition_route_conflicts(&candidates));
+        conflicts.extend(route_conflicts);
         conflicts.sort();
         conflicts.dedup();
-        Ok(PartitionAudit { conflicts })
+        diagnostics.sort();
+        diagnostics.dedup();
+        Ok(PartitionAudit {
+            conflicts,
+            diagnostics,
+        })
     }
 
     pub fn emit_with_options(
@@ -6536,17 +6939,28 @@ impl HeaderPartitionPlan {
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let target = self.snapshot.timing_target.clone();
-        let (mut snapshot, display_names, source_names) =
+        let (mut snapshot, display_names, source_names, mut diagnostics) =
             self.snapshot.into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
+        let plan = snapshot
+            .plan_partitioned(options, &display_names, &source_names)
+            .map_err(PlanningError::into_error)?;
         let ambiguity_summary = plan.function_ambiguity_summary();
+        diagnostics.extend(plan.diagnostics.iter().cloned());
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
+        let (route_conflicts, route_diagnostics) =
+            snapshot.partition_route_audit(&plan, &candidates);
+        diagnostics.extend(route_diagnostics);
         let mut conflicts = self.root_conflicts;
-        conflicts.extend(snapshot.partition_route_conflicts(&candidates));
+        conflicts.extend(route_conflicts);
         conflicts.sort();
         conflicts.dedup();
-        let audit = PartitionAudit { conflicts };
+        diagnostics.sort();
+        diagnostics.dedup();
+        let audit = PartitionAudit {
+            conflicts,
+            diagnostics,
+        };
         if !audit.is_clean() {
             return Err(Error(audit.to_string()));
         }
@@ -6675,6 +7089,28 @@ struct Plan<'a> {
     pointer_interface_aliases: BTreeMap<String, String>,
     interface_guids: BTreeMap<String, String>,
     flag_enums: BTreeSet<(String, String)>,
+    diagnostics: Vec<PlanningDiagnostic>,
+}
+
+#[derive(Debug)]
+enum PlanningError {
+    Error(Error),
+    RootDiagnostics(Vec<PlanningDiagnostic>),
+}
+
+impl PlanningError {
+    fn into_error(self) -> Error {
+        match self {
+            Self::Error(error) => error,
+            Self::RootDiagnostics(diagnostics) => root_diagnostics_error(diagnostics),
+        }
+    }
+}
+
+impl From<Error> for PlanningError {
+    fn from(error: Error) -> Self {
+        Self::Error(error)
+    }
 }
 
 impl<'a> Plan<'a> {
@@ -7767,6 +8203,18 @@ fn fact_partition_item_kind(fact: &Fact) -> Option<PartitionItemKind> {
         Some(PartitionItemKind::Type)
     } else if is_value_fact(fact) || matches!(fact.data, FactData::Function { .. }) {
         Some(PartitionItemKind::Value)
+    } else {
+        None
+    }
+}
+
+fn planning_diagnostic_kind_for_fact(fact: &Fact) -> Option<PlanningDiagnosticKind> {
+    if matches!(fact.data, FactData::Function { .. }) {
+        Some(PlanningDiagnosticKind::FunctionRoot)
+    } else if is_type_fact(fact) {
+        Some(PlanningDiagnosticKind::TypeRoot)
+    } else if is_value_fact(fact) {
+        Some(PlanningDiagnosticKind::ValueRoot)
     } else {
         None
     }
@@ -9082,6 +9530,70 @@ fn aggregate_function_root_errors(mut errors: Vec<Error>) -> Error {
             .collect::<Vec<_>>()
             .join("\n  ")
     ))
+}
+
+fn root_diagnostics_error(mut diagnostics: Vec<PlanningDiagnostic>) -> Error {
+    diagnostics.retain(|diagnostic| diagnostic.status == PlanningDiagnosticStatus::Blocked);
+    diagnostics.sort();
+    diagnostics.dedup();
+    if diagnostics.len() == 1 {
+        return Error(diagnostics.pop().unwrap().message);
+    }
+    if diagnostics.iter().all(|diagnostic| {
+        diagnostic.kind == PlanningDiagnosticKind::FunctionRoot
+            && !diagnostic.message.starts_with("selected function `")
+    }) {
+        return aggregate_function_root_errors(
+            diagnostics
+                .into_iter()
+                .map(|diagnostic| Error(diagnostic.message))
+                .collect(),
+        );
+    }
+    let count = diagnostics.len();
+    Error(format!(
+        "root planning failed with {count} error(s):\n  {}",
+        diagnostics
+            .into_iter()
+            .map(|diagnostic| diagnostic.message)
+            .collect::<Vec<_>>()
+            .join("\n  ")
+    ))
+}
+
+fn resolved_planning_diagnostic(
+    name: impl Into<String>,
+    kind: PlanningDiagnosticKind,
+    message: impl Into<String>,
+) -> PlanningDiagnostic {
+    PlanningDiagnostic {
+        name: name.into(),
+        kind,
+        status: PlanningDiagnosticStatus::Resolved,
+        message: message.into(),
+    }
+}
+
+fn planning_diagnostic_kind_name(kind: PlanningDiagnosticKind) -> &'static str {
+    match kind {
+        PlanningDiagnosticKind::TypeRoot => "type",
+        PlanningDiagnosticKind::ValueRoot => "value",
+        PlanningDiagnosticKind::ConstantRoot => "constant",
+        PlanningDiagnosticKind::FunctionRoot => "function",
+    }
+}
+
+fn blocked_planning_diagnostic(
+    name: impl Into<String>,
+    kind: PlanningDiagnosticKind,
+    error: Error,
+) -> PlanningDiagnostic {
+    PlanningDiagnostic {
+        name: name.into(),
+        kind,
+        status: PlanningDiagnosticStatus::Blocked,
+        message: error.to_string(),
+    }
 }
 
 type FunctionParentPath = Vec<(FactKind, String, Option<Location>)>;
@@ -10764,21 +11276,6 @@ fn emitted_pointer_is_mutable(param: &Parameter, projection: &TypeProjection<'_>
 
 fn parameter_string_name(param: &Parameter) -> Option<&'static str> {
     match &param.ty {
-        TypeRef::Pointer { mutable, target } if param.annotation.null_terminated => {
-            let shape = match target.as_ref() {
-                TypeRef::Scalar(Scalar::I8 | Scalar::U8) => "i8",
-                TypeRef::Scalar(Scalar::U16) => "u16",
-                TypeRef::Named { name, .. } => canonical_named_type(name)?,
-                _ => return None,
-            };
-            match (mutable, shape) {
-                (false, "i8" | "u8") => Some("PCSTR"),
-                (true, "i8" | "u8") => Some("PSTR"),
-                (false, "u16") => Some("PCWSTR"),
-                (true, "u16") => Some("PWSTR"),
-                _ => None,
-            }
-        }
         TypeRef::Named { name, .. } => {
             if param.annotation.input && !param.annotation.output {
                 match name.as_str() {
