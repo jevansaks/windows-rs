@@ -4022,6 +4022,10 @@ impl Snapshot {
                 .constant_root_owners
                 .get(&(constant.root.clone(), constant.name.clone()))
                 .or_else(|| self.root_owners.get(&constant.root))
+                .or_else(|| {
+                    self.root_partitions
+                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
+                })
                 .cloned()
                 .into_iter()
                 .collect();
@@ -4042,6 +4046,10 @@ impl Snapshot {
                 .constant_root_owners
                 .get(&(constant.root.clone(), constant.name.clone()))
                 .or_else(|| self.root_owners.get(&constant.root))
+                .or_else(|| {
+                    self.root_partitions
+                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
+                })
                 .map(|owner| self.constant_route_claim(constant, owner, annotations))
                 .filter(|claim| claims.contains(claim))
                 .or_else(|| (claims.len() == 1).then(|| claims.first().unwrap().clone()));
@@ -4530,12 +4538,23 @@ impl Snapshot {
         let Some(first) = roots.first() else {
             return Err(Error(format!("missing constant root `{name}`")));
         };
-        if !roots.iter().all(|constant| {
-            constant_types_match(&constant.ty, &first.ty) && constant.value == first.value
-        }) {
-            return Err(Error(format!("ambiguous constant root `{name}`")));
-        }
-        roots
+        let candidates = if constant_roots_agree(roots, first) {
+            roots.to_vec()
+        } else {
+            let headers: Vec<_> = roots
+                .iter()
+                .copied()
+                .filter(|constant| constant.spelling.file != constant.root.tu)
+                .collect();
+            let Some(first_header) = headers.first() else {
+                return Err(Error(format!("ambiguous constant root `{name}`")));
+            };
+            if !constant_roots_agree(&headers, first_header) {
+                return Err(Error(format!("ambiguous constant root `{name}`")));
+            }
+            headers
+        };
+        candidates
             .iter()
             .min_by_key(|constant| {
                 (
@@ -8752,6 +8771,12 @@ fn choose_type_root_cached<'a>(
         .collect::<Vec<_>>()
         .join("; ");
     Err(Error(format!("ambiguous type root `{name}`: {choices}")))
+}
+
+fn constant_roots_agree(roots: &[&Constant], first: &Constant) -> bool {
+    roots.iter().all(|constant| {
+        constant_types_match(&constant.ty, &first.ty) && constant.value == first.value
+    })
 }
 
 fn constant_types_match(left: &TypeRef, right: &TypeRef) -> bool {

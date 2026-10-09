@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use windows_clang::{
-    EmitOptions, Input, NamespaceAuthorities, RdlPartition, RootPartition, TypeReference,
-    TypeReferenceKind, extract_partitioned,
+    EmitOptions, ExtractionOptions, Input, NamespaceAuthorities, RdlPartition, RootPartition,
+    TypeReference, TypeReferenceKind, extract_partitioned, extract_partitioned_with_options,
 };
 
 #[test]
@@ -1751,6 +1751,279 @@ fn duplicate_macro_constants_prefer_extraction_order() {
             .to_string()
             .contains("ambiguous constant root `DIFFERENT_TYPE`"),
         "{different_type}"
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn input_source_constant_override_defers_to_agreeing_header_roots() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-source-constant-override-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let header = scratch.join("public.h");
+    std::fs::write(&header, "#define COMPILE_CONTROL 1\n").unwrap();
+    let inputs = vec![
+        Input::new("source.cpp", "#define COMPILE_CONTROL 0\n").partitioned("source-input"),
+        Input::new("header.cpp", format!("#include \"{}\"\n", header.display()))
+            .partitioned("header-input")
+            .with_root(
+                header.to_string_lossy(),
+                "header",
+                "Example.HeaderConstants",
+            ),
+    ];
+    let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+    let serial = extract_partitioned_with_options(
+        inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(1),
+    )
+    .unwrap();
+    let parallel = extract_partitioned_with_options(
+        inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    assert_eq!(serial.dump(), parallel.dump());
+
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let expected = serial.emit_partitioned_with_options(&options).unwrap();
+    assert_eq!(
+        expected,
+        parallel.emit_partitioned_with_options(&options).unwrap()
+    );
+    let output = expected.values().cloned().collect::<Vec<_>>().join("\n");
+    assert!(output.contains("const COMPILE_CONTROL"), "{output}");
+    assert!(output.contains(" = 1;"), "{output}");
+    assert!(!output.contains(" = 0;"), "{output}");
+    assert!(
+        expected
+            .keys()
+            .any(|partition| partition.namespace == "Example.HeaderConstants"),
+        "{expected:#?}"
+    );
+
+    let mut reversed = inputs;
+    reversed.reverse();
+    let reversed = extract_partitioned_with_options(
+        reversed,
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap()
+    .emit_partitioned_with_options(&options)
+    .unwrap();
+    assert_eq!(expected, reversed);
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn header_selected_nonroot_constant_uses_its_spelling_owner() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-nonroot-constant-owner-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let public_header = scratch.join("public.h");
+    let other_header = scratch.join("other.h");
+    std::fs::write(&public_header, "enum { ROUTED_CONSTANT = 1 };\n").unwrap();
+    std::fs::write(&other_header, "typedef unsigned OTHER_TYPE;\n").unwrap();
+    let inputs = vec![
+        Input::new("source.cpp", "#define ROUTED_CONSTANT 0\n").partitioned("source-input"),
+        Input::new(
+            "headers.cpp",
+            format!(
+                "#include \"{}\"\n#include \"{}\"\n",
+                public_header.display(),
+                other_header.display()
+            ),
+        )
+        .partitioned("headers-input")
+        .with_root(public_header.to_string_lossy(), "public", "Example.Public")
+        .with_root(other_header.to_string_lossy(), "other", "Example.Other"),
+    ];
+    let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+    let serial = extract_partitioned_with_options(
+        inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(1),
+    )
+    .unwrap();
+    let parallel = extract_partitioned_with_options(
+        inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    assert_eq!(serial.dump(), parallel.dump());
+
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let expected = serial.emit_partitioned_with_options(&options).unwrap();
+    assert_eq!(
+        expected,
+        parallel.emit_partitioned_with_options(&options).unwrap()
+    );
+    let output = expected.values().cloned().collect::<Vec<_>>().join("\n");
+    assert!(
+        output.contains("const ROUTED_CONSTANT: i32 = 1;"),
+        "{output}"
+    );
+    assert!(
+        expected
+            .keys()
+            .any(|partition| partition.namespace == "Example.Public"),
+        "{expected:#?}"
+    );
+    assert!(
+        !expected
+            .keys()
+            .any(|partition| partition.namespace == "Example.Other"
+                && expected[partition].contains("ROUTED_CONSTANT")),
+        "{expected:#?}"
+    );
+
+    let mut reversed = inputs;
+    reversed.reverse();
+    let reversed = extract_partitioned_with_options(
+        reversed,
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap()
+    .emit_partitioned_with_options(&options)
+    .unwrap();
+    assert_eq!(expected, reversed);
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn constant_source_filter_preserves_header_and_source_only_conflicts() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-constant-conflicts-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let first_header = scratch.join("first.h");
+    let second_header = scratch.join("second.h");
+    std::fs::write(&first_header, "#define HEADER_CONFLICT 1\n").unwrap();
+    std::fs::write(&second_header, "#define HEADER_CONFLICT 2\n").unwrap();
+    let header_inputs = vec![
+        Input::new(
+            "first.cpp",
+            format!("#include \"{}\"\n", first_header.display()),
+        )
+        .partitioned("first-input")
+        .with_root(
+            first_header.to_string_lossy(),
+            "constants",
+            "Example.Constants",
+        ),
+        Input::new(
+            "second.cpp",
+            format!("#include \"{}\"\n", second_header.display()),
+        )
+        .partitioned("second-input")
+        .with_root(
+            second_header.to_string_lossy(),
+            "constants",
+            "Example.Constants",
+        ),
+    ];
+    let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+    let serial = extract_partitioned_with_options(
+        header_inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(1),
+    )
+    .unwrap();
+    let parallel = extract_partitioned_with_options(
+        header_inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(3),
+    )
+    .unwrap();
+    assert_eq!(serial.dump(), parallel.dump());
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let serial_error = serial
+        .emit_partitioned_with_options(&options)
+        .unwrap_err()
+        .to_string();
+    let parallel_error = parallel
+        .emit_partitioned_with_options(&options)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(serial_error, parallel_error);
+    assert!(
+        serial_error.contains("ambiguous constant root `HEADER_CONFLICT`"),
+        "{serial_error}"
+    );
+    let mut reversed = header_inputs;
+    reversed.reverse();
+    let reversed_error = extract_partitioned_with_options(
+        reversed,
+        &args,
+        &ExtractionOptions::new().with_parallelism(3),
+    )
+    .unwrap()
+    .emit_partitioned_with_options(&options)
+    .unwrap_err()
+    .to_string();
+    assert_eq!(serial_error, reversed_error);
+
+    let source_inputs = vec![
+        Input::new("first.cpp", "#define SOURCE_CONFLICT 1\n").partitioned("first-input"),
+        Input::new("second.cpp", "#define SOURCE_CONFLICT 2\n").partitioned("second-input"),
+    ];
+    let source_serial = extract_partitioned_with_options(
+        source_inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(1),
+    )
+    .unwrap();
+    let source_parallel = extract_partitioned_with_options(
+        source_inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    assert_eq!(source_serial.dump(), source_parallel.dump());
+    let source_error = source_serial.emit("Example").unwrap_err().to_string();
+    assert_eq!(
+        source_error,
+        source_parallel.emit("Example").unwrap_err().to_string()
+    );
+    assert!(
+        source_error.contains("ambiguous constant root `SOURCE_CONFLICT`"),
+        "{source_error}"
+    );
+    let mut reversed = source_inputs;
+    reversed.reverse();
+    assert_eq!(
+        source_error,
+        extract_partitioned_with_options(
+            reversed,
+            &args,
+            &ExtractionOptions::new().with_parallelism(2),
+        )
+        .unwrap()
+        .emit("Example")
+        .unwrap_err()
+        .to_string()
     );
 
     std::fs::remove_dir_all(scratch).unwrap();

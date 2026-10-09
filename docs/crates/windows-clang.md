@@ -280,6 +280,13 @@ an owner's remap, exclusion, override, or library maps do not create a conflict.
 planned declaration supplies the output partition and physical header, while every candidate remains
 available in an ambiguity report.
 
+Constant roots normally require every extracted type and value to agree. If they differ, candidates
+spelled in included headers may still supply the public constant when all header-spelled candidates
+agree. Conflicting definitions spelled in their own extraction input are then treated as
+translation-unit compile controls and do not override the header value. Conflicting header
+providers and conflicts containing only input-source definitions remain errors. The selected
+header provider still controls ownership and routing.
+
 Free-function declarations with the same planned name are grouped by native linker name. Distinct
 linker names remain separate aliases. Within one linker-name group, the declaration from the
 earliest extraction input supplies the whole callable declaration. Source location breaks ties only
