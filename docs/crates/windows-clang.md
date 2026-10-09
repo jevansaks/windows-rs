@@ -289,6 +289,11 @@ completion. All retained roots must agree in type and value; conflicts between h
 explicitly owned source providers remain errors. The selected provider controls ownership and
 routing.
 
+Partitioned planning compares repeated constant roots within their resolved output namespace after
+exclusions, remaps, and namespace authorities are applied. The same native name may therefore emit
+once in each distinct namespace. Candidates routed to the same namespace must still agree in type
+and value and are coalesced to one output. Non-partitioned emission keeps its global name grouping.
+
 Free-function declarations with the same planned name are grouped by native linker name. Distinct
 linker names remain separate aliases. Within one linker-name group, the declaration from the
 earliest extraction input supplies the whole callable declaration. Source location breaks ties only

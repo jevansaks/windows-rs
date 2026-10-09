@@ -2860,25 +2860,64 @@ impl Snapshot {
                 (!equivalent_typedefs).then_some(name.to_string())
             })
             .collect();
-        if collisions.is_empty() {
+        let constant_namespaces: BTreeMap<_, _> = self
+            .constants
+            .iter()
+            .filter_map(|constant| {
+                self.constant_route_namespace(constant).map(|namespace| {
+                    (
+                        (
+                            constant.root.clone(),
+                            constant.definition.clone(),
+                            constant.spelling.clone(),
+                            constant.name.clone(),
+                        ),
+                        namespace,
+                    )
+                })
+            })
+            .collect();
+        let constant_collisions: BTreeSet<_> = self
+            .constants
+            .iter()
+            .filter_map(|constant| {
+                let namespace = constant_namespaces.get(&(
+                    constant.root.clone(),
+                    constant.definition.clone(),
+                    constant.spelling.clone(),
+                    constant.name.clone(),
+                ))?;
+                Some((constant.name.clone(), namespace.clone()))
+            })
+            .fold(
+                BTreeMap::<String, BTreeSet<String>>::new(),
+                |mut routes, (name, namespace)| {
+                    routes.entry(name).or_default().insert(namespace);
+                    routes
+                },
+            )
+            .into_iter()
+            .filter_map(|(name, namespaces)| (namespaces.len() > 1).then_some(name))
+            .collect();
+        if collisions.is_empty() && constant_collisions.is_empty() {
             return (self, BTreeMap::new(), source_names);
         }
-        let scoped_collision_fact = |fact: &Fact| {
-            !canonical_pointer_collisions.contains(&fact.name)
-                || retained_canonical_pointer_declarations.contains(&(
-                    fact.origin.tu.clone(),
-                    fact.spelling.clone(),
-                    fact.name.clone(),
-                ))
+        let fact_requires_scoping = |fact: &Fact| {
+            if collisions.contains(&fact.name) {
+                return partition_collision_symbol(fact)
+                    && (!canonical_pointer_collisions.contains(&fact.name)
+                        || retained_canonical_pointer_declarations.contains(&(
+                            fact.origin.tu.clone(),
+                            fact.spelling.clone(),
+                            fact.name.clone(),
+                        )));
+            }
+            constant_collisions.contains(&fact.name)
+                && (is_value_fact(fact) || matches!(&fact.data, FactData::Function { .. }))
         };
 
         let mut source_namespaces: BTreeMap<(Location, String), BTreeSet<String>> = BTreeMap::new();
-        for fact in self
-            .facts
-            .iter()
-            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
-            .filter(|fact| scoped_collision_fact(fact))
-        {
+        for fact in self.facts.iter().filter(|fact| fact_requires_scoping(fact)) {
             if let Some(namespace) = rooted_fact_namespaces.get(&fact.origin) {
                 source_namespaces
                     .entry((
@@ -2892,8 +2931,7 @@ impl Snapshot {
         let rooted_collision_facts: BTreeMap<&str, Vec<&Fact>> = self
             .facts
             .iter()
-            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
-            .filter(|fact| scoped_collision_fact(fact))
+            .filter(|fact| fact_requires_scoping(fact))
             .filter(|fact| rooted_fact_namespaces.contains_key(&fact.origin))
             .fold(BTreeMap::new(), |mut facts, fact| {
                 facts.entry(fact.name.as_str()).or_default().push(fact);
@@ -2902,8 +2940,7 @@ impl Snapshot {
         let fact_namespaces: BTreeMap<_, _> = self
             .facts
             .iter()
-            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
-            .filter(|fact| scoped_collision_fact(fact))
+            .filter(|fact| fact_requires_scoping(fact))
             .filter_map(|fact| {
                 let namespace = rooted_fact_namespaces
                     .get(&fact.origin)
@@ -2984,26 +3021,40 @@ impl Snapshot {
         }
         let mut scoped_names = BTreeMap::new();
         let mut display_names = BTreeMap::new();
-        for (index, (name, namespace)) in self
+        let scoped_routes: BTreeSet<_> = self
             .facts
             .iter()
-            .filter(|fact| partition_collision_symbol(fact) && collisions.contains(&fact.name))
+            .filter(|fact| fact_requires_scoping(fact))
             .filter_map(|fact| {
                 fact_namespaces
                     .get(&fact.origin)
                     .map(|namespace| (fact.name.clone(), namespace.clone()))
             })
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .enumerate()
-        {
+            .chain(self.constants.iter().filter_map(|constant| {
+                if !constant_collisions.contains(&constant.name) {
+                    return None;
+                }
+                let namespace = constant_namespaces.get(&(
+                    constant.root.clone(),
+                    constant.definition.clone(),
+                    constant.spelling.clone(),
+                    constant.name.clone(),
+                ))?;
+                Some((constant.name.clone(), namespace.clone()))
+            }))
+            .collect();
+        for (index, (name, namespace)) in scoped_routes.into_iter().enumerate() {
             let scoped = format!("__partition_{index}_{name}");
             display_names.insert(scoped.clone(), name.clone());
             scoped_names.insert((name, namespace), scoped);
         }
 
         let mut declarations = ScopedDeclarationIndex::new(&self.facts, &collisions);
-        for fact in &self.facts {
+        for fact in self
+            .facts
+            .iter()
+            .filter(|fact| collisions.contains(&fact.name))
+        {
             let Some(namespace) = fact_namespaces.get(&fact.origin) else {
                 continue;
             };
@@ -3054,29 +3105,15 @@ impl Snapshot {
             }
             rename_fact_types(&mut fact.data, &fact.origin.tu, &declarations, &collisions);
         }
-        let constant_namespaces: BTreeMap<_, _> = self
-            .constants
-            .iter()
-            .filter_map(|constant| {
-                constant_root_owner(
-                    constant,
-                    &constant.name,
-                    &self.constant_root_owners,
-                    &self.root_owners,
-                    &self.root_partitions,
-                )
-                .map(|owner| {
-                    (
-                        (constant.root.clone(), constant.name.clone()),
-                        owner.namespace.clone(),
-                    )
-                })
-            })
-            .collect();
         for constant in &mut self.constants {
             let original = constant.name.clone();
             let namespace = constant_namespaces
-                .get(&(constant.root.clone(), original.clone()))
+                .get(&(
+                    constant.root.clone(),
+                    constant.definition.clone(),
+                    constant.spelling.clone(),
+                    original.clone(),
+                ))
                 .cloned();
             if let Some(namespace) = namespace
                 && let Some(scoped) = scoped_names.get(&(original.clone(), namespace))
@@ -4442,10 +4479,23 @@ impl Snapshot {
         if !owners.is_empty() {
             return Ok(());
         }
+        if let Some(namespace) = namespace {
+            validate_namespace(namespace)?;
+        }
+        if let Some(owner) = self.constant_fallback_owner(constant, namespace) {
+            owners.insert(owner);
+        }
+        Ok(())
+    }
+
+    fn constant_fallback_owner(
+        &self,
+        constant: &Constant,
+        namespace: Option<&str>,
+    ) -> Option<RootOwner> {
         if self.header_partition_policy
             && let Some(namespace) = namespace
         {
-            validate_namespace(namespace)?;
             let partition = self
                 .header_authority_partition
                 .as_deref()
@@ -4457,8 +4507,7 @@ impl Snapshot {
                 .map_or(constant.spelling.file.as_str(), |fact| {
                     fact.expansion.file.as_str()
                 });
-            owners.insert(authority_root_owner(partition, namespace, root));
-            return Ok(());
+            return Some(authority_root_owner(partition, namespace, root));
         }
         let mut input_owners = self
             .root_partitions
@@ -4466,12 +4515,9 @@ impl Snapshot {
             .filter(|((tu, _), _)| tu == &constant.root.tu)
             .map(|(_, owner)| owner.clone())
             .collect::<BTreeSet<_>>();
-        let owner = if let Some(namespace) = namespace {
-            let Some(input) = self.partition_inputs.get(&constant.root.tu) else {
-                return Ok(());
-            };
-            validate_namespace(namespace)?;
-            RootOwner {
+        if let Some(namespace) = namespace {
+            let input = self.partition_inputs.get(&constant.root.tu)?;
+            return Some(RootOwner {
                 input: input.clone(),
                 root: constant.spelling.file.clone(),
                 partition: input.clone(),
@@ -4483,21 +4529,16 @@ impl Snapshot {
                 flags: BTreeSet::new(),
                 preserved_auto_function_pointer_levels: BTreeSet::new(),
                 exclude_empty_records: false,
-            }
-        } else {
-            let Some(mut owner) = input_owners.pop_first() else {
-                return Ok(());
-            };
-            if input_owners.iter().any(|candidate| {
-                candidate.partition != owner.partition || candidate.namespace != owner.namespace
-            }) {
-                return Ok(());
-            }
-            owner.root.clone_from(&constant.spelling.file);
-            owner
-        };
-        owners.insert(owner);
-        Ok(())
+            });
+        }
+        let mut owner = input_owners.pop_first()?;
+        if input_owners.iter().any(|candidate| {
+            candidate.partition != owner.partition || candidate.namespace != owner.namespace
+        }) {
+            return None;
+        }
+        owner.root.clone_from(&constant.spelling.file);
+        Some(owner)
     }
 
     fn input_rank(&self, tu: &str) -> usize {
@@ -4601,6 +4642,26 @@ impl Snapshot {
             &self.root_partitions,
         )
         .is_some_and(|owner| source_path_matches(&owner.root, &constant.spelling.file))
+    }
+
+    fn constant_route_namespace(&self, constant: &Constant) -> Option<String> {
+        self.constant_namespace_authorities
+            .get(&(constant.definition.clone(), constant.name.clone()))
+            .cloned()
+            .or_else(|| {
+                constant_root_owner(
+                    constant,
+                    &constant.name,
+                    &self.constant_root_owners,
+                    &self.root_owners,
+                    &self.root_partitions,
+                )
+                .map(|owner| owner.namespace.clone())
+            })
+            .or_else(|| {
+                self.constant_fallback_owner(constant, None)
+                    .map(|owner| owner.namespace)
+            })
     }
 
     fn choose_common_function_root<'a>(
@@ -4947,12 +5008,16 @@ impl Snapshot {
             roots.entry(&fact.name).or_default().functions.push(fact);
         }
         for constant in &self.constants {
+            let source_name = source_names.map_or(constant.name.as_str(), |names| {
+                names.constant_name(constant)
+            });
+            let associated = associated_constants.contains(source_name);
             if excluded_constants.is_some_and(|excluded| excluded.contains(&constant.name))
-                && !associated_constants.contains(constant.name.as_str())
+                && !associated
             {
                 continue;
             }
-            let selected = associated_constants.contains(constant.name.as_str())
+            let selected = associated
                 || self
                     .constant_namespace_authorities
                     .contains_key(&(constant.definition.clone(), constant.name.clone()));
