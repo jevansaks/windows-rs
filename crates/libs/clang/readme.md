@@ -38,12 +38,13 @@ symbol. It keeps an ordinal such as `#660` or an exact exported name separate fr
 metadata function name. The existing `library` and `libraries` options remain available for
 symbol-to-DLL-only callers.
 
-`Clang::parallelism` bounds concurrent parsing of original translation units. The lower-level
-`extract_with_options` and `extract_partitioned_with_options` functions accept the same setting
-through `ExtractionOptions`. Results, diagnostics, and inclusion records retain extraction input
-order. Zero and one select serial parsing. For a large partitioned capture, pass the ordered
-`Vec<PartitionedInput>` to `extract_partitioned_with_options` and set `parallelism` to the desired
-bounded worker count; no separate batching API is required.
+`Clang::parallelism` bounds concurrent parsing and extraction of original translation units. Each
+worker releases its libclang translation unit before ordered cross-input reconciliation. The
+lower-level `extract_with_options` and `extract_partitioned_with_options` functions accept the same
+setting through `ExtractionOptions`. Results, diagnostics, and inclusion records retain extraction
+input order. Zero and one select serial extraction. For a large partitioned capture, pass the
+ordered `Vec<PartitionedInput>` to `extract_partitioned_with_options` and set `parallelism` to the
+desired bounded worker count; no separate batching API is required.
 
 `Input::with_excluded_source_dirs` and `Clang::exclude_path` omit declarations spelled beneath
 toolchain resource directories while retaining those files in inclusion provenance.

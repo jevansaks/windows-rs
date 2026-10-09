@@ -2,8 +2,6 @@ use super::*;
 use clang_sys::*;
 use std::cell::OnceCell;
 use std::ffi::{CStr, CString};
-use std::marker::PhantomData;
-use std::ops::Deref;
 use std::sync::Arc;
 
 pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
@@ -114,15 +112,17 @@ fn extract_impl(
             .any(|input| input.source.contains("win32metadata:"));
     let target = timing.then(|| timing_target(args));
     let total_time = timing.then(std::time::Instant::now);
-    let parse_time = timing.then(std::time::Instant::now);
-    let parse_context = ParseContext {
+    let extraction_time = timing.then(std::time::Instant::now);
+    let extraction_context = ExtractionContext {
         args,
         input_arguments: &input_arguments,
+        timing,
+        validate_annotations,
     };
-    let translation_units = if options.parallelism() <= 1 || inputs.len() <= 1 {
+    let extracted_inputs = if options.parallelism() <= 1 || inputs.len() <= 1 {
         inputs
             .iter()
-            .map(|input| parse_input(&index, input, &parse_context, timing))
+            .map(|input| extract_input(&index, input, &extraction_context))
             .collect::<Result<Vec<_>, _>>()?
     } else {
         let shared_library = library.shared();
@@ -132,37 +132,38 @@ fn extract_impl(
             || Library::from_shared(shared_library.clone()),
             |_, input| {
                 let input_index = Index::new()?;
-                parse_input(&input_index, input, &parse_context, timing)
-                    .map(|parsed| parsed.with_index(input_index))
+                extract_input(&input_index, input, &extraction_context)
             },
         )?
     };
     if timing {
-        for parsed in &translation_units {
+        for (input, extracted) in inputs.iter().zip(&extracted_inputs) {
             eprintln!(
                 "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} elapsed_ms={:.3}",
                 target.as_deref().unwrap(),
-                parsed.input,
-                parsed.source_bytes,
-                parsed.elapsed_ms,
+                input.name,
+                extracted.source_bytes,
+                extracted.parse_elapsed_ms,
+            );
+            let metrics = extracted.metrics.as_ref().unwrap();
+            eprintln!(
+                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} macro_index_ms={:.3} traversal_ms={:.3} deferred_ms={:.3} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                input.name,
+                metrics.macro_definitions,
+                metrics.macro_expansion_files,
+                metrics.cursors,
+                metrics.facts,
+                metrics.constants,
+                metrics.macro_index_ms,
+                metrics.traversal_ms,
+                metrics.deferred_ms,
+                metrics.elapsed_ms
             );
         }
     }
-    if timing {
-        eprintln!(
-            "windows-clang timing phase=parse-total target={} input_tus={} elapsed_ms={:.3}",
-            target.as_deref().unwrap(),
-            inputs.len(),
-            elapsed_ms(parse_time)
-        );
-    }
 
-    let included_files = translation_units
-        .iter()
-        .flat_map(|parsed| parsed.translation_unit.included_files(&parsed.input))
-        .collect();
-
-    let traversal_time = timing.then(std::time::Instant::now);
+    let mut included_files = vec![];
     let mut facts = vec![];
     let mut constants = vec![];
     let mut annotations = BTreeMap::new();
@@ -175,40 +176,24 @@ fn extract_impl(
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
-    for (input, parsed) in inputs.iter().zip(&translation_units) {
-        let mut output = ExtractionState {
-            facts: &mut facts,
-            constants: &mut constants,
-            annotations: &mut annotations,
-            declaration_guids: &mut declaration_guids,
-            pointer_callback_aliases: &mut pointer_callback_aliases,
-            pointer_only_class_layouts: &mut pointer_only_class_layouts,
-            embeddable_class_layouts: &mut embeddable_class_layouts,
-            clang_flag_enums: &mut clang_flag_enums,
-        };
-        let (result, metrics) =
-            parsed
-                .translation_unit
-                .extract(input, &mut output, timing, validate_annotations)?;
-        if let Some(metrics) = metrics {
+    for mut input in extracted_inputs {
+        included_files.append(&mut input.included_files);
+        let fact_offset = facts.len();
+        input.extracted.offset_fact_indices(fact_offset);
+        facts.append(&mut input.facts);
+        constants.append(&mut input.constants);
+        annotations.append(&mut input.annotations);
+        declaration_guids.append(&mut input.declaration_guids);
+        pointer_callback_aliases.append(&mut input.pointer_callback_aliases);
+        pointer_only_class_layouts.append(&mut input.pointer_only_class_layouts);
+        embeddable_class_layouts.append(&mut input.embeddable_class_layouts);
+        clang_flag_enums.append(&mut input.clang_flag_enums);
+        if let Some(metrics) = input.metrics {
             traversal_cursors += metrics.cursors;
             traversal_facts += metrics.facts;
             traversal_constants += metrics.constants;
-            eprintln!(
-                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} macro_index_ms={:.3} traversal_ms={:.3} elapsed_ms={:.3}",
-                target.as_deref().unwrap(),
-                input.name,
-                metrics.macro_definitions,
-                metrics.macro_expansion_files,
-                metrics.cursors,
-                metrics.facts,
-                metrics.constants,
-                metrics.macro_index_ms,
-                metrics.traversal_ms,
-                metrics.elapsed_ms
-            );
         }
-        extracted.push(result);
+        extracted.push(input.extracted);
     }
     let source_annotations = annotations.clone();
     let function_origins: HashSet<_> = facts
@@ -224,23 +209,24 @@ fn extract_impl(
     merge_redeclaration_annotations(&facts, &mut annotations)?;
     let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
-    decode_selected_macro_definitions(&mut facts, &extracted, &annotation_macros);
+    decode_selected_macro_definitions(&mut facts, &mut extracted, &annotation_macros);
     if timing {
         eprintln!(
-            "windows-clang timing phase=extract-total target={} input_tus={} cursors={} facts={} constants={} elapsed_ms={:.3}",
+            "windows-clang timing phase=parse-extract-total target={} input_tus={} workers={} cursors={} facts={} constants={} elapsed_ms={:.3}",
             target.as_deref().unwrap(),
             inputs.len(),
+            options.parallelism().max(1).min(inputs.len().max(1)),
             traversal_cursors,
             traversal_facts,
             traversal_constants,
-            elapsed_ms(traversal_time)
+            elapsed_ms(extraction_time)
         );
     }
     let constant_time = timing.then(std::time::Instant::now);
     let mut probe_candidates = 0;
     let mut synthetic_tus = 0;
     let mut retry_tus = 0;
-    for ((input, parsed), extracted) in inputs.iter().zip(&translation_units).zip(&extracted) {
+    for (input, extracted) in inputs.iter().zip(&extracted) {
         let local_arguments = input_arguments.get(&input.name);
         let probe_arguments: Vec<_> = args
             .iter()
@@ -254,7 +240,7 @@ fn extract_impl(
             &facts,
             &ConstantSources {
                 macros: &extracted.macros,
-                translation_unit: &parsed.translation_unit,
+                source_diagnostics: &extracted.source_diagnostics,
             },
             &associated_constants,
             timing,
@@ -306,7 +292,7 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
-    decode_reachable_structs(&mut facts, &constants, &extracted);
+    decode_reachable_structs(&mut facts, &constants, &mut extracted);
     if timing {
         eprintln!(
             "windows-clang timing phase=deferred-records target={} elapsed_ms={:.3}",
@@ -674,7 +660,7 @@ fn enum_override_value(value: &Value, repr: Scalar) -> Option<i64> {
 fn identify_declare_handles(
     inputs: &[Input],
     facts: &[Fact],
-    extracted: &[Extracted<'_>],
+    extracted: &[Extracted],
 ) -> Vec<DeclareHandle> {
     if extracted
         .iter()
@@ -1204,64 +1190,35 @@ impl Drop for Index {
 
 struct TranslationUnit(CXTranslationUnit);
 
-struct OwnedTranslationUnit {
-    translation_unit: TranslationUnit,
-    _index: Option<Index>,
-}
-
-impl OwnedTranslationUnit {
-    fn new(translation_unit: TranslationUnit) -> Self {
-        Self {
-            translation_unit,
-            _index: None,
-        }
-    }
-
-    fn with_index(mut self, index: Index) -> Self {
-        self._index = Some(index);
-        self
-    }
-}
-
-impl Deref for OwnedTranslationUnit {
-    type Target = TranslationUnit;
-
-    fn deref(&self) -> &Self::Target {
-        &self.translation_unit
-    }
-}
-
-// SAFETY: this private bundle uniquely owns both libclang handles and is moved only after parsing
-// finishes. It is never accessed from two threads at once, and its fields drop the translation
-// unit before the index that created it.
-unsafe impl Send for OwnedTranslationUnit {}
-
-struct ParsedTranslationUnit {
-    input: String,
+struct ExtractedInput {
     source_bytes: usize,
-    elapsed_ms: f64,
-    translation_unit: OwnedTranslationUnit,
+    parse_elapsed_ms: f64,
+    included_files: Vec<IncludedFile>,
+    facts: Vec<Fact>,
+    constants: Vec<Constant>,
+    annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    declaration_guids: BTreeMap<Origin, String>,
+    pointer_callback_aliases: BTreeSet<Origin>,
+    pointer_only_class_layouts: BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: BTreeSet<Origin>,
+    clang_flag_enums: BTreeSet<Origin>,
+    extracted: Extracted,
+    metrics: Option<ExtractionMetrics>,
 }
 
-impl ParsedTranslationUnit {
-    fn with_index(mut self, index: Index) -> Self {
-        self.translation_unit = self.translation_unit.with_index(index);
-        self
-    }
-}
-
-struct ParseContext<'a> {
+struct ExtractionContext<'a> {
     args: &'a [&'a str],
     input_arguments: &'a BTreeMap<String, Vec<String>>,
+    timing: bool,
+    validate_annotations: bool,
 }
 
-fn parse_input(
+fn extract_input(
     index: &Index,
     input: &Input,
-    context: &ParseContext<'_>,
-    timing: bool,
-) -> Result<ParsedTranslationUnit, Error> {
-    let start = timing.then(std::time::Instant::now);
+    context: &ExtractionContext<'_>,
+) -> Result<ExtractedInput, Error> {
+    let parse_time = context.timing.then(std::time::Instant::now);
     let local_arguments = context.input_arguments.get(&input.name);
     let arguments: Vec<_> = context
         .args
@@ -1270,11 +1227,48 @@ fn parse_input(
         .chain(local_arguments.into_iter().flatten().map(String::as_str))
         .collect();
     let translation_unit = TranslationUnit::parse(index, input, &arguments)?;
-    Ok(ParsedTranslationUnit {
-        input: input.name.clone(),
+    let parse_elapsed_ms = elapsed_ms(parse_time);
+    let included_files = translation_unit.included_files(&input.name);
+    let source_diagnostics = translation_unit.error_diagnostics();
+    let mut facts = vec![];
+    let mut constants = vec![];
+    let mut annotations = BTreeMap::new();
+    let mut declaration_guids = BTreeMap::new();
+    let mut pointer_callback_aliases = BTreeSet::new();
+    let mut pointer_only_class_layouts = BTreeMap::new();
+    let mut embeddable_class_layouts = BTreeSet::new();
+    let mut clang_flag_enums = BTreeSet::new();
+    let mut output = ExtractionState {
+        facts: &mut facts,
+        constants: &mut constants,
+        annotations: &mut annotations,
+        declaration_guids: &mut declaration_guids,
+        pointer_callback_aliases: &mut pointer_callback_aliases,
+        pointer_only_class_layouts: &mut pointer_only_class_layouts,
+        embeddable_class_layouts: &mut embeddable_class_layouts,
+        clang_flag_enums: &mut clang_flag_enums,
+    };
+    let (mut extracted, metrics) = translation_unit.extract(
+        input,
+        &mut output,
+        context.timing,
+        context.validate_annotations,
+    )?;
+    extracted.source_diagnostics = source_diagnostics;
+    Ok(ExtractedInput {
         source_bytes: input.source.len(),
-        elapsed_ms: elapsed_ms(start),
-        translation_unit: OwnedTranslationUnit::new(translation_unit),
+        parse_elapsed_ms,
+        included_files,
+        facts,
+        constants,
+        annotations,
+        declaration_guids,
+        pointer_callback_aliases,
+        pointer_only_class_layouts,
+        embeddable_class_layouts,
+        clang_flag_enums,
+        extracted,
+        metrics,
     })
 }
 
@@ -1339,6 +1333,62 @@ where
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::try_map_ordered_bounded;
+    use std::sync::Barrier;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    #[test]
+    fn ordered_bounded_map_preserves_order_and_worker_limit() {
+        let active = AtomicUsize::new(0);
+        let maximum = AtomicUsize::new(0);
+        let barrier = Barrier::new(2);
+        let output = try_map_ordered_bounded(
+            &[0, 1, 2, 3],
+            2,
+            || (),
+            |_, input| {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                maximum.fetch_max(current, Ordering::SeqCst);
+                if *input < 2 {
+                    barrier.wait();
+                }
+                active.fetch_sub(1, Ordering::SeqCst);
+                Ok::<_, ()>(*input)
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output, [0, 1, 2, 3]);
+        assert_eq!(maximum.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn ordered_bounded_map_reports_errors_by_input_order() {
+        let second_finished = AtomicBool::new(false);
+        let error = try_map_ordered_bounded(
+            &[0, 1],
+            2,
+            || (),
+            |_, input| -> Result<(), &'static str> {
+                if *input == 0 {
+                    while !second_finished.load(Ordering::Acquire) {
+                        std::thread::yield_now();
+                    }
+                    Err("first")
+                } else {
+                    second_finished.store(true, Ordering::Release);
+                    Err("second")
+                }
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error, "first");
+    }
+}
+
 struct Evaluated {
     name: String,
     ty: TypeRef,
@@ -1353,6 +1403,7 @@ struct ExtractionMetrics {
     constants: usize,
     macro_index_ms: f64,
     traversal_ms: f64,
+    deferred_ms: f64,
     elapsed_ms: f64,
 }
 
@@ -1389,9 +1440,9 @@ struct ErrorDiagnostic {
     offset: u32,
 }
 
-struct ConstantSources<'a, 'tu> {
-    macros: &'a MacroDefinitions<'tu>,
-    translation_unit: &'a TranslationUnit,
+struct ConstantSources<'a> {
+    macros: &'a MacroDefinitions,
+    source_diagnostics: &'a [ErrorDiagnostic],
 }
 
 impl TranslationUnit {
@@ -1587,17 +1638,19 @@ impl TranslationUnit {
             .collect()
     }
 
-    fn extract<'tu>(
-        &'tu self,
+    fn extract(
+        &self,
         input: &Input,
         output: &mut ExtractionState<'_>,
         timing: bool,
         validate_annotations: bool,
-    ) -> Result<(Extracted<'tu>, Option<ExtractionMetrics>), Error> {
+    ) -> Result<(Extracted, Option<ExtractionMetrics>), Error> {
         let total_time = timing.then(std::time::Instant::now);
         let phase_time = timing.then(std::time::Instant::now);
         let macros = macro_definitions(self, unsafe { clang_getTranslationUnitCursor(self.0) });
         let macro_index_ms = elapsed_ms(phase_time);
+        let macro_definition_count = macros.definitions.len();
+        let macro_expansion_file_count = macros.expansion_orders.len();
         let phase_time = timing.then(std::time::Instant::now);
         let initial_facts = output.facts.len();
         let initial_constants = output.constants.len();
@@ -1633,26 +1686,49 @@ impl TranslationUnit {
         if let Some(error) = traversal.error.take() {
             return Err(error);
         }
-        let metrics = timing.then(|| ExtractionMetrics {
-            macro_definitions: macros.definitions.len(),
-            macro_expansion_files: macros.expansion_orders.len(),
-            cursors: traversal.next,
-            facts: traversal.facts.len() - initial_facts,
-            constants: traversal.constants.len() - initial_constants,
-            macro_index_ms,
-            traversal_ms,
-            elapsed_ms: elapsed_ms(total_time),
-        });
+        let cursors = traversal.next;
+        let fact_count = traversal.facts.len() - initial_facts;
+        let constant_count = traversal.constants.len() - initial_constants;
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         let declare_handle_expansions = std::mem::take(&mut traversal.declare_handle_expansions);
         drop(traversal);
+        let phase_time = timing.then(std::time::Instant::now);
+        let pending_structs = pending_structs
+            .into_iter()
+            .map(|(index, cursor)| (index, fact_data(cursor, FactKind::Struct, &macros)))
+            .collect();
+        let pending_macros = pending_macros
+            .into_iter()
+            .map(|(index, cursor)| {
+                let name = &output.facts[index].name;
+                let data = macros.definition_order(cursor, name).map_or_else(
+                    || DeferredMacro::Data(fact_data(cursor, FactKind::Macro, &macros)),
+                    DeferredMacro::Definition,
+                );
+                (index, data)
+            })
+            .collect();
+        let macros = macros.into_owned();
+        let deferred_ms = elapsed_ms(phase_time);
+        let metrics = timing.then(|| ExtractionMetrics {
+            macro_definitions: macro_definition_count,
+            macro_expansion_files: macro_expansion_file_count,
+            cursors,
+            facts: fact_count,
+            constants: constant_count,
+            macro_index_ms,
+            traversal_ms,
+            deferred_ms,
+            elapsed_ms: elapsed_ms(total_time),
+        });
         Ok((
             Extracted {
                 macros,
                 pending_structs,
                 pending_macros,
                 declare_handle_expansions,
+                source_diagnostics: vec![],
             },
             metrics,
         ))
@@ -1673,7 +1749,7 @@ struct Traversal<'a> {
     excluded_roots: &'a BTreeSet<String>,
     next: u32,
     seen: HashMap<u32, Vec<(CXCursor, Origin)>>,
-    macros: &'a MacroDefinitions<'a>,
+    macros: &'a TranslationUnitMacros<'a>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
@@ -1700,11 +1776,28 @@ struct ExtractionState<'a> {
     clang_flag_enums: &'a mut BTreeSet<Origin>,
 }
 
-struct Extracted<'tu> {
-    macros: MacroDefinitions<'tu>,
-    pending_structs: Vec<(usize, CXCursor)>,
-    pending_macros: Vec<(usize, CXCursor)>,
+struct Extracted {
+    macros: MacroDefinitions,
+    pending_structs: Vec<(usize, FactData)>,
+    pending_macros: Vec<(usize, DeferredMacro)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
+    source_diagnostics: Vec<ErrorDiagnostic>,
+}
+
+impl Extracted {
+    fn offset_fact_indices(&mut self, offset: usize) {
+        for (index, _) in &mut self.pending_structs {
+            *index += offset;
+        }
+        for (index, _) in &mut self.pending_macros {
+            *index += offset;
+        }
+    }
+}
+
+enum DeferredMacro {
+    Definition(usize),
+    Data(FactData),
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -2240,7 +2333,7 @@ fn unique_synthetic_name(stem: &str, used: &mut BTreeSet<String>) -> String {
 fn decode_reachable_structs(
     facts: &mut [Fact],
     constants: &[Constant],
-    extracted: &[Extracted<'_>],
+    extracted: &mut [Extracted],
 ) {
     let mut reachable: HashSet<String> = facts
         .iter()
@@ -2253,13 +2346,13 @@ fn decode_reachable_structs(
     for constant in constants {
         type_names(&constant.ty, &mut reachable);
     }
-    let mut pending: HashMap<String, Vec<(usize, usize, CXCursor)>> = HashMap::new();
-    for (extraction_index, extraction) in extracted.iter().enumerate() {
-        for &(fact_index, cursor) in &extraction.pending_structs {
+    let mut pending: HashMap<String, Vec<(usize, FactData)>> = HashMap::new();
+    for extraction in extracted {
+        for (fact_index, data) in std::mem::take(&mut extraction.pending_structs) {
             pending
                 .entry(facts[fact_index].name.clone())
                 .or_default()
-                .push((extraction_index, fact_index, cursor));
+                .push((fact_index, data));
         }
     }
     let mut queue: Vec<_> = reachable.iter().cloned().collect();
@@ -2267,12 +2360,7 @@ fn decode_reachable_structs(
         let Some(candidates) = pending.remove(&name) else {
             continue;
         };
-        for (extraction_index, fact_index, cursor) in candidates {
-            let data = fact_data(
-                cursor,
-                FactKind::Struct,
-                &extracted[extraction_index].macros,
-            );
+        for (fact_index, data) in candidates {
             let mut dependencies = HashSet::new();
             fact_type_names(&data, &mut dependencies);
             for dependency in dependencies {
@@ -2287,7 +2375,7 @@ fn decode_reachable_structs(
 
 fn decode_selected_macro_definitions(
     facts: &mut [Fact],
-    extracted: &[Extracted<'_>],
+    extracted: &mut [Extracted],
     selected: &BTreeSet<String>,
 ) {
     let mut roots: HashSet<_> = facts
@@ -2297,9 +2385,14 @@ fn decode_selected_macro_definitions(
         .collect();
     roots.extend(selected.iter().cloned());
     for extraction in extracted {
-        for &(index, cursor) in &extraction.pending_macros {
+        for (index, deferred) in std::mem::take(&mut extraction.pending_macros) {
             if roots.contains(facts[index].name.as_str()) {
-                facts[index].data = fact_data(cursor, FactKind::Macro, &extraction.macros);
+                facts[index].data = match deferred {
+                    DeferredMacro::Definition(order) => {
+                        extraction.macros.fact_data(&facts[index].name, order)
+                    }
+                    DeferredMacro::Data(data) => data,
+                };
             }
         }
     }
@@ -2413,14 +2506,14 @@ fn cursor_children(cursor: CXCursor) -> Vec<CXCursor> {
 }
 
 #[derive(Default)]
-struct MacroDefinitions<'tu> {
-    definitions: HashMap<String, Vec<MacroDefinition>>,
+struct TranslationUnitMacros<'tu> {
+    definitions: HashMap<String, Vec<TranslationUnitMacroDefinition>>,
     expansion_orders: HashMap<String, Vec<(u32, usize)>>,
     cursor_orders: HashMap<String, Vec<(u32, u32, usize)>>,
-    translation_unit: PhantomData<&'tu TranslationUnit>,
+    translation_unit: std::marker::PhantomData<&'tu TranslationUnit>,
 }
 
-struct MacroDefinition {
+struct TranslationUnitMacroDefinition {
     order: usize,
     cursor: CXCursor,
     spelling: Option<Location>,
@@ -2428,7 +2521,7 @@ struct MacroDefinition {
     tokens: OnceCell<Vec<String>>,
 }
 
-impl MacroDefinition {
+impl TranslationUnitMacroDefinition {
     fn tokens(&self) -> &[String] {
         self.tokens.get_or_init(|| {
             cursor_tokens(self.cursor)
@@ -2440,7 +2533,7 @@ impl MacroDefinition {
     }
 }
 
-impl MacroDefinitions<'_> {
+impl TranslationUnitMacros<'_> {
     fn contains_key(&self, name: &str) -> bool {
         self.definitions.contains_key(name)
     }
@@ -2449,7 +2542,7 @@ impl MacroDefinitions<'_> {
         self.definitions
             .get(name)?
             .last()
-            .map(MacroDefinition::tokens)
+            .map(TranslationUnitMacroDefinition::tokens)
     }
 
     fn definition(&self, cursor: CXCursor, name: &str) -> Option<(&[String], bool)> {
@@ -2461,13 +2554,21 @@ impl MacroDefinitions<'_> {
         Some((definition.tokens(), definition.function_like))
     }
 
+    fn definition_order(&self, cursor: CXCursor, name: &str) -> Option<usize> {
+        self.definitions
+            .get(name)?
+            .iter()
+            .find(|definition| unsafe { clang_equalCursors(definition.cursor, cursor) } != 0)
+            .map(|definition| definition.order)
+    }
+
     fn get_before(&self, name: &str, order: usize) -> Option<&[String]> {
         self.definitions
             .get(name)?
             .iter()
             .filter(|definition| definition.order < order)
             .max_by_key(|definition| definition.order)
-            .map(MacroDefinition::tokens)
+            .map(TranslationUnitMacroDefinition::tokens)
     }
 
     fn definition_before(
@@ -2526,17 +2627,79 @@ impl MacroDefinitions<'_> {
         })
     }
 
+    fn into_owned(self) -> MacroDefinitions {
+        MacroDefinitions {
+            definitions: self
+                .definitions
+                .into_iter()
+                .map(|(name, definitions)| {
+                    let definitions = definitions
+                        .into_iter()
+                        .map(|definition| {
+                            let tokens = definition.tokens.into_inner().unwrap_or_else(|| {
+                                cursor_tokens(definition.cursor)
+                                    .into_iter()
+                                    .map(|(_, token)| token)
+                                    .skip(1)
+                                    .collect()
+                            });
+                            MacroDefinition {
+                                order: definition.order,
+                                function_like: definition.function_like,
+                                tokens,
+                            }
+                        })
+                        .collect();
+                    (name, definitions)
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct MacroDefinitions {
+    definitions: HashMap<String, Vec<MacroDefinition>>,
+}
+
+struct MacroDefinition {
+    order: usize,
+    function_like: bool,
+    tokens: Vec<String>,
+}
+
+impl MacroDefinitions {
+    fn contains_key(&self, name: &str) -> bool {
+        self.definitions.contains_key(name)
+    }
+
     fn final_definition(&self, name: &str) -> Option<(&[String], bool)> {
         let definition = self.definitions.get(name)?.last()?;
-        Some((definition.tokens(), definition.function_like))
+        Some((&definition.tokens, definition.function_like))
+    }
+
+    fn fact_data(&self, name: &str, order: usize) -> FactData {
+        let definition = self
+            .definitions
+            .get(name)
+            .and_then(|definitions| {
+                definitions
+                    .iter()
+                    .find(|definition| definition.order == order)
+            })
+            .unwrap();
+        FactData::Macro {
+            function_like: definition.function_like,
+            tokens: definition.tokens.clone(),
+        }
     }
 }
 
 fn macro_definitions<'tu>(
     _translation_unit: &'tu TranslationUnit,
     cursor: CXCursor,
-) -> MacroDefinitions<'tu> {
-    let mut result = MacroDefinitions::default();
+) -> TranslationUnitMacros<'tu> {
+    let mut result = TranslationUnitMacros::default();
     for (order, child) in cursor_children(cursor).into_iter().enumerate() {
         let kind = unsafe { clang_getCursorKind(child) };
         if let Some((file, start, end)) = cursor_expansion_extent(child) {
@@ -2553,7 +2716,7 @@ fn macro_definitions<'tu>(
                 .definitions
                 .entry(name)
                 .or_default()
-                .push(MacroDefinition {
+                .push(TranslationUnitMacroDefinition {
                     order,
                     cursor: child,
                     spelling: cursor_locations(child).map(|(spelling, _, _, _)| spelling),
@@ -2593,7 +2756,7 @@ fn cursor_expansion_extent(cursor: CXCursor) -> Option<(String, u32, u32)> {
 fn source_function_name(
     cursor: CXCursor,
     link_name: &str,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
 ) -> Option<String> {
     let tokens = cursor_tokens(cursor);
     let token_name = tokens
@@ -2642,7 +2805,7 @@ fn evaluate_constants(
     input: &Input,
     args: &[&str],
     facts: &[Fact],
-    sources: &ConstantSources<'_, '_>,
+    sources: &ConstantSources<'_>,
     selected: &BTreeSet<String>,
     timing: bool,
 ) -> Result<(Vec<Constant>, Option<ProbeMetrics>), Error> {
@@ -2716,7 +2879,7 @@ fn evaluate_constants(
             .is_some_and(|(_, function_like)| !function_like)
     });
     let names: Vec<_> = candidates.keys().cloned().collect();
-    let source_diagnostics = sources.translation_unit.error_diagnostics();
+    let source_diagnostics = sources.source_diagnostics;
     let available_parallelism = std::thread::available_parallelism().map_or(1, usize::from);
     let workers = available_parallelism.min(4);
     if names.is_empty() {
@@ -2755,7 +2918,7 @@ fn evaluate_constants(
             let mut reached = HashSet::new();
             for batch in batches.iter().skip(worker).step_by(worker_count) {
                 let (batch_evaluated, batch_reached) =
-                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
+                    evaluate_probe(index, input, args, batch, source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -2781,7 +2944,7 @@ fn evaluate_constants(
             let mut reached = HashSet::new();
             for batch in recovery_batches.iter().skip(worker).step_by(worker_count) {
                 let (batch_evaluated, batch_reached) =
-                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
+                    evaluate_probe(index, input, args, batch, source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -2807,7 +2970,7 @@ fn evaluate_constants(
             let mut reached = HashSet::new();
             for batch in isolation_batches.iter().skip(worker).step_by(worker_count) {
                 let (batch_evaluated, batch_reached) =
-                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
+                    evaluate_probe(index, input, args, batch, source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -2837,7 +3000,7 @@ fn evaluate_constants(
                 args,
                 fallback_batches[worker],
                 &reached,
-                &source_diagnostics,
+                source_diagnostics,
             )
         })?;
     for fallback in fallback_results {
@@ -3436,7 +3599,7 @@ fn fact_kind(kind: CXCursorKind) -> Option<FactKind> {
     })
 }
 
-fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> FactData {
+fn fact_data(cursor: CXCursor, kind: FactKind, macros: &TranslationUnitMacros) -> FactData {
     match kind {
         FactKind::Enum => {
             let ty = unsafe { clang_getEnumDeclIntegerType(cursor) };
@@ -3696,7 +3859,7 @@ fn is_data_class(cursor: CXCursor) -> bool {
 
 fn pointer_only_class_layout(
     cursor: CXCursor,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
 ) -> Option<(FactData, bool)> {
     let (cursor, embeddable) = pointer_only_class_definition(cursor)?;
     let mut record =
@@ -3838,7 +4001,7 @@ fn interface_inherits_from(cursor: CXCursor, ancestor: CXCursor) -> bool {
     false
 }
 
-fn interface_fact(cursor: CXCursor, macros: &MacroDefinitions) -> FactData {
+fn interface_fact(cursor: CXCursor, macros: &TranslationUnitMacros) -> FactData {
     let children = cursor_children(cursor);
     let async_interface =
         cx_string(unsafe { clang_getCursorSpelling(cursor) }).starts_with("Async");
@@ -4111,7 +4274,7 @@ fn method_overrides_base(cursor: CXCursor) -> bool {
 
 fn callable_params(
     cursor: CXCursor,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
     allow_unresolved_size: bool,
 ) -> Result<Vec<Parameter>, String> {
     let mut params = vec![];
@@ -4179,7 +4342,7 @@ fn callable_params(
 
 fn callback_params(
     cursor: CXCursor,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
     fallback: Vec<TypeRef>,
 ) -> Vec<Parameter> {
     let mut candidates = vec![cursor];
@@ -4275,7 +4438,11 @@ fn tokens_before_method_name(
     &tokens[..end]
 }
 
-fn apply_source_annotations(cursor: CXCursor, macros: &MacroDefinitions, params: &mut [Parameter]) {
+fn apply_source_annotations(
+    cursor: CXCursor,
+    macros: &TranslationUnitMacros,
+    params: &mut [Parameter],
+) {
     let tokens = cursor_tokens(cursor);
     let parameter_cursors: Vec<_> = cursor_children(cursor)
         .into_iter()
@@ -4615,14 +4782,14 @@ fn expanded_raw_annotations(
 
 fn annotation_values(
     cursor: CXCursor,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
 ) -> Result<Vec<Annotation>, Error> {
     annotation_values_in_range(cursor, macros, None)
 }
 
 fn annotation_values_in_range(
     cursor: CXCursor,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
     source_range: Option<&AnnotationSourceRange<'_>>,
 ) -> Result<Vec<Annotation>, Error> {
     let before = macros.cursor_order(cursor).unwrap_or(usize::MAX);
@@ -4740,7 +4907,7 @@ fn collect_fact_annotations(
     cursor: CXCursor,
     kind: FactKind,
     origin: &Origin,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
     source_range: Option<&AnnotationSourceRange<'_>>,
     annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
 ) -> Result<(), Error> {
@@ -4871,7 +5038,7 @@ fn collect_fact_annotations(
 fn collect_record_field_annotations(
     cursor: CXCursor,
     origin: &Origin,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
     annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     prefix: &[usize],
 ) -> Result<(), Error> {
@@ -5509,7 +5676,7 @@ fn validate_associated_constants(
 
 fn resolve_annotation_macro_integer(
     name: &str,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
     before: usize,
     location: Option<&Location>,
     seen: &mut BTreeSet<String>,
@@ -5531,7 +5698,7 @@ fn resolve_annotation_macro_integer(
 struct AnnotationExpression<'a, 'tu> {
     tokens: &'a [String],
     index: usize,
-    macros: &'a MacroDefinitions<'tu>,
+    macros: &'a TranslationUnitMacros<'tu>,
     before: usize,
     location: Option<&'a Location>,
     seen: &'a mut BTreeSet<String>,
@@ -5540,7 +5707,7 @@ struct AnnotationExpression<'a, 'tu> {
 impl<'a, 'tu> AnnotationExpression<'a, 'tu> {
     fn new(
         tokens: &'a [String],
-        macros: &'a MacroDefinitions<'tu>,
+        macros: &'a TranslationUnitMacros<'tu>,
         before: usize,
         location: Option<&'a Location>,
         seen: &'a mut BTreeSet<String>,
@@ -6001,7 +6168,7 @@ fn calling_convention_fact(ty: CXType) -> Option<CallingConvention> {
 fn inherited_function_typedef_calling_convention(
     cursor: CXCursor,
     function: CXType,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
 ) -> Option<CallingConvention> {
     let function = unsafe { clang_getCanonicalType(function) };
     cursor_children(cursor).into_iter().find_map(|child| {
@@ -6023,7 +6190,7 @@ fn inherited_function_typedef_calling_convention(
 
 fn source_calling_convention(
     cursor: CXCursor,
-    macros: &MacroDefinitions,
+    macros: &TranslationUnitMacros,
 ) -> Option<CallingConvention> {
     fn literal(token: &str) -> Option<CallingConvention> {
         match token {
@@ -6035,7 +6202,7 @@ fn source_calling_convention(
 
     fn resolve(
         token: &str,
-        macros: &MacroDefinitions,
+        macros: &TranslationUnitMacros,
         order: usize,
         visited: &mut HashSet<String>,
     ) -> Option<CallingConvention> {
@@ -6075,7 +6242,7 @@ fn source_calling_convention(
 fn inline_record(
     cursor: CXCursor,
     union: bool,
-    macros: Option<&MacroDefinitions>,
+    macros: Option<&TranslationUnitMacros>,
 ) -> Result<InlineRecord, String> {
     inline_record_with_pointer_class_layouts(cursor, union, macros, false)
 }
@@ -6083,7 +6250,7 @@ fn inline_record(
 fn inline_record_with_pointer_class_layouts(
     cursor: CXCursor,
     union: bool,
-    macros: Option<&MacroDefinitions>,
+    macros: Option<&TranslationUnitMacros>,
     preserve_pointer_class_layouts: bool,
 ) -> Result<InlineRecord, String> {
     let mut base = None;

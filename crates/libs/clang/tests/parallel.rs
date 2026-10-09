@@ -12,7 +12,8 @@ fn parallel_extraction_preserves_input_order_and_output() {
     std::fs::create_dir_all(&scratch).unwrap();
     std::fs::write(
         scratch.join("shared.h"),
-        "typedef struct SHARED { unsigned value; } SHARED;\n",
+        "#define SHARED_LIMIT 42\n\
+         typedef struct SHARED { unsigned value; } SHARED;\n",
     )
     .unwrap();
     for index in 0..4 {
@@ -20,6 +21,7 @@ fn parallel_extraction_preserves_input_order_and_output() {
             scratch.join(format!("api{index}.h")),
             format!(
                 "#include \"shared.h\"\n\
+                 #define API{index}_VALUE SHARED_LIMIT\n\
                  typedef struct API{index} {{ SHARED shared; }} API{index};\n"
             ),
         )
@@ -32,7 +34,7 @@ fn parallel_extraction_preserves_input_order_and_output() {
                 format!("input-{index}.cpp"),
                 format!("#include \"api{index}.h\"\n"),
             )
-            .with_root_dirs([scratch.to_string_lossy().to_string()])
+            .with_root_suffixes([format!("api{index}.h")])
         })
         .collect();
     let include = format!("-I{}", scratch.display());
@@ -57,6 +59,16 @@ fn parallel_extraction_preserves_input_order_and_output() {
         })
         .collect();
     assert_eq!(observed_inputs, expected_inputs);
+    for index in 0..4 {
+        assert!(
+            parallel
+                .constants()
+                .iter()
+                .any(|constant| constant.name == format!("API{index}_VALUE")),
+            "{:?}",
+            parallel.constants()
+        );
+    }
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -81,7 +93,36 @@ fn parallel_extraction_reports_errors_in_input_order() {
 }
 
 #[test]
-fn partitioned_extraction_uses_bounded_parallel_parsing() {
+fn parallel_extraction_reports_traversal_errors_in_input_order() {
+    helpers::ensure_libclang();
+
+    let declarations = (0..2_000)
+        .map(|index| format!("typedef struct DELAY_{index} {{ int value; }} DELAY_{index};\n"))
+        .collect::<String>();
+    let first = format!(
+        "#define W32M(text) __attribute__((annotate(text)))\n\
+         {declarations}\n\
+         class W32M(\"win32metadata:first_unknown\") First;\n"
+    );
+    let second = "#define W32M(text) __attribute__((annotate(text)))\n\
+                  class W32M(\"win32metadata:second_unknown\") Second;\n";
+    let error = extract_with_options(
+        [
+            Input::new("first.hpp", first),
+            Input::new("second.hpp", second),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(error.contains("first_unknown"), "{error}");
+    assert!(!error.contains("second_unknown"), "{error}");
+}
+
+#[test]
+fn partitioned_extraction_uses_bounded_parse_extract_workers() {
     helpers::ensure_libclang();
 
     let snapshot = extract_partitioned_with_options(

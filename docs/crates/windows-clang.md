@@ -38,9 +38,9 @@ The builder is an adapter over the extraction and emission APIs described below.
 `reference_default` supplies the Windows metadata references, and `write` calls `extract` and
 emits with `EmitOptions`. It does not have a separate parser or projection path.
 
-`parallelism` bounds concurrent parsing of original translation units. Zero and one select serial
-parsing. `exclude_path` omits declarations spelled beneath a directory, such as Clang's resource
-headers, without hiding that the files were visited.
+`parallelism` bounds concurrent parsing and extraction of original translation units. Zero and one
+select serial extraction. `exclude_path` omits declarations spelled beneath a directory, such as
+Clang's resource headers, without hiding that the files were visited.
 
 Use the lower-level API when a generator must inspect facts, compare architectures, merge
 snapshots, assign libraries per function, or control output promotion.
@@ -76,8 +76,8 @@ let snapshot = windows_clang::extract(
 .unwrap();
 ```
 
-Use `extract_with_options` or `extract_partitioned_with_options` to parse independent original
-translation units concurrently:
+Use `extract_with_options` or `extract_partitioned_with_options` to parse and extract independent
+original translation units concurrently:
 
 ```rust,no_run
 let options = windows_clang::ExtractionOptions::new().with_parallelism(4);
@@ -89,9 +89,12 @@ let snapshot = windows_clang::extract_with_options(
 .unwrap();
 ```
 
-The worker count is bounded by the configured value and input count. Each concurrent translation
-unit owns a separate libclang index until the translation unit is dropped. Results and errors are
-collected in input order. Only original extraction translation units use this setting; synthetic
+The worker count is bounded by the configured value and input count. Each worker parses and
+traverses one original translation unit into an isolated owned result, then drops the libclang
+translation unit before returning it. Per-input results are merged in input order before
+cross-input annotation, constant, and declaration reconciliation. Results and errors therefore
+retain input order even when workers finish out of order, while live original ASTs remain bounded
+by the worker count. Only original extraction translation units use this setting; synthetic
 constant-probe translation units keep their existing bounded probe scheduling.
 
 For a large partitioned capture, put every natural translation unit in one ordered
@@ -104,8 +107,8 @@ let snapshot =
     windows_clang::extract_partitioned_with_options(inputs, &args, &options).unwrap();
 ```
 
-The vector order remains the extraction authority used by callable selection even though parsing
-finishes out of order. A separate batch or worker API is not needed for independent translation
+The vector order remains the extraction authority used by callable selection even when workers
+finish out of order. A separate batch or worker API is not needed for independent translation
 units.
 
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
@@ -446,8 +449,8 @@ indexing path.
 
 The implementation has four stages:
 
-1. Parse each translation unit and record immutable facts, source locations, annotations, and
-   constants.
+1. Parse and traverse each translation unit in a bounded worker, freeze its facts, source
+   locations, annotations, macro data, and constants, then release its AST.
 2. Select roots and compute the dependency closure from the complete fact graph.
 3. Resolve equivalent declarations, external references, and unsupported constructs.
 4. Project the plan to RDL without mutating or discovering declarations during emission.

@@ -105,9 +105,9 @@ impl ExtractionOptions {
         Self::default()
     }
 
-    /// Sets the maximum number of original translation units parsed concurrently.
+    /// Sets the maximum number of original translation units parsed and extracted concurrently.
     ///
-    /// Zero and one both select serial parsing.
+    /// Zero and one both select serial extraction.
     pub fn with_parallelism(mut self, parallelism: usize) -> Self {
         self.parallelism = parallelism;
         self
