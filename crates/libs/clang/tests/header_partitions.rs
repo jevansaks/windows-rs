@@ -5210,14 +5210,19 @@ fn satellite_included_only_alias_is_not_retargeted_to_aggregate_owner() {
         );
     }
     assert!(
-        !partitions
-            .keys()
-            .any(|partition| partition.namespace == "Example.Common"),
+        partitions.keys().any(|partition| {
+            partition.namespace == "Example.Common"
+                && partition.header == base.to_string_lossy().replace('\\', "/")
+        }),
+        "{partitions:#?}"
+    );
+    assert!(
+        output(&partitions, "Example.Common").contains("type PULONG_PTR = *mut u64"),
         "{partitions:#?}"
     );
     let satellite = output(&partitions, "Example.Satellite");
     assert!(
-        satellite.contains("fn UseSatellitePointer(value: *mut u64)"),
+        satellite.contains("fn UseSatellitePointer(value: Example::Common::PULONG_PTR)"),
         "{satellite}"
     );
 
@@ -5239,7 +5244,16 @@ fn satellite_included_only_alias_is_not_retargeted_to_aggregate_owner() {
     };
     let signature = function.signature(&[]);
     assert_eq!(signature.return_type, Type::Void);
-    assert_eq!(signature.types, [Type::PtrMut(Box::new(Type::U64), 1)]);
+    assert_eq!(
+        signature.types,
+        [Type::value_named("Example.Common", "PULONG_PTR")]
+    );
+    assert_eq!(
+        index
+            .expect("Example.Common", "PULONG_PTR")
+            .underlying_type(),
+        Some(Type::PtrMut(Box::new(Type::U64), 1))
+    );
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -5336,10 +5350,10 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
     let second = output(&partitions, "Example.Second");
     assert!(second.contains("type PVOID = *mut void"), "{second}");
     assert!(
-        second.contains("type PTBS_HCONTEXT = *mut PVOID"),
+        second.contains("type PTBS_HCONTEXT = *mut *mut void"),
         "{second}"
     );
-    assert!(second.contains("type TBS_HCONTEXT = PVOID"), "{second}");
+    assert!(second.contains("type TBS_HCONTEXT = *mut void"), "{second}");
     assert!(
         second.contains("fn SecondUse(value: PTBS_HCONTEXT, context: TBS_HCONTEXT)"),
         "{second}"
@@ -5389,16 +5403,13 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
         index
             .expect("Example.Second", "PTBS_HCONTEXT")
             .underlying_type(),
-        Some(Type::PtrMut(
-            Box::new(Type::value_named("Example.Second", "PVOID")),
-            1
-        ))
+        Some(Type::PtrMut(Box::new(Type::Void), 2))
     );
     assert_eq!(
         index
             .expect("Example.Second", "TBS_HCONTEXT")
             .underlying_type(),
-        Some(Type::value_named("Example.Second", "PVOID"))
+        Some(Type::PtrMut(Box::new(Type::Void), 1))
     );
     let common = output(&partitions, "Example.Common");
     assert!(!common.contains("type PVOID"), "{common}");
@@ -5430,7 +5441,7 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
         "{selected_first}"
     );
     assert!(
-        selected_first.contains("fn ReadPointer(source: *const PVOID) -> PVOID"),
+        selected_first.contains("fn ReadPointer(source: *const PVOID) -> *mut void"),
         "{selected_first}"
     );
     let selected_winmd = scratch.join("selected-canonical-pointer-routes.winmd");
@@ -5461,10 +5472,7 @@ fn canonical_pointer_aliases_keep_declaration_specific_routes() {
             1
         )]
     );
-    assert_eq!(
-        signature.return_type,
-        Type::value_named("Example.First", "PVOID")
-    );
+    assert_eq!(signature.return_type, Type::PtrMut(Box::new(Type::Void), 1));
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -5558,7 +5566,7 @@ extern "C" BOOL ReadProcessMemory(
     let partitions = plan.emit_with_options(&options).unwrap();
     let memory = output(&partitions, "Windows.Win32.System.Diagnostics.Debug");
     assert!(
-        memory.contains("#[size_param(3)] #[out] lpBuffer: Windows::Win32::Foundation::LPVOID"),
+        memory.contains("#[size_param(3)] lpBuffer: *mut void"),
         "{memory}"
     );
     assert!(
@@ -5566,7 +5574,7 @@ extern "C" BOOL ReadProcessMemory(
         "{memory}"
     );
     assert!(
-        memory.contains("fn InspectBuffer(lpBuffer: Windows::Win32::Foundation::LPVOID)"),
+        memory.contains("fn InspectBuffer(#[in] lpBuffer: *mut void)"),
         "{memory}"
     );
 
@@ -5585,6 +5593,10 @@ extern "C" BOOL ReadProcessMemory(
         panic!("ReadProcessMemory was not emitted as a function");
     };
     let params = function.params_by_sequence(5).unwrap();
+    assert_eq!(
+        function.signature(&[]).types[2],
+        Type::PtrMut(Box::new(Type::Void), 1)
+    );
     let [
         Some(hprocess),
         Some(base),
@@ -5607,6 +5619,7 @@ extern "C" BOOL ReadProcessMemory(
         buffer.direction(),
         windows_metadata::reader::ParamDirection::Output
     );
+    assert_eq!(buffer.flags().0, 2);
     assert_eq!(
         buffer.buffer_relationship(),
         Some(windows_metadata::reader::BufferRelationship::BytesParam(3))
@@ -5621,6 +5634,7 @@ extern "C" BOOL ReadProcessMemory(
         windows_metadata::reader::ParamDirection::Output
     );
     assert!(bytes_read.is_optional());
+    assert_eq!(bytes_read.flags().0, 18);
     assert_eq!(bytes_read.buffer_relationship(), None);
     let Item::Fn(inspect) =
         index.expect_item("Windows.Win32.System.Diagnostics.Debug", "InspectBuffer")
@@ -5630,6 +5644,11 @@ extern "C" BOOL ReadProcessMemory(
     assert_eq!(
         inspect.params().next().unwrap().direction(),
         windows_metadata::reader::ParamDirection::Input
+    );
+    assert_eq!(inspect.params().next().unwrap().flags().0, 1);
+    assert_eq!(
+        inspect.signature(&[]).types,
+        [Type::PtrMut(Box::new(Type::Void), 1)]
     );
 
     std::fs::remove_dir_all(scratch).unwrap();
@@ -5808,7 +5827,7 @@ fn canonical_pointer_alias_dependency_keeps_the_consuming_partition_identity() {
 }
 
 #[test]
-fn included_canonical_pointer_alias_is_retained_by_owned_callback() {
+fn owned_callback_uses_do_not_make_canonical_pointers_nominal() {
     helpers::ensure_libclang();
 
     let scratch = scratch("included-canonical-pointer-callback");
@@ -5867,17 +5886,16 @@ fn included_canonical_pointer_alias_is_retained_by_owned_callback() {
     let partitions = emit(snapshot);
     assert_eq!(partitions, emit(reverse));
 
-    let common = output(&partitions, "Example.Common");
     assert!(
-        common.contains("type LPVOID = *mut void"),
+        !partitions
+            .keys()
+            .any(|partition| partition.namespace == "Example.Common"),
         "{partitions:#?}"
     );
+    assert!(!partitions.values().any(|rdl| rdl.contains("LPVOID")));
     let base = output(&partitions, "Example.SystemServices");
     assert!(
-        base.contains(
-            "fn PENCLAVE_ROUTINE(lpThreadParameter: Example::Common::LPVOID) -> \
-             Example::Common::LPVOID"
-        ),
+        base.contains("fn PENCLAVE_ROUTINE(lpThreadParameter: *mut void) -> *mut void"),
         "{partitions:#?}"
     );
     assert!(
@@ -5888,8 +5906,8 @@ fn included_canonical_pointer_alias_is_retained_by_owned_callback() {
     assert!(
         enclave.contains(
             "fn CallEnclave(lpRoutine: Example::SystemServices::LPENCLAVE_ROUTINE, \
-             lpParameter: Example::Common::LPVOID, fWaitForThread: i32, \
-             lpReturnValue: *mut Example::Common::LPVOID) -> i32"
+             lpParameter: *mut void, fWaitForThread: i32, \
+             lpReturnValue: *mut *mut void) -> i32"
         ),
         "{partitions:#?}"
     );
@@ -5902,24 +5920,15 @@ fn included_canonical_pointer_alias_is_retained_by_owned_callback() {
         .write()
         .unwrap();
     let index = windows_metadata::reader::Index::read(&winmd).unwrap();
-    assert_eq!(
-        index.expect("Example.Common", "LPVOID").underlying_type(),
-        Some(Type::PtrMut(Box::new(Type::Void), 1))
-    );
+    assert!(!index.contains("Example.Common", "LPVOID"));
     let invoke = index
         .expect("Example.SystemServices", "PENCLAVE_ROUTINE")
         .methods()
         .find(|method| method.name() == "Invoke")
         .unwrap()
         .signature(&[]);
-    assert_eq!(
-        invoke.types,
-        [Type::value_named("Example.Common", "LPVOID")]
-    );
-    assert_eq!(
-        invoke.return_type,
-        Type::value_named("Example.Common", "LPVOID")
-    );
+    assert_eq!(invoke.types, [Type::PtrMut(Box::new(Type::Void), 1)]);
+    assert_eq!(invoke.return_type, Type::PtrMut(Box::new(Type::Void), 1));
     assert_eq!(
         index
             .expect("Example.SystemServices", "LPENCLAVE_ROUTINE")
@@ -5936,9 +5945,9 @@ fn included_canonical_pointer_alias_is_retained_by_owned_callback() {
         call_enclave.signature(&[]).types,
         [
             Type::value_named("Example.SystemServices", "LPENCLAVE_ROUTINE"),
-            Type::value_named("Example.Common", "LPVOID"),
+            Type::PtrMut(Box::new(Type::Void), 1),
             Type::I32,
-            Type::PtrMut(Box::new(Type::value_named("Example.Common", "LPVOID")), 1),
+            Type::PtrMut(Box::new(Type::Void), 2),
         ]
     );
 
@@ -6003,12 +6012,15 @@ fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
     let partitions = plan.emit_with_options(&options).unwrap();
 
     let tbs_rdl = output(&partitions, "Example.Tbs");
-    assert!(tbs_rdl.contains("type PVOID = *mut void"), "{tbs_rdl}");
+    assert!(!tbs_rdl.contains("type PVOID"), "{tbs_rdl}");
     assert!(
-        tbs_rdl.contains("type PTBS_HCONTEXT = *mut PVOID"),
+        tbs_rdl.contains("type PTBS_HCONTEXT = *mut *mut void"),
         "{tbs_rdl}"
     );
-    assert!(tbs_rdl.contains("type TBS_HCONTEXT = PVOID"), "{tbs_rdl}");
+    assert!(
+        tbs_rdl.contains("type TBS_HCONTEXT = *mut void"),
+        "{tbs_rdl}"
+    );
     let satellite_rdl = output(&partitions, "Example.Satellite");
     assert!(!satellite_rdl.contains("type PVOID"), "{satellite_rdl}");
     assert!(
@@ -6024,6 +6036,17 @@ fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
     compiler.reference_default().output(&winmd).write().unwrap();
     let index = windows_metadata::reader::Index::read(&winmd).unwrap();
     assert!(!index.contains("Example.Satellite", "PVOID"));
+    assert!(!index.contains("Example.Tbs", "PVOID"));
+    let Item::Fn(tbs_use) = index.expect_item("Example.Tbs", "TbsUse") else {
+        panic!("Example.Tbs.TbsUse was not emitted as a function");
+    };
+    assert_eq!(
+        tbs_use.signature(&[]).types,
+        [
+            Type::value_named("Example.Tbs", "PTBS_HCONTEXT"),
+            Type::value_named("Example.Tbs", "TBS_HCONTEXT"),
+        ]
+    );
     let Item::Fn(satellite_use) = index.expect_item("Example.Satellite", "SatelliteUse") else {
         panic!("Example.Satellite.SatelliteUse was not emitted as a function");
     };
@@ -6035,16 +6058,13 @@ fn included_canonical_pointer_alias_does_not_follow_another_input_owner() {
         index
             .expect("Example.Tbs", "PTBS_HCONTEXT")
             .underlying_type(),
-        Some(Type::PtrMut(
-            Box::new(Type::value_named("Example.Tbs", "PVOID")),
-            1
-        ))
+        Some(Type::PtrMut(Box::new(Type::Void), 2))
     );
     assert_eq!(
         index
             .expect("Example.Tbs", "TBS_HCONTEXT")
             .underlying_type(),
-        Some(Type::value_named("Example.Tbs", "PVOID"))
+        Some(Type::PtrMut(Box::new(Type::Void), 1))
     );
 
     std::fs::remove_dir_all(scratch).unwrap();

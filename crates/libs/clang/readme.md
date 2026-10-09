@@ -84,6 +84,11 @@ classes, layout, and native inheritance are not projected, and any by-value use 
 Captured SAL keeps ordinary NUL-terminated strings and double-NUL multistrings as separate
 parameter facts through `ParamAnnotation`.
 
+Pointer projection is chosen per use rather than by header ownership. Ordinary `LPVOID` and `PVOID`
+uses become raw pointers; nested pointers retain a native alias when WinMD needs its const boundary.
+Noncanonical pointer aliases such as `HANDLE` stay named. Explicit SAL directions and buffer counts
+survive lowering, while an unannotated mutable pointer uses the raw-pointer output default.
+
 Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
 to stderr without changing the generated RDL.
 

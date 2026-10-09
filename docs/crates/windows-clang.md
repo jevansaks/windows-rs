@@ -217,13 +217,11 @@ settings and emitted `RdlPartition::header` values use the extracted physical pa
 remaps and other exact source lookups consistent when policy spelling differs by case or uses a
 relative suffix.
 
-When a canonical pointer typedef is retained as an unowned shared dependency, equivalent observations
-of its physical declaration keep the same named projection across translation units. This applies to
-directly observed pointers to `void` or scalar types. Every exact candidate must match the
-declaration's name, location, native parent scope, definition, pointer target, and semantic annotations.
-Output namespace ownership is resolved separately. Aliases owned by a traversed header keep their
-input-scoped projection. Different declarations or compile variants do not gain alias retention
-through this rule, and native raw pointer uses remain raw pointers.
+Pointer projection is chosen for each use, independently of output namespace ownership. Ordinary
+`LPVOID` and `PVOID` uses become raw pointers even when another use retains their native declaration.
+An outer pointer with different constness retains the alias boundary needed by WinMD. Native facts
+keep the exact declaration reference; header ownership neither changes that reference nor chooses
+whether its emitted use is raw or named.
 
 Source provenance follows these rules:
 
@@ -334,26 +332,22 @@ that are all equivalent, its exact references keep the deterministic surviving p
 planning selected before namespace scoping. If any retained declaration differs, the normal
 owner-exclusion diagnostic remains.
 
-Canonical typedefs are not promoted to public identities merely because equivalent declarations
-have logical owners. If dependency closure retains a canonical raw-pointer alias such as `PVOID`
-for a nested pointer boundary, its route comes from the selected declaration. A direct typedef in
-another extraction input may preserve that nominal target when its local canonical alias has the
-same physical spelling location, identical extracted declaration data, matching native parent
-qualification, and the same semantic annotations. Emission builds one exact
-`(input, name, spelling) -> declarations` typedef index and requires every declaration in the
-matching bucket to satisfy those rules. This source-identity bridge does not promote the other copy
-or change its owner. Direct non-typedef uses, declarations from another physical header, and raw
-pointers still project to the raw pointer and do not create nominal aliases in their logical or
-default namespaces.
+Dependency planning records a `TypeChoice` for each `(input, TypeEdge)`. Type edges distinguish a
+declared type, a pointee and its outer constness, a parameter and its annotations, and a projected
+canonical dependency. Emission uses the same choice for the type name and pointer mutability used
+to encode parameter flags. A retained alias declaration does not make every use nominal: a
+`PVOID const *` parameter can retain `PVOID` while a return value or ordinary parameter using that
+same declaration becomes `*mut void`.
 
-Equivalent canonical raw-pointer declarations are scoped only for exact declarations that need a
-nominal identity: another pointer typedef points through the declaration, a pointer boundary changes
-mutability, or a selected function reaches a named callback that directly uses the same declaration.
-Those namespaces retain the authored alias and exact references keep that identity. Standalone
-callbacks, direct uses, and other representable same-mutability function or field pointer chains
-keep the canonical projection behavior above. Function references participate only when the
-function passes the emission function selection and exclusion filters, so an unselected declaration
-cannot force a nominal alias into its header partition.
+Canonical choices use the native source name even when collision routing assigns an internal scoped
+name. Exact declaration resolution, compile-variant equivalence, annotations, and owner conflicts
+still determine which declaration is available. Noncanonical pointer aliases, including `HANDLE`,
+keep their nominal contract. A needed alias boundary uses the selected declaration's route; an
+unowned declaration uses the default namespace rather than another input's owner.
+
+Lowering an unannotated nominal mutable-pointer parameter to a raw mutable pointer changes its
+default direction from input to output. Explicit SAL input, output, optional, and buffer-count
+contracts remain encoded in the physical parameter metadata.
 
 The extractor records direct `DECLARE_HANDLE(name)` macro invocations and validates the exact
 `name__ { int unused; }` plus `typedef name__ *name` expansion. When a header partition suppresses

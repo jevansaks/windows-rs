@@ -459,14 +459,11 @@ fn canonical_pointer_alias_identity_survives_isolated_translation_units() {
     let isolated_partitions = emit(isolated, &isolated_policy);
     assert_eq!(isolated_partitions, aggregate_partitions);
 
-    let foundation_rdl = isolated_partitions
-        .values()
-        .find(|rdl| rdl.contains("type LPVOID"))
-        .unwrap()
-        .as_str();
     assert!(
-        foundation_rdl.contains("type LPVOID = *mut void;"),
-        "{foundation_rdl}"
+        !isolated_partitions
+            .values()
+            .any(|rdl| rdl.contains("type LPVOID")),
+        "{isolated_partitions:#?}"
     );
     let consumer_rdl = isolated_partitions
         .iter()
@@ -474,7 +471,7 @@ fn canonical_pointer_alias_identity_survives_isolated_translation_units() {
         .unwrap()
         .1;
     assert!(
-        consumer_rdl.contains("type CONSUMER_POINTER = Example::Foundation::LPVOID;"),
+        consumer_rdl.contains("type CONSUMER_POINTER = *mut void;"),
         "{consumer_rdl}"
     );
     assert!(
@@ -492,9 +489,27 @@ fn canonical_pointer_alias_identity_survives_isolated_translation_units() {
     let index = windows_metadata::reader::Index::read(&winmd).unwrap();
     assert_eq!(
         index
+            .expect("Example.Foundation", "PFOUNDATION_POINTER")
+            .underlying_type(),
+        Some(Type::PtrMut(Box::new(Type::Void), 2))
+    );
+    assert_eq!(
+        index
             .expect("Example.Consumer", "CONSUMER_POINTER")
             .underlying_type(),
-        Some(Type::value_named("Example.Foundation", "LPVOID"))
+        Some(Type::PtrMut(Box::new(Type::Void), 1))
+    );
+    assert!(!index.contains("Example.Foundation", "LPVOID"));
+    let Item::Fn(use_consumer) = index.expect_item("Example.Consumer", "UseConsumerPointer") else {
+        panic!("UseConsumerPointer was not emitted as a function");
+    };
+    assert_eq!(
+        use_consumer.signature(&[]).types,
+        [Type::value_named("Example.Consumer", "CONSUMER_POINTER")]
+    );
+    assert_eq!(
+        use_consumer.signature(&[]).return_type,
+        Type::value_named("Example.Consumer", "CONSUMER_POINTER")
     );
     let Item::Fn(use_raw_pointer) = index.expect_item("Example.Consumer", "UseRawPointer") else {
         panic!("UseRawPointer was not emitted as a function");

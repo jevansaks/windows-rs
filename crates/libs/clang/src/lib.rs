@@ -1343,6 +1343,7 @@ impl<'a> DeclarationIndex<'a> {
     }
 }
 
+#[cfg(test)]
 struct TypedefDeclarationIndex<'a> {
     facts: HashMap<(&'a str, &'a str, &'a Location), Vec<&'a Fact>>,
     #[cfg(test)]
@@ -1353,6 +1354,7 @@ struct TypedefDeclarationIndex<'a> {
     inspected_candidates: Cell<usize>,
 }
 
+#[cfg(test)]
 impl<'a> TypedefDeclarationIndex<'a> {
     fn new(facts: &'a [Fact]) -> Self {
         let mut result = Self {
@@ -1795,22 +1797,6 @@ impl Snapshot {
                 .map(|fact| (&fact.origin, fact))
                 .collect::<HashMap<_, _>>()
         });
-        let mut retained_canonical_raw_pointers = RetainedCanonicalRawPointers::new();
-        if routes.is_some() {
-            let declarations = TypedefDeclarationIndex::new(&self.facts);
-            let planned_types: Vec<_> = plan.types.iter().map(|planned| planned.fact).collect();
-            let annotations = self.route_annotation_signatures();
-            populate_retained_canonical_raw_pointers(
-                &planned_types,
-                &self.root_owners,
-                &declarations,
-                facts_by_origin.as_ref().unwrap(),
-                &annotations,
-                &mut retained_canonical_raw_pointers,
-            );
-        }
-        let retained_canonical_raw_pointers =
-            routes.is_some().then_some(&retained_canonical_raw_pointers);
         if let Some(routes) = routes {
             let mut local_type_namespaces: BTreeMap<Location, BTreeSet<String>> = BTreeMap::new();
             for planned in &plan.types {
@@ -1974,7 +1960,7 @@ impl Snapshot {
                 &fact.origin.tu,
                 &local_types,
                 &routed_types,
-                retained_canonical_raw_pointers,
+                &plan.type_choices,
                 namespace,
             );
             let item = match &fact.data {
@@ -1989,7 +1975,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        retained_canonical_raw_pointers,
+                        &plan.type_choices,
                         namespace,
                     );
                     write_callback(
@@ -2043,7 +2029,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        retained_canonical_raw_pointers,
+                        &plan.type_choices,
                         namespace,
                     );
                     let item = write_named_record(
@@ -2067,7 +2053,6 @@ impl Snapshot {
                     )
                 }
                 FactData::Typedef { target } => {
-                    let projection = projection.for_typedef(&fact.origin);
                     format!(
                         "{}    type {} = {};\n",
                         annotation_lines(
@@ -2143,7 +2128,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        retained_canonical_raw_pointers,
+                        &plan.type_choices,
                         namespace,
                     );
                     let item = write_named_record(
@@ -2180,7 +2165,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        retained_canonical_raw_pointers,
+                        &plan.type_choices,
                         namespace,
                     );
                     write_interface(
@@ -2245,7 +2230,7 @@ impl Snapshot {
                 &function.origin.tu,
                 &local_types,
                 &routed_types,
-                retained_canonical_raw_pointers,
+                &plan.type_choices,
                 namespace,
             );
             let callable = CallableTarget::Function(&function.origin);
@@ -2334,7 +2319,7 @@ impl Snapshot {
                 &constant.root.tu,
                 &local_types,
                 &routed_types,
-                retained_canonical_raw_pointers,
+                &plan.type_choices,
                 namespace,
             );
             let ty = if routes.is_some()
@@ -5193,7 +5178,9 @@ impl Snapshot {
             &declarations,
             functions.iter().map(|function| function.fact),
         );
+        let mut type_choices = BTreeMap::new();
         let (facts_by_name, mut retained_pointer_aliases, dependency_diagnostics) = loop {
+            type_choices.clear();
             let mut facts = BTreeSet::new();
             let mut queue = vec![];
             let mut pointer_alias_candidates = BTreeSet::new();
@@ -5254,25 +5241,34 @@ impl Snapshot {
                 ));
             }
             for function in &functions {
+                let fact = function.fact;
                 let root_node = dependency_diagnostics.add_root(
                     "function",
-                    &function.name,
-                    &function.fact.origin.tu,
-                    &function.fact.expansion,
+                    &fact.name,
+                    &fact.origin.tu,
+                    &fact.expansion,
                 );
-                let fact_node = DependencyNode::Fact(&function.fact.origin);
+                let fact_node = DependencyNode::Fact(&fact.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
                 collect_fact_pointer_alias_candidates(
-                    function.fact,
+                    fact,
                     &callback_pointer_alias_requirements,
                     &mut pointer_alias_candidates,
                 );
-                queue_function_edges(function.fact, fact_node, &mut queue);
+                queue_function_edges(fact, fact_node, &mut queue);
             }
 
             while let Some((tu, edge, source)) = queue.pop() {
-                let ty = match edge {
-                    TypeEdge::Type(ty) => ty,
+                let (ty, parent_mutability) = match edge {
+                    TypeEdge::Type(ty) => (ty, None),
+                    TypeEdge::Pointee(ty, mutable) => (ty, Some(mutable)),
+                    TypeEdge::Parameter(param) => {
+                        let choice = parameter_string_name(param)
+                            .map_or(TypeChoice::Declared(&param.ty), TypeChoice::Canonical);
+                        type_choices.insert((tu, edge), choice);
+                        queue.push((tu, choice.edge(), source));
+                        continue;
+                    }
                     TypeEdge::Projected(name) => {
                         let reference = DependencyReference {
                             name,
@@ -5334,13 +5330,24 @@ impl Snapshot {
                     }
                 };
                 let (name, declaration) = match ty {
-                    TypeRef::Pointer { target, .. } | TypeRef::Reference { target, .. } => {
-                        queue.push((tu, TypeEdge::Type(target), source));
+                    TypeRef::Pointer { .. } => {
+                        let (mutable, _, target) = pointer_run(ty);
+                        queue.push((tu, TypeEdge::Pointee(target, mutable), source));
+                        continue;
+                    }
+                    TypeRef::Reference { mutable, target } => {
+                        queue.push((tu, TypeEdge::Pointee(target, *mutable), source));
                         continue;
                     }
                     TypeRef::FunctionPointer { .. } | TypeRef::OpaquePointer { .. } => continue,
                     TypeRef::Array { target, .. } => {
                         queue.push((tu, TypeEdge::Type(target), source));
+                        continue;
+                    }
+                    TypeRef::Generic { args, .. } => {
+                        for arg in args {
+                            queue.push((tu, TypeEdge::Type(arg), source));
+                        }
                         continue;
                     }
                     TypeRef::InlineRecord(record) => {
@@ -5352,6 +5359,7 @@ impl Snapshot {
                     TypeRef::Named { name, declaration } => (name, declaration),
                     _ => continue,
                 };
+                type_choices.insert((tu, edge), TypeChoice::Declared(ty));
                 let reference = DependencyReference {
                     name,
                     tu,
@@ -5398,9 +5406,11 @@ impl Snapshot {
                     pointer_alias_candidates.contains(&(tu, declaration, name.as_str()));
                 let retain_pointer_alias = self.header_partition_policy
                     && (pointer_alias_candidate || canonical_string.is_some());
-                if canonical_typedef_declarations.contains(&(tu, declaration))
+                if let Some(canonical_string) = canonical_string
+                    && canonical_typedef_declarations.contains(&(tu, declaration))
                     && !(retain_pointer_alias && canonical_pointer_alias_name(name))
                 {
+                    type_choices.insert((tu, edge), TypeChoice::Canonical(canonical_string));
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
@@ -5566,15 +5576,27 @@ impl Snapshot {
                     }
                     return Err(error);
                 };
-                if canonical_named_type(name).is_some()
+                let native_name = source_fact_name(fact);
+                let canonical = canonical_named_type(&native_name);
+                let string_alias =
+                    is_string_alias_fact(fact, &facts_by_declaration, &mut BTreeSet::new());
+                let retain_pointer_alias = if string_alias {
+                    retain_pointer_alias
+                } else {
+                    parent_mutability
+                        .zip(canonical_raw_pointer_mutability(&native_name))
+                        .is_some_and(|(parent, alias)| parent != alias)
+                };
+                if let Some(canonical) = canonical
                     && matches!(fact.data, FactData::Typedef { .. })
                     && !retain_pointer_alias
                 {
+                    type_choices.insert((tu, edge), TypeChoice::Canonical(canonical));
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
                 dependency_diagnostics.resolve(reference);
-                if retain_pointer_alias
+                if (retain_pointer_alias || (canonical.is_none() && !string_alias))
                     && is_pointer_alias_fact(fact, &facts_by_declaration, &mut BTreeSet::new())
                 {
                     retained_pointer_aliases.insert(fact.name.as_str());
@@ -6044,7 +6066,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        None,
+                        &type_choices,
                         None,
                     );
                     let target_name = planned_emitted_type_name(target, &projection);
@@ -6268,7 +6290,7 @@ impl Snapshot {
                             &constant.root.tu,
                             &local_types,
                             &routed_types,
-                            None,
+                            &type_choices,
                             None,
                         );
                         constant_type_name(&constant.ty, &pointer_interface_aliases, &projection)
@@ -6343,6 +6365,7 @@ impl Snapshot {
             constants,
             type_names,
             interface_names,
+            type_choices,
             pointer_interface_aliases,
             interface_guids,
             flag_enums,
@@ -6507,6 +6530,7 @@ struct Plan<'a> {
     constants: Vec<PlannedConstant<'a>>,
     type_names: BTreeMap<String, String>,
     interface_names: BTreeSet<(String, String)>,
+    type_choices: BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
     pointer_interface_aliases: BTreeMap<String, String>,
     interface_guids: BTreeMap<String, String>,
     flag_enums: BTreeSet<(String, String)>,
@@ -6972,78 +6996,7 @@ fn route_candidate_error(candidate: &RouteCandidate<'_>, reason: PartitionConfli
     }
 }
 
-fn populate_retained_canonical_raw_pointers<'a>(
-    planned_types: &[&'a Fact],
-    root_owners: &BTreeMap<Origin, RootOwner>,
-    declarations: &TypedefDeclarationIndex<'a>,
-    facts_by_origin: &HashMap<&'a Origin, &'a Fact>,
-    annotations: &BTreeMap<Origin, Rc<RouteAnnotations>>,
-    retained: &mut RetainedCanonicalRawPointers,
-) {
-    let retained_aliases: Vec<_> = planned_types
-        .iter()
-        .copied()
-        .filter(|fact| {
-            canonical_raw_pointer_name(&fact.name) && matches!(fact.data, FactData::Typedef { .. })
-        })
-        .collect();
-    for alias in &retained_aliases {
-        retained.retain_translation_unit(alias);
-    }
-
-    let mut aliases_by_source: HashMap<_, Vec<_>> = HashMap::new();
-    for alias in &retained_aliases {
-        // Owned aliases keep input-scoped projection; shared dependencies have no such owner.
-        if !root_owners.contains_key(&alias.origin)
-            && matches!(
-                &alias.data,
-                FactData::Typedef {
-                    target: TypeRef::Pointer { target, .. }
-                } if matches!(target.as_ref(), TypeRef::Void | TypeRef::Scalar(_))
-            )
-        {
-            aliases_by_source
-                .entry((alias.name.as_str(), &alias.spelling))
-                .or_default()
-                .push(*alias);
-        }
-    }
-    for ((_, name, declaration), local_declarations) in &declarations.facts {
-        let Some(aliases) = aliases_by_source.get(&(*name, *declaration)) else {
-            continue;
-        };
-        if local_declarations.iter().all(|local| {
-            !root_owners.contains_key(&local.origin)
-                && aliases.iter().any(|alias| {
-                    same_typedef_bridge_identity(alias, local, facts_by_origin, annotations)
-                })
-        }) {
-            retained.retain_translation_unit(local_declarations[0]);
-        }
-    }
-
-    // A direct typedef may target the same physical alias declaration through another
-    // translation unit, without retaining every use of that translation unit's copy.
-    for planned in planned_types {
-        let FactData::Typedef {
-            target: TypeRef::Named { name, declaration },
-        } = &planned.data
-        else {
-            continue;
-        };
-        let local_declarations = declarations.get(&planned.origin.tu, name, declaration);
-        if !local_declarations.is_empty()
-            && local_declarations.iter().all(|local| {
-                retained_aliases.iter().any(|retained| {
-                    same_typedef_bridge_identity(retained, local, facts_by_origin, annotations)
-                })
-            })
-        {
-            retained.retain_typedef_target(&planned.origin, declaration);
-        }
-    }
-}
-
+#[cfg(test)]
 fn same_typedef_bridge_identity(
     left: &Fact,
     right: &Fact,
@@ -7071,6 +7024,7 @@ fn same_typedef_bridge_identity(
     left_annotations == right_annotations
 }
 
+#[cfg(test)]
 fn native_parent_scope(
     fact: &Fact,
     facts_by_origin: &HashMap<&Origin, &Fact>,
@@ -7090,52 +7044,14 @@ fn native_parent_scope(
     Some(result)
 }
 
-#[derive(Default)]
-struct RetainedCanonicalRawPointers {
-    translation_units: BTreeMap<String, BTreeSet<Location>>,
-    typedef_targets: BTreeMap<Origin, BTreeSet<Location>>,
-}
-
-impl RetainedCanonicalRawPointers {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn retain_translation_unit(&mut self, fact: &Fact) {
-        self.translation_units
-            .entry(fact.origin.tu.clone())
-            .or_default()
-            .insert(fact.spelling.clone());
-    }
-
-    fn retain_typedef_target(&mut self, origin: &Origin, declaration: &Location) {
-        self.typedef_targets
-            .entry(origin.clone())
-            .or_default()
-            .insert(declaration.clone());
-    }
-
-    fn contains(&self, tu: &str, origin: Option<&Origin>, declaration: &Location) -> bool {
-        self.translation_units
-            .get(tu)
-            .is_some_and(|locations| locations.contains(declaration))
-            || origin.is_some_and(|origin| {
-                self.typedef_targets
-                    .get(origin)
-                    .is_some_and(|locations| locations.contains(declaration))
-            })
-    }
-}
-
 #[derive(Clone, Copy)]
 struct TypeProjection<'a> {
     type_names: &'a BTreeMap<String, String>,
     interface_names: &'a BTreeSet<(String, String)>,
     tu: &'a str,
-    typedef_origin: Option<&'a Origin>,
     local_types: &'a BTreeMap<Location, String>,
     routed_types: &'a BTreeMap<String, String>,
-    retained_canonical_raw_pointers: Option<&'a RetainedCanonicalRawPointers>,
+    type_choices: &'a BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
     namespace: Option<&'a str>,
 }
 
@@ -7146,31 +7062,158 @@ impl<'a> TypeProjection<'a> {
         tu: &'a str,
         local_types: &'a BTreeMap<Location, String>,
         routed_types: &'a BTreeMap<String, String>,
-        retained_canonical_raw_pointers: Option<&'a RetainedCanonicalRawPointers>,
+        type_choices: &'a BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
         namespace: Option<&'a str>,
     ) -> Self {
         Self {
             type_names,
             interface_names,
             tu,
-            typedef_origin: None,
             local_types,
             routed_types,
-            retained_canonical_raw_pointers,
+            type_choices,
             namespace,
         }
     }
 
     fn name(&self, ty: &TypeRef) -> String {
-        planned_emitted_type_name(ty, self)
+        self.project(TypeEdge::Type(ty)).name
     }
 
-    fn for_typedef(self, origin: &'a Origin) -> Self {
-        Self {
-            typedef_origin: Some(origin),
-            ..self
+    fn parameter(&self, param: &Parameter) -> ProjectedType {
+        if param.annotation.com_out_ptr {
+            return ProjectedType {
+                name: "*mut *mut void".to_string(),
+                mutable: true,
+            };
+        }
+        self.project(TypeEdge::Parameter(param))
+    }
+
+    fn project(&self, edge: TypeEdge<'_>) -> ProjectedType {
+        let ty = match self.type_choices.get(&(self.tu, edge)) {
+            Some(TypeChoice::Canonical(name)) => {
+                let emitted = self
+                    .type_names
+                    .get(*name)
+                    .cloned()
+                    .unwrap_or_else(|| (*name).to_string());
+                return ProjectedType {
+                    name: qualify_routed_type(&emitted, self.routed_types, self.namespace),
+                    mutable: name.starts_with("*mut "),
+                };
+            }
+            Some(TypeChoice::Declared(ty)) if matches!(edge, TypeEdge::Parameter(_)) => {
+                return self.project(TypeEdge::Type(ty));
+            }
+            Some(TypeChoice::Declared(ty)) => *ty,
+            None => match edge {
+                TypeEdge::Type(ty) | TypeEdge::Pointee(ty, _) => {
+                    assert!(!matches!(ty, TypeRef::Named { .. }));
+                    ty
+                }
+                _ => unreachable!(),
+            },
+        };
+        if matches!(ty, TypeRef::FunctionPointer { .. }) {
+            return ProjectedType {
+                name: "*mut u8".to_string(),
+                mutable: true,
+            };
+        }
+        if let TypeRef::OpaquePointer { mutable, .. } = ty {
+            return ProjectedType {
+                name: format!("*{} void", if *mutable { "mut" } else { "const" }),
+                mutable: *mutable,
+            };
+        }
+        if let TypeRef::Reference { mutable, target } = ty {
+            if let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target.as_ref()
+                && self
+                    .interface_names
+                    .contains(&(self.tu.to_string(), name.clone()))
+            {
+                return ProjectedType {
+                    name: self.project(TypeEdge::Pointee(target, *mutable)).name,
+                    mutable: false,
+                };
+            }
+            return self.pointer(target, *mutable, 1);
+        }
+        if let TypeRef::Array { target, len } = ty {
+            return ProjectedType {
+                name: format!("[{}; {len}]", self.name(target)),
+                mutable: false,
+            };
+        }
+        if let TypeRef::Generic { name, args, .. } = ty {
+            return ProjectedType {
+                name: format!(
+                    "{}<{}>",
+                    rdl_ident(self.type_names.get(name).unwrap_or(name)),
+                    args.iter()
+                        .map(|arg| self.name(arg))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                mutable: false,
+            };
+        }
+        let (mutable, depth, target) = pointer_run(ty);
+        if depth != 0
+            && let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target
+            && self
+                .interface_names
+                .contains(&(self.tu.to_string(), name.clone()))
+        {
+            return self.pointer(target, mutable, depth - 1);
+        }
+        if depth != 0 {
+            return self.pointer(target, mutable, depth);
+        }
+        let name = if let TypeRef::Named { name, declaration } = ty
+            && let Some(emitted) = self.type_names.get(name)
+        {
+            qualify_emitted_type(
+                declaration,
+                emitted,
+                self.local_types,
+                self.routed_types,
+                self.namespace,
+            )
+        } else if let TypeRef::Named { name, .. } = ty
+            && let Some(canonical) = canonical_string_name(name)
+        {
+            let emitted = self
+                .type_names
+                .get(canonical)
+                .cloned()
+                .unwrap_or_else(|| canonical.to_string());
+            qualify_routed_type(&emitted, self.routed_types, self.namespace)
+        } else {
+            planned_type_name(ty, self.type_names, self.local_types, self.namespace)
+        };
+        ProjectedType {
+            name,
+            mutable: false,
         }
     }
+
+    fn pointer(&self, target: &TypeRef, mutable: bool, depth: usize) -> ProjectedType {
+        ProjectedType {
+            name: format!(
+                "{}{}",
+                format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth),
+                self.project(TypeEdge::Pointee(target, mutable)).name
+            ),
+            mutable: depth != 0 && mutable,
+        }
+    }
+}
+
+struct ProjectedType {
+    name: String,
+    mutable: bool,
 }
 
 struct ScopedDeclarationIndex {
@@ -9418,9 +9461,27 @@ fn validate_complete_layout(
     }
 }
 
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
 enum TypeEdge<'a> {
     Type(&'a TypeRef),
+    Pointee(&'a TypeRef, bool),
+    Parameter(&'a Parameter),
     Projected(&'a str),
+}
+
+#[derive(Clone, Copy)]
+enum TypeChoice<'a> {
+    Declared(&'a TypeRef),
+    Canonical(&'static str),
+}
+
+impl<'a> TypeChoice<'a> {
+    fn edge(self) -> TypeEdge<'a> {
+        match self {
+            Self::Declared(ty) => TypeEdge::Type(ty),
+            Self::Canonical(name) => TypeEdge::Projected(name),
+        }
+    }
 }
 
 type PendingTypeEdge<'a> = (&'a str, TypeEdge<'a>, DependencyNode<'a>);
@@ -9988,6 +10049,29 @@ fn canonical_pointer_alias_name(name: &str) -> bool {
     canonical_string_name(name).is_some() || canonical_raw_pointer_name(name)
 }
 
+fn is_string_alias_fact(
+    fact: &Fact,
+    facts_by_declaration: &BTreeMap<(String, Location), &Fact>,
+    seen: &mut BTreeSet<Origin>,
+) -> bool {
+    if canonical_string_name(&fact.name).is_some() {
+        return true;
+    }
+    if !seen.insert(fact.origin.clone()) {
+        return false;
+    }
+    let FactData::Typedef {
+        target: TypeRef::Named { name, declaration },
+    } = &fact.data
+    else {
+        return false;
+    };
+    canonical_string_name(name).is_some()
+        || facts_by_declaration
+            .get(&(fact.origin.tu.clone(), declaration.clone()))
+            .is_some_and(|target| is_string_alias_fact(target, facts_by_declaration, seen))
+}
+
 fn canonical_raw_pointer_name(name: &str) -> bool {
     canonical_raw_pointer_mutability(name).is_some()
 }
@@ -10001,15 +10085,6 @@ fn canonical_raw_pointer_mutability(name: &str) -> Option<bool> {
     } else {
         None
     }
-}
-
-fn canonical_raw_pointer_is_retained(
-    declarations: Option<&RetainedCanonicalRawPointers>,
-    tu: &str,
-    origin: Option<&Origin>,
-    declaration: &Location,
-) -> bool {
-    declarations.is_none_or(|declarations| declarations.contains(tu, origin, declaration))
 }
 
 fn type_ref_uses_alias(ty: &TypeRef, aliases: &BTreeSet<&str>) -> bool {
@@ -10087,7 +10162,7 @@ fn queue_type_edges<'a>(
         FactData::Callback { params, result, .. } => {
             push(TypeEdge::Type(result));
             for param in params {
-                push(TypeEdge::Type(&param.ty));
+                push(TypeEdge::Parameter(param));
             }
         }
         FactData::PropertyKey { ty, .. } => push(TypeEdge::Projected(
@@ -10110,10 +10185,7 @@ fn queue_type_edges<'a>(
             for method in methods {
                 push(TypeEdge::Type(&method.result));
                 for param in &method.params {
-                    push(TypeEdge::Type(&param.ty));
-                    if let Some(name) = parameter_string_name(param) {
-                        push(TypeEdge::Projected(name));
-                    }
+                    push(TypeEdge::Parameter(param));
                 }
             }
         }
@@ -10131,10 +10203,7 @@ fn queue_function_edges<'a>(
         let mut push = |edge| queue.push((tu, edge, source));
         push(TypeEdge::Type(result));
         for param in params {
-            push(TypeEdge::Type(&param.ty));
-            if let Some(name) = parameter_string_name(param) {
-                push(TypeEdge::Projected(name));
-            }
+            push(TypeEdge::Parameter(param));
         }
     }
 }
@@ -10354,16 +10423,17 @@ fn write_params(
                     parameter: index,
                 },
             };
+            let ty = projection.parameter(param);
             Ok(format!(
                 "{}{}: {}",
                 param_attributes(
                     param,
                     params,
-                    emitted_pointer_is_mutable(param, projection),
+                    ty.mutable,
                     annotations_for(annotations, &target),
                 )?,
                 rdl_ident(&param.name),
-                planned_param_type_name(param, projection)
+                ty.name
             ))
         })
         .collect()
@@ -10525,69 +10595,6 @@ fn rdl_uuid(guid: &str) -> String {
     )
 }
 
-fn planned_param_type_name(param: &Parameter, projection: &TypeProjection<'_>) -> String {
-    if param.annotation.com_out_ptr {
-        return "*mut *mut void".to_string();
-    }
-    if let Some(name) = parameter_string_name(param) {
-        let name = projection
-            .type_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| name.to_string());
-        return qualify_routed_type(&name, projection.routed_types, projection.namespace);
-    }
-    planned_emitted_type_name(&param.ty, projection)
-}
-
-fn emitted_pointer_is_mutable(param: &Parameter, projection: &TypeProjection<'_>) -> bool {
-    if param.annotation.com_out_ptr {
-        return true;
-    }
-    if parameter_string_name(param).is_some() {
-        return false;
-    }
-    match &param.ty {
-        TypeRef::Pointer { .. } => {
-            let (mutable, depth, target) = pointer_run(&param.ty);
-            if depth == 1
-                && matches!(
-                    target,
-                    TypeRef::Named { name, .. } | TypeRef::Generic { name, .. }
-                        if projection
-                            .interface_names
-                            .contains(&(projection.tu.to_string(), name.clone()))
-                )
-            {
-                false
-            } else {
-                mutable
-            }
-        }
-        TypeRef::Reference { mutable, target } => {
-            !matches!(
-                target.as_ref(),
-                TypeRef::Named { name, .. } | TypeRef::Generic { name, .. }
-                    if projection
-                        .interface_names
-                        .contains(&(projection.tu.to_string(), name.clone()))
-            ) && *mutable
-        }
-        TypeRef::FunctionPointer { .. } => true,
-        TypeRef::OpaquePointer { mutable, .. } => *mutable,
-        TypeRef::Named { name, declaration } if matches!(name.as_str(), "PVOID" | "LPVOID") => {
-            !(projection.type_names.contains_key(name)
-                && canonical_raw_pointer_is_retained(
-                    projection.retained_canonical_raw_pointers,
-                    projection.tu,
-                    projection.typedef_origin,
-                    declaration,
-                ))
-        }
-        _ => false,
-    }
-}
-
 fn parameter_string_name(param: &Parameter) -> Option<&'static str> {
     match &param.ty {
         TypeRef::Pointer { mutable, target } if param.annotation.null_terminated => {
@@ -10620,97 +10627,7 @@ fn parameter_string_name(param: &Parameter) -> Option<&'static str> {
 }
 
 fn planned_emitted_type_name(ty: &TypeRef, projection: &TypeProjection<'_>) -> String {
-    if matches!(ty, TypeRef::FunctionPointer { .. }) {
-        return "*mut u8".to_string();
-    }
-    if let TypeRef::OpaquePointer { mutable, .. } = ty {
-        return format!("*{} void", if *mutable { "mut" } else { "const" });
-    }
-    if let TypeRef::Named { name, declaration } = ty
-        && let Some(emitted_name) = projection.type_names.get(name)
-        && (!canonical_raw_pointer_name(name)
-            || canonical_raw_pointer_is_retained(
-                projection.retained_canonical_raw_pointers,
-                projection.tu,
-                projection.typedef_origin,
-                declaration,
-            ))
-    {
-        return qualify_emitted_type(
-            declaration,
-            emitted_name,
-            projection.local_types,
-            projection.routed_types,
-            projection.namespace,
-        );
-    }
-    if let TypeRef::Named { name, .. } = ty
-        && let Some(name) = canonical_string_name(name)
-    {
-        let name = projection
-            .type_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| name.to_string());
-        return qualify_routed_type(&name, projection.routed_types, projection.namespace);
-    }
-    if let TypeRef::Named { name, .. } = ty
-        && let Some(name) = canonical_named_type(name)
-    {
-        return projection
-            .type_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| name.to_string());
-    }
-    if let TypeRef::Reference { mutable, target } = ty {
-        if let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target.as_ref()
-            && projection
-                .interface_names
-                .contains(&(projection.tu.to_string(), name.clone()))
-        {
-            return planned_type_name(
-                target,
-                projection.type_names,
-                projection.local_types,
-                projection.namespace,
-            );
-        }
-        return format!(
-            "*{} {}",
-            if *mutable { "mut" } else { "const" },
-            planned_emitted_type_name(target, projection)
-        );
-    }
-    if let TypeRef::Array { target, len } = ty {
-        return format!("[{}; {len}]", planned_emitted_type_name(target, projection));
-    }
-    let (mutable, depth, target) = pointer_run(ty);
-    if depth != 0
-        && let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target
-        && projection
-            .interface_names
-            .contains(&(projection.tu.to_string(), name.clone()))
-    {
-        return format!(
-            "{}{}",
-            format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth - 1),
-            planned_emitted_type_name(target, projection)
-        );
-    }
-    if depth != 0 {
-        return format!(
-            "{}{}",
-            format!("*{} ", if mutable { "mut" } else { "const" }).repeat(depth),
-            planned_emitted_type_name(target, projection)
-        );
-    }
-    planned_type_name(
-        ty,
-        projection.type_names,
-        projection.local_types,
-        projection.namespace,
-    )
+    projection.name(ty)
 }
 
 fn internal_alias_target_resolved(ty: &TypeRef, aliases: &BTreeSet<String>) -> bool {
@@ -11279,40 +11196,17 @@ fn constant_type_name(
         {
             return None;
         }
-        TypeRef::Named { name, .. } if projection.type_names.contains_key(name) => {
-            if canonical_raw_pointer_name(name) {
-                projection.name(ty)
-            } else {
-                planned_type_name(
-                    ty,
-                    projection.type_names,
-                    projection.local_types,
-                    projection.namespace,
-                )
-            }
-        }
-        TypeRef::Named { name, .. } => canonical_named_type(name).map_or_else(
-            || {
-                planned_type_name(
-                    ty,
-                    projection.type_names,
-                    projection.local_types,
-                    projection.namespace,
-                )
-            },
-            str::to_string,
-        ),
         TypeRef::Void
         | TypeRef::Object
         | TypeRef::Generic { .. }
         | TypeRef::Array { .. }
         | TypeRef::InlineRecord(_) => return None,
-        _ => planned_type_name(
-            ty,
-            projection.type_names,
-            projection.local_types,
-            projection.namespace,
-        ),
+        TypeRef::Pointer { .. } => {
+            let (mutable, depth, target) = pointer_run(ty);
+            projection.pointer(target, mutable, depth).name
+        }
+        TypeRef::Reference { mutable, target } => projection.pointer(target, *mutable, 1).name,
+        _ => projection.name(ty),
     };
     Some(name)
 }
@@ -11543,22 +11437,26 @@ mod tests {
             .iter()
             .map(|fact| (&fact.origin, fact))
             .collect::<HashMap<_, _>>();
-        let mut retained = RetainedCanonicalRawPointers::new();
-        populate_retained_canonical_raw_pointers(
-            &planned,
-            &BTreeMap::new(),
-            &declarations,
-            &facts_by_origin,
-            &BTreeMap::new(),
-            &mut retained,
-        );
+        for fact in planned {
+            if let FactData::Typedef {
+                target: TypeRef::Named { name, declaration },
+            } = &fact.data
+            {
+                let local = declarations.get(&fact.origin.tu, name, declaration);
+                assert_eq!(local.len(), 2);
+                assert!(local.iter().all(|candidate| same_typedef_bridge_identity(
+                    &facts[0],
+                    candidate,
+                    &facts_by_origin,
+                    &BTreeMap::new(),
+                )));
+            }
+        }
 
         assert_eq!(
             declarations.metrics(),
             (facts.len(), PLANNED_ALIASES, PLANNED_ALIASES * 2)
         );
-        assert_eq!(retained.typedef_targets.len(), PLANNED_ALIASES);
-        assert!(!retained.translation_units.contains_key("noise"));
     }
 
     #[test]
@@ -11619,25 +11517,20 @@ mod tests {
                 },
             ),
         ];
-        let planned = [&facts[0], &facts[3]];
         let declarations = TypedefDeclarationIndex::new(&facts);
         let facts_by_origin = facts
             .iter()
             .map(|fact| (&fact.origin, fact))
             .collect::<HashMap<_, _>>();
-        let mut retained = RetainedCanonicalRawPointers::new();
-        populate_retained_canonical_raw_pointers(
-            &planned,
-            &BTreeMap::new(),
-            &declarations,
+        let local = declarations.get("consumer", "LPVOID", &facts[0].spelling);
+        assert!(!local.iter().all(|candidate| same_typedef_bridge_identity(
+            &facts[0],
+            candidate,
             &facts_by_origin,
             &BTreeMap::new(),
-            &mut retained,
-        );
+        )));
 
         assert_eq!(declarations.metrics(), (facts.len(), 1, 2));
-        assert!(retained.typedef_targets.is_empty());
-        assert!(!retained.translation_units.contains_key("consumer"));
     }
 
     #[test]
@@ -11664,22 +11557,17 @@ mod tests {
         for different_location in [false, true] {
             right.spelling.offset = if different_location { 33 } else { 32 };
             let facts = [left.clone(), right.clone()];
-            let declarations = TypedefDeclarationIndex::new(&facts);
             let facts_by_origin = facts
                 .iter()
                 .map(|fact| (&fact.origin, fact))
                 .collect::<HashMap<_, _>>();
-            let mut retained = RetainedCanonicalRawPointers::new();
-            populate_retained_canonical_raw_pointers(
-                &[&facts[0]],
-                &BTreeMap::new(),
-                &declarations,
-                &facts_by_origin,
-                &BTreeMap::new(),
-                &mut retained,
-            );
             assert_eq!(
-                retained.contains("right", None, &right.spelling),
+                same_typedef_bridge_identity(
+                    &facts[0],
+                    &facts[1],
+                    &facts_by_origin,
+                    &BTreeMap::new(),
+                ),
                 !different_location
             );
         }
@@ -11749,21 +11637,16 @@ mod tests {
             &annotations,
         ));
         let facts = [left, right];
-        let declarations = TypedefDeclarationIndex::new(&facts);
         let facts_by_origin = facts
             .iter()
             .map(|fact| (&fact.origin, fact))
             .collect::<HashMap<_, _>>();
-        let mut retained = RetainedCanonicalRawPointers::new();
-        populate_retained_canonical_raw_pointers(
-            &[&facts[0]],
-            &BTreeMap::new(),
-            &declarations,
+        assert!(!same_typedef_bridge_identity(
+            &facts[0],
+            &facts[1],
             &facts_by_origin,
             &annotations,
-            &mut retained,
-        );
-        assert!(!retained.contains("right", None, &facts[1].spelling));
+        ));
     }
 
     #[test]
