@@ -20,4 +20,5 @@ extern "C" void ProjectionControls(
     void *raw,
     unsigned int size,
     __attribute__((annotate("_In_"))) PCOR_SIGNATURE signature,
-    PCCOR_SIGNATURE *signatureBoundary);
+    PCCOR_SIGNATURE *signatureBoundary,
+    PCOR_SIGNATURE rawSignature);

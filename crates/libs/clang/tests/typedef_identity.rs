@@ -26,9 +26,10 @@ fn assert_projection_controls(index: &windows_metadata::reader::Index, aliases: 
             Type::U32,
             Type::PtrMut(Box::new(Type::U8), 1),
             Type::PtrMut(Box::new(Type::value_named(aliases, "PCCOR_SIGNATURE")), 1),
+            Type::PtrMut(Box::new(Type::U8), 1),
         ]
     );
-    let params = function.params_by_sequence(11).unwrap();
+    let params = function.params_by_sequence(12).unwrap();
     let buffer = params.params()[0].unwrap();
     assert_eq!(buffer.direction(), ParamDirection::Output);
     assert!(buffer.is_optional());
@@ -51,6 +52,7 @@ fn assert_projection_controls(index: &windows_metadata::reader::Index, aliases: 
         ParamDirection::Input,
         ParamDirection::Input,
         ParamDirection::Output,
+        ParamDirection::Output,
     ]
     .into_iter()
     .enumerate()
@@ -63,6 +65,7 @@ fn assert_projection_controls(index: &windows_metadata::reader::Index, aliases: 
         }
     }
     assert_eq!(params.params()[9].unwrap().flags().0, 1);
+    assert_eq!(params.params()[11].unwrap().flags().0, 2);
     assert_eq!(
         index.expect(aliases, "PCCOR_SIGNATURE").underlying_type(),
         Some(Type::PtrConst(Box::new(Type::U8), 1))

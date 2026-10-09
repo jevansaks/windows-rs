@@ -5263,8 +5263,13 @@ impl Snapshot {
                     TypeEdge::Type(ty) => (ty, None),
                     TypeEdge::Pointee(ty, mutable) => (ty, Some(mutable)),
                     TypeEdge::Parameter(param) => {
-                        let choice = parameter_string_name(param)
-                            .map_or(TypeChoice::Declared(&param.ty), TypeChoice::Canonical);
+                        let choice = parameter_string_name(param).map_or(
+                            TypeChoice::Declared(&param.ty),
+                            |name| TypeChoice::Canonical {
+                                name,
+                                mutable: false,
+                            },
+                        );
                         type_choices.insert((tu, edge), choice);
                         queue.push((tu, choice.edge(), source));
                         continue;
@@ -5410,7 +5415,13 @@ impl Snapshot {
                     && canonical_typedef_declarations.contains(&(tu, declaration))
                     && !(retain_pointer_alias && canonical_pointer_alias_name(name))
                 {
-                    type_choices.insert((tu, edge), TypeChoice::Canonical(canonical_string));
+                    type_choices.insert(
+                        (tu, edge),
+                        TypeChoice::Canonical {
+                            name: canonical_string,
+                            mutable: false,
+                        },
+                    );
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
@@ -5591,7 +5602,13 @@ impl Snapshot {
                     && matches!(fact.data, FactData::Typedef { .. })
                     && !retain_pointer_alias
                 {
-                    type_choices.insert((tu, edge), TypeChoice::Canonical(canonical));
+                    type_choices.insert(
+                        (tu, edge),
+                        TypeChoice::Canonical {
+                            name: canonical,
+                            mutable: canonical_raw_pointer_mutability(&native_name) == Some(true),
+                        },
+                    );
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
@@ -7092,7 +7109,7 @@ impl<'a> TypeProjection<'a> {
 
     fn project(&self, edge: TypeEdge<'_>) -> ProjectedType {
         let ty = match self.type_choices.get(&(self.tu, edge)) {
-            Some(TypeChoice::Canonical(name)) => {
+            Some(TypeChoice::Canonical { name, mutable }) => {
                 let emitted = self
                     .type_names
                     .get(*name)
@@ -7100,7 +7117,7 @@ impl<'a> TypeProjection<'a> {
                     .unwrap_or_else(|| (*name).to_string());
                 return ProjectedType {
                     name: qualify_routed_type(&emitted, self.routed_types, self.namespace),
-                    mutable: name.starts_with("*mut "),
+                    mutable: *mutable,
                 };
             }
             Some(TypeChoice::Declared(ty)) if matches!(edge, TypeEdge::Parameter(_)) => {
@@ -9472,14 +9489,14 @@ enum TypeEdge<'a> {
 #[derive(Clone, Copy)]
 enum TypeChoice<'a> {
     Declared(&'a TypeRef),
-    Canonical(&'static str),
+    Canonical { name: &'static str, mutable: bool },
 }
 
 impl<'a> TypeChoice<'a> {
     fn edge(self) -> TypeEdge<'a> {
         match self {
             Self::Declared(ty) => TypeEdge::Type(ty),
-            Self::Canonical(name) => TypeEdge::Projected(name),
+            Self::Canonical { name, .. } => TypeEdge::Projected(name),
         }
     }
 }
