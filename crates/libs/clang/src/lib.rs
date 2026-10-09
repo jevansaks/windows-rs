@@ -2742,7 +2742,7 @@ impl Snapshot {
             .iter()
             .filter(|fact| fact.root)
             .filter_map(|fact| {
-                let owner = self.root_owners.get(&fact.origin)?;
+                let owner = fact_root_owner(fact, &self.root_owners, &self.root_partitions)?;
                 let namespace = self
                     .fact_authority_namespace(fact, &declarations)
                     .unwrap_or(&owner.namespace);
@@ -3000,7 +3000,8 @@ impl Snapshot {
                         .copied()
                         .min_by_key(|fact| {
                             (
-                                self.root_owners.get(&fact.origin).unwrap(),
+                                fact_root_owner(fact, &self.root_owners, &self.root_partitions)
+                                    .unwrap(),
                                 partition_declaration_location(fact),
                                 &fact.origin,
                             )
@@ -3155,7 +3156,7 @@ impl Snapshot {
         let mut queue = Vec::new();
         for fact in self.facts.iter().filter(|fact| {
             fact.root
-                && self.root_owners.contains_key(&fact.origin)
+                && fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
                 && pointer_alias_root_is_selected(fact, options)
                 && matches!(
                     &fact.data,
@@ -3223,7 +3224,7 @@ impl Snapshot {
     fn apply_partition_remaps(&mut self) {
         let mut source_remaps: BTreeMap<(Location, String), BTreeSet<String>> = BTreeMap::new();
         for fact in &self.facts {
-            if let Some(owner) = self.root_owners.get(&fact.origin)
+            if let Some(owner) = fact_root_owner(fact, &self.root_owners, &self.root_partitions)
                 && let Some(target) = owner.remaps.get(&fact.name)
             {
                 source_remaps
@@ -3236,9 +3237,7 @@ impl Snapshot {
             .facts
             .iter()
             .filter_map(|fact| {
-                let target = self
-                    .root_owners
-                    .get(&fact.origin)
+                let target = fact_root_owner(fact, &self.root_owners, &self.root_partitions)
                     .and_then(|owner| owner.remaps.get(&fact.name))
                     .cloned()
                     .or_else(|| {
@@ -3349,10 +3348,8 @@ impl Snapshot {
     fn apply_partition_exclusions(&mut self) {
         let declaration_guids = &self.declaration_guids;
         self.facts.retain_mut(|fact| {
-            let Some(owner) = self.root_owners.get(&fact.origin).or_else(|| {
-                self.root_partitions
-                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
-            }) else {
+            let Some(owner) = fact_root_owner(fact, &self.root_owners, &self.root_partitions)
+            else {
                 return true;
             };
             let empty_record = owner.exclude_empty_records
@@ -3449,12 +3446,7 @@ impl Snapshot {
             .facts
             .iter()
             .filter(|fact| {
-                self.root_owners
-                    .get(&fact.origin)
-                    .or_else(|| {
-                        self.root_partitions
-                            .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
-                    })
+                fact_root_owner(fact, &self.root_owners, &self.root_partitions)
                     .is_some_and(|owner| owner.u32_types.contains(&fact.name))
             })
             .map(|fact| (fact.spelling.clone(), fact.name.clone()))
@@ -3473,10 +3465,7 @@ impl Snapshot {
                 .insert(fact.name.clone());
         }
         for fact in &mut self.facts {
-            let owner = self.root_owners.get(&fact.origin).or_else(|| {
-                self.root_partitions
-                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
-            });
+            let owner = fact_root_owner(fact, &self.root_owners, &self.root_partitions);
             let force_u32 = owner.is_some_and(|owner| owner.u32_types.contains(&fact.name))
                 || (owner.is_none()
                     && u32_sources.contains(&(fact.spelling.clone(), fact.name.clone())));
@@ -3527,7 +3516,9 @@ impl Snapshot {
     ) -> Vec<&'a Fact> {
         let owned_sources: BTreeSet<_> = facts
             .iter()
-            .filter(|fact| self.root_owners.contains_key(&fact.origin))
+            .filter(|fact| {
+                fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
+            })
             .map(|fact| {
                 (
                     fact.name.as_str(),
@@ -3541,7 +3532,7 @@ impl Snapshot {
             .iter()
             .copied()
             .filter(|fact| {
-                self.root_owners.contains_key(&fact.origin)
+                fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
                     || !owned_sources.contains(&(
                         fact.name.as_str(),
                         &fact.spelling,
@@ -3571,12 +3562,7 @@ impl Snapshot {
             .iter()
             .copied()
             .filter(|fact| {
-                self.root_owners
-                    .get(&fact.origin)
-                    .or_else(|| {
-                        self.root_partitions
-                            .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
-                    })
+                fact_root_owner(fact, &self.root_owners, &self.root_partitions)
                     .is_some_and(|owner| owner.namespace == *namespace)
             })
             .collect();
@@ -3667,11 +3653,9 @@ impl Snapshot {
                 .push(fact.origin.clone());
         }
         let mut result = HashMap::new();
-        for fact in self
-            .facts
-            .iter()
-            .filter(|fact| self.root_owners.contains_key(&fact.origin))
-        {
+        for fact in self.facts.iter().filter(|fact| {
+            fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
+        }) {
             self.route_fact_projection_suppressed(
                 &fact.origin,
                 &facts,
@@ -3773,10 +3757,7 @@ impl Snapshot {
         };
         let mut candidates = Vec::new();
         for fact in self.facts.iter().filter(|fact| fact.name == name) {
-            let owner = self.root_owners.get(&fact.origin).or_else(|| {
-                self.root_partitions
-                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
-            });
+            let owner = fact_root_owner(fact, &self.root_owners, &self.root_partitions);
             let rejection = if let FactData::Unsupported { reason } = &fact.data {
                 format!("unsupported declaration: {reason}")
             } else if matches!(fact.data, FactData::Class { .. }) {
@@ -3924,7 +3905,8 @@ impl Snapshot {
             .facts
             .iter()
             .filter(|fact| {
-                self.root_owners.contains_key(&fact.origin) && !projection_suppressed(fact)
+                fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
+                    && !projection_suppressed(fact)
             })
             .map(|fact| (&fact.name, fact.kind, fact.definition, &fact.data))
             .collect();
@@ -3932,14 +3914,15 @@ impl Snapshot {
             .facts
             .iter()
             .filter(|fact| {
-                self.root_owners.contains_key(&fact.origin) && !projection_suppressed(fact)
+                fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
+                    && !projection_suppressed(fact)
             })
             .map(|fact| (&fact.name, fact.kind, fact.definition, &fact.spelling))
             .collect();
         let mut fact_claims: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         let mut source_fact_claims: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
         for fact in &self.facts {
-            if let Some(owner) = self.root_owners.get(&fact.origin) {
+            if let Some(owner) = fact_root_owner(fact, &self.root_owners, &self.root_partitions) {
                 let fact_key = (&fact.name, fact.kind, fact.definition, &fact.data);
                 let source_key = (&fact.name, fact.kind, fact.definition, &fact.spelling);
                 let suppressed = projection_suppressed(fact);
@@ -4054,7 +4037,9 @@ impl Snapshot {
                 .unwrap_or_else(|| empty_annotations.clone());
             let mut claims = BTreeSet::new();
             for &declaration in &planned.declarations {
-                let Some(owner) = self.root_owners.get(&declaration.origin) else {
+                let Some(owner) =
+                    fact_root_owner(declaration, &self.root_owners, &self.root_partitions)
+                else {
                     continue;
                 };
                 claims.insert(self.fact_route_claim(
@@ -4198,9 +4183,7 @@ impl Snapshot {
                 )?);
             }
         }
-        let preferred = self
-            .root_owners
-            .get(&fact.origin)
+        let preferred = fact_root_owner(fact, &self.root_owners, &self.root_partitions)
             .map(|owner| {
                 self.fact_route_claim(
                     fact,
@@ -4986,8 +4969,8 @@ impl Snapshot {
                 if is_flat_root(fact) {
                     return true;
                 }
-                self.header_partition_policy
-                    && self.root_owners.contains_key(&fact.origin)
+                source_names.is_some()
+                    && fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
                     && selected_functions.is_some_and(|functions| {
                         matches!(
                             &fact.data,
@@ -5031,12 +5014,37 @@ impl Snapshot {
                 .push(constant);
         }
 
+        let selected_non_flat_dependency_tus: BTreeSet<_> = if source_names.is_some()
+            && !self.header_partition_policy
+        {
+            self.facts
+                .iter()
+                .filter(|fact| {
+                    fact.root
+                        && matches!(fact.data, FactData::Function { .. })
+                        && !is_flat_root(fact)
+                        && fact_root_owner(fact, &self.root_owners, &self.root_partitions).is_some()
+                        && selected_functions.is_some_and(|functions| {
+                            matches!(
+                                &fact.data,
+                                FactData::Function { link_name, .. } if functions.contains(link_name)
+                            )
+                        })
+                })
+                .map(|fact| fact.origin.tu.as_str())
+                .collect()
+        } else {
+            BTreeSet::new()
+        };
         let mut facts_index: HashMap<&str, Vec<&Fact>> = HashMap::new();
         let mut exact_dependency_facts_index: HashMap<&str, Vec<&Fact>> = HashMap::new();
         for fact in &self.facts {
             if is_flat_dependency(fact) {
                 facts_index.entry(&fact.name).or_default().push(fact);
-            } else if self.header_partition_policy && is_type_declaration_fact(fact) {
+            } else if is_type_declaration_fact(fact)
+                && (self.header_partition_policy
+                    || selected_non_flat_dependency_tus.contains(fact.origin.tu.as_str()))
+            {
                 exact_dependency_facts_index
                     .entry(&fact.name)
                     .or_default()
@@ -5321,6 +5329,7 @@ impl Snapshot {
         );
         let (facts_by_name, mut retained_pointer_aliases, dependency_diagnostics) = loop {
             let mut facts = BTreeSet::new();
+            let mut facts_with_non_flat_access = BTreeSet::new();
             let mut queue = vec![];
             let mut pointer_alias_candidates = BTreeSet::new();
             let mut retained_pointer_aliases = BTreeSet::new();
@@ -5341,7 +5350,13 @@ impl Snapshot {
                         &callback_pointer_alias_requirements,
                         &mut pointer_alias_candidates,
                     );
-                    queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
+                    queue_type_edges(
+                        root,
+                        &self.projected_type_names,
+                        fact_node,
+                        self.header_partition_policy,
+                        &mut queue,
+                    );
                 }
             }
             for root in &value_roots {
@@ -5358,7 +5373,13 @@ impl Snapshot {
                     &callback_pointer_alias_requirements,
                     &mut pointer_alias_candidates,
                 );
-                queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
+                queue_type_edges(
+                    root,
+                    &self.projected_type_names,
+                    fact_node,
+                    self.header_partition_policy,
+                    &mut queue,
+                );
             }
             for constant in &constants {
                 let root_node = dependency_diagnostics.add_root(
@@ -5377,6 +5398,7 @@ impl Snapshot {
                     constant.root.tu.as_str(),
                     TypeEdge::Type(&constant.ty),
                     root_node,
+                    self.header_partition_policy,
                 ));
             }
             for function in &functions {
@@ -5393,10 +5415,14 @@ impl Snapshot {
                     &callback_pointer_alias_requirements,
                     &mut pointer_alias_candidates,
                 );
-                queue_function_edges(function.fact, fact_node, &mut queue);
+                let allow_non_flat = self.header_partition_policy
+                    || (selected_non_flat_dependency_tus
+                        .contains(function.fact.origin.tu.as_str())
+                        && !is_flat_root(function.fact));
+                queue_function_edges(function.fact, fact_node, allow_non_flat, &mut queue);
             }
 
-            while let Some((tu, edge, source)) = queue.pop() {
+            while let Some((tu, edge, source, allow_non_flat)) = queue.pop() {
                 let ty = match edge {
                     TypeEdge::Type(ty) => ty,
                     TypeEdge::Projected(name) => {
@@ -5443,7 +5469,10 @@ impl Snapshot {
                         }
                         let fact_node = DependencyNode::Fact(&fact.origin);
                         dependency_diagnostics.add_edge(source, fact_node);
-                        if facts.insert(fact.origin.clone()) {
+                        let first = facts.insert(fact.origin.clone());
+                        let upgraded = allow_non_flat
+                            && facts_with_non_flat_access.insert(fact.origin.clone());
+                        if first || upgraded {
                             collect_fact_pointer_alias_candidates(
                                 fact,
                                 &callback_pointer_alias_requirements,
@@ -5453,6 +5482,7 @@ impl Snapshot {
                                 fact,
                                 &self.projected_type_names,
                                 fact_node,
+                                allow_non_flat,
                                 &mut queue,
                             );
                         }
@@ -5461,17 +5491,17 @@ impl Snapshot {
                 };
                 let (name, declaration) = match ty {
                     TypeRef::Pointer { target, .. } | TypeRef::Reference { target, .. } => {
-                        queue.push((tu, TypeEdge::Type(target), source));
+                        queue.push((tu, TypeEdge::Type(target), source, allow_non_flat));
                         continue;
                     }
                     TypeRef::FunctionPointer { .. } | TypeRef::OpaquePointer { .. } => continue,
                     TypeRef::Array { target, .. } => {
-                        queue.push((tu, TypeEdge::Type(target), source));
+                        queue.push((tu, TypeEdge::Type(target), source, allow_non_flat));
                         continue;
                     }
                     TypeRef::InlineRecord(record) => {
                         for field in &record.fields {
-                            queue.push((tu, TypeEdge::Type(&field.ty), source));
+                            queue.push((tu, TypeEdge::Type(&field.ty), source, allow_non_flat));
                         }
                         continue;
                     }
@@ -5488,7 +5518,7 @@ impl Snapshot {
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
-                let exact_local_dependency = self.header_partition_policy
+                let exact_local_dependency = allow_non_flat
                     && facts_index
                         .get(name.as_str())
                         .into_iter()
@@ -5540,7 +5570,7 @@ impl Snapshot {
                     })
                     .collect();
                 let mut exact_non_flat = false;
-                if matches.is_empty() && self.header_partition_policy {
+                if matches.is_empty() && allow_non_flat {
                     matches.extend(
                         exact_dependency_facts_index
                             .get(name.as_str())
@@ -5707,13 +5737,22 @@ impl Snapshot {
                 }
                 let fact_node = DependencyNode::Fact(&fact.origin);
                 dependency_diagnostics.add_edge(source, fact_node);
-                if facts.insert(fact.origin.clone()) {
+                let first = facts.insert(fact.origin.clone());
+                let upgraded =
+                    allow_non_flat && facts_with_non_flat_access.insert(fact.origin.clone());
+                if first || upgraded {
                     collect_fact_pointer_alias_candidates(
                         fact,
                         &callback_pointer_alias_requirements,
                         &mut pointer_alias_candidates,
                     );
-                    queue_type_edges(fact, &self.projected_type_names, fact_node, &mut queue);
+                    queue_type_edges(
+                        fact,
+                        &self.projected_type_names,
+                        fact_node,
+                        allow_non_flat,
+                        &mut queue,
+                    );
                 }
             }
 
@@ -7656,6 +7695,24 @@ fn authority_root_owner(partition: &str, namespace: &str, root: &str) -> RootOwn
     }
 }
 
+fn fact_root_owner<'a>(
+    fact: &Fact,
+    root_owners: &'a BTreeMap<Origin, RootOwner>,
+    root_partitions: &'a BTreeMap<(String, String), RootOwner>,
+) -> Option<&'a RootOwner> {
+    if let Some(owner) = root_owners.get(&fact.origin) {
+        return Some(owner);
+    }
+    let mut owners = root_partitions
+        .iter()
+        .filter(|((tu, root), _)| {
+            tu == &fact.origin.tu && source_path_matches(root, &fact.spelling.file)
+        })
+        .map(|(_, owner)| owner);
+    let owner = owners.next()?;
+    owners.all(|candidate| candidate == owner).then_some(owner)
+}
+
 fn constant_root_owner<'a>(
     constant: &Constant,
     name: &str,
@@ -9538,7 +9595,7 @@ enum TypeEdge<'a> {
     Projected(&'a str),
 }
 
-type PendingTypeEdge<'a> = (&'a str, TypeEdge<'a>, DependencyNode<'a>);
+type PendingTypeEdge<'a> = (&'a str, TypeEdge<'a>, DependencyNode<'a>, bool);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct DependencyRoot<'a> {
@@ -10193,10 +10250,11 @@ fn queue_type_edges<'a>(
     fact: &'a Fact,
     projected_type_names: &'a BTreeMap<Origin, String>,
     source: DependencyNode<'a>,
+    allow_non_flat: bool,
     queue: &mut Vec<PendingTypeEdge<'a>>,
 ) {
     let tu = fact.origin.tu.as_str();
-    let mut push = |edge| queue.push((tu, edge, source));
+    let mut push = |edge| queue.push((tu, edge, source, allow_non_flat));
     match &fact.data {
         FactData::Typedef { target } => push(TypeEdge::Type(target)),
         FactData::Callback { params, result, .. } => {
@@ -10239,11 +10297,12 @@ fn queue_type_edges<'a>(
 fn queue_function_edges<'a>(
     fact: &'a Fact,
     source: DependencyNode<'a>,
+    allow_non_flat: bool,
     queue: &mut Vec<PendingTypeEdge<'a>>,
 ) {
     if let FactData::Function { params, result, .. } = &fact.data {
         let tu = fact.origin.tu.as_str();
-        let mut push = |edge| queue.push((tu, edge, source));
+        let mut push = |edge| queue.push((tu, edge, source, allow_non_flat));
         push(TypeEdge::Type(result));
         for param in params {
             push(TypeEdge::Type(&param.ty));
@@ -11565,6 +11624,106 @@ mod tests {
             system: false,
             data,
         }
+    }
+
+    #[test]
+    fn selected_function_owner_falls_back_to_spelling_path() {
+        helpers::ensure_libclang();
+
+        let scratch = std::env::temp_dir().join(format!(
+            "windows-clang-function-owner-fallback-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&scratch).unwrap();
+        let owned = scratch.join("owned.h");
+        let input = scratch.join("input.cpp");
+        std::fs::write(
+            &owned,
+            "extern \"C\" int __stdcall OwnedSelected(int value);\n",
+        )
+        .unwrap();
+        let source = format!(
+            "namespace Graphics {{ namespace DllExports {{\n\
+             #include \"{}\"\n\
+             }} }}\n",
+            owned.display()
+        );
+        let mut snapshot = extract_partitioned(
+            [Input::new(input.to_string_lossy(), source)
+                .partitioned("owned-input")
+                .with_root_partition(
+                    owned.to_string_lossy(),
+                    RootPartition::new("graphics", "Example.Graphics")
+                        .with_remap("OwnedSelected", "EmittedOwnedSelected")
+                        .with_library("OwnedSelected", "graphics.dll"),
+                )],
+            &[
+                "-x",
+                "c++",
+                "-fms-extensions",
+                "--target=x86_64-pc-windows-msvc",
+            ],
+        )
+        .unwrap();
+        let origin = snapshot
+            .facts
+            .iter()
+            .find(|fact| fact.name == "OwnedSelected")
+            .unwrap()
+            .origin
+            .clone();
+        let exact_owner = snapshot.root_owners.remove(&origin).unwrap();
+        let function = snapshot
+            .facts
+            .iter()
+            .find(|fact| fact.origin == origin)
+            .unwrap();
+        assert_eq!(
+            fact_root_owner(function, &snapshot.root_owners, &snapshot.root_partitions),
+            Some(&exact_owner)
+        );
+
+        let selected = BTreeSet::from(["OwnedSelected".to_string()]);
+        let references = BTreeMap::from([(
+            "EXTERNAL".to_string(),
+            TypeReference::new("External", "EXTERNAL", TypeReferenceKind::Type),
+        )]);
+        let mut options = EmitOptions::new("Example.Common", &references);
+        options.functions = Some(&selected);
+        let partitions = snapshot
+            .clone()
+            .emit_partitioned_with_options(&options)
+            .unwrap();
+        let output = &partitions[&RdlPartition {
+            partition: "graphics".to_string(),
+            namespace: "Example.Graphics".to_string(),
+            header: owned.to_string_lossy().replace('\\', "/"),
+        }];
+        assert!(
+            output.contains("#[library(\"graphics.dll\", import = \"OwnedSelected\")]"),
+            "{output}"
+        );
+        assert!(
+            output.contains("fn EmittedOwnedSelected(value: i32) -> i32"),
+            "{output}"
+        );
+
+        snapshot
+            .root_partitions
+            .values_mut()
+            .next()
+            .unwrap()
+            .exclusions
+            .insert("OwnedSelected".to_string());
+        assert_eq!(
+            snapshot
+                .emit_partitioned_with_options(&options)
+                .unwrap_err()
+                .to_string(),
+            "selected function `OwnedSelected` was not found"
+        );
+
+        std::fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]

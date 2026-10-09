@@ -195,9 +195,11 @@ needs emission, it is routed to the namespace in `EmitOptions`. An explicit trav
 mapping or namespace authority takes precedence. Exact declaration-path dependencies may come from
 C++ namespaces that are not eligible as public roots; unrelated declarations from those headers
 remain excluded. A native free function in such a namespace becomes eligible only when its
-traversed-header declaration has an explicit owner and its link name is selected by
-`EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
-change non-header emission.
+declaration resolves to an explicit owner from a partitioned input root or
+`HeaderPartitionPolicy`, and its link name is selected by `EmitOptions::functions`. Owner
+resolution uses the exact extracted origin when available, then a unique matching spelling path in
+the same input. This scoped selection does not promote other namespaced declarations or change
+non-partitioned emission.
 
 An `associated_enum` annotation on a selected root adds the matching enum provider from its
 annotation-compatible redeclarations to dependency closure. Those redeclarations may come from

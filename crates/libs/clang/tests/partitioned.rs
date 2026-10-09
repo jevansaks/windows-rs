@@ -5,6 +5,200 @@ use windows_clang::{
 };
 
 #[test]
+fn selected_non_flat_function_uses_owned_spelling_route() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-owned-non-flat-function-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let owned = scratch.join("owned.h");
+    let primary = scratch.join("primary.cpp");
+    let secondary = scratch.join("secondary.cpp");
+    std::fs::write(
+        &owned,
+        "enum OwnedStatusTag { OwnedOk = 0 };\n\
+         typedef OwnedStatusTag OwnedStatus;\n\
+         struct OwnedArc { float value; };\n\
+         extern \"C\" OwnedStatus __stdcall OwnedSelected(OwnedArc* arc);\n\
+         extern \"C\" OwnedStatus __stdcall OwnedUnselected(OwnedArc* arc);\n",
+    )
+    .unwrap();
+    let primary_source = format!(
+        "namespace Graphics {{ namespace DllExports {{\n\
+         #include \"{}\"\n\
+         extern \"C\" int __stdcall UnownedSelected(int value);\n\
+         }} }}\n",
+        owned.display()
+    );
+    let inputs = vec![
+        Input::new(primary.to_string_lossy(), primary_source)
+            .partitioned("primary-input")
+            .with_root_partition(
+                owned.to_string_lossy(),
+                RootPartition::new("graphics", "Example.Graphics")
+                    .with_library("OwnedSelected", "graphics.dll"),
+            ),
+        Input::new(
+            secondary.to_string_lossy(),
+            "typedef unsigned SECONDARY_VALUE;\n",
+        )
+        .partitioned("secondary-input")
+        .with_root(
+            secondary.to_string_lossy(),
+            "secondary",
+            "Example.Secondary",
+        ),
+    ];
+    let args = [
+        "-x",
+        "c++",
+        "-fms-extensions",
+        "--target=x86_64-pc-windows-msvc",
+    ];
+    let serial = extract_partitioned_with_options(
+        inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(1),
+    )
+    .unwrap();
+    let parallel = extract_partitioned_with_options(
+        inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    assert_eq!(serial.dump(), parallel.dump());
+
+    let selected = serial
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "OwnedSelected")
+        .unwrap();
+    assert_eq!(
+        selected.origin.tu,
+        primary.to_string_lossy().replace('\\', "/")
+    );
+    assert_eq!(
+        selected.spelling.file,
+        owned.to_string_lossy().replace('\\', "/")
+    );
+    assert_eq!(selected.expansion, selected.spelling);
+    assert!(selected.root);
+    let parent = serial
+        .facts()
+        .iter()
+        .find(|fact| Some(&fact.origin) == selected.parent.as_ref())
+        .unwrap();
+    let grandparent = serial
+        .facts()
+        .iter()
+        .find(|fact| Some(&fact.origin) == parent.parent.as_ref())
+        .unwrap();
+    assert_eq!(parent.name, "DllExports");
+    assert_eq!(grandparent.name, "Graphics");
+
+    let functions = BTreeSet::from(["OwnedSelected".to_string()]);
+    let references = BTreeMap::from([
+        (
+            "EXTERNAL".to_string(),
+            TypeReference::new("External", "EXTERNAL", TypeReferenceKind::Type),
+        ),
+        (
+            "OwnedStatus".to_string(),
+            TypeReference::new("External", "OwnedStatus", TypeReferenceKind::Type),
+        ),
+    ]);
+    let mut options = EmitOptions::new("Example.Common", &references);
+    options.functions = Some(&functions);
+    assert_eq!(
+        serial
+            .clone()
+            .emit_with_options(&options)
+            .unwrap_err()
+            .to_string(),
+        "selected function `OwnedSelected` was not found"
+    );
+    let expected = serial
+        .clone()
+        .emit_partitioned_with_options(&options)
+        .unwrap();
+    assert_eq!(
+        expected,
+        parallel
+            .clone()
+            .emit_partitioned_with_options(&options)
+            .unwrap()
+    );
+    let graphics = &expected[&RdlPartition {
+        partition: "graphics".to_string(),
+        namespace: "Example.Graphics".to_string(),
+        header: owned.to_string_lossy().replace('\\', "/"),
+    }];
+    assert!(
+        graphics.contains("#[library(\"graphics.dll\")]"),
+        "{graphics}"
+    );
+    assert!(graphics.contains("enum OwnedStatusTag"), "{graphics}");
+    assert!(
+        graphics.contains("type OwnedStatus = OwnedStatusTag"),
+        "{graphics}"
+    );
+    assert!(graphics.contains("struct OwnedArc"), "{graphics}");
+    assert!(
+        graphics.contains("fn OwnedSelected(arc: *mut OwnedArc) -> OwnedStatus"),
+        "{graphics}"
+    );
+    assert!(!graphics.contains("OwnedUnselected"), "{graphics}");
+    assert!(!graphics.contains("UnownedSelected"), "{graphics}");
+
+    let unowned_functions = BTreeSet::from(["UnownedSelected".to_string()]);
+    let mut unowned_options = EmitOptions::new("Example.Common", &references);
+    unowned_options.functions = Some(&unowned_functions);
+    let unowned_error = serial
+        .emit_partitioned_with_options(&unowned_options)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(
+        unowned_error,
+        parallel
+            .emit_partitioned_with_options(&unowned_options)
+            .unwrap_err()
+            .to_string()
+    );
+    assert_eq!(
+        unowned_error,
+        "selected function `UnownedSelected` was not found"
+    );
+
+    let mut reversed = inputs;
+    reversed.reverse();
+    let reversed = extract_partitioned_with_options(
+        reversed,
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    assert_eq!(
+        expected,
+        reversed
+            .clone()
+            .emit_partitioned_with_options(&options)
+            .unwrap()
+    );
+    assert_eq!(
+        unowned_error,
+        reversed
+            .emit_partitioned_with_options(&unowned_options)
+            .unwrap_err()
+            .to_string()
+    );
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn partitioned_emission_routes_owners_and_qualifies_types() {
     helpers::ensure_libclang();
 
