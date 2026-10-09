@@ -217,6 +217,14 @@ settings and emitted `RdlPartition::header` values use the extracted physical pa
 remaps and other exact source lookups consistent when policy spelling differs by case or uses a
 relative suffix.
 
+When a canonical pointer typedef is retained as an unowned shared dependency, equivalent observations
+of its physical declaration keep the same named projection across translation units. This applies to
+directly observed pointers to `void` or scalar types. Every exact candidate must match the
+declaration's name, location, native parent scope, definition, pointer target, and semantic annotations.
+Output namespace ownership is resolved separately. Aliases owned by a traversed header keep their
+input-scoped projection. Different declarations or compile variants do not gain alias retention
+through this rule, and native raw pointer uses remain raw pointers.
+
 Source provenance follows these rules:
 
 | Source item | Traversed-header path |

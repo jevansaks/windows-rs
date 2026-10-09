@@ -1802,6 +1802,7 @@ impl Snapshot {
             let annotations = self.route_annotation_signatures();
             populate_retained_canonical_raw_pointers(
                 &planned_types,
+                &self.root_owners,
                 &declarations,
                 facts_by_origin.as_ref().unwrap(),
                 &annotations,
@@ -6973,6 +6974,7 @@ fn route_candidate_error(candidate: &RouteCandidate<'_>, reason: PartitionConfli
 
 fn populate_retained_canonical_raw_pointers<'a>(
     planned_types: &[&'a Fact],
+    root_owners: &BTreeMap<Origin, RootOwner>,
     declarations: &TypedefDeclarationIndex<'a>,
     facts_by_origin: &HashMap<&'a Origin, &'a Fact>,
     annotations: &BTreeMap<Origin, Rc<RouteAnnotations>>,
@@ -6987,6 +6989,36 @@ fn populate_retained_canonical_raw_pointers<'a>(
         .collect();
     for alias in &retained_aliases {
         retained.retain_translation_unit(alias);
+    }
+
+    let mut aliases_by_source: HashMap<_, Vec<_>> = HashMap::new();
+    for alias in &retained_aliases {
+        // Owned aliases keep input-scoped projection; shared dependencies have no such owner.
+        if !root_owners.contains_key(&alias.origin)
+            && matches!(
+                &alias.data,
+                FactData::Typedef {
+                    target: TypeRef::Pointer { target, .. }
+                } if matches!(target.as_ref(), TypeRef::Void | TypeRef::Scalar(_))
+            )
+        {
+            aliases_by_source
+                .entry((alias.name.as_str(), &alias.spelling))
+                .or_default()
+                .push(*alias);
+        }
+    }
+    for ((_, name, declaration), local_declarations) in &declarations.facts {
+        let Some(aliases) = aliases_by_source.get(&(*name, *declaration)) else {
+            continue;
+        };
+        if local_declarations.iter().all(|local| {
+            aliases.iter().any(|alias| {
+                same_typedef_bridge_identity(alias, local, facts_by_origin, annotations)
+            })
+        }) {
+            retained.retain_translation_unit(local_declarations[0]);
+        }
     }
 
     // A direct typedef may target the same physical alias declaration through another
@@ -11513,6 +11545,7 @@ mod tests {
         let mut retained = RetainedCanonicalRawPointers::new();
         populate_retained_canonical_raw_pointers(
             &planned,
+            &BTreeMap::new(),
             &declarations,
             &facts_by_origin,
             &BTreeMap::new(),
@@ -11594,6 +11627,7 @@ mod tests {
         let mut retained = RetainedCanonicalRawPointers::new();
         populate_retained_canonical_raw_pointers(
             &planned,
+            &BTreeMap::new(),
             &declarations,
             &facts_by_origin,
             &BTreeMap::new(),
@@ -11602,6 +11636,52 @@ mod tests {
 
         assert_eq!(declarations.metrics(), (facts.len(), 1, 2));
         assert!(retained.typedef_targets.is_empty());
+        assert!(!retained.translation_units.contains_key("consumer"));
+    }
+
+    #[test]
+    fn shared_pointer_alias_requires_exact_source_location() {
+        let left = test_fact_in_tu(
+            "left",
+            1,
+            None,
+            FactKind::Typedef,
+            "LPVOID",
+            Location {
+                file: "shared.h".to_string(),
+                offset: 32,
+            },
+            FactData::Typedef {
+                target: TypeRef::Pointer {
+                    mutable: true,
+                    target: Box::new(TypeRef::Void),
+                },
+            },
+        );
+        let mut right = left.clone();
+        right.origin.tu = "right".to_string();
+        for different_location in [false, true] {
+            right.spelling.offset = if different_location { 33 } else { 32 };
+            let facts = [left.clone(), right.clone()];
+            let declarations = TypedefDeclarationIndex::new(&facts);
+            let facts_by_origin = facts
+                .iter()
+                .map(|fact| (&fact.origin, fact))
+                .collect::<HashMap<_, _>>();
+            let mut retained = RetainedCanonicalRawPointers::new();
+            populate_retained_canonical_raw_pointers(
+                &[&facts[0]],
+                &BTreeMap::new(),
+                &declarations,
+                &facts_by_origin,
+                &BTreeMap::new(),
+                &mut retained,
+            );
+            assert_eq!(
+                retained.contains("right", None, &right.spelling),
+                !different_location
+            );
+        }
     }
 
     #[test]
@@ -11667,6 +11747,22 @@ mod tests {
             &facts_by_origin,
             &annotations,
         ));
+        let facts = [left, right];
+        let declarations = TypedefDeclarationIndex::new(&facts);
+        let facts_by_origin = facts
+            .iter()
+            .map(|fact| (&fact.origin, fact))
+            .collect::<HashMap<_, _>>();
+        let mut retained = RetainedCanonicalRawPointers::new();
+        populate_retained_canonical_raw_pointers(
+            &[&facts[0]],
+            &BTreeMap::new(),
+            &declarations,
+            &facts_by_origin,
+            &annotations,
+            &mut retained,
+        );
+        assert!(!retained.contains("right", None, &facts[1].spelling));
     }
 
     #[test]
