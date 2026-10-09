@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use windows_clang::{
-    EmitOptions, Input, NamespaceAuthorities, RdlPartition, RootPartition, TypeReference,
-    TypeReferenceKind, extract_partitioned,
+    EmitOptions, HeaderPartitionPolicy, Input, NamespaceAuthorities, RdlPartition, RootPartition,
+    TypeReference, TypeReferenceKind, extract_partitioned,
 };
+use windows_metadata::{Type, reader::Item};
 
 #[test]
 fn partitioned_emission_routes_owners_and_qualifies_types() {
@@ -1314,6 +1315,7 @@ fn unowned_scalar_typedef_dependencies_are_inlined() {
     .unwrap();
     let references = BTreeMap::new();
     let partitions = snapshot
+        .clone()
         .emit_partitioned_with_options(&EmitOptions::new("Example.Common", &references))
         .unwrap();
     let owned = partitions
@@ -1326,6 +1328,60 @@ fn unowned_scalar_typedef_dependencies_are_inlined() {
     assert!(owned.contains("pointer: *mut u32"), "{owned}");
     assert!(!owned.contains("type ACCESS_MASK"), "{owned}");
     assert!(!owned.contains("type PACCESS_MASK"), "{owned}");
+    assert_eq!(partitions.len(), 1);
+    let path = scratch.join("access.winmd");
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&path)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&path).unwrap();
+    assert_eq!(
+        index
+            .expect("Example.Owned", "OWNED_ACCESS")
+            .fields()
+            .map(|field| field.ty())
+            .collect::<Vec<_>>(),
+        [Type::U32, Type::PtrMut(Box::new(Type::U32), 1),]
+    );
+    assert!(!index.contains("Example.Common", "PACCESS_MASK"));
+    let modern = snapshot
+        .plan_header_partitions(
+            &HeaderPartitionPolicy::new().with_traversed_header(
+                api.to_string_lossy(),
+                RootPartition::new("owned", "Example.Owned"),
+            ),
+            &NamespaceAuthorities::new(),
+        )
+        .unwrap()
+        .emit_with_options(&EmitOptions::new("Example.Common", &references))
+        .unwrap();
+    let path = scratch.join("access-modern.winmd");
+    windows_rdl::reader()
+        .input_texts(modern.values())
+        .reference_default()
+        .output(&path)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&path).unwrap();
+    assert_eq!(
+        index
+            .expect("Example.Owned", "OWNED_ACCESS")
+            .fields()
+            .map(|field| field.ty())
+            .collect::<Vec<_>>(),
+        [
+            Type::U32,
+            Type::value_named("Example.Common", "PACCESS_MASK")
+        ]
+    );
+    assert_eq!(
+        index
+            .expect("Example.Common", "PACCESS_MASK")
+            .underlying_type(),
+        Some(Type::PtrMut(Box::new(Type::U32), 1))
+    );
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -1532,6 +1588,37 @@ fn midl_helper_functions_use_input_order_across_headers() {
 
     assert_eq!(marshal.matches("fn BSTR_UserFree").count(), 1, "{marshal}");
     assert_eq!(marshal.matches("fn BSTR_UserSize").count(), 1, "{marshal}");
+    let path = scratch.join("midl.winmd");
+    windows_rdl::reader()
+        .input_texts(partitions.values())
+        .reference_default()
+        .output(&path)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&path).unwrap();
+    let Item::Fn(free) = index.expect_item("Example.System.Com.Marshal", "BSTR_UserFree") else {
+        panic!()
+    };
+    assert_eq!(
+        free.signature(&[]).types,
+        [
+            Type::PtrMut(Box::new(Type::U32), 1),
+            Type::PtrMut(Box::new(Type::U16), 2),
+        ]
+    );
+    let Item::Fn(size) = index.expect_item("Example.System.Com.Marshal", "BSTR_UserSize") else {
+        panic!()
+    };
+    assert_eq!(
+        size.signature(&[]).types,
+        [
+            Type::PtrMut(Box::new(Type::U32), 1),
+            Type::U32,
+            Type::PtrMut(Box::new(Type::U16), 2),
+        ]
+    );
+    assert_eq!(size.signature(&[]).return_type, Type::U32);
+    assert!(!index.contains("Example.Common", "BSTR"));
 
     let differing = extract_partitioned(
         [

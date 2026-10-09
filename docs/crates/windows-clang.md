@@ -345,6 +345,12 @@ still determine which declaration is available. Noncanonical pointer aliases, in
 keep their nominal contract. A needed alias boundary uses the selected declaration's route; an
 unowned declaration uses the default namespace rather than another input's owner.
 
+Legacy `emit_partitioned_with_options` has a closed owner set, without default dependency routes.
+It keeps its internal-alias inlining for unowned scalar and pointer typedef dependencies whose
+targets are resolved. Tagged roots, namespace-authorized types, external references, and required
+mixed-const alias boundaries do not use that path. Use `HeaderPartitionPlan` when unowned nominal
+pointer aliases must remain declarations in the default namespace.
+
 Lowering an unannotated nominal mutable-pointer parameter to a raw mutable pointer changes its
 default direction from input to output. Explicit SAL input, output, optional, and buffer-count
 contracts remain encoded in the physical parameter metadata.

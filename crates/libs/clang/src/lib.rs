@@ -5371,7 +5371,9 @@ impl Snapshot {
                     declaration: Some(declaration),
                 };
                 dependency_diagnostics.process(reference);
-                if excluded_local_names.contains(&(tu.to_string(), name.clone())) {
+                if excluded_local_names.contains(&(tu.to_string(), name.clone()))
+                    && !canonical_typedef_declarations.contains(&(tu, declaration))
+                {
                     dependency_diagnostics.resolve(reference);
                     continue;
                 }
@@ -5613,7 +5615,8 @@ impl Snapshot {
                     continue;
                 }
                 dependency_diagnostics.resolve(reference);
-                if (retain_pointer_alias || (canonical.is_none() && !string_alias))
+                if (retain_pointer_alias
+                    || (self.header_partition_policy && canonical.is_none() && !string_alias))
                     && is_pointer_alias_fact(fact, &facts_by_declaration, &mut BTreeSet::new())
                 {
                     retained_pointer_aliases.insert(fact.name.as_str());

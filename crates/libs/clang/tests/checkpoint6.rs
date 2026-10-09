@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use windows_clang::{EmitOptions, FactData, Input, TypeReference, TypeReferenceKind, extract};
+use windows_metadata::Type;
 
 const WIN32_TOOL: &str = include_str!("../../../tools/win32/src/main.rs");
 
@@ -1369,6 +1370,25 @@ fn external_scalar_alias_does_not_rename_the_scalar() {
     for alias in references.keys() {
         assert!(!rdl.contains(&format!(": {alias}")), "{rdl}");
     }
+    let path = std::env::temp_dir().join(format!(
+        "windows-clang-external-scalar-alias-{}.winmd",
+        std::process::id()
+    ));
+    windows_rdl::reader()
+        .input_text(&rdl)
+        .output(&path)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&path).unwrap();
+    assert_eq!(
+        index
+            .expect("Windows.Win32", "LOCAL")
+            .fields()
+            .map(|field| field.ty())
+            .collect::<Vec<_>>(),
+        [Type::U64, Type::U32, Type::U16, Type::I64, Type::ISize,]
+    );
+    std::fs::remove_file(path).unwrap();
 }
 
 #[test]
