@@ -1757,7 +1757,7 @@ fn duplicate_macro_constants_prefer_extraction_order() {
 }
 
 #[test]
-fn input_source_constant_override_defers_to_agreeing_header_roots() {
+fn unowned_input_source_constant_defers_to_owned_header_root() {
     helpers::ensure_libclang();
 
     let scratch = std::env::temp_dir().join(format!(
@@ -1821,6 +1821,141 @@ fn input_source_constant_override_defers_to_agreeing_header_roots() {
     .emit_partitioned_with_options(&options)
     .unwrap();
     assert_eq!(expected, reversed);
+
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn unowned_input_source_constants_are_omitted_and_owned_source_is_retained() {
+    helpers::ensure_libclang();
+
+    let scratch = std::env::temp_dir().join(format!(
+        "windows-clang-source-constant-eligibility-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let public_header = scratch.join("public.h");
+    std::fs::write(&public_header, "typedef unsigned PUBLIC_TYPE;\n").unwrap();
+    let profile_inputs = vec![
+        Input::new(
+            "first.cpp",
+            format!(
+                "#define PROFILE_SELECTOR 1\n#include \"{}\"\n",
+                public_header.display()
+            ),
+        )
+        .partitioned("first-input")
+        .with_root(public_header.to_string_lossy(), "public", "Example.Public"),
+        Input::new("second.cpp", "#define PROFILE_SELECTOR 2\n").partitioned("second-input"),
+    ];
+    let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+    let serial = extract_partitioned_with_options(
+        profile_inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(1),
+    )
+    .unwrap();
+    let parallel = extract_partitioned_with_options(
+        profile_inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap();
+    assert_eq!(serial.dump(), parallel.dump());
+
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Example.Common", &references);
+    let expected = serial.emit_partitioned_with_options(&options).unwrap();
+    assert_eq!(
+        expected,
+        parallel.emit_partitioned_with_options(&options).unwrap()
+    );
+    let output = expected.values().cloned().collect::<Vec<_>>().join("\n");
+    assert!(output.contains("type PUBLIC_TYPE"), "{output}");
+    assert!(!output.contains("PROFILE_SELECTOR"), "{output}");
+
+    let mut reversed = profile_inputs;
+    reversed.reverse();
+    let reversed = extract_partitioned_with_options(
+        reversed,
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap()
+    .emit_partitioned_with_options(&options)
+    .unwrap();
+    assert_eq!(expected, reversed);
+
+    let owned_inputs = vec![
+        Input::new("owned.cpp", "const float OWNED_SOURCE_CONSTANT = 7.0f;\n")
+            .partitioned("owned-input")
+            .with_root_partition(
+                "owned.cpp",
+                RootPartition::new("owned", "Example.Owned")
+                    .with_remap("OWNED_SOURCE_CONSTANT", "RENAMED_SOURCE_CONSTANT"),
+            ),
+        Input::new("noise.cpp", "#define UNOWNED_SOURCE_CONSTANT 9\n").partitioned("noise-input"),
+    ];
+    let owned = extract_partitioned_with_options(
+        owned_inputs.clone(),
+        &args,
+        &ExtractionOptions::new().with_parallelism(2),
+    )
+    .unwrap()
+    .emit_partitioned_with_options(&options)
+    .unwrap();
+    let output = owned.values().cloned().collect::<Vec<_>>().join("\n");
+    assert!(
+        output.contains("const RENAMED_SOURCE_CONSTANT: f32 = 7.0;"),
+        "{output}"
+    );
+    assert!(!output.contains("const OWNED_SOURCE_CONSTANT"), "{output}");
+    assert!(!output.contains("UNOWNED_SOURCE_CONSTANT"), "{output}");
+    assert!(
+        owned
+            .keys()
+            .any(|partition| partition.namespace == "Example.Owned"),
+        "{owned:#?}"
+    );
+    let mut reversed = owned_inputs;
+    reversed.reverse();
+    assert_eq!(
+        owned,
+        extract_partitioned_with_options(
+            reversed,
+            &args,
+            &ExtractionOptions::new().with_parallelism(2),
+        )
+        .unwrap()
+        .emit_partitioned_with_options(&options)
+        .unwrap()
+    );
+
+    let selected = extract_partitioned_with_options(
+        [
+            Input::new("selected.cpp", "#define SELECTED_SOURCE_CONSTANT 11\n")
+                .partitioned("selected-input"),
+        ],
+        &args,
+        &ExtractionOptions::new(),
+    )
+    .unwrap()
+    .emit_partitioned_with_options_and_authorities(
+        &options,
+        &NamespaceAuthorities::new().with_exact("SELECTED_SOURCE_CONSTANT", "Example.Selected"),
+    )
+    .unwrap();
+    let output = selected.values().cloned().collect::<Vec<_>>().join("\n");
+    assert!(
+        output.contains("const SELECTED_SOURCE_CONSTANT: i32 = 11;"),
+        "{output}"
+    );
+    assert!(
+        selected
+            .keys()
+            .any(|partition| partition.namespace == "Example.Selected"),
+        "{selected:#?}"
+    );
 
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -1909,7 +2044,7 @@ fn header_selected_nonroot_constant_uses_its_spelling_owner() {
 }
 
 #[test]
-fn constant_source_filter_preserves_header_and_source_only_conflicts() {
+fn constant_source_filter_preserves_header_and_owned_source_conflicts() {
     helpers::ensure_libclang();
 
     let scratch = std::env::temp_dir().join(format!(
@@ -1986,8 +2121,12 @@ fn constant_source_filter_preserves_header_and_source_only_conflicts() {
     assert_eq!(serial_error, reversed_error);
 
     let source_inputs = vec![
-        Input::new("first.cpp", "#define SOURCE_CONFLICT 1\n").partitioned("first-input"),
-        Input::new("second.cpp", "#define SOURCE_CONFLICT 2\n").partitioned("second-input"),
+        Input::new("first.cpp", "#define SOURCE_CONFLICT 1\n")
+            .partitioned("first-input")
+            .with_root("first.cpp", "constants", "Example.Constants"),
+        Input::new("second.cpp", "#define SOURCE_CONFLICT 2\n")
+            .partitioned("second-input")
+            .with_root("second.cpp", "constants", "Example.Constants"),
     ];
     let source_serial = extract_partitioned_with_options(
         source_inputs.clone(),
@@ -2002,10 +2141,16 @@ fn constant_source_filter_preserves_header_and_source_only_conflicts() {
     )
     .unwrap();
     assert_eq!(source_serial.dump(), source_parallel.dump());
-    let source_error = source_serial.emit("Example").unwrap_err().to_string();
+    let source_error = source_serial
+        .emit_partitioned_with_options(&options)
+        .unwrap_err()
+        .to_string();
     assert_eq!(
         source_error,
-        source_parallel.emit("Example").unwrap_err().to_string()
+        source_parallel
+            .emit_partitioned_with_options(&options)
+            .unwrap_err()
+            .to_string()
     );
     assert!(
         source_error.contains("ambiguous constant root `SOURCE_CONFLICT`"),
@@ -2021,7 +2166,7 @@ fn constant_source_filter_preserves_header_and_source_only_conflicts() {
             &ExtractionOptions::new().with_parallelism(2),
         )
         .unwrap()
-        .emit("Example")
+        .emit_partitioned_with_options(&options)
         .unwrap_err()
         .to_string()
     );

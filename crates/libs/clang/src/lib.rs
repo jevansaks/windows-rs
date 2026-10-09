@@ -3054,13 +3054,30 @@ impl Snapshot {
             }
             rename_fact_types(&mut fact.data, &fact.origin.tu, &declarations, &collisions);
         }
+        let constant_namespaces: BTreeMap<_, _> = self
+            .constants
+            .iter()
+            .filter_map(|constant| {
+                constant_root_owner(
+                    constant,
+                    &constant.name,
+                    &self.constant_root_owners,
+                    &self.root_owners,
+                    &self.root_partitions,
+                )
+                .map(|owner| {
+                    (
+                        (constant.root.clone(), constant.name.clone()),
+                        owner.namespace.clone(),
+                    )
+                })
+            })
+            .collect();
         for constant in &mut self.constants {
             let original = constant.name.clone();
-            let owner = self
-                .constant_root_owners
+            let namespace = constant_namespaces
                 .get(&(constant.root.clone(), original.clone()))
-                .or_else(|| self.root_owners.get(&constant.root));
-            let namespace = owner.map(|owner| owner.namespace.clone());
+                .cloned();
             if let Some(namespace) = namespace
                 && let Some(scoped) = scoped_names.get(&(original.clone(), namespace))
             {
@@ -3244,6 +3261,23 @@ impl Snapshot {
                 fact.name = target.clone();
             }
         }
+        let constant_remaps: BTreeMap<_, _> = self
+            .constants
+            .iter()
+            .filter_map(|constant| {
+                let target = constant_root_owner(
+                    constant,
+                    &constant.name,
+                    &self.constant_root_owners,
+                    &self.root_owners,
+                    &self.root_partitions,
+                )?
+                .remaps
+                .get(&constant.name)?
+                .clone();
+                Some(((constant.root.clone(), constant.name.clone()), target))
+            })
+            .collect();
         for constant in &mut self.constants {
             remap_type_ref(
                 &mut constant.ty,
@@ -3252,11 +3286,9 @@ impl Snapshot {
                 &self.root_partitions,
             );
             let original = constant.name.clone();
-            let owner = self
-                .constant_root_owners
+            let target = constant_remaps
                 .get(&(constant.root.clone(), original.clone()))
-                .or_else(|| self.root_owners.get(&constant.root));
-            let target = owner.and_then(|owner| owner.remaps.get(&constant.name).cloned());
+                .cloned();
             if let Some(target) = target {
                 constant.name.clone_from(&target);
                 if let Some(owner) = self
@@ -3314,14 +3346,14 @@ impl Snapshot {
             }
         });
         self.constants.retain(|constant| {
-            self.constant_root_owners
-                .get(&(constant.root.clone(), constant.name.clone()))
-                .or_else(|| self.root_owners.get(&constant.root))
-                .or_else(|| {
-                    self.root_partitions
-                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
-                })
-                .is_none_or(|owner| !owner.exclusions.contains(&constant.name))
+            constant_root_owner(
+                constant,
+                &constant.name,
+                &self.constant_root_owners,
+                &self.root_owners,
+                &self.root_partitions,
+            )
+            .is_none_or(|owner| !owner.exclusions.contains(&constant.name))
         });
     }
 
@@ -3430,16 +3462,17 @@ impl Snapshot {
             }
         }
 
+        let constant_root_owners = &self.constant_root_owners;
+        let root_owners = &self.root_owners;
+        let root_partitions = &self.root_partitions;
         for constant in &mut self.constants {
-            if let Some(owner) = self
-                .constant_root_owners
-                .get(&(constant.root.clone(), constant.name.clone()))
-                .or_else(|| self.root_owners.get(&constant.root))
-                .or_else(|| {
-                    self.root_partitions
-                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
-                })
-            {
+            if let Some(owner) = constant_root_owner(
+                constant,
+                &constant.name,
+                constant_root_owners,
+                root_owners,
+                root_partitions,
+            ) {
                 preserve_auto_function_pointer_level(
                     &mut constant.ty,
                     &owner.preserved_auto_function_pointer_levels,
@@ -4018,17 +4051,16 @@ impl Snapshot {
         }
         for planned in &plan.constants {
             let constant = planned.constant;
-            let mut owners: BTreeSet<_> = self
-                .constant_root_owners
-                .get(&(constant.root.clone(), constant.name.clone()))
-                .or_else(|| self.root_owners.get(&constant.root))
-                .or_else(|| {
-                    self.root_partitions
-                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
-                })
-                .cloned()
-                .into_iter()
-                .collect();
+            let mut owners: BTreeSet<_> = constant_root_owner(
+                constant,
+                &constant.name,
+                &self.constant_root_owners,
+                &self.root_owners,
+                &self.root_partitions,
+            )
+            .cloned()
+            .into_iter()
+            .collect();
             let namespace = self
                 .constant_namespace_authorities
                 .get(&(constant.definition.clone(), constant.name.clone()))
@@ -4042,17 +4074,16 @@ impl Snapshot {
                 .iter()
                 .map(|owner| self.constant_route_claim(constant, owner, annotations.clone()))
                 .collect();
-            let preferred = self
-                .constant_root_owners
-                .get(&(constant.root.clone(), constant.name.clone()))
-                .or_else(|| self.root_owners.get(&constant.root))
-                .or_else(|| {
-                    self.root_partitions
-                        .get(&(constant.root.tu.clone(), constant.spelling.file.clone()))
-                })
-                .map(|owner| self.constant_route_claim(constant, owner, annotations))
-                .filter(|claim| claims.contains(claim))
-                .or_else(|| (claims.len() == 1).then(|| claims.first().unwrap().clone()));
+            let preferred = constant_root_owner(
+                constant,
+                &constant.name,
+                &self.constant_root_owners,
+                &self.root_owners,
+                &self.root_partitions,
+            )
+            .map(|owner| self.constant_route_claim(constant, owner, annotations))
+            .filter(|claim| claims.contains(claim))
+            .or_else(|| (claims.len() == 1).then(|| claims.first().unwrap().clone()));
             let anchored = !claims.is_empty() || namespace.is_some();
             let key = (constant.name.clone(), OutputKind::Value);
             result.insert(
@@ -4538,23 +4569,10 @@ impl Snapshot {
         let Some(first) = roots.first() else {
             return Err(Error(format!("missing constant root `{name}`")));
         };
-        let candidates = if constant_roots_agree(roots, first) {
-            roots.to_vec()
-        } else {
-            let headers: Vec<_> = roots
-                .iter()
-                .copied()
-                .filter(|constant| constant.spelling.file != constant.root.tu)
-                .collect();
-            let Some(first_header) = headers.first() else {
-                return Err(Error(format!("ambiguous constant root `{name}`")));
-            };
-            if !constant_roots_agree(&headers, first_header) {
-                return Err(Error(format!("ambiguous constant root `{name}`")));
-            }
-            headers
-        };
-        candidates
+        if !constant_roots_agree(roots, first) {
+            return Err(Error(format!("ambiguous constant root `{name}`")));
+        }
+        roots
             .iter()
             .min_by_key(|constant| {
                 (
@@ -4565,6 +4583,24 @@ impl Snapshot {
             })
             .copied()
             .ok_or_else(|| Error(format!("missing constant root `{name}`")))
+    }
+
+    fn constant_is_public_root_candidate(&self, constant: &Constant, selected: bool) -> bool {
+        self.partition_inputs.is_empty()
+            || constant.spelling.file != constant.root.tu
+            || selected
+            || self.constant_source_is_owned(constant)
+    }
+
+    fn constant_source_is_owned(&self, constant: &Constant) -> bool {
+        constant_root_owner(
+            constant,
+            &constant.name,
+            &self.constant_root_owners,
+            &self.root_owners,
+            &self.root_partitions,
+        )
+        .is_some_and(|owner| source_path_matches(&owner.root, &constant.spelling.file))
     }
 
     fn choose_common_function_root<'a>(
@@ -4914,6 +4950,13 @@ impl Snapshot {
             if excluded_constants.is_some_and(|excluded| excluded.contains(&constant.name))
                 && !associated_constants.contains(constant.name.as_str())
             {
+                continue;
+            }
+            let selected = associated_constants.contains(constant.name.as_str())
+                || self
+                    .constant_namespace_authorities
+                    .contains_key(&(constant.definition.clone(), constant.name.clone()));
+            if !self.constant_is_public_root_candidate(constant, selected) {
                 continue;
             }
             roots
@@ -7546,6 +7589,29 @@ fn authority_root_owner(partition: &str, namespace: &str, root: &str) -> RootOwn
         preserved_auto_function_pointer_levels: BTreeSet::new(),
         exclude_empty_records: false,
     }
+}
+
+fn constant_root_owner<'a>(
+    constant: &Constant,
+    name: &str,
+    constant_root_owners: &'a BTreeMap<(Origin, String), RootOwner>,
+    root_owners: &'a BTreeMap<Origin, RootOwner>,
+    root_partitions: &'a BTreeMap<(String, String), RootOwner>,
+) -> Option<&'a RootOwner> {
+    if let Some(owner) = constant_root_owners.get(&(constant.root.clone(), name.to_string())) {
+        return Some(owner);
+    }
+    if let Some(owner) = root_owners.get(&constant.root) {
+        return Some(owner);
+    }
+    let mut owners = root_partitions
+        .iter()
+        .filter(|((tu, root), _)| {
+            tu == &constant.root.tu && source_path_matches(root, &constant.spelling.file)
+        })
+        .map(|(_, owner)| owner);
+    let owner = owners.next()?;
+    owners.all(|candidate| candidate == owner).then_some(owner)
 }
 
 fn header_fact_owner_candidates(
