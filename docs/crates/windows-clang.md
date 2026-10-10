@@ -475,6 +475,40 @@ probe batches and worker bounds, planning, item construction, and RDL formatting
 disabled by default and does not change the generated RDL. The legacy `WINDOWS_CLANG_TIMING`
 spelling is also accepted.
 
+With timings enabled, `phase=owned-tu-complete` emits one `schema=1` receipt after each original
+native TU and index have dropped, before its owned outcome enters the result channel or slot. The
+receipt binds a Unix-millisecond timestamp, extraction-input ordinal and TU to `status=success` or
+`status=error` and the existing parse/traversal failure phase. Completion order may differ from input
+order; error selection and ordered merging do not change.
+
+`categories` uses semicolon-separated entries with the following columns:
+
+| Column | Meaning |
+| --- | --- |
+| category | Facts, constants, values, annotations, SAL, GUIDs, canonical identities, layouts, origin sets, includes, diagnostics, handles, deferred records, macro containers/payloads, or error. |
+| logical_buffer_bytes | Used Vec element storage, String lengths, and Box/unique macro payload layouts. |
+| capacity_buffer_bytes | Reserved Vec element storage, String capacities, and Box/unique macro payload layouts. |
+| map_entries | Number of entries in maps/sets. |
+| map_payload_estimate_bytes | Entry count times inline key/value layout; excludes node/control overhead. |
+| hash_capacity_payload_estimate_bytes | Hash capacity times inline key/value layout; an alternative reserved-payload estimate, not additive to the preceding column. |
+
+Nested type/record/callable/annotation buffers are walked by reference without cloning evidence.
+Macro payloads are counted once by exact Arc allocation identity across final/root/pending captures;
+distinct equal-content definitions remain separate. Handle storage is already included in its Vec or
+map category. `macro_handles` and `unique_macro_payloads` are counts, not extra byte charges.
+`outcome_inline_layout_bytes` describes the outcome value layout separately from heap buffers.
+`input_source_logical_bytes` and `input_source_capacity_bytes` describe the original input source
+once, outside completed-slot-owned categories.
+`logical_buffer_bytes` and `capacity_buffer_bytes` sum only the corresponding buffer columns;
+map estimates are separate. Failed outcomes retain the error String and report
+`success_payload=absent`, rather than pretending that a successful extraction payload exists.
+
+Map nodes, hash controls, Arc controls and allocator overhead are unknown. Native/process memory,
+scheduler storage, temporary diagnostic buffers and other outer input context are unmeasured.
+Static strings require no owned heap charge. These receipts are Rust buffer/layout estimates,
+not RSS, private bytes, allocation
+measurements or a memory-fit result. With timings disabled, extraction does not perform this walk.
+
 ## Emission
 
 Use `Snapshot::emit(namespace)` for one namespace, `emit_with_library` to attach one DLL to all

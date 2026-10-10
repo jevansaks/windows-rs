@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 mod definitions;
 use definitions::Definitions;
+mod owned_bytes;
 
 pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
     extract_with_options(inputs, args, &ExtractionOptions::default())
@@ -95,7 +96,7 @@ fn extract_impl(
     args: &[&str],
     options: &ExtractionOptions,
 ) -> Result<Snapshot, Error> {
-    let input_order = inputs
+    let input_order: BTreeMap<_, _> = inputs
         .iter()
         .enumerate()
         .map(|(index, input)| (input.name.clone(), index))
@@ -135,7 +136,13 @@ fn extract_impl(
             #[cfg(test)]
             _lifetime: native_lifetime::Scope::new(lifetime.clone()),
         },
-        |_, input| Ok::<_, std::convert::Infallible>(extract_original(input, &context)),
+        |_, input| {
+            let outcome = extract_original(input, &context);
+            if context.timing {
+                owned_bytes::emit(input_order[&input.name], input, &outcome);
+            }
+            Ok::<_, std::convert::Infallible>(outcome)
+        },
     )
     .unwrap();
     let native = ordered_native_results(outcomes)?;
