@@ -165,6 +165,7 @@ fn extract_impl(
     let traversal_time = timing.then(std::time::Instant::now);
     let mut facts = vec![];
     let mut constants = vec![];
+    let mut value_declarations = vec![];
     let mut annotations = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
     let mut pointer_callback_aliases = BTreeSet::new();
@@ -179,6 +180,7 @@ fn extract_impl(
         let mut output = ExtractionState {
             facts: &mut facts,
             constants: &mut constants,
+            value_declarations: &mut value_declarations,
             annotations: &mut annotations,
             declaration_guids: &mut declaration_guids,
             pointer_callback_aliases: &mut pointer_callback_aliases,
@@ -334,7 +336,12 @@ fn extract_impl(
             elapsed_ms(phase_time)
         );
     }
-    materialize_anonymous_callbacks(&mut facts);
+    let next_local = extracted
+        .iter()
+        .zip(&inputs)
+        .map(|(extracted, input)| (input.name.clone(), extracted.next_local))
+        .collect();
+    materialize_anonymous_callbacks(&mut facts, next_local);
     let declare_handles = identify_declare_handles(&inputs, &facts, &extracted);
     facts.sort();
     for pair in facts.windows(2) {
@@ -346,6 +353,16 @@ fn extract_impl(
         }
     }
     constants.sort();
+    value_declarations.sort();
+    let mut origins: HashSet<_> = facts.iter().map(|fact| &fact.origin).collect();
+    for declaration in &value_declarations {
+        if !origins.insert(&declaration.origin) {
+            return Err(Error(format!(
+                "duplicate native value origin `{}`",
+                origin(&declaration.origin)
+            )));
+        }
+    }
     if timing {
         let headers = facts
             .iter()
@@ -399,6 +416,7 @@ fn extract_impl(
     Ok(Snapshot {
         facts,
         constants,
+        value_declarations,
         included_files,
         declare_handles,
         annotations,
@@ -1616,6 +1634,7 @@ impl TranslationUnit {
             declare_handle_expansions: vec![],
             facts: &mut *output.facts,
             constants: &mut *output.constants,
+            value_declarations: &mut *output.value_declarations,
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
             pointer_callback_aliases: &mut *output.pointer_callback_aliases,
@@ -1649,6 +1668,7 @@ impl TranslationUnit {
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         let declare_handle_expansions = std::mem::take(&mut traversal.declare_handle_expansions);
+        let next_local = traversal.next;
         drop(traversal);
         Ok((
             Extracted {
@@ -1656,6 +1676,7 @@ impl TranslationUnit {
                 pending_structs,
                 pending_macros,
                 declare_handle_expansions,
+                next_local,
             },
             metrics,
         ))
@@ -1679,6 +1700,7 @@ struct Traversal<'a> {
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
+    value_declarations: &'a mut Vec<ValueDeclaration>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
@@ -1692,6 +1714,7 @@ struct Traversal<'a> {
 struct ExtractionState<'a> {
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
+    value_declarations: &'a mut Vec<ValueDeclaration>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
@@ -1705,6 +1728,7 @@ struct Extracted<'tu> {
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
+    next_local: u32,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -2001,7 +2025,7 @@ fn extract_child(
     }
     if kind == CXCursor_VarDecl
         && !name.is_empty()
-        && let Some((spelling, _, _, _)) = cursor_locations(child)
+        && let Some((spelling, expansion, main_file, system)) = cursor_locations(child)
         && traversal.is_root(&spelling.file)
     {
         let ty = unsafe { clang_getCursorType(child) };
@@ -2028,6 +2052,18 @@ fn extract_child(
                     return;
                 }
             };
+            traversal.value_declarations.push(ValueDeclaration {
+                origin: origin.clone(),
+                parent: parent.cloned(),
+                kind: ValueDeclarationKind::Variable,
+                name: name.clone(),
+                spelling: spelling.clone(),
+                expansion,
+                definition: unsafe { clang_isCursorDefinition(child) } != 0,
+                main_file,
+                root: true,
+                system,
+            });
             traversal.constants.push(Constant {
                 root: origin.clone(),
                 definition: origin.clone(),
@@ -2046,7 +2082,7 @@ fn extract_child(
     let anonymous_enum =
         kind == CXCursor_EnumDecl && unsafe { clang_Cursor_isAnonymous(child) } != 0;
     if anonymous_enum
-        && let Some((spelling, _, _, _)) = cursor_locations(child)
+        && let Some((spelling, expansion, main_file, system)) = cursor_locations(child)
         && traversal.is_root(&spelling.file)
     {
         let ty = unsafe { clang_getEnumDeclIntegerType(child) };
@@ -2055,6 +2091,18 @@ fn extract_child(
                 tu: traversal.tu.to_string(),
                 local,
             };
+            traversal.value_declarations.push(ValueDeclaration {
+                origin: origin.clone(),
+                parent: parent.cloned(),
+                kind: ValueDeclarationKind::AnonymousEnum,
+                name: name.clone(),
+                spelling: spelling.clone(),
+                expansion,
+                definition: unsafe { clang_isCursorDefinition(child) } != 0,
+                main_file,
+                root: true,
+                system,
+            });
             for constant in cursor_children(child).into_iter().filter(|cursor| unsafe {
                 clang_getCursorKind(*cursor) == CXCursor_EnumConstantDecl
             }) {
@@ -2234,9 +2282,8 @@ fn enum_has_flag_attribute(cursor: CXCursor) -> bool {
         .any(|child| unsafe { clang_getCursorKind(child) } == CXCursor_FlagEnum)
 }
 
-fn materialize_anonymous_callbacks(facts: &mut Vec<Fact>) {
+fn materialize_anonymous_callbacks(facts: &mut Vec<Fact>, mut next_local: HashMap<String, u32>) {
     let mut used: BTreeSet<_> = facts.iter().map(|fact| fact.name.clone()).collect();
-    let mut next_local: HashMap<_, u32> = HashMap::new();
     for fact in facts.iter() {
         next_local
             .entry(fact.origin.tu.clone())

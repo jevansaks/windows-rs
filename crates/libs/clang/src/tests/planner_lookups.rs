@@ -4,6 +4,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
     Snapshot {
         facts,
         constants: Vec::new(),
+        value_declarations: Vec::new(),
         included_files: Vec::new(),
         declare_handles: Vec::new(),
         annotations: BTreeMap::new(),

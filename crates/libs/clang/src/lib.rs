@@ -1279,10 +1279,32 @@ pub struct Constant {
     pub value: Value,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ValueDeclarationKind {
+    Variable,
+    AnonymousEnum,
+}
+
+/// Compiler-observed source evidence for a value origin that has no metadata fact.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ValueDeclaration {
+    pub origin: Origin,
+    pub parent: Option<Origin>,
+    pub kind: ValueDeclarationKind,
+    pub name: String,
+    pub spelling: Location,
+    pub expansion: Location,
+    pub definition: bool,
+    pub main_file: bool,
+    pub root: bool,
+    pub system: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     facts: Vec<Fact>,
     constants: Vec<Constant>,
+    value_declarations: Vec<ValueDeclaration>,
     included_files: Vec<IncludedFile>,
     declare_handles: Vec<DeclareHandle>,
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
@@ -1431,6 +1453,7 @@ impl PartialEq for Snapshot {
     fn eq(&self, other: &Self) -> bool {
         self.facts == other.facts
             && self.constants == other.constants
+            && self.value_declarations == other.value_declarations
             && self.declare_handles == other.declare_handles
             && self.annotations == other.annotations
             && self.source_annotations == other.source_annotations
@@ -1465,6 +1488,14 @@ impl Snapshot {
 
     pub fn constants(&self) -> &[Constant] {
         &self.constants
+    }
+
+    /// Native scalar variables and anonymous enums backing constants without a [`Fact`].
+    ///
+    /// An anonymous enum's constants share its origin. Macro and recovered MIDL constants
+    /// retain their existing fact-backed origins instead of adding duplicate evidence here.
+    pub fn value_declarations(&self) -> &[ValueDeclaration] {
+        &self.value_declarations
     }
 
     pub fn included_files(&self) -> &[IncludedFile] {

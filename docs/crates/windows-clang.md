@@ -105,6 +105,14 @@ Native scalar `const` and `constexpr` declarations become constants when Clang c
 initializers. They retain their source names, declared scalar widths and signedness, declaration
 provenance, and annotations. Mutable, unevaluable, and unsupported declarations are not constants;
 the same source-root selection applies to native integer and floating-point declarations.
+`value_declarations` supplies compiler-observed kind, name, spelling and expansion locations,
+definition, root, main-file and system-header flags, and parent origin for native scalar variables
+and anonymous enums whose constant origins have no `Fact`. Capture occurs at the original AST
+cursor. Anonymous enum constants share the enum's origin; the enum does not become a metadata type.
+Macro and recovered MIDL constants keep their existing fact-backed evidence. This source collection
+does not participate in emission or change native value types and declaration annotations.
+Synthetic callback origins start after the original traversal's allocation domain, including
+native value declarations and cursors that do not produce facts.
 `included_files` returns `IncludedFile` records for the physical files visited in each original
 translation unit, including the main input and headers that produced no fact or constant. The
 `input` field is the normalized `Input::name` used by `Origin::tu`; `path` is the slash-normalized

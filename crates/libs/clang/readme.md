@@ -36,6 +36,9 @@ combine immutable snapshots before emission.
 Native scalar `const` and `constexpr` declarations retain their source names, scalar types, and
 annotations when Clang can evaluate their initializers. Root selection also applies to these
 constants; mutable and unevaluable declarations are not emitted as constants.
+`Snapshot::value_declarations` exposes the original compiler cursor's physical source evidence for
+native variables and anonymous enums whose constant origins have no metadata fact. Anonymous enums
+remain bags of constants; macros and recovered MIDL constants retain their existing fact evidence.
 
 `EmitOptions::native_imports` accepts typed DLL entry-point contracts keyed by the native C linker
 symbol. It keeps an ordinal such as `#660` or an exact exported name separate from the projected
