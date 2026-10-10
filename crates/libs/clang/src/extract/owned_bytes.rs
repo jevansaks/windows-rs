@@ -435,12 +435,39 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
     Some(receipt)
 }
 
+fn phase_clocks(outcome: &Result<NativeExtraction, NativeFailure>) -> String {
+    const UNAVAILABLE_METRICS: &str = "success_metrics=unavailable \
+        definition_index_ms=unavailable macro_index_ms=unavailable traversal_ms=unavailable \
+        pre_sal_binding_elapsed_ms=unavailable";
+    let Ok(result) = outcome else {
+        return format!("parse_ms=unavailable {UNAVAILABLE_METRICS}");
+    };
+    let mut clocks = format!("parse_ms={:.3} ", result.parse_ms);
+    if let Some(metrics) = &result.metrics {
+        write!(
+            clocks,
+            "success_metrics=present definition_index_ms={:.3} macro_index_ms={:.3} \
+             traversal_ms={:.3} pre_sal_binding_elapsed_ms={:.3}",
+            metrics.definition_index_ms,
+            metrics.macro_index_ms,
+            metrics.traversal_ms,
+            metrics.elapsed_ms,
+        )
+        .unwrap();
+    } else {
+        clocks.push_str(UNAVAILABLE_METRICS);
+    }
+    clocks
+}
+
 pub(super) fn emit(
     ordinal: usize,
     input: &Input,
     outcome: &Result<NativeExtraction, NativeFailure>,
+    worker_call_ms: f64,
 ) {
     let receipt = measure(true, outcome).unwrap();
+    let clocks = phase_clocks(outcome);
     let (status, failure_phase, success_payload) = match outcome {
         Ok(_) => ("success", "none", "present"),
         Err(NativeFailure::Parse(_)) => ("error", "parse", "absent"),
@@ -481,6 +508,7 @@ pub(super) fn emit(
     eprintln!(
         "windows-clang timing phase=owned-tu-complete schema=1 timestamp_unix_ms={timestamp} \
          input_ordinal={ordinal} tu={:?} status={status} failure_phase={failure_phase} \
+         worker_call_ms={worker_call_ms:.3} {clocks} \
          success_payload={success_payload} logical_buffer_bytes={logical} capacity_buffer_bytes={capacity} \
          outcome_inline_layout_bytes={} input_source_logical_bytes={} input_source_capacity_bytes={} \
          macro_handles={} unique_macro_payloads={} \
@@ -501,6 +529,64 @@ pub(super) fn emit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owned_bytes_phase_clocks_preserve_available_and_unavailable_measurements() {
+        for failure in [
+            NativeFailure::Parse(Error("parse".to_string())),
+            NativeFailure::Traversal(Error("traversal".to_string())),
+        ] {
+            let clocks = phase_clocks(&Err(failure));
+            assert!(clocks.starts_with("parse_ms=unavailable success_metrics=unavailable "));
+            for field in [
+                "definition_index_ms",
+                "macro_index_ms",
+                "traversal_ms",
+                "pre_sal_binding_elapsed_ms",
+            ] {
+                assert!(clocks.contains(&format!("{field}=unavailable")));
+            }
+            assert!(!clocks.contains("=0"));
+        }
+        let mut observed = outcome(vec![Arc::new(OwnedMacro {
+            tokens: vec!["token".to_string()],
+            function_like: false,
+        })]);
+        let Ok(result) = &mut observed else {
+            panic!();
+        };
+        result.parse_ms = 2.5;
+        assert_eq!(
+            phase_clocks(&observed),
+            "parse_ms=2.500 success_metrics=unavailable definition_index_ms=unavailable \
+             macro_index_ms=unavailable traversal_ms=unavailable pre_sal_binding_elapsed_ms=unavailable",
+        );
+        let Ok(result) = &mut observed else {
+            panic!();
+        };
+        result.metrics = Some(ExtractionMetrics {
+            definition_observations: 0,
+            definition_lookups: 0,
+            definition_index_ms: 1.25,
+            macro_definitions: 0,
+            macro_expansion_files: 0,
+            cursors: 0,
+            facts: 0,
+            constants: 0,
+            root_cache_misses: 0,
+            exclusion_cache_misses: 0,
+            macro_index_ms: 0.5,
+            traversal_ms: 3.75,
+            elapsed_ms: 6.0,
+        });
+        let before = measure(true, &observed);
+        assert_eq!(
+            phase_clocks(&observed),
+            "parse_ms=2.500 success_metrics=present definition_index_ms=1.250 \
+             macro_index_ms=0.500 traversal_ms=3.750 pre_sal_binding_elapsed_ms=6.000",
+        );
+        assert_eq!(measure(true, &observed), before);
+    }
 
     fn outcome(macros: Vec<Arc<OwnedMacro>>) -> Result<NativeExtraction, NativeFailure> {
         let captured = macros[0].clone();

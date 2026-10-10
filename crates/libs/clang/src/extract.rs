@@ -137,9 +137,11 @@ fn extract_impl(
             _lifetime: native_lifetime::Scope::new(lifetime.clone()),
         },
         |_, input| {
+            let start = context.timing.then(std::time::Instant::now);
             let outcome = extract_original(input, &context);
             if context.timing {
-                owned_bytes::emit(input_order[&input.name], input, &outcome);
+                let worker_call_ms = elapsed_ms(start);
+                owned_bytes::emit(input_order[&input.name], input, &outcome, worker_call_ms);
             }
             Ok::<_, std::convert::Infallible>(outcome)
         },

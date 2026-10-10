@@ -481,6 +481,19 @@ receipt binds a Unix-millisecond timestamp, extraction-input ordinal and TU to `
 `status=error` and the existing parse/traversal failure phase. Completion order may differ from input
 order; error selection and ordered merging do not change.
 
+The additive timing fields use milliseconds:
+
+| Field | Measured interval |
+| --- | --- |
+| `worker_call_ms` | Complete original worker call, including argument/index setup, parsing, inclusions, SAL probes, owned captures and native disposal. Excludes the accounting walk and receipt emission. |
+| `parse_ms` | Existing original-TU parse clock, available only for a successful outcome. |
+| `definition_index_ms`, `macro_index_ms`, `traversal_ms` | Existing successful extraction phase clocks. |
+| `pre_sal_binding_elapsed_ms` | Existing extraction elapsed clock through native traversal and canonical binding, sampled before SAL resolution and deferred captures. Not full worker time. |
+
+Errors report `parse_ms=unavailable` and `success_metrics=unavailable`; their successful phase clocks
+are also `unavailable`, not zero. A success without optional extraction metrics retains its measured
+parse time and reports the other phase clocks as unavailable. No native clocks or probes are added.
+
 `categories` uses semicolon-separated entries with the following columns:
 
 | Column | Meaning |
