@@ -120,11 +120,11 @@ impl Merger {
             arch_groups.push((reader::Index::new(files), *arch_bits));
         }
 
-        let reference_assemblies = merge_reference_assemblies(
+        let reference_scopes = merge_reference_scopes(
             std::iter::once(&index).chain(arch_groups.iter().map(|(index, _)| index)),
         )?;
         let mut file = writer::File::new(name);
-        file.set_reference_assemblies(reference_assemblies);
+        file.set_reference_scopes(reference_scopes);
 
         if self.union_enums {
             let mut groups: BTreeMap<(String, String), Vec<reader::TypeDef<'_>>> = BTreeMap::new();
@@ -238,9 +238,9 @@ impl Merger {
     }
 }
 
-fn merge_reference_assemblies<'a>(
+fn merge_reference_scopes<'a>(
     indexes: impl IntoIterator<Item = &'a reader::Index>,
-) -> Result<BTreeMap<(String, String), writer::AssemblyRefIdentity>, Error> {
+) -> Result<BTreeMap<(String, String), Option<writer::AssemblyRefIdentity>>, Error> {
     let indexes: Vec<_> = indexes.into_iter().collect();
     let mut local_types: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for index in &indexes {
@@ -257,13 +257,17 @@ fn merge_reference_assemblies<'a>(
         }
     }
     let mut candidates: BTreeMap<_, BTreeSet<writer::AssemblyRefIdentity>> = BTreeMap::new();
+    let mut module_references = BTreeSet::new();
     for index in indexes {
         for ty in index.type_refs() {
-            let Some(assembly) = ty.assembly() else {
-                continue;
-            };
             let name = ty.qualified_name();
             let key = (name.namespace, name.name);
+            let Some(assembly) = ty.assembly() else {
+                if matches!(ty.scope(), reader::ResolutionScope::Module(_)) {
+                    module_references.insert(key);
+                }
+                continue;
+            };
             candidates.entry(key).or_default().insert(assembly.into());
         }
     }
@@ -299,7 +303,18 @@ fn merge_reference_assemblies<'a>(
             ));
             continue;
         }
-        result.insert(name, assemblies.into_iter().next().unwrap());
+        if module_references.contains(&name) {
+            conflicts.push(format!(
+                "cannot preserve both module and external references for `{}.{}`: \
+                 external assemblies {assemblies:?}",
+                name.0, name.1
+            ));
+            continue;
+        }
+        result.insert(name, Some(assemblies.into_iter().next().unwrap()));
+    }
+    for name in module_references {
+        result.entry(name).or_insert(None);
     }
     if conflicts.is_empty() {
         Ok(result)
@@ -1165,9 +1180,9 @@ mod tests {
 
     fn reference_index(identity: writer::AssemblyRefIdentity) -> reader::Index {
         let mut file = writer::File::new("Consumer");
-        file.set_reference_assemblies(BTreeMap::from([(
+        file.set_reference_scopes(BTreeMap::from([(
             ("N".to_string(), "T".to_string()),
-            identity,
+            Some(identity),
         )]));
         let value_type = writer::TypeDefOrRef::TypeRef(file.TypeRef("System", "ValueType"));
         file.TypeDef(
@@ -1190,8 +1205,95 @@ mod tests {
     ) -> Result<bool, Error> {
         let definition = definition_index(definition);
         let reference = reference_index(reference);
-        let assemblies = merge_reference_assemblies([&definition, &reference])?;
+        let assemblies = merge_reference_scopes([&definition, &reference])?;
         Ok(!assemblies.contains_key(&("N".to_string(), "T".to_string())))
+    }
+
+    fn modifier_index(module: bool) -> reader::Index {
+        let mut file = writer::File::new("Modifier.Owner");
+        if module {
+            file.set_reference_scopes(BTreeMap::from([(
+                (
+                    "System.Runtime.CompilerServices".to_string(),
+                    "IsConst".to_string(),
+                ),
+                None,
+            )]));
+        }
+        file.TypeDef("Test", "Holder", Default::default(), TypeAttributes::Public);
+        file.Field(
+            "pointer",
+            &Type::PtrConst(Box::new(Type::I32), 1),
+            FieldAttributes::Public,
+        );
+        file.Field(
+            "reference",
+            &Type::RefConst(Box::new(Type::U16)),
+            FieldAttributes::Public,
+        );
+        reader::Index::new(vec![reader::File::new(file.into_stream()).unwrap()])
+    }
+
+    fn assert_modifier_roundtrip(module: bool) {
+        let mut index = modifier_index(module);
+        for _ in 0..2 {
+            let reference = index
+                .type_refs()
+                .find(|ty| {
+                    ty.namespace() == "System.Runtime.CompilerServices" && ty.name() == "IsConst"
+                })
+                .unwrap();
+            if module {
+                assert!(matches!(
+                    reference.scope(),
+                    reader::ResolutionScope::Module(_)
+                ));
+            } else {
+                assert_eq!(reference.assembly().unwrap().name(), "mscorlib");
+            }
+            assert_eq!(
+                index
+                    .expect("Test", "Holder")
+                    .fields()
+                    .map(|field| field.ty())
+                    .collect::<Vec<_>>(),
+                [
+                    Type::PtrConst(Box::new(Type::I32), 1),
+                    Type::RefConst(Box::new(Type::U16)),
+                ],
+            );
+            let mut file = writer::File::new("Modifier.Owner");
+            file.set_reference_scopes(merge_reference_scopes([&index]).unwrap());
+            write_type(
+                &mut file,
+                &index,
+                index.expect("Test", "Holder"),
+                None,
+                None,
+            );
+            index = reader::Index::new(vec![reader::File::new(file.into_stream()).unwrap()]);
+        }
+    }
+
+    #[test]
+    fn preserves_module_modifier_scope_across_roundtrips() {
+        assert_modifier_roundtrip(true);
+    }
+
+    #[test]
+    fn preserves_external_core_modifier_scope_across_roundtrips() {
+        assert_modifier_roundtrip(false);
+    }
+
+    #[test]
+    fn rejects_conflicting_module_and_core_modifier_scopes() {
+        let module = modifier_index(true);
+        let core = modifier_index(false);
+        for indexes in [[&module, &core], [&core, &module]] {
+            let error = merge_reference_scopes(indexes).unwrap_err().to_string();
+            assert!(error.contains("cannot preserve both module and external references"));
+            assert!(error.contains("System.Runtime.CompilerServices.IsConst"));
+        }
     }
 
     #[test]

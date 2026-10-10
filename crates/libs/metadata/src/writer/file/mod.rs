@@ -87,7 +87,7 @@ pub struct File {
     CoreTypeRef: HashMap<String, HashMap<String, TypeRef>>,
     TypeSpec: HashMap<BlobId, TypeSpec>,
     AssemblyRef: HashMap<AssemblyRefIdentity, AssemblyRef>,
-    reference_assemblies: HashMap<(String, String), AssemblyRefIdentity>,
+    reference_scopes: HashMap<(String, String), Option<AssemblyRefIdentity>>,
     ModuleRef: HashMap<String, ModuleRef>,
     MemberRef: HashMap<rec::MemberRef, MemberRef>,
 
@@ -350,11 +350,11 @@ impl File {
         self.reference = Some(reference);
     }
 
-    pub(crate) fn set_reference_assemblies(
+    pub(crate) fn set_reference_scopes(
         &mut self,
-        references: BTreeMap<(String, String), AssemblyRefIdentity>,
+        references: BTreeMap<(String, String), Option<AssemblyRefIdentity>>,
     ) {
-        self.reference_assemblies = references.into_iter().collect();
+        self.reference_scopes = references.into_iter().collect();
     }
 
     #[cfg(test)]
@@ -459,8 +459,8 @@ impl File {
 
     /// Creates a reference to a compiler-known core-library type.
     ///
-    /// An exact supplied reference definition takes precedence. Otherwise this uses the same
-    /// `mscorlib` identity as the legacy `System` sentinel.
+    /// An exact supplied reference scope or definition takes precedence. Otherwise this uses the
+    /// same `mscorlib` identity as the legacy `System` sentinel.
     pub fn CoreTypeRef(&mut self, namespace: &str, name: &str) -> TypeRef {
         self.type_ref(namespace, name, true)
     }
@@ -483,15 +483,19 @@ impl File {
                 ResolutionScope: ResolutionScope::TypeRef(enclosing),
             }))
         } else {
-            let reference = self.reference_assembly(namespace, name);
+            let reference = self.reference_scope(namespace, name);
             let scope = if core {
-                ResolutionScope::AssemblyRef(
-                    self.assembly_ref(reference.unwrap_or_else(AssemblyRefIdentity::system)),
-                )
+                reference
+                    .unwrap_or_else(|| Some(AssemblyRefIdentity::system()))
+                    .map_or(ResolutionScope::Module(Module(0)), |assembly| {
+                        ResolutionScope::AssemblyRef(self.assembly_ref(assembly))
+                    })
             } else if self.has_local_type(namespace, name) {
                 ResolutionScope::Module(Module(0))
             } else if let Some(reference) = reference {
-                ResolutionScope::AssemblyRef(self.assembly_ref(reference))
+                reference.map_or(ResolutionScope::Module(Module(0)), |assembly| {
+                    ResolutionScope::AssemblyRef(self.assembly_ref(assembly))
+                })
             } else if namespace == "System" {
                 ResolutionScope::AssemblyRef(self.AssemblyRef("System"))
             } else {
@@ -529,8 +533,8 @@ impl File {
         }
     }
 
-    fn reference_assembly(&self, namespace: &str, name: &str) -> Option<AssemblyRefIdentity> {
-        self.reference_assemblies
+    fn reference_scope(&self, namespace: &str, name: &str) -> Option<Option<AssemblyRefIdentity>> {
+        self.reference_scopes
             .get(&(namespace.to_string(), name.to_string()))
             .cloned()
             .or_else(|| {
@@ -539,6 +543,7 @@ impl File {
                     .and_then(|reference| reference.exact_type(namespace, name))
                     .and_then(|ty| ty.assembly())
                     .map(AssemblyRefIdentity::from_definition)
+                    .map(Some)
             })
     }
 

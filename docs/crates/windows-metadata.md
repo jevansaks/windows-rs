@@ -67,6 +67,10 @@ exact supplied reference definition when one exists and otherwise reuses the leg
 `mscorlib` identity. The ordinary resolver does not treat every `System.*` namespace as core;
 unresolved non-core names retain module scope.
 
+The merger also supplies observed TypeRef scopes to the writer. An unresolved module-scoped
+compiler modifier such as `IsConst` stays module-scoped instead of acquiring a core assembly.
+Conflicting module and external scopes for the same exact reference name are rejected.
+
 Local TypeDefs are indexed by exact namespace and raw metadata name, including generic arity.
 Core and inferred TypeRefs use separate physical rows, so a local homonym and a core-library
 reference can coexist without either row being retargeted. `MemberRefWithTypeRefs` lets a compiler
