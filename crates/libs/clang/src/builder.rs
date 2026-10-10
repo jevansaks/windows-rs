@@ -94,9 +94,9 @@ impl Clang {
         self
     }
 
-    /// Sets the maximum number of original translation units parsed concurrently.
+    /// Sets the maximum number of original translation units extracted concurrently.
     ///
-    /// Zero and one both select serial parsing.
+    /// Zero and one both select serial extraction.
     pub fn parallelism(&mut self, parallelism: usize) -> &mut Self {
         self.parallelism = parallelism;
         self

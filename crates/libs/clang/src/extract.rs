@@ -3,7 +3,6 @@ use clang_sys::*;
 use std::cell::{OnceCell, RefCell};
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::sync::Arc;
 
 mod definitions;
@@ -117,97 +116,55 @@ fn extract_impl(
             .any(|input| input.source.contains("win32metadata:"));
     let target = timing.then(|| timing_target(args));
     let total_time = timing.then(std::time::Instant::now);
-    let parse_time = timing.then(std::time::Instant::now);
-    let parse_context = ParseContext {
+    let traversal_time = timing.then(std::time::Instant::now);
+    let context = NativeContext {
         args,
         input_arguments: &input_arguments,
+        timing,
+        validate_annotations,
     };
-    let translation_units = if options.parallelism() <= 1 || inputs.len() <= 1 {
-        inputs
-            .iter()
-            .map(|input| parse_input(&index, input, &parse_context, timing))
-            .collect::<Result<Vec<_>, _>>()?
-    } else {
-        let shared_library = library.shared();
-        try_map_ordered_bounded(
-            &inputs,
-            options.parallelism(),
-            || Library::from_shared(shared_library.clone()),
-            |_, input| {
-                let input_index = Index::new()?;
-                parse_input(&input_index, input, &parse_context, timing)
-                    .map(|parsed| parsed.with_index(input_index))
-            },
-        )?
-    };
-    if timing {
-        for parsed in &translation_units {
-            eprintln!(
-                "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} elapsed_ms={:.3}",
-                target.as_deref().unwrap(),
-                parsed.input,
-                parsed.source_bytes,
-                parsed.elapsed_ms,
-            );
-        }
-    }
+    let shared_library = library.shared();
+    #[cfg(test)]
+    let lifetime = native_lifetime::current();
+    // Keep phase failures inside the owned outcome so even serial scheduling visits later parses.
+    let outcomes = try_map_ordered_bounded(
+        &inputs,
+        options.parallelism(),
+        || NativeWorker {
+            _library: Library::from_shared(shared_library.clone()),
+            #[cfg(test)]
+            _lifetime: native_lifetime::Scope::new(lifetime.clone()),
+        },
+        |_, input| Ok::<_, std::convert::Infallible>(extract_original(input, &context)),
+    )
+    .unwrap();
+    let native = ordered_native_results(outcomes)?;
     if timing {
         eprintln!(
-            "windows-clang timing phase=parse-total target={} input_tus={} elapsed_ms={:.3}",
+            "windows-clang timing phase=native-inputs-total target={} input_tus={} configured_workers={} elapsed_ms={:.3}",
             target.as_deref().unwrap(),
             inputs.len(),
-            elapsed_ms(parse_time)
+            options.parallelism().max(1).min(inputs.len()),
+            elapsed_ms(traversal_time)
         );
     }
-
-    let included_files = translation_units
-        .iter()
-        .flat_map(|parsed| parsed.translation_unit.included_files(&parsed.input))
-        .collect();
-
-    let traversal_time = timing.then(std::time::Instant::now);
-    let mut facts = vec![];
-    let mut constants = vec![];
-    let mut value_declarations = vec![];
-    let mut annotations = BTreeMap::new();
-    let mut sal_constant_sizes = BTreeMap::new();
-    let mut declaration_guids = BTreeMap::new();
-    let mut pointer_callback_aliases = BTreeSet::new();
-    let mut pointer_only_class_layouts = BTreeMap::new();
-    let mut embeddable_class_layouts = BTreeSet::new();
-    let mut clang_flag_enums = BTreeSet::new();
+    let mut output = ExtractionBuffers::default();
+    let mut included_files = vec![];
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
-    for (input, parsed) in inputs.iter().zip(translation_units) {
-        let local_arguments = input_arguments.get(&input.name);
-        let probe_arguments: Vec<_> = args
-            .iter()
-            .copied()
-            .chain(local_arguments.into_iter().flatten().map(String::as_str))
-            .collect();
-        let mut output = ExtractionState {
-            facts: &mut facts,
-            constants: &mut constants,
-            value_declarations: &mut value_declarations,
-            annotations: &mut annotations,
-            sal_constant_sizes: &mut sal_constant_sizes,
-            declaration_guids: &mut declaration_guids,
-            pointer_callback_aliases: &mut pointer_callback_aliases,
-            pointer_only_class_layouts: &mut pointer_only_class_layouts,
-            embeddable_class_layouts: &mut embeddable_class_layouts,
-            clang_flag_enums: &mut clang_flag_enums,
-        };
-        let (result, metrics) = parsed.translation_unit.extract(
-            parsed.translation_unit._index.as_ref().unwrap_or(&index),
-            input,
-            &probe_arguments,
-            &mut output,
-            timing,
-            validate_annotations,
-        )?;
-        if let Some(metrics) = metrics {
+    for (input, mut result) in inputs.iter().zip(native) {
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} elapsed_ms={:.3}",
+                target.as_deref().unwrap(),
+                input.name,
+                input.source.len(),
+                result.parse_ms,
+            );
+        }
+        if let Some(metrics) = result.metrics {
             traversal_cursors += metrics.cursors;
             traversal_facts += metrics.facts;
             traversal_constants += metrics.constants;
@@ -230,8 +187,32 @@ fn extract_impl(
                 metrics.elapsed_ms
             );
         }
-        extracted.push(result);
+        let offset = output.facts.len();
+        for (index, _) in result
+            .extracted
+            .pending_structs
+            .iter_mut()
+            .chain(&mut result.extracted.pending_macros)
+        {
+            *index += offset;
+        }
+        output.append(result.output);
+        included_files.append(&mut result.included_files);
+        extracted.push(result.extracted);
     }
+    let ExtractionBuffers {
+        mut facts,
+        mut constants,
+        mut value_declarations,
+        mut annotations,
+        sal_constant_sizes,
+        declaration_guids,
+        class_canonical_origins,
+        pointer_callback_aliases,
+        pointer_only_class_layouts,
+        embeddable_class_layouts,
+        clang_flag_enums,
+    } = output;
     let source_annotations = annotations.clone();
     let function_origins: HashSet<_> = facts
         .iter()
@@ -442,6 +423,7 @@ fn extract_impl(
         function_annotations,
         sal_constant_sizes,
         declaration_guids,
+        class_canonical_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
         embeddable_class_layouts,
@@ -1241,66 +1223,42 @@ impl Drop for Index {
     }
 }
 
-struct TranslationUnit(CXTranslationUnit);
+struct TranslationUnit(
+    CXTranslationUnit,
+    #[cfg(test)] Option<Arc<native_lifetime::Counters>>,
+);
 
-struct OwnedTranslationUnit {
-    translation_unit: TranslationUnit,
-    _index: Option<Index>,
+struct NativeWorker {
+    _library: Library,
+    #[cfg(test)]
+    _lifetime: native_lifetime::Scope,
 }
 
-impl OwnedTranslationUnit {
-    fn new(translation_unit: TranslationUnit) -> Self {
-        Self {
-            translation_unit,
-            _index: None,
-        }
-    }
-
-    fn with_index(mut self, index: Index) -> Self {
-        self._index = Some(index);
-        self
-    }
-}
-
-impl Deref for OwnedTranslationUnit {
-    type Target = TranslationUnit;
-
-    fn deref(&self) -> &Self::Target {
-        &self.translation_unit
-    }
-}
-
-// SAFETY: this private bundle uniquely owns both libclang handles and is moved only after parsing
-// finishes. It is never accessed from two threads at once, and its fields drop the translation
-// unit before the index that created it.
-unsafe impl Send for OwnedTranslationUnit {}
-
-struct ParsedTranslationUnit {
-    input: String,
-    source_bytes: usize,
-    elapsed_ms: f64,
-    translation_unit: OwnedTranslationUnit,
-}
-
-impl ParsedTranslationUnit {
-    fn with_index(mut self, index: Index) -> Self {
-        self.translation_unit = self.translation_unit.with_index(index);
-        self
-    }
-}
-
-struct ParseContext<'a> {
+struct NativeContext<'a> {
     args: &'a [&'a str],
     input_arguments: &'a BTreeMap<String, Vec<String>>,
+    timing: bool,
+    validate_annotations: bool,
 }
 
-fn parse_input(
-    index: &Index,
+struct NativeExtraction {
+    output: ExtractionBuffers,
+    extracted: Extracted,
+    included_files: Vec<IncludedFile>,
+    parse_ms: f64,
+    metrics: Option<ExtractionMetrics>,
+}
+
+enum NativeFailure {
+    Parse(Error),
+    Traversal(Error),
+}
+
+fn extract_original(
     input: &Input,
-    context: &ParseContext<'_>,
-    timing: bool,
-) -> Result<ParsedTranslationUnit, Error> {
-    let start = timing.then(std::time::Instant::now);
+    context: &NativeContext<'_>,
+) -> Result<NativeExtraction, NativeFailure> {
+    let index = Index::new().map_err(NativeFailure::Parse)?;
     let local_arguments = context.input_arguments.get(&input.name);
     let arguments: Vec<_> = context
         .args
@@ -1308,13 +1266,57 @@ fn parse_input(
         .copied()
         .chain(local_arguments.into_iter().flatten().map(String::as_str))
         .collect();
-    let translation_unit = TranslationUnit::parse(index, input, &arguments)?;
-    Ok(ParsedTranslationUnit {
-        input: input.name.clone(),
-        source_bytes: input.source.len(),
-        elapsed_ms: elapsed_ms(start),
-        translation_unit: OwnedTranslationUnit::new(translation_unit),
+    let start = context.timing.then(std::time::Instant::now);
+    let translation_unit =
+        TranslationUnit::parse(&index, input, &arguments).map_err(NativeFailure::Parse)?;
+    let parse_ms = elapsed_ms(start);
+    let included_files = translation_unit.included_files(&input.name);
+    let mut output = ExtractionBuffers::default();
+    let (extracted, metrics) = translation_unit
+        .extract(
+            &index,
+            input,
+            &arguments,
+            &mut output.state(),
+            context.timing,
+            context.validate_annotations,
+        )
+        .map_err(NativeFailure::Traversal)?;
+    Ok(NativeExtraction {
+        output,
+        extracted,
+        included_files,
+        parse_ms,
+        metrics,
     })
+}
+
+fn ordered_native_results(
+    outcomes: Vec<Result<NativeExtraction, NativeFailure>>,
+) -> Result<Vec<NativeExtraction>, Error> {
+    let mut output = Vec::with_capacity(outcomes.len());
+    let mut parse_error = None;
+    let mut traversal_error = None;
+    for outcome in outcomes {
+        match outcome {
+            Ok(result) => output.push(result),
+            Err(NativeFailure::Parse(error)) => {
+                if parse_error.is_none() {
+                    parse_error = Some(error);
+                }
+            }
+            Err(NativeFailure::Traversal(error)) => {
+                if traversal_error.is_none() {
+                    traversal_error = Some(error);
+                }
+            }
+        }
+    }
+    if let Some(error) = parse_error.or(traversal_error) {
+        Err(error)
+    } else {
+        Ok(output)
+    }
 }
 
 fn try_map_ordered_bounded<T, S, R, E>(
@@ -1471,7 +1473,11 @@ impl TranslationUnit {
             return Err(Error(format!("failed to parse `{}`", input.name)));
         }
 
-        let result = Self(value);
+        let result = Self(
+            value,
+            #[cfg(test)]
+            native_lifetime::original(),
+        );
         let errors = result.errors();
         if errors.is_empty() {
             Ok(result)
@@ -1524,7 +1530,13 @@ impl TranslationUnit {
                 name.to_string_lossy()
             )))
         } else {
-            Ok(Self(value))
+            #[cfg(test)]
+            native_lifetime::probe();
+            Ok(Self(
+                value,
+                #[cfg(test)]
+                None,
+            ))
         }
     }
 
@@ -1676,12 +1688,14 @@ impl TranslationUnit {
             pending_structs: vec![],
             pending_macros: vec![],
             pending_callables: vec![],
+            pending_classes: vec![],
             declare_handle_expansions: vec![],
             facts: &mut *output.facts,
             constants: &mut *output.constants,
             value_declarations: &mut *output.value_declarations,
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
+            class_canonical_origins: &mut *output.class_canonical_origins,
             pointer_callback_aliases: &mut *output.pointer_callback_aliases,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
@@ -1689,15 +1703,25 @@ impl TranslationUnit {
             error: None,
             validate_annotations,
         };
+        #[cfg(test)]
+        let native_traversal = native_lifetime::traversal();
         extract_children(
             unsafe { clang_getTranslationUnitCursor(self.0) },
             None,
             &mut traversal,
         );
+        #[cfg(test)]
+        drop(native_traversal);
         let traversal_ms = elapsed_ms(phase_time);
         if let Some(error) = traversal.error.take() {
             return Err(error);
         }
+        bind_class_origins(
+            self.0,
+            &traversal.pending_classes,
+            &traversal.seen,
+            traversal.class_canonical_origins,
+        )?;
         let metrics = timing.then(|| ExtractionMetrics {
             definition_observations: traversal.definitions.observations,
             definition_lookups: traversal.definitions.lookups,
@@ -1764,6 +1788,12 @@ impl TranslationUnit {
 impl Drop for TranslationUnit {
     fn drop(&mut self) {
         unsafe { clang_disposeTranslationUnit(self.0) };
+        #[cfg(test)]
+        if let Some(counters) = &self.1 {
+            counters
+                .live
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 }
 
@@ -1777,12 +1807,14 @@ struct Traversal<'a> {
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
     pending_callables: Vec<(usize, CXCursor)>,
+    pending_classes: Vec<(Origin, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
     value_declarations: &'a mut Vec<ValueDeclaration>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    class_canonical_origins: &'a mut BTreeMap<Origin, Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1798,10 +1830,64 @@ struct ExtractionState<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: &'a mut SalConstantSizes,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    class_canonical_origins: &'a mut BTreeMap<Origin, Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
+}
+
+#[derive(Default)]
+struct ExtractionBuffers {
+    facts: Vec<Fact>,
+    constants: Vec<Constant>,
+    value_declarations: Vec<ValueDeclaration>,
+    annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    sal_constant_sizes: SalConstantSizes,
+    declaration_guids: BTreeMap<Origin, String>,
+    class_canonical_origins: BTreeMap<Origin, Origin>,
+    pointer_callback_aliases: BTreeSet<Origin>,
+    pointer_only_class_layouts: BTreeMap<Origin, FactData>,
+    embeddable_class_layouts: BTreeSet<Origin>,
+    clang_flag_enums: BTreeSet<Origin>,
+}
+
+impl ExtractionBuffers {
+    fn state(&mut self) -> ExtractionState<'_> {
+        ExtractionState {
+            facts: &mut self.facts,
+            constants: &mut self.constants,
+            value_declarations: &mut self.value_declarations,
+            annotations: &mut self.annotations,
+            sal_constant_sizes: &mut self.sal_constant_sizes,
+            declaration_guids: &mut self.declaration_guids,
+            class_canonical_origins: &mut self.class_canonical_origins,
+            pointer_callback_aliases: &mut self.pointer_callback_aliases,
+            pointer_only_class_layouts: &mut self.pointer_only_class_layouts,
+            embeddable_class_layouts: &mut self.embeddable_class_layouts,
+            clang_flag_enums: &mut self.clang_flag_enums,
+        }
+    }
+
+    fn append(&mut self, mut other: Self) {
+        self.facts.append(&mut other.facts);
+        self.constants.append(&mut other.constants);
+        self.value_declarations
+            .append(&mut other.value_declarations);
+        self.annotations.append(&mut other.annotations);
+        self.sal_constant_sizes
+            .append(&mut other.sal_constant_sizes);
+        self.declaration_guids.append(&mut other.declaration_guids);
+        self.class_canonical_origins
+            .append(&mut other.class_canonical_origins);
+        self.pointer_callback_aliases
+            .append(&mut other.pointer_callback_aliases);
+        self.pointer_only_class_layouts
+            .append(&mut other.pointer_only_class_layouts);
+        self.embeddable_class_layouts
+            .append(&mut other.embeddable_class_layouts);
+        self.clang_flag_enums.append(&mut other.clang_flag_enums);
+    }
 }
 
 struct Extracted {
@@ -1832,6 +1918,114 @@ mod owned_tests {
     use super::*;
 
     #[test]
+    fn whole_native_workers_bound_lifetimes_and_preserve_count_errors() {
+        use std::sync::atomic::Ordering;
+        helpers::ensure_libclang();
+        let inputs: Vec<_> = (0..12)
+            .map(|index| {
+                Input::new(
+                    format!("bounded{index}.hpp"),
+                    format!(
+                        "#define LIMIT 8\n\
+                         extern \"C\" void Good{index}(
+                             __attribute__((annotate(\"_In_reads_(LIMIT)\"))) char *value);\n\
+                         extern \"C\" void Invalid{index}(
+                             __attribute__((annotate(\"_In_reads_(LIMIT - 20)\"))) char *value);\n\
+                         struct Record{index} {{ int (*invoke)(int); }};\n\
+                         typedef class Coclass{index} Coclass{index};\n\
+                         class __declspec(uuid(\"11111111-2222-3333-4455-66778899aabb\"))
+                             Coclass{index};\n\
+                         class __declspec(uuid(\"11111111-2222-3333-4455-66778899aabb\"))
+                             Coclass{index};\n"
+                    ),
+                )
+            })
+            .collect();
+        let args = [
+            "-x",
+            "c++",
+            "-fms-extensions",
+            "--target=x86_64-pc-windows-msvc",
+        ];
+        let serial = extract(inputs.clone(), &args).unwrap();
+        assert!(serial.sal_constant_sizes.values().any(Result::is_err));
+        assert_eq!(serial.class_canonical_origins.len(), inputs.len() * 3);
+        let aliases = serial.coclass_aliases().unwrap();
+        assert_eq!(aliases.len(), inputs.len());
+        for (origin, alias) in &aliases {
+            let classes: Vec<_> = serial
+                .facts
+                .iter()
+                .filter(|fact| fact.origin.tu == origin.tu && fact.kind == FactKind::Class)
+                .collect();
+            assert_eq!(classes.len(), 3);
+            assert_eq!(alias.canonical, classes[0].origin);
+            assert_eq!(
+                alias.guids,
+                [
+                    (
+                        classes[1].origin.clone(),
+                        "11111111-2222-3333-4455-66778899aabb".to_string()
+                    ),
+                    (
+                        classes[2].origin.clone(),
+                        "11111111-2222-3333-4455-66778899aabb".to_string()
+                    ),
+                ]
+            );
+        }
+        assert_eq!(
+            serial
+                .facts
+                .iter()
+                .filter(|fact| matches!(fact.data, FactData::Callback { .. }))
+                .count(),
+            inputs.len(),
+        );
+        assert_eq!(serial.sal_constant_sizes.len(), inputs.len() * 2);
+        for (target, count) in &serial.sal_constant_sizes {
+            let AnnotationTarget::Parameter { declaration, .. } = target else {
+                panic!();
+            };
+            let fact = serial
+                .facts
+                .iter()
+                .find(|fact| fact.origin == *declaration)
+                .unwrap();
+            if fact.name.starts_with("Good") {
+                assert_eq!(
+                    count,
+                    &Ok(SalSize {
+                        bytes: false,
+                        value: SalSizeValue::Constant(8),
+                    })
+                );
+            } else {
+                assert!(fact.name.starts_with("Invalid"));
+                assert!(matches!(count, Err(SalCountError::Invalid(_))));
+            }
+        }
+        for workers in [1, 2, 4] {
+            let counters = Arc::new(native_lifetime::Counters::new(workers));
+            let _scope = native_lifetime::Scope::new(Some(counters.clone()));
+            let parallel = extract_with_options(
+                inputs.clone(),
+                &args,
+                &ExtractionOptions::new().with_parallelism(workers),
+            )
+            .unwrap();
+            assert_complete_eq(&serial, &parallel);
+            assert_eq!(parallel.coclass_aliases().unwrap(), aliases);
+            assert_eq!(counters.originals.load(Ordering::Relaxed), inputs.len());
+            assert_eq!(counters.definitions.load(Ordering::Relaxed), inputs.len());
+            assert_eq!(counters.live.load(Ordering::Relaxed), 0);
+            assert_eq!(counters.maximum.load(Ordering::Relaxed), workers);
+            assert_eq!(counters.max_traversals.load(Ordering::Relaxed), workers);
+            assert!(counters.probes.load(Ordering::Relaxed) > 0);
+        }
+    }
+
+    #[test]
     fn owned_evidence_survives_native_context_disposal_and_thread_transfer() {
         helpers::ensure_libclang();
         let mut facts = vec![];
@@ -1840,6 +2034,7 @@ mod owned_tests {
         let mut annotations = BTreeMap::new();
         let mut sizes = BTreeMap::new();
         let mut guids = BTreeMap::new();
+        let mut class_origins = BTreeMap::new();
         let mut aliases = BTreeSet::new();
         let mut layouts = BTreeMap::new();
         let mut embeddable = BTreeSet::new();
@@ -1865,6 +2060,7 @@ mod owned_tests {
                 annotations: &mut annotations,
                 sal_constant_sizes: &mut sizes,
                 declaration_guids: &mut guids,
+                class_canonical_origins: &mut class_origins,
                 pointer_callback_aliases: &mut aliases,
                 pointer_only_class_layouts: &mut layouts,
                 embeddable_class_layouts: &mut embeddable,
@@ -1900,6 +2096,7 @@ mod owned_tests {
         assert_eq!(left, right);
         assert_eq!(left.included_files, right.included_files);
         assert_eq!(left.input_order, right.input_order);
+        assert_eq!(left.class_canonical_origins, right.class_canonical_origins);
     }
 
     #[test]
@@ -1907,6 +2104,7 @@ mod owned_tests {
         helpers::ensure_libclang();
         fn assert_send<T: Send>() {}
         assert_send::<Extracted>();
+        assert_send::<NativeExtraction>();
         let group = Input::new(
             "group.hpp",
             r#"
@@ -2046,6 +2244,97 @@ mod owned_tests {
                 assert!(extract_with_options([input], &args, &options).is_err());
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod native_lifetime {
+    use super::*;
+    use std::sync::Barrier;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    thread_local! {
+        static CURRENT: RefCell<Option<Arc<Counters>>> = const { RefCell::new(None) };
+    }
+
+    pub(super) struct Counters {
+        pub(super) originals: AtomicUsize,
+        pub(super) live: AtomicUsize,
+        pub(super) maximum: AtomicUsize,
+        pub(super) definitions: AtomicUsize,
+        pub(super) probes: AtomicUsize,
+        traversals: AtomicUsize,
+        pub(super) max_traversals: AtomicUsize,
+        barrier: Barrier,
+    }
+
+    impl Counters {
+        pub(super) fn new(workers: usize) -> Self {
+            Self {
+                originals: AtomicUsize::new(0),
+                live: AtomicUsize::new(0),
+                maximum: AtomicUsize::new(0),
+                definitions: AtomicUsize::new(0),
+                probes: AtomicUsize::new(0),
+                traversals: AtomicUsize::new(0),
+                max_traversals: AtomicUsize::new(0),
+                barrier: Barrier::new(workers),
+            }
+        }
+    }
+
+    pub(super) struct Scope(Option<Arc<Counters>>);
+
+    impl Scope {
+        pub(super) fn new(counters: Option<Arc<Counters>>) -> Self {
+            Self(CURRENT.replace(counters))
+        }
+    }
+
+    impl Drop for Scope {
+        fn drop(&mut self) {
+            CURRENT.replace(self.0.take());
+        }
+    }
+
+    pub(super) fn current() -> Option<Arc<Counters>> {
+        CURRENT.with_borrow(Clone::clone)
+    }
+
+    pub(super) fn original() -> Option<Arc<Counters>> {
+        let counters = current()?;
+        counters.originals.fetch_add(1, Ordering::Relaxed);
+        let live = counters.live.fetch_add(1, Ordering::Relaxed) + 1;
+        counters.maximum.fetch_max(live, Ordering::Relaxed);
+        Some(counters)
+    }
+
+    pub(super) fn definition() {
+        if let Some(counters) = current() {
+            counters.definitions.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub(super) fn probe() {
+        if let Some(counters) = current() {
+            counters.probes.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub(super) struct TraversalScope(Arc<Counters>);
+
+    impl Drop for TraversalScope {
+        fn drop(&mut self) {
+            self.0.traversals.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+
+    pub(super) fn traversal() -> Option<TraversalScope> {
+        let counters = current()?;
+        let live = counters.traversals.fetch_add(1, Ordering::Relaxed) + 1;
+        counters.max_traversals.fetch_max(live, Ordering::Relaxed);
+        counters.barrier.wait();
+        Some(TraversalScope(counters))
     }
 }
 
@@ -2559,6 +2848,9 @@ fn extract_child(
                     let declaration_guid = matches!(fact_kind, FactKind::Class | FactKind::Struct)
                         .then(|| cursor_uuid(child))
                         .flatten();
+                    if fact_kind == FactKind::Class {
+                        traversal.pending_classes.push((origin.clone(), child));
+                    }
                     traversal.facts.push(Fact {
                         origin: origin.clone(),
                         parent: parent.cloned(),
@@ -2621,6 +2913,111 @@ fn enum_has_flag_attribute(cursor: CXCursor) -> bool {
     cursor_children(cursor)
         .into_iter()
         .any(|child| unsafe { clang_getCursorKind(child) } == CXCursor_FlagEnum)
+}
+
+fn bind_class_origins(
+    tu: CXTranslationUnit,
+    pending: &[(Origin, CXCursor)],
+    seen: &HashMap<u32, Vec<(CXCursor, Origin)>>,
+    output: &mut BTreeMap<Origin, Origin>,
+) -> Result<(), Error> {
+    for (origin, cursor) in pending {
+        let canonical = unsafe { clang_getCanonicalCursor(*cursor) };
+        if unsafe {
+            clang_Cursor_getTranslationUnit(*cursor) != tu
+                || clang_Cursor_getTranslationUnit(canonical) != tu
+                || clang_getCursorKind(canonical) != CXCursor_ClassDecl
+        } {
+            return Err(Error(format!(
+                "invalid native class canonical cursor for {}",
+                super::origin(origin)
+            )));
+        }
+        let hash = unsafe { clang_hashCursor(canonical) };
+        let mut matched = None;
+        for (candidate, candidate_origin) in seen.get(&hash).into_iter().flatten() {
+            if unsafe { clang_equalCursors(canonical, *candidate) } == 0 {
+                continue;
+            }
+            if candidate_origin.tu != origin.tu
+                || matched.is_some_and(|previous| previous != candidate_origin)
+            {
+                return Err(Error(
+                    "conflicting exact native class canonical origins".into(),
+                ));
+            }
+            matched = Some(candidate_origin);
+        }
+        let canonical_origin = matched.ok_or_else(|| {
+            Error(format!(
+                "missing exact native class canonical origin for {}",
+                super::origin(origin)
+            ))
+        })?;
+        if let Some(previous) = output.insert(origin.clone(), canonical_origin.clone())
+            && previous != *canonical_origin
+        {
+            return Err(Error("conflicting native class canonical binding".into()));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod class_binding_tests {
+    use super::*;
+
+    #[test]
+    fn exact_native_class_joins_reject_missing_conflicting_and_foreign_evidence() {
+        helpers::ensure_libclang();
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let input = Input::new("classes.hpp", "class X; class X; class Y;");
+        let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+        let tu = TranslationUnit::parse(&index, &input, &args).unwrap();
+        let classes: Vec<_> = cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) })
+            .into_iter()
+            .filter(|cursor| unsafe { clang_getCursorKind(*cursor) } == CXCursor_ClassDecl)
+            .collect();
+        let first = Origin {
+            tu: input.name.clone(),
+            local: 1,
+        };
+        let second = Origin {
+            tu: input.name,
+            local: 2,
+        };
+        let hash = unsafe { clang_hashCursor(classes[0]) };
+        let mut seen = HashMap::from([(
+            hash,
+            vec![(classes[0], first.clone()), (classes[2], second.clone())],
+        )]);
+        let pending = [(second.clone(), classes[1])];
+        let mut output = BTreeMap::new();
+        bind_class_origins(tu.0, &pending, &seen, &mut output).unwrap();
+        assert_eq!(output.get(&second), Some(&first));
+        seen.get_mut(&hash).unwrap().push((classes[0], second));
+        assert!(
+            bind_class_origins(tu.0, &pending, &seen, &mut BTreeMap::new())
+                .unwrap_err()
+                .to_string()
+                .contains("conflicting")
+        );
+        assert!(
+            bind_class_origins(tu.0, &pending, &HashMap::new(), &mut BTreeMap::new())
+                .unwrap_err()
+                .to_string()
+                .contains("missing")
+        );
+        let foreign =
+            TranslationUnit::parse(&index, &Input::new("foreign.hpp", "class X;"), &args).unwrap();
+        assert!(
+            bind_class_origins(foreign.0, &pending, &seen, &mut BTreeMap::new())
+                .unwrap_err()
+                .to_string()
+                .contains("invalid")
+        );
+    }
 }
 
 fn materialize_anonymous_callbacks(facts: &mut Vec<Fact>, mut next_local: HashMap<String, u32>) {

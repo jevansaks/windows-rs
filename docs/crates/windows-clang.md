@@ -38,9 +38,9 @@ The builder is an adapter over the extraction and emission APIs described below.
 `reference_default` supplies the Windows metadata references, and `write` calls `extract` and
 emits with `EmitOptions`. It does not have a separate parser or projection path.
 
-`parallelism` bounds concurrent parsing of original translation units. Zero and one select serial
-parsing. `exclude_path` omits declarations spelled beneath a directory, such as Clang's resource
-headers, without hiding that the files were visited.
+`parallelism` bounds concurrent native extraction of original translation units. Zero and one select
+serial extraction. `exclude_path` omits declarations spelled beneath a directory, such as Clang's
+resource headers, without hiding that the files were visited.
 
 Use the lower-level API when a generator must inspect facts, compare architectures, merge
 snapshots, assign libraries per function, or control output promotion.
@@ -81,7 +81,7 @@ let snapshot = windows_clang::extract(
 .unwrap();
 ```
 
-Use `extract_with_options` or `extract_partitioned_with_options` to parse independent original
+Use `extract_with_options` or `extract_partitioned_with_options` to extract independent original
 translation units concurrently:
 
 ```rust,no_run
@@ -94,19 +94,26 @@ let snapshot = windows_clang::extract_with_options(
 .unwrap();
 ```
 
-The worker count is bounded by the configured value and input count. Each concurrent translation
-unit owns a separate libclang index until the translation unit is dropped. Results and errors are
-collected in input order. Only original extraction translation units use this setting; synthetic
-constant-probe translation units keep their existing bounded probe scheduling.
+The worker count is bounded by the configured value and input count. Each worker owns its native
+index, translation unit, traversal, and source-bound SAL count probes. It returns owned per-input
+buffers and drops the native translation unit before accepting another input. Buffers merge in
+original input order; only private pending-fact indices are offset. Parse errors take priority over
+traversal errors across all inputs, with input order preserved within each phase. Synthetic
+constant-probe translation units keep their existing bounded probe scheduling after this native map.
 
 Traversal captures deferred native record and macro data in private owned sidecars, without
 changing preliminary facts. It also retains final macro tokens and original diagnostics for
-constant probes. Each processed translation unit is dropped before global annotation selection,
-constant probing, and reachable-record finalization. The parse phase still retains the unprocessed
-units; this does not bound the total number of parsed units by the worker count.
+constant probes. No original translation unit remains live during global annotation selection,
+constant probing, or reachable-record finalization. Original native TU lifetimes are bounded by the
+worker count, while the owned buffers retain all inputs' evidence for global finalization.
 
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
+`class_canonical_origins` retains exact native class redeclaration identity within each translation
+unit. Physical facts, definition flags, type-reference locations, and annotations remain unchanged.
+`coclass_aliases` exposes GUID-value alias evidence, including every UUID-marker origin. It does not
+supply an allocation type or exempt required native type uses from validation. Native UUID conflicts
+remain errors.
 Each original translation unit builds one native definition index using
 `clang_indexTranslationUnit` on that same parsed unit. Function cursors join by native hash and
 cursor equality; missing or conflicting evidence is an extraction error. Synthetic constant and

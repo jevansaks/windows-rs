@@ -40,6 +40,8 @@ impl Definitions {
     pub(super) fn new(tu: CXTranslationUnit, index: &Index) -> Result<Self, Error> {
         #[cfg(test)]
         BUILDS.set(BUILDS.get() + 1);
+        #[cfg(test)]
+        native_lifetime::definition();
         let callback = Callback {
             library: get_library()
                 .ok_or_else(|| Error("native definition index has no libclang context".into()))?,

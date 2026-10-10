@@ -33,6 +33,9 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+`Snapshot::coclass_aliases` exposes exact native class identity for GUID-only coclass aliases without
+changing their physical facts or treating a GUID value as an allocation type.
+
 Supported definitions and non-external functions retain typed native signatures in
 `FactData::NonEmittableFunction` without becoming imports. Native indexing recovers each declaration's
 definition status under the existing body-skipping parse; it does not validate body semantics.
@@ -53,10 +56,11 @@ symbol. It keeps an ordinal such as `#660` or an exact exported name separate fr
 metadata function name. The existing `library` and `libraries` options remain available for
 symbol-to-DLL-only callers.
 
-`Clang::parallelism` bounds concurrent parsing of original translation units. The lower-level
+`Clang::parallelism` bounds concurrent native extraction of original translation units. The lower-level
 `extract_with_options` and `extract_partitioned_with_options` functions accept the same setting
 through `ExtractionOptions`. Results, diagnostics, and inclusion records retain extraction input
-order. Zero and one select serial parsing.
+order. Each worker parses, indexes, traverses, captures owned evidence, and drops its native
+translation unit before accepting another input. Zero and one select serial extraction.
 
 `Input::with_excluded_source_dirs` and `Clang::exclude_path` omit declarations spelled beneath
 toolchain resource directories while retaining those files in inclusion provenance.

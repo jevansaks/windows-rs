@@ -105,9 +105,10 @@ impl ExtractionOptions {
         Self::default()
     }
 
-    /// Sets the maximum number of original translation units parsed concurrently.
+    /// Sets the maximum number of original translation units extracted concurrently.
     ///
-    /// Zero and one both select serial parsing.
+    /// Each worker parses, indexes, traverses, and disposes its native translation unit.
+    /// Zero and one both select serial extraction.
     pub fn with_parallelism(mut self, parallelism: usize) -> Self {
         self.parallelism = parallelism;
         self
@@ -1332,6 +1333,12 @@ pub struct ValueDeclaration {
     pub system: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CoclassAlias {
+    pub canonical: Origin,
+    pub guids: Vec<(Origin, String)>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     facts: Vec<Fact>,
@@ -1344,6 +1351,7 @@ pub struct Snapshot {
     function_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
+    class_canonical_origins: BTreeMap<Origin, Origin>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
@@ -1559,6 +1567,7 @@ impl PartialEq for Snapshot {
             && self.function_annotations == other.function_annotations
             && self.sal_constant_sizes == other.sal_constant_sizes
             && self.declaration_guids == other.declaration_guids
+            && self.class_canonical_origins == other.class_canonical_origins
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
             && self.embeddable_class_layouts == other.embeddable_class_layouts
@@ -1582,6 +1591,104 @@ impl PartialEq for Snapshot {
 impl Eq for Snapshot {}
 
 impl Snapshot {
+    /// Exact native class redeclaration bindings within each original translation unit.
+    pub fn class_canonical_origins(&self) -> &BTreeMap<Origin, Origin> {
+        &self.class_canonical_origins
+    }
+
+    /// GUID-value aliases, not allocation types. All physical UUID observations are retained.
+    ///
+    /// A required use of an alias as a native type still needs a supported type definition.
+    pub fn coclass_aliases(&self) -> Result<BTreeMap<Origin, CoclassAlias>, Error> {
+        let facts: BTreeMap<_, _> = self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+        let mut declarations = BTreeMap::new();
+        let mut guids: BTreeMap<&Origin, Vec<(Origin, String)>> = BTreeMap::new();
+        let mut allocation_types = BTreeSet::new();
+        for (member, canonical) in &self.class_canonical_origins {
+            let fact = facts.get(member);
+            let excluded = self
+                .partition_exclusions
+                .iter()
+                .find(|excluded| excluded.origin == *member && excluded.kind == FactKind::Class);
+            if fact.is_none() && excluded.is_none() {
+                return Err(Error("missing native class member".into()));
+            }
+            let canonical_is_class = facts
+                .get(canonical)
+                .is_some_and(|fact| fact.kind == FactKind::Class)
+                || self.partition_exclusions.iter().any(|excluded| {
+                    excluded.origin == *canonical && excluded.kind == FactKind::Class
+                });
+            if fact.is_some_and(|fact| fact.kind != FactKind::Class)
+                || !canonical_is_class
+                || member.tu != canonical.tu
+                || self.class_canonical_origins.get(canonical) != Some(canonical)
+            {
+                return Err(Error("invalid owned native class canonical binding".into()));
+            }
+            let spelling = fact
+                .map(|fact| &fact.spelling)
+                .or_else(|| excluded.map(|excluded| &excluded.spelling))
+                .ok_or_else(|| Error("missing native class source observation".into()))?;
+            let key = (member.tu.as_str(), spelling);
+            if let Some(previous) = declarations.insert(key, canonical)
+                && previous != canonical
+            {
+                return Err(Error(
+                    "conflicting exact native class declaration bindings".into(),
+                ));
+            }
+            if fact.is_some_and(|fact| {
+                fact.definition || matches!(fact.data, FactData::Unsupported { .. })
+            }) || excluded
+                .is_some_and(|excluded| excluded.definition || excluded.data_kind == "Unsupported")
+            {
+                allocation_types.insert(canonical);
+            }
+            if let Some(guid) = self.declaration_guids.get(member) {
+                if fact.is_some_and(|fact| matches!(&fact.data, FactData::Class { guid: observed } if observed != guid))
+                    || excluded.is_some_and(|excluded| excluded.uuid.as_ref() != Some(guid))
+                {
+                    return Err(Error("missing native class UUID observation".into()));
+                }
+                let observations = guids.entry(canonical).or_default();
+                if observations.iter().any(|(_, previous)| previous != guid) {
+                    return Err(Error(
+                        "conflicting UUID observations for exact native class".into(),
+                    ));
+                }
+                observations.push((member.clone(), guid.clone()));
+            } else if fact.is_some_and(|fact| matches!(fact.data, FactData::Class { .. })) {
+                return Err(Error("missing native class UUID observation".into()));
+            }
+        }
+        let mut aliases = BTreeMap::new();
+        for fact in &self.facts {
+            let FactData::Typedef {
+                target: TypeRef::Named { declaration, .. },
+            } = &fact.data
+            else {
+                continue;
+            };
+            let Some(canonical) = declarations.get(&(fact.origin.tu.as_str(), declaration)) else {
+                continue;
+            };
+            if allocation_types.contains(canonical) {
+                continue;
+            }
+            if let Some(observations) = guids.get(canonical) {
+                aliases.insert(
+                    fact.origin.clone(),
+                    CoclassAlias {
+                        canonical: (*canonical).clone(),
+                        guids: observations.clone(),
+                    },
+                );
+            }
+        }
+        Ok(aliases)
+    }
+
     pub fn facts(&self) -> &[Fact] {
         &self.facts
     }
@@ -5211,6 +5318,7 @@ impl Snapshot {
         let mut root_names = BTreeSet::new();
         let mut shape_cache = ShapeCache::default();
 
+        let coclass_aliases = self.coclass_aliases()?;
         for (name, roots) in roots {
             if !roots.types.is_empty() && !roots.functions.is_empty() {
                 return Err(Error(format!(
@@ -5230,7 +5338,7 @@ impl Snapshot {
                 Some(self.choose_constant_root(name, &roots.constants)?)
             };
             let types_alias_value_class =
-                types_alias_value_class(name, &roots.types, &roots.values);
+                types_alias_value_class(&roots.types, &roots.values, &coclass_aliases);
             if !roots.types.is_empty() && !types_alias_value_class {
                 let excluded = roots.types.iter().any(|fact| {
                     excluded_declarations.contains(&(fact.origin.tu.clone(), fact.spelling.clone()))
@@ -8601,23 +8709,21 @@ fn choose_value_root<'a>(name: &str, roots: &[&'a Fact]) -> Result<&'a Fact, Err
     }
 }
 
-fn types_alias_value_class(name: &str, types: &[&Fact], values: &[&Fact]) -> bool {
+fn types_alias_value_class(
+    types: &[&Fact],
+    values: &[&Fact],
+    aliases: &BTreeMap<Origin, CoclassAlias>,
+) -> bool {
     types.iter().all(|fact| {
-        values
-            .iter()
-            .copied()
-            .filter(|value| matches!(value.data, FactData::Class { .. }))
-            .any(|value| {
-                fact.origin == value.origin
-                    || (fact.origin.tu == value.origin.tu
-                        && fact.parent == value.parent
-                        && matches!(
-                            &fact.data,
-                            FactData::Typedef {
-                                target: TypeRef::Named { name: target, .. }
-                            } if target == name
-                        ))
+        aliases.get(&fact.origin).is_some_and(|alias| {
+            values.iter().any(|value| {
+                matches!(value.data, FactData::Class { .. })
+                    && alias
+                        .guids
+                        .iter()
+                        .any(|(origin, _)| origin == &value.origin)
             })
+        })
     })
 }
 
