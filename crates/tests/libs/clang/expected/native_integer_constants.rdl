@@ -1,0 +1,27 @@
+#[win32]
+mod Test {
+    #[associated_enum("NativeFlags")]
+    const ANNOTATED: u32 = 2147483648;
+    const BOOL_FALSE: u32 = 0;
+    const BOOL_TRUE: u32 = 1;
+    const BYTE_VALUE: u8 = 255;
+    const CONSTEXPR_VALUE: u32 = 3145747;
+    const DOUBLE_VALUE: f64 = -2.5;
+    const FLOAT_VALUE: f32 = 1.25;
+    const HIGH_BIT: u32 = 2147483648;
+    const NATIVE_EXPRESSION: u32 = 3145745;
+    const NEGATIVE: i32 = -17;
+    #[repr(u32)]
+    enum NativeFlags {
+        NativeFlag = 1,
+    }
+    const PROC_THREAD_ATTRIBUTE_PARENT_PROCESS: i32 = 131072;
+    const SIGNED_BYTE: i8 = -128;
+    const SIGNED_WIDE: i64 = -9223372036854775808;
+    const SIGNED_WORD: i16 = -32768;
+    const WIDE_HIGH_BIT: u64 = 9223372036854775808;
+    const WORD_VALUE: u16 = 65535;
+    const __forceconst__PROC_THREAD_ATTRIBUTE_PARENT_PROCESS: u32 = 131072;
+    #[library("test.dll", import = "?runtime_value@@YAHXZ")]
+    extern "C" fn runtime_value() -> i32;
+}

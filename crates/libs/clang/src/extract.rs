@@ -1872,8 +1872,16 @@ fn extract_child(
     {
         let ty = unsafe { clang_getCursorType(child) };
         if unsafe { clang_isConstQualifiedType(ty) } != 0
-            && let Some(scalar @ (Scalar::F32 | Scalar::F64)) = scalar(ty)
-            && let Some(value) = evaluate_float(child, scalar)
+            && let Some(scalar) = scalar(ty)
+            && let Some(value) = match scalar {
+                Scalar::F32 | Scalar::F64 => evaluate_float(child, scalar),
+                Scalar::Bool | Scalar::U8 | Scalar::U16 | Scalar::U32 | Scalar::U64 => {
+                    evaluate_integer(child).map(|value| Value::Unsigned(value.0))
+                }
+                Scalar::I8 | Scalar::I16 | Scalar::I32 | Scalar::I64 => {
+                    evaluate_integer(child).map(|value| Value::Signed(value.1))
+                }
+            }
         {
             let origin = Origin {
                 tu: traversal.tu.to_string(),

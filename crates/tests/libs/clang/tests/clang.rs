@@ -43,6 +43,7 @@ fn run(name: &str) {
     let actual = std::fs::read_to_string(output).unwrap();
     let mut reader = windows_rdl::reader();
     reader
+        .input_text(include_str!("../../../../../metadata/metadata.rdl"))
         .input_text(&actual)
         .reference_default()
         .output(std::path::Path::new(env!("OUT_DIR")).join(format!("{name}.winmd")));

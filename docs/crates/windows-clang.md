@@ -96,6 +96,10 @@ constant-probe translation units keep their existing bounded probe scheduling.
 
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
+Native scalar `const` and `constexpr` declarations become constants when Clang can evaluate their
+initializers. They retain their source names, declared scalar widths and signedness, declaration
+provenance, and annotations. Mutable, unevaluable, and unsupported declarations are not constants;
+the same source-root selection applies to native integer and floating-point declarations.
 `included_files` returns `IncludedFile` records for the physical files visited in each original
 translation unit, including the main input and headers that produced no fact or constant. The
 `input` field is the normalized `Input::name` used by `Origin::tu`; `path` is the slash-normalized

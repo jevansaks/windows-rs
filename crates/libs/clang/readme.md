@@ -33,6 +33,10 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+Native scalar `const` and `constexpr` declarations retain their source names, scalar types, and
+annotations when Clang can evaluate their initializers. Root selection also applies to these
+constants; mutable and unevaluable declarations are not emitted as constants.
+
 `EmitOptions::native_imports` accepts typed DLL entry-point contracts keyed by the native C linker
 symbol. It keeps an ordinal such as `#660` or an exact exported name separate from the projected
 metadata function name. The existing `library` and `libraries` options remain available for
