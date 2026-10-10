@@ -195,7 +195,7 @@ fn extract_impl(
             traversal_facts += metrics.facts;
             traversal_constants += metrics.constants;
             eprintln!(
-                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} macro_index_ms={:.3} traversal_ms={:.3} elapsed_ms={:.3}",
+                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} root_cache_misses={} exclusion_cache_misses={} macro_index_ms={:.3} traversal_ms={:.3} elapsed_ms={:.3}",
                 target.as_deref().unwrap(),
                 input.name,
                 metrics.macro_definitions,
@@ -203,6 +203,8 @@ fn extract_impl(
                 metrics.cursors,
                 metrics.facts,
                 metrics.constants,
+                metrics.root_cache_misses,
+                metrics.exclusion_cache_misses,
                 metrics.macro_index_ms,
                 metrics.traversal_ms,
                 metrics.elapsed_ms
@@ -1351,6 +1353,8 @@ struct ExtractionMetrics {
     cursors: u32,
     facts: usize,
     constants: usize,
+    root_cache_misses: usize,
+    exclusion_cache_misses: usize,
     macro_index_ms: f64,
     traversal_ms: f64,
     elapsed_ms: f64,
@@ -1603,10 +1607,7 @@ impl TranslationUnit {
         let initial_constants = output.constants.len();
         let mut traversal = Traversal {
             tu: &input.name,
-            roots: &input.roots,
-            root_dirs: &input.root_dirs,
-            root_suffixes: &input.root_suffixes,
-            excluded_roots: &input.excluded_roots,
+            paths: SourcePaths::new(input),
             next: 0,
             seen: HashMap::new(),
             macros: &macros,
@@ -1639,6 +1640,8 @@ impl TranslationUnit {
             cursors: traversal.next,
             facts: traversal.facts.len() - initial_facts,
             constants: traversal.constants.len() - initial_constants,
+            root_cache_misses: traversal.paths.roots.len(),
+            exclusion_cache_misses: traversal.paths.exclusions.len(),
             macro_index_ms,
             traversal_ms,
             elapsed_ms: elapsed_ms(total_time),
@@ -1667,10 +1670,7 @@ impl Drop for TranslationUnit {
 
 struct Traversal<'a> {
     tu: &'a str,
-    roots: &'a BTreeSet<String>,
-    root_dirs: &'a BTreeSet<String>,
-    root_suffixes: &'a BTreeSet<String>,
-    excluded_roots: &'a BTreeSet<String>,
+    paths: SourcePaths<'a>,
     next: u32,
     seen: HashMap<u32, Vec<(CXCursor, Origin)>>,
     macros: &'a MacroDefinitions<'a>,
@@ -1714,20 +1714,154 @@ struct DeclareHandleExpansion {
 }
 
 impl Traversal<'_> {
-    fn is_root(&self, file: &str) -> bool {
-        is_root_path(
-            self.roots,
-            self.root_dirs,
-            self.root_suffixes,
-            self.excluded_roots,
-            file,
-        )
+    fn is_root(&mut self, file: &str) -> bool {
+        self.paths.is_root(file)
     }
 
-    fn is_source_excluded(&self, file: &str) -> bool {
-        self.excluded_roots.iter().any(|root| {
+    fn is_source_excluded(&mut self, file: &str) -> bool {
+        self.paths.is_source_excluded(file)
+    }
+}
+
+struct SourcePaths<'a> {
+    input: &'a Input,
+    roots: HashMap<String, bool>,
+    exclusions: HashMap<String, bool>,
+    #[cfg(test)]
+    root_match_calls: usize,
+    #[cfg(test)]
+    exclusion_match_calls: usize,
+}
+
+impl<'a> SourcePaths<'a> {
+    fn new(input: &'a Input) -> Self {
+        Self {
+            input,
+            roots: HashMap::new(),
+            exclusions: HashMap::new(),
+            #[cfg(test)]
+            root_match_calls: 0,
+            #[cfg(test)]
+            exclusion_match_calls: 0,
+        }
+    }
+
+    fn is_root(&mut self, file: &str) -> bool {
+        if let Some(root) = self.roots.get(file) {
+            return *root;
+        }
+        #[cfg(test)]
+        {
+            self.root_match_calls += 1;
+        }
+        let root = is_root_path(
+            &self.input.roots,
+            &self.input.root_dirs,
+            &self.input.root_suffixes,
+            &self.input.excluded_roots,
+            file,
+        );
+        self.roots.insert(file.to_string(), root);
+        root
+    }
+
+    fn is_source_excluded(&mut self, file: &str) -> bool {
+        if let Some(excluded) = self.exclusions.get(file) {
+            return *excluded;
+        }
+        #[cfg(test)]
+        {
+            self.exclusion_match_calls += 1;
+        }
+        let excluded = self.input.excluded_roots.iter().any(|root| {
             root.ends_with('/') && source_path_is_under(file, root.trim_end_matches('/'))
-        })
+        });
+        self.exclusions.insert(file.to_string(), excluded);
+        excluded
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    #[test]
+    fn cached_paths_preserve_matching_boundaries_and_exclusions() {
+        let input = Input::new("input.cpp", "")
+            .with_roots([r"C:\SDK\Include\Direct.h", "relative.h"])
+            .with_root_dirs([r"C:\SDK\Directory"])
+            .with_root_suffixes(["nested/suffix.h"])
+            .with_excluded_roots(["C:/SDK/Directory/file.h"])
+            .with_excluded_source_dirs([r"C:\SDK\Directory\Private"]);
+        let mut paths = SourcePaths::new(&input);
+        for (file, root, excluded) in [
+            (r"c:\sdk\include\DIRECT.H", true, false),
+            ("Direct.h", true, false),
+            ("C:/SDK/Include/NotDirect.h", false, false),
+            ("C:/other/relative.h", true, false),
+            ("C:/other/notrelative.h", false, false),
+            ("C:/SDK/Directory", true, false),
+            (r"c:\sdk\directory\child.h", true, false),
+            ("C:/SDK/DirectoryExtra/child.h", false, false),
+            ("C:/other/NESTED/suffix.h", true, false),
+            ("C:/other/notnested/suffix.h", false, false),
+            ("C:/SDK/Directory/FILE.H", false, false),
+            ("file.h", false, false),
+            ("C:/SDK/Directory/Private/child.h", false, true),
+            (r"c:\sdk\directory\PRIVATE", false, true),
+            ("C:/SDK/Directory/PrivateExtra/child.h", true, false),
+        ] {
+            for _ in 0..2 {
+                assert_eq!(paths.is_root(file), root, "{file}");
+                assert_eq!(paths.is_source_excluded(file), excluded, "{file}");
+            }
+        }
+        assert_eq!(paths.root_match_calls, 15);
+        assert_eq!(paths.exclusion_match_calls, 15);
+    }
+
+    #[test]
+    fn cached_paths_match_once_per_distinct_path_with_many_roots() {
+        let input = Input::new("input.cpp", "")
+            .with_roots((0..548).map(|index| format!("C:/SDK/root-{index:03}.h")))
+            .with_excluded_source_dirs(["C:/SDK/private"]);
+        let mut paths = SourcePaths::new(&input);
+        for _ in 0..10_000 {
+            assert!(paths.is_root("C:/SDK/root-547.h"));
+            assert!(!paths.is_root("C:/SDK/missing.h"));
+            assert!(!paths.is_root("C:/SDK/private/child.h"));
+            assert!(!paths.is_source_excluded("C:/SDK/root-547.h"));
+            assert!(!paths.is_source_excluded("C:/SDK/missing.h"));
+            assert!(paths.is_source_excluded("C:/SDK/private/child.h"));
+        }
+        assert_eq!(paths.root_match_calls, 3);
+        assert_eq!(paths.exclusion_match_calls, 3);
+        assert_eq!(paths.roots.len(), 3);
+        assert_eq!(paths.exclusions.len(), 3);
+    }
+
+    #[test]
+    fn cached_paths_keep_input_policies_independent() {
+        let selected = Input::new("selected.cpp", "").with_roots(["shared.h"]);
+        let unselected = Input::new("unselected.cpp", "");
+        let excluded = Input::new("excluded.cpp", "")
+            .with_roots(["shared.h"])
+            .with_excluded_source_dirs(["C:/SDK"]);
+        let mut selected_paths = SourcePaths::new(&selected);
+        let mut unselected_paths = SourcePaths::new(&unselected);
+        let mut excluded_paths = SourcePaths::new(&excluded);
+        for _ in 0..2 {
+            assert!(selected_paths.is_root("C:/SDK/shared.h"));
+            assert!(!unselected_paths.is_root("C:/SDK/shared.h"));
+            assert!(!excluded_paths.is_root("C:/SDK/shared.h"));
+            assert!(!selected_paths.is_source_excluded("C:/SDK/shared.h"));
+            assert!(!unselected_paths.is_source_excluded("C:/SDK/shared.h"));
+            assert!(excluded_paths.is_source_excluded("C:/SDK/shared.h"));
+        }
+        for paths in [selected_paths, unselected_paths, excluded_paths] {
+            assert_eq!(paths.root_match_calls, 1);
+            assert_eq!(paths.exclusion_match_calls, 1);
+        }
     }
 }
 
@@ -1984,13 +2118,7 @@ fn extract_child(
                 }
             } else if let Some((spelling, expansion, _, system)) = cursor_locations(child) {
                 let main_file = spelling.file == traversal.tu;
-                let root = is_root_path(
-                    traversal.roots,
-                    traversal.root_dirs,
-                    traversal.root_suffixes,
-                    traversal.excluded_roots,
-                    &spelling.file,
-                );
+                let root = traversal.paths.is_root(&spelling.file);
                 let origin = Origin {
                     tu: traversal.tu.to_string(),
                     local,

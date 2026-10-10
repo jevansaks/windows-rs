@@ -64,6 +64,11 @@ Each `Input` contains:
 the file in inclusion provenance. The caller supplies all compiler arguments to `extract`,
 including the language, target, include paths, defines, forced includes, and extensions.
 
+AST traversal caches root and source-directory exclusion decisions by source path within each
+immutable input policy. Repeated declarations in a header reuse those decisions; inputs with
+different roots or exclusions do not share a cache. Timing output reports cache misses alongside
+cursor counts.
+
 ```rust,no_run
 let input = windows_clang::Input::new(
     "Example.h",
