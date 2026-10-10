@@ -109,8 +109,15 @@ worker count, while the owned buffers retain all inputs' evidence for global fin
 
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
-`class_canonical_origins` retains exact native class redeclaration identity within each translation
-unit. Physical facts, definition flags, type-reference locations, and annotations remain unchanged.
+`class_canonical_origins` retains exact native class/struct redeclaration identity within each
+translation unit, including C++ entities declared with both keywords. Physical kinds, facts,
+definition flags, type-reference locations, and annotations remain unchanged. Union tags are not
+class/struct entity bindings.
+Map values distinguish `CanonicalRecord::Source` from a source-free `CompilerGenerated` native
+entity. Compiler-created groups retain their native Class/Struct kind and the first physical
+observation as an identity anchor, not a canonical source declaration or allocation definition.
+Grouping uses exact native cursor identity while the original worker is live. A source-bearing
+canonical cursor without a physical Origin remains an error.
 `coclass_aliases` exposes GUID-value alias evidence, including every UUID-marker origin. It does not
 supply an allocation type or exempt required native type uses from validation. Native UUID conflicts
 remain errors.

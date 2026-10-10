@@ -1335,8 +1335,32 @@ pub struct ValueDeclaration {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CoclassAlias {
-    pub canonical: Origin,
+    pub canonical: CanonicalRecord,
     pub guids: Vec<(Origin, String)>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum CanonicalRecordKind {
+    Class,
+    Struct,
+}
+
+/// Exact native record identity, distinct from its physical declaration observations.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum CanonicalRecord {
+    Source(Origin),
+    CompilerGenerated {
+        anchor: Origin,
+        kind: CanonicalRecordKind,
+    },
+}
+
+impl CanonicalRecord {
+    fn anchor(&self) -> &Origin {
+        match self {
+            Self::Source(origin) | Self::CompilerGenerated { anchor: origin, .. } => origin,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1351,7 +1375,7 @@ pub struct Snapshot {
     function_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
-    class_canonical_origins: BTreeMap<Origin, Origin>,
+    class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
@@ -1591,8 +1615,11 @@ impl PartialEq for Snapshot {
 impl Eq for Snapshot {}
 
 impl Snapshot {
-    /// Exact native class redeclaration bindings within each original translation unit.
-    pub fn class_canonical_origins(&self) -> &BTreeMap<Origin, Origin> {
+    /// Exact native class/struct redeclaration bindings within each original translation unit.
+    ///
+    /// Compiler-created entities have no physical canonical declaration. Their anchor identifies
+    /// the first native observation in the group, not a source definition or allocation type.
+    pub fn class_canonical_origins(&self) -> &BTreeMap<Origin, CanonicalRecord> {
         &self.class_canonical_origins
     }
 
@@ -1602,27 +1629,29 @@ impl Snapshot {
     pub fn coclass_aliases(&self) -> Result<BTreeMap<Origin, CoclassAlias>, Error> {
         let facts: BTreeMap<_, _> = self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
         let mut declarations = BTreeMap::new();
-        let mut guids: BTreeMap<&Origin, Vec<(Origin, String)>> = BTreeMap::new();
+        let mut guids: BTreeMap<&CanonicalRecord, Vec<(Origin, String)>> = BTreeMap::new();
         let mut allocation_types = BTreeSet::new();
         for (member, canonical) in &self.class_canonical_origins {
             let fact = facts.get(member);
-            let excluded = self
-                .partition_exclusions
-                .iter()
-                .find(|excluded| excluded.origin == *member && excluded.kind == FactKind::Class);
+            let excluded = self.partition_exclusions.iter().find(|excluded| {
+                excluded.origin == *member
+                    && matches!(excluded.kind, FactKind::Class | FactKind::Struct)
+            });
             if fact.is_none() && excluded.is_none() {
                 return Err(Error("missing native class member".into()));
             }
+            let anchor = canonical.anchor();
             let canonical_is_class = facts
-                .get(canonical)
-                .is_some_and(|fact| fact.kind == FactKind::Class)
+                .get(anchor)
+                .is_some_and(|fact| matches!(fact.kind, FactKind::Class | FactKind::Struct))
                 || self.partition_exclusions.iter().any(|excluded| {
-                    excluded.origin == *canonical && excluded.kind == FactKind::Class
+                    excluded.origin == *anchor
+                        && matches!(excluded.kind, FactKind::Class | FactKind::Struct)
                 });
-            if fact.is_some_and(|fact| fact.kind != FactKind::Class)
+            if fact.is_some_and(|fact| !matches!(fact.kind, FactKind::Class | FactKind::Struct))
                 || !canonical_is_class
-                || member.tu != canonical.tu
-                || self.class_canonical_origins.get(canonical) != Some(canonical)
+                || member.tu != anchor.tu
+                || self.class_canonical_origins.get(anchor) != Some(canonical)
             {
                 return Err(Error("invalid owned native class canonical binding".into()));
             }

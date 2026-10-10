@@ -1814,7 +1814,7 @@ struct Traversal<'a> {
     value_declarations: &'a mut Vec<ValueDeclaration>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
-    class_canonical_origins: &'a mut BTreeMap<Origin, Origin>,
+    class_canonical_origins: &'a mut BTreeMap<Origin, CanonicalRecord>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1830,7 +1830,7 @@ struct ExtractionState<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: &'a mut SalConstantSizes,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
-    class_canonical_origins: &'a mut BTreeMap<Origin, Origin>,
+    class_canonical_origins: &'a mut BTreeMap<Origin, CanonicalRecord>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1845,7 +1845,7 @@ struct ExtractionBuffers {
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
-    class_canonical_origins: BTreeMap<Origin, Origin>,
+    class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
@@ -1932,6 +1932,7 @@ mod owned_tests {
                          extern \"C\" void Invalid{index}(
                              __attribute__((annotate(\"_In_reads_(LIMIT - 20)\"))) char *value);\n\
                          struct Record{index} {{ int (*invoke)(int); }};\n\
+                         struct _GUID; struct _GUID {{ unsigned int Data1; }};\n\
                          typedef class Coclass{index} Coclass{index};\n\
                          class __declspec(uuid(\"11111111-2222-3333-4455-66778899aabb\"))
                              Coclass{index};\n\
@@ -1949,7 +1950,34 @@ mod owned_tests {
         ];
         let serial = extract(inputs.clone(), &args).unwrap();
         assert!(serial.sal_constant_sizes.values().any(Result::is_err));
-        assert_eq!(serial.class_canonical_origins.len(), inputs.len() * 3);
+        assert_eq!(serial.class_canonical_origins.len(), inputs.len() * 6);
+        for fact in serial
+            .facts
+            .iter()
+            .filter(|fact| fact.kind == FactKind::Struct)
+        {
+            if fact.name == "_GUID" {
+                let first = serial
+                    .facts
+                    .iter()
+                    .find(|candidate| {
+                        candidate.origin.tu == fact.origin.tu && candidate.name == "_GUID"
+                    })
+                    .unwrap();
+                assert_eq!(
+                    serial.class_canonical_origins.get(&fact.origin),
+                    Some(&CanonicalRecord::CompilerGenerated {
+                        anchor: first.origin.clone(),
+                        kind: CanonicalRecordKind::Struct,
+                    })
+                );
+            } else {
+                assert_eq!(
+                    serial.class_canonical_origins.get(&fact.origin),
+                    Some(&CanonicalRecord::Source(fact.origin.clone()))
+                );
+            }
+        }
         let aliases = serial.coclass_aliases().unwrap();
         assert_eq!(aliases.len(), inputs.len());
         for (origin, alias) in &aliases {
@@ -1959,7 +1987,10 @@ mod owned_tests {
                 .filter(|fact| fact.origin.tu == origin.tu && fact.kind == FactKind::Class)
                 .collect();
             assert_eq!(classes.len(), 3);
-            assert_eq!(alias.canonical, classes[0].origin);
+            assert_eq!(
+                alias.canonical,
+                CanonicalRecord::Source(classes[0].origin.clone())
+            );
             assert_eq!(
                 alias.guids,
                 [
@@ -2848,7 +2879,7 @@ fn extract_child(
                     let declaration_guid = matches!(fact_kind, FactKind::Class | FactKind::Struct)
                         .then(|| cursor_uuid(child))
                         .flatten();
-                    if fact_kind == FactKind::Class {
+                    if matches!(fact_kind, FactKind::Class | FactKind::Struct) {
                         traversal.pending_classes.push((origin.clone(), child));
                     }
                     traversal.facts.push(Fact {
@@ -2919,14 +2950,24 @@ fn bind_class_origins(
     tu: CXTranslationUnit,
     pending: &[(Origin, CXCursor)],
     seen: &HashMap<u32, Vec<(CXCursor, Origin)>>,
-    output: &mut BTreeMap<Origin, Origin>,
+    output: &mut BTreeMap<Origin, CanonicalRecord>,
 ) -> Result<(), Error> {
+    let mut generated: HashMap<u32, Vec<(CXCursor, CanonicalRecord)>> = HashMap::new();
     for (origin, cursor) in pending {
         let canonical = unsafe { clang_getCanonicalCursor(*cursor) };
         if unsafe {
-            clang_Cursor_getTranslationUnit(*cursor) != tu
+            clang_Cursor_isNull(*cursor) != 0
+                || clang_Cursor_isNull(canonical) != 0
+                || clang_Cursor_getTranslationUnit(*cursor) != tu
                 || clang_Cursor_getTranslationUnit(canonical) != tu
-                || clang_getCursorKind(canonical) != CXCursor_ClassDecl
+                || !matches!(
+                    clang_getCursorKind(*cursor),
+                    CXCursor_ClassDecl | CXCursor_StructDecl
+                )
+                || !matches!(
+                    clang_getCursorKind(canonical),
+                    CXCursor_ClassDecl | CXCursor_StructDecl
+                )
         } {
             return Err(Error(format!(
                 "invalid native class canonical cursor for {}",
@@ -2948,14 +2989,42 @@ fn bind_class_origins(
             }
             matched = Some(candidate_origin);
         }
-        let canonical_origin = matched.ok_or_else(|| {
-            Error(format!(
-                "missing exact native class canonical origin for {}",
-                super::origin(origin)
-            ))
-        })?;
-        if let Some(previous) = output.insert(origin.clone(), canonical_origin.clone())
-            && previous != *canonical_origin
+        let location = unsafe { clang_getCursorLocation(canonical) };
+        let has_source = source_location(location, clang_getSpellingLocation).is_some()
+            || source_location(location, clang_getExpansionLocation).is_some();
+        let identity = if has_source {
+            CanonicalRecord::Source(matched.cloned().ok_or_else(|| {
+                Error(format!(
+                    "missing exact native class canonical origin for {}",
+                    super::origin(origin)
+                ))
+            })?)
+        } else {
+            if matched.is_some() || unsafe { clang_isCursorDefinition(canonical) } != 0 {
+                return Err(Error("invalid source-free native canonical record".into()));
+            }
+            let kind = match unsafe { clang_getCursorKind(canonical) } {
+                CXCursor_ClassDecl => CanonicalRecordKind::Class,
+                CXCursor_StructDecl => CanonicalRecordKind::Struct,
+                _ => unreachable!(),
+            };
+            let bucket = generated.entry(hash).or_default();
+            if let Some((_, identity)) = bucket
+                .iter()
+                .find(|(candidate, _)| unsafe { clang_equalCursors(canonical, *candidate) } != 0)
+            {
+                identity.clone()
+            } else {
+                let identity = CanonicalRecord::CompilerGenerated {
+                    anchor: origin.clone(),
+                    kind,
+                };
+                bucket.push((canonical, identity.clone()));
+                identity
+            }
+        };
+        if let Some(previous) = output.insert(origin.clone(), identity.clone())
+            && previous != identity
         {
             return Err(Error("conflicting native class canonical binding".into()));
         }
@@ -2995,7 +3064,7 @@ mod class_binding_tests {
         let pending = [(second.clone(), classes[1])];
         let mut output = BTreeMap::new();
         bind_class_origins(tu.0, &pending, &seen, &mut output).unwrap();
-        assert_eq!(output.get(&second), Some(&first));
+        assert_eq!(output.get(&second), Some(&CanonicalRecord::Source(first)));
         seen.get_mut(&hash).unwrap().push((classes[0], second));
         assert!(
             bind_class_origins(tu.0, &pending, &seen, &mut BTreeMap::new())
@@ -3013,6 +3082,62 @@ mod class_binding_tests {
             TranslationUnit::parse(&index, &Input::new("foreign.hpp", "class X;"), &args).unwrap();
         assert!(
             bind_class_origins(foreign.0, &pending, &seen, &mut BTreeMap::new())
+                .unwrap_err()
+                .to_string()
+                .contains("invalid")
+        );
+    }
+
+    #[test]
+    fn mixed_record_native_join_preserves_struct_canonical_and_rejects_union() {
+        helpers::ensure_libclang();
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let input = Input::new("mixed.hpp", "struct X; class X; union U;");
+        let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+        let tu = TranslationUnit::parse(&index, &input, &args).unwrap();
+        let records: Vec<_> = cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) })
+            .into_iter()
+            .filter(|cursor| unsafe {
+                matches!(
+                    clang_getCursorKind(*cursor),
+                    CXCursor_ClassDecl | CXCursor_StructDecl | CXCursor_UnionDecl
+                )
+            })
+            .collect();
+        assert_eq!(records.len(), 3);
+        let canonical = unsafe { clang_getCanonicalCursor(records[1]) };
+        assert_eq!(
+            unsafe { clang_getCursorKind(canonical) },
+            CXCursor_StructDecl
+        );
+        assert_ne!(unsafe { clang_equalCursors(records[0], records[1]) }, 1);
+        assert_eq!(unsafe { clang_equalCursors(records[0], canonical) }, 1);
+        let first = Origin {
+            tu: input.name.clone(),
+            local: 1,
+        };
+        let second = Origin {
+            tu: input.name,
+            local: 2,
+        };
+        let hash = unsafe { clang_hashCursor(canonical) };
+        let seen = HashMap::from([(hash, vec![(records[0], first.clone())])]);
+        let mut output = BTreeMap::new();
+        bind_class_origins(
+            tu.0,
+            &[(first.clone(), records[0]), (second.clone(), records[1])],
+            &seen,
+            &mut output,
+        )
+        .unwrap();
+        assert_eq!(
+            output.get(&first),
+            Some(&CanonicalRecord::Source(first.clone()))
+        );
+        assert_eq!(output.get(&second), Some(&CanonicalRecord::Source(first)));
+        assert!(
+            bind_class_origins(tu.0, &[(second, records[2])], &seen, &mut output)
                 .unwrap_err()
                 .to_string()
                 .contains("invalid")

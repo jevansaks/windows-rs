@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use windows_clang::{
-    Annotation, AnnotationTarget, EmitOptions, FactData, FactKind, HeaderPartitionPolicy, Input,
-    NamespaceAuthorities, RootPartition, TypeRef, extract, extract_partitioned,
+    Annotation, AnnotationTarget, CanonicalRecord, CanonicalRecordKind, EmitOptions, FactData,
+    FactKind, HeaderPartitionPolicy, Input, NamespaceAuthorities, RootPartition, TypeRef, extract,
+    extract_partitioned,
 };
 
 #[test]
@@ -40,7 +41,7 @@ fn exact_coclass_identity_and_every_uuid_observation() {
         for fact in &classes {
             assert_eq!(
                 snapshot.class_canonical_origins().get(&fact.origin),
-                Some(canonical)
+                Some(&CanonicalRecord::Source(canonical.clone()))
             );
         }
         assert!(matches!(classes[0].data, FactData::Record { .. }));
@@ -59,7 +60,10 @@ fn exact_coclass_identity_and_every_uuid_observation() {
         assert_eq!(*declaration, classes[0].spelling);
         let aliases = snapshot.coclass_aliases().unwrap();
         let evidence = aliases.get(&alias.origin).unwrap();
-        assert_eq!(evidence.canonical, *canonical);
+        assert_eq!(
+            evidence.canonical,
+            CanonicalRecord::Source(canonical.clone())
+        );
         assert_eq!(evidence.guids.len(), 2);
         assert_eq!(evidence.guids[0].0, classes[1].origin);
         assert_eq!(evidence.guids[1].0, classes[2].origin);
@@ -206,6 +210,195 @@ fn conflicting_uuid_is_a_native_error() {
             error
                 .to_string()
                 .contains("uuid does not match previous declaration")
+        );
+    }
+}
+
+#[test]
+fn mixed_record_keywords_preserve_native_facts_and_alias_disposition() {
+    helpers::ensure_libclang();
+    for target in [
+        "i686-pc-windows-msvc",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+    ] {
+        let target_arg = format!("--target={target}");
+        let args = ["-x", "c++", "-fms-extensions", &target_arg];
+        for (first, later, first_kind, later_kind) in [
+            ("struct", "class", FactKind::Struct, FactKind::Class),
+            ("class", "struct", FactKind::Class, FactKind::Struct),
+        ] {
+            let source = format!("typedef {first} X X;\n{later} X {{ public: int value; }};");
+            let snapshot = extract([Input::new("allocation.hpp", source)], &args).unwrap();
+            let records: Vec<_> = snapshot
+                .facts()
+                .iter()
+                .filter(|fact| matches!(fact.kind, FactKind::Class | FactKind::Struct))
+                .collect();
+            assert_eq!(records.len(), 2);
+            assert_eq!(records[0].kind, first_kind);
+            assert_eq!(records[1].kind, later_kind);
+            assert!(!records[0].definition);
+            assert!(records[1].definition);
+            assert_eq!(
+                snapshot.class_canonical_origins().get(&records[1].origin),
+                Some(&CanonicalRecord::Source(records[0].origin.clone()))
+            );
+            assert!(snapshot.coclass_aliases().unwrap().is_empty());
+            assert!(snapshot.emit("Test").unwrap().contains("struct X"));
+
+            let source = format!(
+                "typedef {first} X X;\n{later} __declspec(uuid(\"11111111-2222-3333-4455-66778899aabb\")) X;\n{first} __declspec(uuid(\"11111111-2222-3333-4455-66778899aabb\")) X;"
+            );
+            let snapshot = extract([Input::new("guid.hpp", source.clone())], &args).unwrap();
+            let records: Vec<_> = snapshot
+                .facts()
+                .iter()
+                .filter(|fact| matches!(fact.kind, FactKind::Class | FactKind::Struct))
+                .collect();
+            assert_eq!(records.len(), 3);
+            assert_eq!(records[0].kind, first_kind);
+            assert_eq!(records[1].kind, later_kind);
+            assert!(records.iter().all(|fact| !fact.definition));
+            assert!(matches!(records[0].data, FactData::Record { .. }));
+            assert!(matches!(records[1].data, FactData::Class { .. }));
+            let aliases = snapshot.coclass_aliases().unwrap();
+            assert_eq!(aliases.len(), 1);
+            let evidence = aliases.values().next().unwrap();
+            assert_eq!(
+                evidence.canonical,
+                CanonicalRecord::Source(records[0].origin.clone())
+            );
+            assert_eq!(evidence.guids.len(), 2);
+            assert_eq!(evidence.guids[0].0, records[1].origin);
+            assert_eq!(evidence.guids[1].0, records[2].origin);
+            assert!(snapshot.emit("Test").unwrap().contains("const X: GUID"));
+            let required = extract(
+                [Input::new(
+                    "required.hpp",
+                    format!("{source}\nextern \"C\" void Use(X value);"),
+                )],
+                &args,
+            )
+            .unwrap();
+            assert!(required.emit_with_library("Test", "test.dll").is_err());
+        }
+
+        let snapshot = extract([Input::new("unrelated.hpp", r#"
+                namespace A { typedef struct X X; class X; }
+                namespace B { typedef class X X; struct __declspec(uuid("11111111-2222-3333-4455-66778899aabb")) X; }
+            "#)], &args).unwrap();
+        let aliases = snapshot.coclass_aliases().unwrap();
+        assert_eq!(aliases.len(), 1);
+        let alias = snapshot
+            .facts()
+            .iter()
+            .find(|fact| aliases.contains_key(&fact.origin))
+            .unwrap();
+        assert_eq!(
+            alias.spelling.offset,
+            snapshot
+                .facts()
+                .iter()
+                .filter(|fact| fact.kind == FactKind::Typedef)
+                .map(|fact| fact.spelling.offset)
+                .max()
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn compiler_created_record_identity_preserves_physical_declarations() {
+    helpers::ensure_libclang();
+    for target in [
+        "i686-pc-windows-msvc",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+    ] {
+        let target_arg = format!("--target={target}");
+        let args = ["-x", "c++", "-fms-extensions", &target_arg];
+        for (source, definitions) in [
+            ("struct _GUID { unsigned int Data1; };", vec![true]),
+            (
+                "struct _GUID; struct _GUID { unsigned int Data1; };",
+                vec![false, true],
+            ),
+            (
+                "struct _GUID { unsigned int Data1; }; struct _GUID;",
+                vec![true, false],
+            ),
+        ] {
+            let snapshot = extract([Input::new("builtin.hpp", source)], &args).unwrap();
+            let records: Vec<_> = snapshot
+                .facts()
+                .iter()
+                .filter(|fact| fact.kind == FactKind::Struct)
+                .collect();
+            assert_eq!(records.len(), definitions.len());
+            let identity = CanonicalRecord::CompilerGenerated {
+                anchor: records[0].origin.clone(),
+                kind: CanonicalRecordKind::Struct,
+            };
+            for (record, definition) in records.iter().zip(definitions) {
+                assert_eq!(record.definition, definition);
+                assert_eq!(record.kind, FactKind::Struct);
+                assert_eq!(record.spelling.file, "builtin.hpp");
+                assert_eq!(
+                    snapshot.class_canonical_origins().get(&record.origin),
+                    Some(&identity)
+                );
+                if definition {
+                    let FactData::Record { fields, .. } = &record.data else {
+                        panic!();
+                    };
+                    assert_eq!(fields.len(), 1);
+                    assert_eq!(fields[0].name, "Data1");
+                    assert_eq!(fields[0].ty, TypeRef::Scalar(windows_clang::Scalar::U32));
+                }
+            }
+            assert!(snapshot.coclass_aliases().unwrap().is_empty());
+            assert!(snapshot.emit("Test").unwrap().contains("struct _GUID"));
+        }
+        let snapshot = extract(
+            [Input::new(
+                "groups.hpp",
+                r#"
+                    struct _GUID; struct _GUID { unsigned int Data1; };
+                    namespace A { struct _GUID; struct _GUID { int value; }; }
+                    namespace B { struct _GUID; struct _GUID { double value; }; }
+                "#,
+            )],
+            &args,
+        )
+        .unwrap();
+        let records: Vec<_> = snapshot
+            .facts()
+            .iter()
+            .filter(|fact| fact.kind == FactKind::Struct)
+            .collect();
+        assert_eq!(records.len(), 6);
+        let identities: Vec<_> = records
+            .iter()
+            .map(|fact| &snapshot.class_canonical_origins()[&fact.origin])
+            .collect();
+        assert_eq!(identities[0], identities[1]);
+        assert_eq!(identities[2], identities[3]);
+        assert_eq!(identities[4], identities[5]);
+        assert_ne!(identities[0], identities[2]);
+        assert_ne!(identities[0], identities[4]);
+        assert_ne!(identities[2], identities[4]);
+        assert!(matches!(
+            identities[0],
+            CanonicalRecord::CompilerGenerated { .. }
+        ));
+        assert_eq!(
+            identities[2],
+            &CanonicalRecord::Source(records[2].origin.clone())
+        );
+        assert_eq!(
+            identities[4],
+            &CanonicalRecord::Source(records[4].origin.clone())
         );
     }
 }
