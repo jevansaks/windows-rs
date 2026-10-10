@@ -422,10 +422,11 @@ as a named native typedef over `*mut void`. Aliases and pointer aliases keep the
 and pointer depth. A non-excluded handle, a lookalike declaration, or a different macro expansion
 keeps the existing record-backed representation. No cleanup or invalid-handle policy is inferred.
 
-Planning indexes declarations by exact translation unit, name, and spelling location for authority
-and typedef-projection lookups. Each bucket retains snapshot fact order, including duplicate
-declarations. The index is local to each planning or routing operation and is built after owner
-settings and remaps have been applied.
+Planning indexes declarations by exact translation unit, name, and spelling location for authority,
+typedef-projection, and dependency UUID lookups. Each bucket retains snapshot fact order, including
+duplicate and unowned declarations. UUID lookup collects UUIDs from all matching observations and
+returns a value only when that set contains exactly one distinct UUID. The index is local to each
+planning or routing operation and is built after owner settings and remaps have been applied.
 
 An authority-routed dependency uses the partition identity set by `with_authority_partition`; if
 none is set, its namespace is the deterministic fallback partition. Its header remains the

@@ -216,6 +216,188 @@ fn declaration_index_keeps_all_matches_in_snapshot_order() {
     }
 }
 
+fn declaration_uuid_full_scan<'a>(
+    snapshot: &'a Snapshot,
+    name: &str,
+    tu: &str,
+    declaration: &Location,
+) -> Option<&'a str> {
+    let guids: BTreeSet<_> = snapshot
+        .facts
+        .iter()
+        .filter(|fact| fact.name == name && fact.origin.tu == tu && fact.spelling == *declaration)
+        .filter_map(|fact| snapshot.fact_uuid(fact))
+        .collect();
+    (guids.len() == 1).then(|| *guids.first().unwrap())
+}
+
+#[test]
+fn declaration_uuid_preserves_all_exact_observations() {
+    const GUID: &str = "11111111-2222-3333-4455-66778899aabb";
+    const OTHER_GUID: &str = "aaaaaaaa-bbbb-cccc-ddee-ff0011223344";
+    let declaration = Location {
+        file: "types.h".to_string(),
+        offset: 7,
+    };
+    let first = test_fact(
+        1,
+        None,
+        FactKind::Struct,
+        "TARGET",
+        declaration.clone(),
+        FactData::None,
+    );
+    let mut wrong_tu = first.clone();
+    wrong_tu.origin.tu = "other".to_string();
+    let mut wrong_name = first.clone();
+    wrong_name.name = "OTHER".to_string();
+    let mut wrong_file = first.clone();
+    wrong_file.spelling.file = "Types.h".to_string();
+    let mut wrong_offset = first.clone();
+    wrong_offset.spelling.offset += 1;
+    let mut facts = vec![first.clone()];
+    for (index, mut fact) in [wrong_tu, wrong_name, wrong_file, wrong_offset]
+        .into_iter()
+        .enumerate()
+    {
+        fact.origin.local = index as u32 + 2;
+        fact.data = FactData::Class {
+            guid: OTHER_GUID.to_string(),
+        };
+        facts.push(fact);
+    }
+    let mut snapshot = snapshot(facts);
+    for (stage, expected) in [None, Some(GUID), Some(GUID), None].into_iter().enumerate() {
+        if stage > 0 {
+            let mut late = first.clone();
+            late.origin.local = stage as u32 + 10;
+            late.root = false;
+            late.definition = false;
+            late.system = true;
+            late.expansion.file = "invocation.h".to_string();
+            match stage {
+                1 => {
+                    late.kind = FactKind::Class;
+                    late.data = FactData::Class {
+                        guid: GUID.to_string(),
+                    };
+                    snapshot
+                        .declaration_guids
+                        .insert(late.origin.clone(), OTHER_GUID.to_string());
+                }
+                2 => {
+                    late.data = FactData::Interface {
+                        base: None,
+                        guid: Some(GUID.to_string()),
+                        methods: Vec::new(),
+                    };
+                    let mut sidecar = late.clone();
+                    sidecar.origin.local = 20;
+                    sidecar.data = FactData::None;
+                    snapshot
+                        .declaration_guids
+                        .insert(sidecar.origin.clone(), GUID.to_string());
+                    snapshot.facts.push(sidecar);
+                }
+                3 => {
+                    snapshot
+                        .declaration_guids
+                        .insert(late.origin.clone(), OTHER_GUID.to_string());
+                }
+                _ => unreachable!(),
+            }
+            snapshot.facts.push(late);
+        }
+        for _ in 0..snapshot.facts.len() {
+            let declarations = DeclarationIndex::new(&snapshot.facts);
+            assert_eq!(
+                declaration_uuid(&snapshot, &declarations, "TARGET", "tu", &declaration),
+                expected
+            );
+            for fact in &snapshot.facts {
+                assert_eq!(
+                    declaration_uuid(
+                        &snapshot,
+                        &declarations,
+                        &fact.name,
+                        &fact.origin.tu,
+                        &fact.spelling
+                    ),
+                    declaration_uuid_full_scan(
+                        &snapshot,
+                        &fact.name,
+                        &fact.origin.tu,
+                        &fact.spelling
+                    )
+                );
+            }
+            assert_eq!(
+                declaration_uuid(&snapshot, &declarations, "MISSING", "tu", &declaration),
+                None
+            );
+            snapshot.facts.rotate_left(1);
+        }
+    }
+}
+
+#[test]
+fn declaration_uuid_inspects_only_the_exact_bucket() {
+    const LOOKUPS: usize = 256;
+    const GUID: &str = "11111111-2222-3333-4455-66778899aabb";
+    for unrelated in [0, 1_000, 20_000] {
+        let declaration = Location {
+            file: "types.h".to_string(),
+            offset: 7,
+        };
+        let first = test_fact(
+            1,
+            None,
+            FactKind::Class,
+            "TARGET",
+            declaration.clone(),
+            FactData::Class {
+                guid: GUID.to_string(),
+            },
+        );
+        let mut alternate = first.clone();
+        alternate.origin.local = 2;
+        alternate.root = false;
+        let mut facts = vec![first];
+        facts.extend((0..unrelated).map(|index| {
+            test_fact(
+                index + 10,
+                None,
+                FactKind::Class,
+                "UNRELATED",
+                Location {
+                    file: "unrelated.h".to_string(),
+                    offset: index,
+                },
+                FactData::Class {
+                    guid: GUID.to_string(),
+                },
+            )
+        }));
+        facts.push(alternate);
+        let snapshot = snapshot(facts);
+        let declarations = DeclarationIndex::new(&snapshot.facts);
+        let expected = declaration_uuid_full_scan(&snapshot, "TARGET", "tu", &declaration);
+        assert_eq!(expected, Some(GUID));
+        for _ in 0..LOOKUPS {
+            assert_eq!(
+                declaration_uuid(&snapshot, &declarations, "TARGET", "tu", &declaration),
+                expected
+            );
+        }
+        assert_eq!(declarations.inspected_candidates.get(), 2 * LOOKUPS);
+        eprintln!(
+            "declaration-uuid facts={} bucket=2 lookups={LOOKUPS} inspected={}",
+            snapshot.facts.len(),
+            declarations.inspected_candidates.get()
+        );
+    }
+}
+
 #[test]
 fn authority_lookup_preserves_exact_identity_and_fact_order() {
     let target = alias(10, "TARGET", "types.h", 7, TypeRef::Scalar(Scalar::U32));

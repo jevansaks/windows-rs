@@ -17,14 +17,14 @@ fn timings_enabled() -> bool {
 
 fn declaration_uuid<'a>(
     snapshot: &'a Snapshot,
+    declarations: &DeclarationIndex<'a>,
     name: &str,
     tu: &str,
     declaration: &Location,
 ) -> Option<&'a str> {
-    let guids: BTreeSet<_> = snapshot
-        .facts
+    let guids: BTreeSet<_> = declarations
+        .get(tu, name, declaration)
         .iter()
-        .filter(|fact| fact.name == name && fact.origin.tu == tu && fact.spelling == *declaration)
         .filter_map(|fact| snapshot.fact_uuid(fact))
         .collect();
     (guids.len() == 1).then(|| *guids.first().unwrap())
@@ -1471,12 +1471,16 @@ struct DeclareHandle {
 
 struct DeclarationIndex<'a> {
     facts: HashMap<(&'a str, &'a str, &'a Location), Vec<&'a Fact>>,
+    #[cfg(test)]
+    inspected_candidates: Cell<usize>,
 }
 
 impl<'a> DeclarationIndex<'a> {
     fn new(facts: &'a [Fact]) -> Self {
         let mut result = Self {
             facts: HashMap::with_capacity(facts.len()),
+            #[cfg(test)]
+            inspected_candidates: Cell::new(0),
         };
         for fact in facts {
             result
@@ -1489,10 +1493,15 @@ impl<'a> DeclarationIndex<'a> {
     }
 
     fn get<'b>(&'b self, tu: &'b str, name: &'b str, declaration: &'b Location) -> &'b [&'a Fact] {
-        self.facts
+        let facts = self
+            .facts
             .get(&(tu, name, declaration))
             .map(Vec::as_slice)
-            .unwrap_or_default()
+            .unwrap_or_default();
+        #[cfg(test)]
+        self.inspected_candidates
+            .set(self.inspected_candidates.get() + facts.len());
+        facts
     }
 }
 
@@ -6045,7 +6054,7 @@ impl Snapshot {
                 };
                 let mut fact = selected;
                 if !self.root_owners.contains_key(&fact.origin)
-                    && let Some(guid) = declaration_uuid(self, name, tu, declaration)
+                    && let Some(guid) = declaration_uuid(self, &declarations, name, tu, declaration)
                 {
                     let owned: Vec<_> = facts_index
                         .get(name.as_str())
