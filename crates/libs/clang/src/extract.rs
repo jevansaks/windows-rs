@@ -188,9 +188,12 @@ fn extract_impl(
             );
         }
         let offset = output.facts.len();
+        for (index, _) in &mut result.extracted.pending_structs {
+            *index += offset;
+        }
         for (index, _) in result
             .extracted
-            .pending_structs
+            .root_macros
             .iter_mut()
             .chain(&mut result.extracted.pending_macros)
         {
@@ -213,6 +216,11 @@ fn extract_impl(
         embeddable_class_layouts,
         clang_flag_enums,
     } = output;
+    for extraction in &mut extracted {
+        for (index, captured) in std::mem::take(&mut extraction.root_macros) {
+            facts[index].data = materialize_macro(captured);
+        }
+    }
     let source_annotations = annotations.clone();
     let function_origins: HashSet<_> = facts
         .iter()
@@ -1687,6 +1695,7 @@ impl TranslationUnit {
             macros: &macros,
             pending_structs: vec![],
             pending_macros: vec![],
+            root_macros: vec![],
             pending_callables: vec![],
             pending_classes: vec![],
             declare_handle_expansions: vec![],
@@ -1739,6 +1748,7 @@ impl TranslationUnit {
         });
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
+        let root_macros = std::mem::take(&mut traversal.root_macros);
         let declare_handle_expansions = std::mem::take(&mut traversal.declare_handle_expansions);
         let next_local = traversal.next;
         let pending_callables = std::mem::take(&mut traversal.pending_callables);
@@ -1756,18 +1766,20 @@ impl TranslationUnit {
             .collect();
         let pending_macros = pending_macros
             .into_iter()
-            .map(|(index, cursor)| (index, fact_data(cursor, FactKind::Macro, &macros, false)))
+            .map(|(index, cursor)| (index, capture_macro(cursor, &macros)))
+            .collect();
+        let root_macros = root_macros
+            .into_iter()
+            .map(|(index, cursor)| (index, capture_macro(cursor, &macros)))
             .collect();
         let final_macros = FinalMacros(
             macros
                 .definitions
-                .keys()
-                .filter_map(|name| {
-                    macros
-                        .final_definition(name)
-                        .map(|(tokens, function_like)| {
-                            (name.clone(), (tokens.to_vec(), function_like))
-                        })
+                .iter()
+                .filter_map(|(name, definitions)| {
+                    definitions
+                        .last()
+                        .map(|definition| (name.clone(), definition.captured().clone()))
                 })
                 .collect(),
         );
@@ -1777,6 +1789,7 @@ impl TranslationUnit {
                 diagnostics: self.error_diagnostics(),
                 pending_structs,
                 pending_macros,
+                root_macros,
                 declare_handle_expansions,
                 next_local,
             },
@@ -1806,6 +1819,7 @@ struct Traversal<'a> {
     macros: &'a MacroDefinitions<'a>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
+    root_macros: Vec<(usize, CXCursor)>,
     pending_callables: Vec<(usize, CXCursor)>,
     pending_classes: Vec<(Origin, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
@@ -1894,12 +1908,51 @@ struct Extracted {
     macros: FinalMacros,
     diagnostics: Vec<ErrorDiagnostic>,
     pending_structs: Vec<(usize, FactData)>,
-    pending_macros: Vec<(usize, FactData)>,
+    pending_macros: Vec<(usize, Arc<OwnedMacro>)>,
+    root_macros: Vec<(usize, Arc<OwnedMacro>)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
     next_local: u32,
 }
 
-struct FinalMacros(HashMap<String, (Vec<String>, bool)>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OwnedMacro {
+    tokens: Vec<String>,
+    function_like: bool,
+}
+
+impl OwnedMacro {
+    fn from_cursor(cursor: CXCursor) -> Self {
+        Self {
+            tokens: cursor_tokens(cursor)
+                .into_iter()
+                .map(|(_, token)| token)
+                .skip(1)
+                .collect(),
+            function_like: unsafe { clang_Cursor_isMacroFunctionLike(cursor) } != 0,
+        }
+    }
+}
+
+fn capture_macro(cursor: CXCursor, macros: &MacroDefinitions) -> Arc<OwnedMacro> {
+    let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
+    macros.definition(cursor, &name).map_or_else(
+        || Arc::new(OwnedMacro::from_cursor(cursor)),
+        |definition| definition.captured().clone(),
+    )
+}
+
+fn materialize_macro(captured: Arc<OwnedMacro>) -> FactData {
+    let OwnedMacro {
+        tokens,
+        function_like,
+    } = Arc::unwrap_or_clone(captured);
+    FactData::Macro {
+        tokens,
+        function_like,
+    }
+}
+
+struct FinalMacros(HashMap<String, Arc<OwnedMacro>>);
 
 impl FinalMacros {
     fn contains_key(&self, name: &str) -> bool {
@@ -1909,13 +1962,255 @@ impl FinalMacros {
     fn final_definition(&self, name: &str) -> Option<(&[String], bool)> {
         self.0
             .get(name)
-            .map(|(tokens, function_like)| (tokens.as_slice(), *function_like))
+            .map(|captured| (captured.tokens.as_slice(), captured.function_like))
     }
 }
 
 #[cfg(test)]
 mod owned_tests {
     use super::*;
+
+    const MACRO_SOURCE: &str = "#define REDEF 1\n#undef REDEF\n#define REDEF 2\n\
+                               #define SAME 7\n#undef SAME\n#define SAME 7\n\
+                               #define EMPTY\n#define FUNCTION(x) ((x) + 1)\n\
+                               #define TEXT \"payload\"\n#define ALIAS TEXT\n#define CHAIN ALIAS\n";
+
+    struct MacroOracle {
+        observations: Vec<(String, Location, FactData)>,
+        final_definitions: BTreeMap<String, FactData>,
+    }
+
+    fn old_native_macro_capture(tu: &TranslationUnit, input: &Input) -> MacroOracle {
+        let mut oracle = MacroOracle {
+            observations: vec![],
+            final_definitions: BTreeMap::new(),
+        };
+        for cursor in cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) }) {
+            if unsafe { clang_getCursorKind(cursor) } != CXCursor_MacroDefinition {
+                continue;
+            }
+            let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
+            let data = FactData::Macro {
+                tokens: cursor_tokens(cursor)
+                    .into_iter()
+                    .map(|(_, token)| token)
+                    .skip(1)
+                    .collect(),
+                function_like: unsafe { clang_Cursor_isMacroFunctionLike(cursor) } != 0,
+            };
+            if let Some((spelling, _, _, _)) = cursor_locations(cursor)
+                && spelling.file == input.name
+            {
+                let missing = capture_macro(cursor, &MacroDefinitions::default());
+                let another_missing = capture_macro(cursor, &MacroDefinitions::default());
+                assert!(!Arc::ptr_eq(&missing, &another_missing));
+                assert_eq!(materialize_macro(missing), data);
+                oracle
+                    .observations
+                    .push((name.clone(), spelling, data.clone()));
+            }
+            oracle.final_definitions.insert(name, data);
+        }
+        oracle
+    }
+
+    #[test]
+    fn macro_ownership_completed_results_share_exact_native_definitions() {
+        helpers::ensure_libclang();
+        let completed = {
+            let _library = Library::new().unwrap();
+            let index = Index::new().unwrap();
+            [true, false]
+                .into_iter()
+                .map(|root| {
+                    let mut input =
+                        Input::new(if root { "root.hpp" } else { "pending.hpp" }, MACRO_SOURCE);
+                    if !root {
+                        input.roots.clear();
+                    }
+                    let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+                    let tu = TranslationUnit::parse(&index, &input, &args).unwrap();
+                    let oracle = old_native_macro_capture(&tu, &input);
+                    let mut output = ExtractionBuffers::default();
+                    let (extracted, metrics) = tu
+                        .extract(&index, &input, &args, &mut output.state(), false, false)
+                        .unwrap();
+                    (
+                        NativeExtraction {
+                            output,
+                            extracted,
+                            included_files: tu.included_files(&input.name),
+                            parse_ms: 0.0,
+                            metrics,
+                        },
+                        oracle,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        std::thread::spawn(move || {
+            let mut slots: Vec<Option<_>> = completed.into_iter().map(Some).collect();
+            assert!(!Arc::ptr_eq(
+                &slots[0].as_ref().unwrap().0.extracted.macros.0["TEXT"],
+                &slots[1].as_ref().unwrap().0.extracted.macros.0["TEXT"],
+            ));
+            for slot in &mut slots {
+                let (mut result, oracle) = slot.take().unwrap();
+                let captures = if result.extracted.root_macros.is_empty() {
+                    &result.extracted.pending_macros
+                } else {
+                    &result.extracted.root_macros
+                };
+                assert_eq!(captures.len(), 8);
+                for (index, captured) in captures {
+                    let fact = &result.output.facts[*index];
+                    assert_eq!(fact.data, FactData::None);
+                    let expected = &oracle
+                        .observations
+                        .iter()
+                        .find(|(name, location, _)| {
+                            *name == fact.name && *location == fact.spelling
+                        })
+                        .unwrap()
+                        .2;
+                    assert_eq!(materialize_macro(captured.clone()), *expected);
+                    let last = oracle
+                        .observations
+                        .iter()
+                        .rev()
+                        .find(|(name, _, _)| *name == fact.name)
+                        .unwrap();
+                    let final_capture = &result.extracted.macros.0[&fact.name];
+                    assert_eq!(
+                        Arc::ptr_eq(captured, final_capture),
+                        fact.spelling == last.1,
+                    );
+                    assert_eq!(
+                        Arc::strong_count(captured),
+                        if fact.spelling == last.1 { 2 } else { 1 },
+                    );
+                }
+                for name in ["REDEF", "SAME"] {
+                    let definitions: Vec<_> = captures
+                        .iter()
+                        .filter(|(index, _)| result.output.facts[*index].name == name)
+                        .map(|(_, captured)| captured)
+                        .collect();
+                    assert_eq!(definitions.len(), 2);
+                    assert!(!Arc::ptr_eq(definitions[0], definitions[1]));
+                }
+                for (name, expected) in &oracle.final_definitions {
+                    let captured = &result.extracted.macros.0[name];
+                    assert_eq!(materialize_macro(captured.clone()), *expected);
+                }
+                assert_eq!(
+                    string_macro_value("CHAIN", &result.extracted.macros, &mut HashSet::new()),
+                    Some(Value::Utf8("payload".to_string())),
+                );
+                for (index, captured) in std::mem::take(&mut result.extracted.root_macros) {
+                    result.output.facts[index].data = materialize_macro(captured);
+                }
+                let selected = ["REDEF", "SAME", "EMPTY", "TEXT", "ALIAS", "CHAIN"]
+                    .map(str::to_string)
+                    .into_iter()
+                    .collect();
+                decode_selected_macro_definitions(
+                    &mut result.output.facts,
+                    std::slice::from_mut(&mut result.extracted),
+                    &selected,
+                );
+                for fact in result
+                    .output
+                    .facts
+                    .iter()
+                    .filter(|fact| fact.kind == FactKind::Macro)
+                {
+                    let expected = &oracle
+                        .observations
+                        .iter()
+                        .find(|(name, location, _)| {
+                            *name == fact.name && *location == fact.spelling
+                        })
+                        .unwrap()
+                        .2;
+                    assert_eq!(fact.data, *expected);
+                }
+            }
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn macro_ownership_preserves_public_oracle_and_complete_worker_order() {
+        helpers::ensure_libclang();
+        let inputs: Vec<_> = (0..4)
+            .map(|index| {
+                let mut input = Input::new(format!("macro{index}.hpp"), MACRO_SOURCE);
+                if index % 2 == 1 {
+                    input.roots.clear();
+                }
+                input
+            })
+            .collect();
+        let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+        let oracles: BTreeMap<_, _> = {
+            let _library = Library::new().unwrap();
+            let index = Index::new().unwrap();
+            inputs
+                .iter()
+                .map(|input| {
+                    let tu = TranslationUnit::parse(&index, input, &args).unwrap();
+                    (input.name.clone(), old_native_macro_capture(&tu, input))
+                })
+                .collect()
+        };
+        let serial = extract(inputs.clone(), &args).unwrap();
+        for workers in [1, 2, 4] {
+            let snapshot = extract_with_options(
+                inputs.clone(),
+                &args,
+                &ExtractionOptions::new().with_parallelism(workers),
+            )
+            .unwrap();
+            assert_complete_eq(&serial, &snapshot);
+            assert_eq!(
+                snapshot
+                    .facts
+                    .iter()
+                    .filter(|fact| fact.kind == FactKind::Macro)
+                    .count(),
+                32,
+            );
+            for fact in snapshot
+                .facts
+                .iter()
+                .filter(|fact| fact.kind == FactKind::Macro)
+            {
+                let expected = &oracles[&fact.origin.tu]
+                    .observations
+                    .iter()
+                    .find(|(name, location, _)| *name == fact.name && *location == fact.spelling)
+                    .unwrap()
+                    .2;
+                assert_eq!(fact.data, *expected);
+            }
+        }
+    }
+
+    #[test]
+    fn macro_ownership_materialization_moves_unique_tokens() {
+        let tokens = vec!["unique".to_string()];
+        let pointer = tokens.as_ptr();
+        let data = materialize_macro(Arc::new(OwnedMacro {
+            tokens,
+            function_like: false,
+        }));
+        let FactData::Macro { tokens, .. } = data else {
+            panic!();
+        };
+        assert_eq!(tokens.as_ptr(), pointer);
+    }
 
     #[test]
     fn whole_native_workers_bound_lifetimes_and_preserve_count_errors() {
@@ -2115,9 +2410,11 @@ mod owned_tests {
                 *index == deferred
                     && matches!(data, FactData::Record { fields, .. } if fields.len() == 1)
             }));
-            assert!(extracted.pending_macros.iter().any(|(index, data)| {
-                facts[*index].name == "ALIAS" && matches!(data, FactData::Macro { .. })
-            }));
+            assert!(
+                extracted.pending_macros.iter().any(|(index, data)| {
+                    facts[*index].name == "ALIAS" && data.tokens == ["TEXT"]
+                })
+            );
         })
         .join()
         .unwrap();
@@ -2128,6 +2425,7 @@ mod owned_tests {
         assert_eq!(left.included_files, right.included_files);
         assert_eq!(left.input_order, right.input_order);
         assert_eq!(left.class_canonical_origins, right.class_canonical_origins);
+        assert_eq!(format!("{left:?}"), format!("{right:?}"));
     }
 
     #[test]
@@ -2838,7 +3136,7 @@ fn extract_child(
                     } else {
                         (unsafe { clang_isCursorDefinition(child) }) != 0
                     };
-                    let data = if deferred_struct || deferred_macro {
+                    let data = if deferred_struct || fact_kind == FactKind::Macro {
                         FactData::None
                     } else {
                         fact_data(child, fact_kind, traversal.macros, definition)
@@ -2922,6 +3220,8 @@ fn extract_child(
                     }
                     if deferred_macro {
                         traversal.pending_macros.push((index, child));
+                    } else if fact_kind == FactKind::Macro {
+                        traversal.root_macros.push((index, child));
                     }
                 }
             }
@@ -3423,7 +3723,7 @@ fn decode_selected_macro_definitions(
     for extraction in extracted {
         for (index, data) in std::mem::take(&mut extraction.pending_macros) {
             if roots.contains(facts[index].name.as_str()) {
-                facts[index].data = data;
+                facts[index].data = materialize_macro(data);
             }
         }
     }
@@ -3559,18 +3859,17 @@ struct MacroDefinition {
     cursor: CXCursor,
     spelling: Option<Location>,
     function_like: bool,
-    tokens: OnceCell<Vec<String>>,
+    tokens: OnceCell<Arc<OwnedMacro>>,
 }
 
 impl MacroDefinition {
     fn tokens(&self) -> &[String] {
-        self.tokens.get_or_init(|| {
-            cursor_tokens(self.cursor)
-                .into_iter()
-                .map(|(_, token)| token)
-                .skip(1)
-                .collect()
-        })
+        &self.captured().tokens
+    }
+
+    fn captured(&self) -> &Arc<OwnedMacro> {
+        self.tokens
+            .get_or_init(|| Arc::new(OwnedMacro::from_cursor(self.cursor)))
     }
 }
 
@@ -3929,13 +4228,11 @@ impl MacroDefinitions<'_> {
             .map(MacroDefinition::tokens)
     }
 
-    fn definition(&self, cursor: CXCursor, name: &str) -> Option<(&[String], bool)> {
-        let definition = self
-            .definitions
+    fn definition(&self, cursor: CXCursor, name: &str) -> Option<&MacroDefinition> {
+        self.definitions
             .get(name)?
             .iter()
-            .find(|definition| unsafe { clang_equalCursors(definition.cursor, cursor) } != 0)?;
-        Some((definition.tokens(), definition.function_like))
+            .find(|definition| unsafe { clang_equalCursors(definition.cursor, cursor) } != 0)
     }
 
     fn get_before(&self, name: &str, order: usize) -> Option<&[String]> {
@@ -4001,11 +4298,6 @@ impl MacroDefinitions<'_> {
                 .min_by_key(|(candidate_start, candidate_end, _)| candidate_end - candidate_start)
                 .map(|(_, _, order)| *order)
         })
-    }
-
-    fn final_definition(&self, name: &str) -> Option<(&[String], bool)> {
-        let definition = self.definitions.get(name)?.last()?;
-        Some((definition.tokens(), definition.function_like))
     }
 }
 
@@ -4984,26 +5276,7 @@ fn fact_data(
                 noreturn,
             }
         }
-        FactKind::Macro => {
-            let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
-            let (tokens, function_like) = macros.definition(cursor, &name).map_or_else(
-                || {
-                    (
-                        cursor_tokens(cursor)
-                            .into_iter()
-                            .map(|(_, token)| token)
-                            .skip(1)
-                            .collect(),
-                        unsafe { clang_Cursor_isMacroFunctionLike(cursor) } != 0,
-                    )
-                },
-                |(tokens, function_like)| (tokens.to_vec(), function_like),
-            );
-            FactData::Macro {
-                function_like,
-                tokens,
-            }
-        }
+        FactKind::Macro => materialize_macro(capture_macro(cursor, macros)),
         FactKind::EnumFlag => {
             let macro_name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
             let target = cursor_tokens(cursor).into_iter().find_map(|(kind, token)| {

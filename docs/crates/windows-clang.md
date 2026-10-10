@@ -97,13 +97,20 @@ let snapshot = windows_clang::extract_with_options(
 The worker count is bounded by the configured value and input count. Each worker owns its native
 index, translation unit, traversal, and source-bound SAL count probes. It returns owned per-input
 buffers and drops the native translation unit before accepting another input. Buffers merge in
-original input order; only private pending-fact indices are offset. Parse errors take priority over
+original input order; private captured-fact indices are offset. Parse errors take priority over
 traversal errors across all inputs, with input order preserved within each phase. Synthetic
 constant-probe translation units keep their existing bounded probe scheduling after this native map.
 
-Traversal captures deferred native record and macro data in private owned sidecars, without
-changing preliminary facts. It also retains final macro tokens and original diagnostics for
-constant probes. No original translation unit remains live during global annotation selection,
+Traversal captures deferred native record and macro data in private owned sidecars. Root and deferred
+macro captures share immutable token payloads with the final macro map only for the same exact native
+definition in that translation unit. Earlier physical redefinitions have separate payloads, including
+equal-token redefinitions. Completed worker results contain no native cursors or API handles.
+Root macros are materialized before global fact consumers; selected deferred macros are materialized
+at their existing selection stage. Public `FactData::Macro` vectors and all `Snapshot` fields remain
+unchanged. Materialization moves uniquely owned tokens and copies shared tokens when public vectors
+are required. This reduces duplicate intermediate payloads, not the total retained evidence bound.
+The extractor also retains original diagnostics for constant probes. No original translation unit
+remains live during global annotation selection,
 constant probing, or reachable-record finalization. Original native TU lifetimes are bounded by the
 worker count, while the owned buffers retain all inputs' evidence for global finalization.
 
