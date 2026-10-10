@@ -99,6 +99,12 @@ unit owns a separate libclang index until the translation unit is dropped. Resul
 collected in input order. Only original extraction translation units use this setting; synthetic
 constant-probe translation units keep their existing bounded probe scheduling.
 
+Traversal captures deferred native record and macro data in private owned sidecars, without
+changing preliminary facts. It also retains final macro tokens and original diagnostics for
+constant probes. Each processed translation unit is dropped before global annotation selection,
+constant probing, and reachable-record finalization. The parse phase still retains the unprocessed
+units; this does not bound the total number of parsed units by the worker count.
+
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
 Each original translation unit builds one native definition index using
@@ -128,6 +134,13 @@ Macro and recovered MIDL constants keep their existing fact-backed evidence. Thi
 does not participate in emission or change native value types and declaration annotations.
 Synthetic callback origins start after the original traversal's allocation domain, including
 native value declarations and cursors that do not produce facts.
+Generated callback names bind to the native owner's spelling and expansion locations, kind and
+name, plus the typed field route. Routes retain field indices and native names at every nested
+record level and distinguish pointer, reference and array traversal. Repeated observations of that
+source binding reuse the name without merging facts, origins, signatures or annotations. Distinct
+bindings receive collision names in physical-source order, independent of translation-unit order
+or repeated includes. Authored names remain reserved. Conflicting complete callback payloads remain
+separate native observations and fail normal emission rather than selecting a signature winner.
 `included_files` returns `IncludedFile` records for the physical files visited in each original
 translation unit, including the main input and headers that produced no fact or constant. The
 `input` field is the normalized `Input::name` used by `Origin::tu`; `path` is the slash-normalized

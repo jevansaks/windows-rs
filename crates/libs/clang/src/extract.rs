@@ -180,7 +180,7 @@ fn extract_impl(
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
-    for (input, parsed) in inputs.iter().zip(&translation_units) {
+    for (input, parsed) in inputs.iter().zip(translation_units) {
         let local_arguments = input_arguments.get(&input.name);
         let probe_arguments: Vec<_> = args
             .iter()
@@ -246,7 +246,7 @@ fn extract_impl(
     merge_redeclaration_annotations(&facts, &mut annotations)?;
     let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
-    decode_selected_macro_definitions(&mut facts, &extracted, &annotation_macros);
+    decode_selected_macro_definitions(&mut facts, &mut extracted, &annotation_macros);
     if timing {
         eprintln!(
             "windows-clang timing phase=extract-total target={} input_tus={} cursors={} facts={} constants={} elapsed_ms={:.3}",
@@ -262,7 +262,7 @@ fn extract_impl(
     let mut probe_candidates = 0;
     let mut synthetic_tus = 0;
     let mut retry_tus = 0;
-    for ((input, parsed), extracted) in inputs.iter().zip(&translation_units).zip(&extracted) {
+    for (input, extracted) in inputs.iter().zip(&extracted) {
         let local_arguments = input_arguments.get(&input.name);
         let probe_arguments: Vec<_> = args
             .iter()
@@ -276,7 +276,7 @@ fn extract_impl(
             &facts,
             &ConstantSources {
                 macros: &extracted.macros,
-                translation_unit: &parsed.translation_unit,
+                diagnostics: &extracted.diagnostics,
             },
             &associated_constants,
             timing,
@@ -328,7 +328,7 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
-    decode_reachable_structs(&mut facts, &constants, &extracted);
+    decode_reachable_structs(&mut facts, &constants, &mut extracted);
     if timing {
         eprintln!(
             "windows-clang timing phase=deferred-records target={} elapsed_ms={:.3}",
@@ -713,7 +713,7 @@ fn enum_override_value(value: &Value, repr: Scalar) -> Option<i64> {
 fn identify_declare_handles(
     inputs: &[Input],
     facts: &[Fact],
-    extracted: &[Extracted<'_>],
+    extracted: &[Extracted],
 ) -> Vec<DeclareHandle> {
     if extracted
         .iter()
@@ -1433,9 +1433,9 @@ struct ErrorDiagnostic {
     offset: u32,
 }
 
-struct ConstantSources<'a, 'tu> {
-    macros: &'a MacroDefinitions<'tu>,
-    translation_unit: &'a TranslationUnit,
+struct ConstantSources<'a> {
+    macros: &'a FinalMacros,
+    diagnostics: &'a [ErrorDiagnostic],
 }
 
 impl TranslationUnit {
@@ -1648,7 +1648,7 @@ impl TranslationUnit {
         output: &mut ExtractionState<'_>,
         timing: bool,
         validate_annotations: bool,
-    ) -> Result<(Extracted<'tu>, Option<ExtractionMetrics>), Error> {
+    ) -> Result<(Extracted, Option<ExtractionMetrics>), Error> {
         let total_time = timing.then(std::time::Instant::now);
         let phase_time = timing.then(std::time::Instant::now);
         let mut definitions = Definitions::new(self.0, index)
@@ -1726,9 +1726,31 @@ impl TranslationUnit {
         for (index, cursor) in pending_callables {
             macros.collect_constant_sizes(&output.facts[index], cursor, output.sal_constant_sizes);
         }
+        let pending_structs = pending_structs
+            .into_iter()
+            .map(|(index, cursor)| (index, fact_data(cursor, FactKind::Struct, &macros, false)))
+            .collect();
+        let pending_macros = pending_macros
+            .into_iter()
+            .map(|(index, cursor)| (index, fact_data(cursor, FactKind::Macro, &macros, false)))
+            .collect();
+        let final_macros = FinalMacros(
+            macros
+                .definitions
+                .keys()
+                .filter_map(|name| {
+                    macros
+                        .final_definition(name)
+                        .map(|(tokens, function_like)| {
+                            (name.clone(), (tokens.to_vec(), function_like))
+                        })
+                })
+                .collect(),
+        );
         Ok((
             Extracted {
-                macros,
+                macros: final_macros,
+                diagnostics: self.error_diagnostics(),
                 pending_structs,
                 pending_macros,
                 declare_handle_expansions,
@@ -1782,12 +1804,249 @@ struct ExtractionState<'a> {
     clang_flag_enums: &'a mut BTreeSet<Origin>,
 }
 
-struct Extracted<'tu> {
-    macros: MacroDefinitions<'tu>,
-    pending_structs: Vec<(usize, CXCursor)>,
-    pending_macros: Vec<(usize, CXCursor)>,
+struct Extracted {
+    macros: FinalMacros,
+    diagnostics: Vec<ErrorDiagnostic>,
+    pending_structs: Vec<(usize, FactData)>,
+    pending_macros: Vec<(usize, FactData)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
     next_local: u32,
+}
+
+struct FinalMacros(HashMap<String, (Vec<String>, bool)>);
+
+impl FinalMacros {
+    fn contains_key(&self, name: &str) -> bool {
+        self.0.contains_key(name)
+    }
+
+    fn final_definition(&self, name: &str) -> Option<(&[String], bool)> {
+        self.0
+            .get(name)
+            .map(|(tokens, function_like)| (tokens.as_slice(), *function_like))
+    }
+}
+
+#[cfg(test)]
+mod owned_tests {
+    use super::*;
+
+    #[test]
+    fn owned_evidence_survives_native_context_disposal_and_thread_transfer() {
+        helpers::ensure_libclang();
+        let mut facts = vec![];
+        let mut constants = vec![];
+        let mut values = vec![];
+        let mut annotations = BTreeMap::new();
+        let mut sizes = BTreeMap::new();
+        let mut guids = BTreeMap::new();
+        let mut aliases = BTreeSet::new();
+        let mut layouts = BTreeMap::new();
+        let mut embeddable = BTreeSet::new();
+        let mut flags = BTreeSet::new();
+        let mut input = Input::new(
+            "disposed.hpp",
+            "#define TEXT \"payload\"\n#define ALIAS TEXT\nstruct Deferred { int (*call)(int); };\n",
+        );
+        input.roots.clear();
+        let extracted = {
+            let _library = Library::new().unwrap();
+            let index = Index::new().unwrap();
+            let tu = TranslationUnit::parse(
+                &index,
+                &input,
+                &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+            )
+            .unwrap();
+            let mut output = ExtractionState {
+                facts: &mut facts,
+                constants: &mut constants,
+                value_declarations: &mut values,
+                annotations: &mut annotations,
+                sal_constant_sizes: &mut sizes,
+                declaration_guids: &mut guids,
+                pointer_callback_aliases: &mut aliases,
+                pointer_only_class_layouts: &mut layouts,
+                embeddable_class_layouts: &mut embeddable,
+                clang_flag_enums: &mut flags,
+            };
+            tu.extract(&index, &input, &[], &mut output, false, false)
+                .unwrap()
+                .0
+        };
+        let deferred = facts
+            .iter()
+            .position(|fact| fact.name == "Deferred")
+            .unwrap();
+        assert_eq!(facts[deferred].data, FactData::None);
+        std::thread::spawn(move || {
+            assert_eq!(
+                string_macro_value("ALIAS", &extracted.macros, &mut HashSet::new()),
+                Some(Value::Utf8("payload".to_string()))
+            );
+            assert!(extracted.pending_structs.iter().any(|(index, data)| {
+                *index == deferred
+                    && matches!(data, FactData::Record { fields, .. } if fields.len() == 1)
+            }));
+            assert!(extracted.pending_macros.iter().any(|(index, data)| {
+                facts[*index].name == "ALIAS" && matches!(data, FactData::Macro { .. })
+            }));
+        })
+        .join()
+        .unwrap();
+    }
+
+    fn assert_complete_eq(left: &Snapshot, right: &Snapshot) {
+        assert_eq!(left, right);
+        assert_eq!(left.included_files, right.included_files);
+        assert_eq!(left.input_order, right.input_order);
+    }
+
+    #[test]
+    fn owned_global_evidence_preserves_cross_input_finalization() {
+        helpers::ensure_libclang();
+        fn assert_send<T: Send>() {}
+        assert_send::<Extracted>();
+        let group = Input::new(
+            "group.hpp",
+            r#"
+                    struct Shared;
+                    typedef Shared SharedAlias;
+                    struct Root { SharedAlias *shared; };
+                    struct __attribute__((annotate("win32metadata:supported_os=Windows10")))
+                        Annotated { int value; };
+                    enum __attribute__((annotate("win32metadata:associated_constant=EXTRA")))
+                        Flags : unsigned long { Local = 1 };
+                    struct CallbackOwner { int (*invoke)(int); };
+                    constexpr int NativeValue = 13;
+                "#,
+        );
+        let mut provider = Input::new(
+            "provider.hpp",
+            r#"
+                    #define TARGET 42UL
+                    #define EXTRA TARGET
+                    #define NOISE 99
+                    struct Leaf { unsigned value; };
+                    struct Shared { Leaf leaf; };
+                    struct Annotated { int value; };
+                    struct Unreachable { double value; };
+                "#,
+        );
+        provider.roots.clear();
+        let collision = Input::new("collision.hpp", "typedef int CallbackOwner_invoke;");
+        let inputs = vec![group, provider, collision];
+        let args = ["-x", "c++", "-std=c++20", "--target=x86_64-pc-windows-msvc"];
+        let serial = extract(inputs.clone(), &args).unwrap();
+        for workers in [1, 2, 4] {
+            let parallel = extract_with_options(
+                inputs.clone(),
+                &args,
+                &ExtractionOptions::new().with_parallelism(workers),
+            )
+            .unwrap();
+            assert_complete_eq(&serial, &parallel);
+        }
+        for name in ["Shared", "Leaf"] {
+            let fact = serial
+                .facts
+                .iter()
+                .find(|fact| fact.origin.tu == "provider.hpp" && fact.name == name)
+                .unwrap();
+            assert!(matches!(fact.data, FactData::Record { .. }), "{fact:?}");
+        }
+        let unreachable = serial
+            .facts
+            .iter()
+            .find(|fact| fact.name == "Unreachable")
+            .unwrap();
+        assert_eq!(unreachable.data, FactData::None);
+        let extra = serial
+            .constants
+            .iter()
+            .find(|constant| constant.name == "EXTRA")
+            .unwrap();
+        assert_eq!(extra.value, Value::Unsigned(42));
+        assert!(
+            serial
+                .constants
+                .iter()
+                .all(|constant| constant.name != "NOISE")
+        );
+        assert!(
+            serial
+                .facts
+                .iter()
+                .any(|fact| fact.name == "CallbackOwner_invoke_2")
+        );
+        for fact in serial.facts.iter().filter(|fact| fact.name == "Annotated") {
+            assert!(
+                serial.annotations[&AnnotationTarget::Declaration(fact.origin.clone())]
+                    .contains(&Annotation::SupportedOs("Windows10".to_string()))
+            );
+        }
+    }
+
+    #[test]
+    fn owned_partition_arguments_and_errors_preserve_original_context() {
+        helpers::ensure_libclang();
+        let mut first = Input::new("first.hpp", "#define RESULT LOCAL_VALUE\n")
+            .partitioned("first")
+            .with_root("first.hpp", "first", "Test.First");
+        first.arguments.push("-DLOCAL_VALUE=11".to_string());
+        let mut second = Input::new("second.hpp", "#define RESULT LOCAL_VALUE\n")
+            .partitioned("second")
+            .with_root("second.hpp", "second", "Test.Second");
+        second.arguments.push("-DLOCAL_VALUE=22".to_string());
+        let inputs = vec![first, second];
+        let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+        let serial = extract_partitioned(inputs.clone(), &args).unwrap();
+        for workers in [1, 2, 4] {
+            let parallel = extract_partitioned_with_options(
+                inputs.clone(),
+                &args,
+                &ExtractionOptions::new().with_parallelism(workers),
+            )
+            .unwrap();
+            assert_complete_eq(&serial, &parallel);
+        }
+        let values: Vec<_> = serial
+            .constants
+            .iter()
+            .filter(|constant| constant.name == "RESULT")
+            .map(|constant| (&constant.root.tu, &constant.value))
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                (&"first.hpp".to_string(), &Value::Signed(11)),
+                (&"second.hpp".to_string(), &Value::Signed(22))
+            ]
+        );
+        for workers in [1, 2, 4] {
+            let options = ExtractionOptions::new().with_parallelism(workers);
+            let error = extract_with_options(
+                [
+                    Input::new(
+                        "annotation.hpp",
+                        "struct __attribute__((annotate(\"win32metadata:unknown\"))) A {};",
+                    ),
+                    Input::new("parse.hpp", "#error PARSE_BEFORE_TRAVERSAL\n"),
+                ],
+                &["-x", "c++", "-DWIN32METADATA=1"],
+                &options,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("PARSE_BEFORE_TRAVERSAL"), "{error}");
+            for input in [
+                Input::new("source.hpp", "int value;\0"),
+                Input::new("name\0.hpp", "int value;"),
+            ] {
+                assert!(extract_with_options([input], &args, &options).is_err());
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -2373,31 +2632,114 @@ fn materialize_anonymous_callbacks(facts: &mut Vec<Fact>, mut next_local: HashMa
             .or_insert(fact.origin.local + 1);
     }
 
+    let mut names = BTreeMap::new();
+    for fact in facts.iter_mut() {
+        if !matches!(
+            fact.data,
+            FactData::Record { .. }
+                | FactData::Typedef {
+                    target: TypeRef::InlineRecord(_)
+                }
+        ) {
+            continue;
+        }
+        let owner = SyntheticOwner::new(fact);
+        if let Some(fields) = callback_fields(&mut fact.data) {
+            visit_field_callbacks(fields, &owner.name, &mut vec![], &mut |_, stem, route| {
+                names
+                    .entry(owner.source(route))
+                    .or_insert_with(|| stem.to_string());
+            });
+        }
+    }
+    for name in names.values_mut() {
+        *name = unique_synthetic_name(name, &mut used);
+    }
+
     let mut callbacks = vec![];
     for fact in facts.iter_mut() {
-        let owner = SyntheticOwner {
-            origin: fact.origin.clone(),
-            name: fact.name.clone(),
-            spelling: fact.spelling.clone(),
-            expansion: fact.expansion.clone(),
-            main_file: fact.main_file,
-            root: fact.root,
-            system: fact.system,
-        };
-        let fields = match &mut fact.data {
-            FactData::Record { fields, .. } => fields,
-            FactData::Typedef {
-                target: TypeRef::InlineRecord(record),
-            } => &mut record.fields,
-            _ => continue,
-        };
-        materialize_field_callbacks(fields, &owner, &mut used, &mut next_local, &mut callbacks);
+        if !matches!(
+            fact.data,
+            FactData::Record { .. }
+                | FactData::Typedef {
+                    target: TypeRef::InlineRecord(_)
+                }
+        ) {
+            continue;
+        }
+        let owner = SyntheticOwner::new(fact);
+        if let Some(fields) = callback_fields(&mut fact.data) {
+            visit_field_callbacks(fields, &owner.name, &mut vec![], &mut |ty, _, route| {
+                let TypeRef::FunctionPointer {
+                    convention,
+                    params,
+                    result,
+                } = ty
+                else {
+                    unreachable!();
+                };
+                let name = names[&owner.source(route)].clone();
+                let local = next_local.entry(owner.origin.tu.clone()).or_default();
+                let origin = Origin {
+                    tu: owner.origin.tu.clone(),
+                    local: *local,
+                };
+                *local += 1;
+                callbacks.push(Fact {
+                    origin,
+                    parent: None,
+                    kind: FactKind::Typedef,
+                    name: name.clone(),
+                    spelling: owner.spelling.clone(),
+                    expansion: owner.expansion.clone(),
+                    definition: true,
+                    main_file: owner.main_file,
+                    root: owner.root,
+                    system: owner.system,
+                    data: FactData::Callback {
+                        convention: *convention,
+                        params: params
+                            .iter()
+                            .enumerate()
+                            .map(|(index, ty)| Parameter {
+                                name: format!("arg{index}"),
+                                ty: ty.clone(),
+                                annotation: ParamAnnotation::default(),
+                            })
+                            .collect(),
+                        result: result.as_ref().clone(),
+                    },
+                });
+                *ty = TypeRef::Named {
+                    name,
+                    declaration: owner.spelling.clone(),
+                };
+            });
+        }
     }
     facts.extend(callbacks);
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum CallbackRoute {
+    Field { index: usize, name: String },
+    Pointer,
+    Reference,
+    Array,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct CallbackSource {
+    spelling: Location,
+    expansion: Location,
+    kind: FactKind,
+    name: String,
+    route: Vec<CallbackRoute>,
+}
+
 struct SyntheticOwner {
     origin: Origin,
+    kind: FactKind,
     name: String,
     spelling: Location,
     expansion: Location,
@@ -2406,92 +2748,87 @@ struct SyntheticOwner {
     system: bool,
 }
 
-fn materialize_field_callbacks(
-    fields: &mut [Field],
-    owner: &SyntheticOwner,
-    used: &mut BTreeSet<String>,
-    next_local: &mut HashMap<String, u32>,
-    callbacks: &mut Vec<Fact>,
-) {
-    for field in fields {
-        let stem = format!(
-            "{}_{}",
-            owner.name.trim_start_matches('_'),
-            field.name.trim_start_matches('_')
-        );
-        materialize_type_callbacks(&mut field.ty, &stem, owner, used, next_local, callbacks);
+impl SyntheticOwner {
+    fn new(fact: &Fact) -> Self {
+        Self {
+            origin: fact.origin.clone(),
+            kind: fact.kind,
+            name: fact.name.clone(),
+            spelling: fact.spelling.clone(),
+            expansion: fact.expansion.clone(),
+            main_file: fact.main_file,
+            root: fact.root,
+            system: fact.system,
+        }
+    }
+
+    fn source(&self, route: &[CallbackRoute]) -> CallbackSource {
+        CallbackSource {
+            spelling: self.spelling.clone(),
+            expansion: self.expansion.clone(),
+            kind: self.kind,
+            name: self.name.clone(),
+            route: route.to_vec(),
+        }
     }
 }
 
-fn materialize_type_callbacks(
+fn callback_fields(data: &mut FactData) -> Option<&mut [Field]> {
+    match data {
+        FactData::Record { fields, .. } => Some(fields),
+        FactData::Typedef {
+            target: TypeRef::InlineRecord(record),
+        } => Some(&mut record.fields),
+        _ => None,
+    }
+}
+
+fn visit_field_callbacks(
+    fields: &mut [Field],
+    stem: &str,
+    route: &mut Vec<CallbackRoute>,
+    visit: &mut impl FnMut(&mut TypeRef, &str, &[CallbackRoute]),
+) {
+    for (index, field) in fields.iter_mut().enumerate() {
+        route.push(CallbackRoute::Field {
+            index,
+            name: field.name.clone(),
+        });
+        let stem = format!(
+            "{}_{}",
+            stem.trim_start_matches('_'),
+            field.name.trim_start_matches('_')
+        );
+        visit_type_callbacks(&mut field.ty, &stem, route, visit);
+        route.pop();
+    }
+}
+
+fn visit_type_callbacks(
     ty: &mut TypeRef,
     stem: &str,
-    owner: &SyntheticOwner,
-    used: &mut BTreeSet<String>,
-    next_local: &mut HashMap<String, u32>,
-    callbacks: &mut Vec<Fact>,
+    route: &mut Vec<CallbackRoute>,
+    visit: &mut impl FnMut(&mut TypeRef, &str, &[CallbackRoute]),
 ) {
     match ty {
-        TypeRef::FunctionPointer {
-            convention,
-            params,
-            result,
-        } => {
-            let name = unique_synthetic_name(stem, used);
-            let local = next_local.entry(owner.origin.tu.clone()).or_default();
-            let origin = Origin {
-                tu: owner.origin.tu.clone(),
-                local: *local,
-            };
-            *local += 1;
-            let callback = Fact {
-                origin,
-                parent: None,
-                kind: FactKind::Typedef,
-                name: name.clone(),
-                spelling: owner.spelling.clone(),
-                expansion: owner.expansion.clone(),
-                definition: true,
-                main_file: owner.main_file,
-                root: owner.root,
-                system: owner.system,
-                data: FactData::Callback {
-                    convention: *convention,
-                    params: params
-                        .iter()
-                        .enumerate()
-                        .map(|(index, ty)| Parameter {
-                            name: format!("arg{index}"),
-                            ty: ty.clone(),
-                            annotation: ParamAnnotation::default(),
-                        })
-                        .collect(),
-                    result: result.as_ref().clone(),
-                },
-            };
-            callbacks.push(callback);
-            *ty = TypeRef::Named {
-                name,
-                declaration: owner.spelling.clone(),
-            };
+        TypeRef::FunctionPointer { .. } => visit(ty, stem, route),
+        TypeRef::Pointer { target, .. } => {
+            route.push(CallbackRoute::Pointer);
+            visit_type_callbacks(target, stem, route, visit);
+            route.pop();
         }
-        TypeRef::Pointer { target, .. }
-        | TypeRef::Reference { target, .. }
-        | TypeRef::Array { target, .. } => {
-            materialize_type_callbacks(target, stem, owner, used, next_local, callbacks);
+        TypeRef::Reference { target, .. } => {
+            route.push(CallbackRoute::Reference);
+            visit_type_callbacks(target, stem, route, visit);
+            route.pop();
+        }
+        TypeRef::Array { target, .. } => {
+            route.push(CallbackRoute::Array);
+            visit_type_callbacks(target, stem, route, visit);
+            route.pop();
         }
         TypeRef::InlineRecord(record) => {
-            for field in &mut record.fields {
-                let nested = format!("{stem}_{}", field.name.trim_start_matches('_'));
-                materialize_type_callbacks(
-                    &mut field.ty,
-                    &nested,
-                    owner,
-                    used,
-                    next_local,
-                    callbacks,
-                );
-            }
+            visit_field_callbacks(&mut record.fields, stem, route, visit);
         }
         _ => {}
     }
@@ -2510,7 +2847,7 @@ fn unique_synthetic_name(stem: &str, used: &mut BTreeSet<String>) -> String {
 fn decode_reachable_structs(
     facts: &mut [Fact],
     constants: &[Constant],
-    extracted: &[Extracted<'_>],
+    extracted: &mut [Extracted],
 ) {
     let mut reachable: HashSet<String> = facts
         .iter()
@@ -2523,13 +2860,13 @@ fn decode_reachable_structs(
     for constant in constants {
         type_names(&constant.ty, &mut reachable);
     }
-    let mut pending: HashMap<String, Vec<(usize, usize, CXCursor)>> = HashMap::new();
-    for (extraction_index, extraction) in extracted.iter().enumerate() {
-        for &(fact_index, cursor) in &extraction.pending_structs {
+    let mut pending: HashMap<String, Vec<(usize, FactData)>> = HashMap::new();
+    for extraction in extracted {
+        for (fact_index, data) in std::mem::take(&mut extraction.pending_structs) {
             pending
                 .entry(facts[fact_index].name.clone())
                 .or_default()
-                .push((extraction_index, fact_index, cursor));
+                .push((fact_index, data));
         }
     }
     let mut queue: Vec<_> = reachable.iter().cloned().collect();
@@ -2537,13 +2874,7 @@ fn decode_reachable_structs(
         let Some(candidates) = pending.remove(&name) else {
             continue;
         };
-        for (extraction_index, fact_index, cursor) in candidates {
-            let data = fact_data(
-                cursor,
-                FactKind::Struct,
-                &extracted[extraction_index].macros,
-                false,
-            );
+        for (fact_index, data) in candidates {
             let mut dependencies = HashSet::new();
             fact_type_names(&data, &mut dependencies);
             for dependency in dependencies {
@@ -2558,7 +2889,7 @@ fn decode_reachable_structs(
 
 fn decode_selected_macro_definitions(
     facts: &mut [Fact],
-    extracted: &[Extracted<'_>],
+    extracted: &mut [Extracted],
     selected: &BTreeSet<String>,
 ) {
     let mut roots: HashSet<_> = facts
@@ -2568,9 +2899,9 @@ fn decode_selected_macro_definitions(
         .collect();
     roots.extend(selected.iter().cloned());
     for extraction in extracted {
-        for &(index, cursor) in &extraction.pending_macros {
+        for (index, data) in std::mem::take(&mut extraction.pending_macros) {
             if roots.contains(facts[index].name.as_str()) {
-                facts[index].data = fact_data(cursor, FactKind::Macro, &extraction.macros, false);
+                facts[index].data = data;
             }
         }
     }
@@ -3266,7 +3597,7 @@ fn evaluate_constants(
     input: &Input,
     args: &[&str],
     facts: &[Fact],
-    sources: &ConstantSources<'_, '_>,
+    sources: &ConstantSources<'_>,
     selected: &BTreeSet<String>,
     timing: bool,
 ) -> Result<(Vec<Constant>, Option<ProbeMetrics>), Error> {
@@ -3340,7 +3671,7 @@ fn evaluate_constants(
             .is_some_and(|(_, function_like)| !function_like)
     });
     let names: Vec<_> = candidates.keys().cloned().collect();
-    let source_diagnostics = sources.translation_unit.error_diagnostics();
+    let source_diagnostics = sources.diagnostics;
     let available_parallelism = std::thread::available_parallelism().map_or(1, usize::from);
     let workers = available_parallelism.min(4);
     if names.is_empty() {
@@ -3379,7 +3710,7 @@ fn evaluate_constants(
             let mut reached = HashSet::new();
             for batch in batches.iter().skip(worker).step_by(worker_count) {
                 let (batch_evaluated, batch_reached) =
-                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
+                    evaluate_probe(index, input, args, batch, source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -3405,7 +3736,7 @@ fn evaluate_constants(
             let mut reached = HashSet::new();
             for batch in recovery_batches.iter().skip(worker).step_by(worker_count) {
                 let (batch_evaluated, batch_reached) =
-                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
+                    evaluate_probe(index, input, args, batch, source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -3431,7 +3762,7 @@ fn evaluate_constants(
             let mut reached = HashSet::new();
             for batch in isolation_batches.iter().skip(worker).step_by(worker_count) {
                 let (batch_evaluated, batch_reached) =
-                    evaluate_probe(index, input, args, batch, &source_diagnostics)?;
+                    evaluate_probe(index, input, args, batch, source_diagnostics)?;
                 evaluated.extend(batch_evaluated);
                 reached.extend(batch_reached);
             }
@@ -3461,7 +3792,7 @@ fn evaluate_constants(
                 args,
                 fallback_batches[worker],
                 &reached,
-                &source_diagnostics,
+                source_diagnostics,
             )
         })?;
     for fallback in fallback_results {
@@ -3553,7 +3884,7 @@ fn macro_may_be_integer(tokens: &[String]) -> bool {
 
 fn string_macro_value(
     name: &str,
-    macros: &MacroDefinitions,
+    macros: &FinalMacros,
     visited: &mut HashSet<String>,
 ) -> Option<Value> {
     if !visited.insert(name.to_string()) {

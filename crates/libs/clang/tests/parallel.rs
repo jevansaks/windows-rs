@@ -41,6 +41,8 @@ fn parallel_extraction_preserves_input_order_and_output() {
     let parallel =
         extract_with_options(inputs, &args, &ExtractionOptions::new().with_parallelism(4)).unwrap();
 
+    assert_eq!(serial, parallel);
+    assert_eq!(serial.included_files(), parallel.included_files());
     assert_eq!(
         serial.emit("Parallel").unwrap(),
         parallel.emit("Parallel").unwrap()
