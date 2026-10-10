@@ -103,15 +103,16 @@ The resulting `Snapshot` owns translation-unit-local facts and constants. `facts
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
 Each original translation unit builds one native definition index using
 `clang_indexTranslationUnit` on that same parsed unit. Function cursors join by native hash and
-cursor equality; missing or conflicting evidence is an extraction error. Synthetic constant probes
-do not build this index. Parsing still skips function bodies, so native body semantics are not
-validated. Traversal also skips body subtrees that Clang retains for constexpr evaluation, excluding
-their declarations from both metadata facts and native value-source evidence. Global constants can
-still use constexpr helpers in their initializers.
+cursor equality; missing or conflicting evidence is an extraction error. Synthetic constant and
+SAL-count probes do not build this index. Parsing still skips function bodies, so native body
+semantics are not validated. Traversal also skips body subtrees that Clang retains for constexpr
+evaluation, excluding their declarations from both metadata facts and native value-source evidence.
+Global constants can still use constexpr helpers in their initializers.
 
 Supported function definitions and non-external declarations retain
 `FactData::NonEmittableFunction`, with a typed `FunctionExclusion` and native `FunctionSignature`.
-Signatures and annotations use the same compiler extraction as ordinary external declarations.
+Signatures, annotations, and source-bound SAL counts use the same compiler extraction as ordinary
+external declarations.
 These facts never become RDL functions, imports, or dependency roots, including under explicit
 selection. A forward declaration remains independent from a later definition. Unsupported required
 signature data remains `FactData::Unsupported`.
@@ -365,8 +366,9 @@ owner-exclusion diagnostic remains.
 
 Dependency planning records a `TypeChoice` for each `(input, TypeEdge)`. Type edges distinguish a
 declared type, a pointee and its outer constness, a parameter and its annotations, and a projected
-canonical dependency. Emission uses the same choice for the type name and pointer mutability used
-to encode parameter flags. A retained alias declaration does not make every use nominal: a
+canonical dependency. Annotated field and return uses have their own edges. Emission uses the same
+choice for the type name, use attributes, and pointer mutability used to encode parameter flags.
+A retained alias declaration does not make every use nominal: a
 `PVOID const *` parameter can retain `PVOID` while a return value or ordinary parameter using that
 same declaration becomes `*mut void`.
 
@@ -456,6 +458,7 @@ map of defining-header names to RDL partitions.
 | `excluded_functions` | Functions omitted from the local output. |
 | `excluded_constants` | Constants omitted from the local output. |
 | `functions` | Optional free-function allowlist. |
+| `mutable_string_aliases` | Opt-in SDK `PSTR`/`PWSTR` uses with const and termination attributes. |
 
 `NativeImports` rejects two different contracts for one linker symbol. A contract may name an
 export or use `NativeImport::ordinal` to emit an ordinal entry point such as `#660`. If the same
@@ -577,6 +580,66 @@ arbitrary byte values as Rust booleans.
 Explicit null-terminated SAL on a direct character pointer selects the same string vocabulary after
 applying the existing scalar canonicalization to its pointee. For example, `_In_z_ const WCHAR *`
 becomes `PCWSTR`. Without the null-terminated fact, `WCHAR *` keeps its raw pointer shape.
+
+Set `EmitOptions::mutable_string_aliases = true` to select the Win32 string representation. The
+default remains the canonical `PCSTR`/`PSTR` and `PCWSTR`/`PWSTR` vocabulary. The option applies to
+parameters, callback and interface signatures, record fields, and returns, in both ordinary and
+header-partition emission.
+
+Planning follows exact native typedef declarations in the use's translation unit to obtain the
+character width and pointed-to constness. It requires an available SDK `PSTR` or `PWSTR` definition
+or an explicit metadata reference; it does not create a native typedef. Local definitions must be
+mutable single-character pointers. The emitted alias keeps its selected namespace and owner.
+Declared `TypeRef` values and source locations remain unchanged.
+
+Only the declared SDK string vocabulary selects a named string use. An unlisted alias such as
+`typedef PCSTR TEXT_HANDLE` keeps its own identity, including when annotated with `_In_` or `_In_z_`.
+Following the alias chain supplies character width and native constness, not permission to rename
+the declaration. Positive termination can select a string representation for a direct raw pointer,
+but SAL does not override a named alias's identity.
+
+| Native or SAL contract | Compatible use |
+| --- | --- |
+| ANSI string | `PSTR`, with `native_const` for const characters. |
+| UTF16 string | `PWSTR`, with `native_const` for const characters. |
+| `PCH`/`PCCH`/`PWCH`/`PCWCH` and their `LP` aliases | Character alias with `not_null_terminated`. |
+| `PZZSTR`/`PCZZSTR`/`PZZWSTR`/`PCZZWSTR` | Character alias with `null_null_terminated`. |
+| Named character buffer with a count but no positive termination | Alias with `not_null_terminated`. |
+| Direct character pointer with positive NUL or double-NUL evidence | Corresponding character alias. |
+| Direct pointer without positive termination | Raw pointer, including binary buffers. |
+| Nested pointers and arrays of string pointers | Native aliases preserving the inner qualifier. |
+
+`native_const` comes from the native character pointer, not from an input direction or a `PC` name.
+An input `LPSTR` therefore stays mutable. Element counts, byte sizes, explicit input/output flags,
+optionality, negative termination, and double termination remain separate use attributes. An
+explicit negative termination attribute is not removed by positive SAL. A counted-or-NUL SAL
+contract keeps its count without gaining a negative termination attribute.
+
+Field attributes are attached to their field, including members of anonymous record types with a
+named containing field. Return attributes are attached to the physical `Param.Sequence == 0` row,
+not the function, callback, or interface declaration. Existing matching attributes are emitted once.
+
+Compiler constant SAL counts are evaluated at each parameter annotation's native expansion location
+with the same translation unit and compiler arguments. Macro redefinitions keep their value at each
+use. Native probes do not rewrite the annotation text or the declared type. Constant byte sizes use
+the native pointee size to produce an exact element count; parameter byte sizes remain byte sizes.
+One added native parse batches all requested expressions in a translation unit; inputs without
+requests add none. Resolved counts are separate from raw annotations and are consumed only for an
+eligible selected string use. Equivalent observations of that same physical declaration, native
+parent path, parameter slot, and complete partition policy must agree. Conflicts identify the
+selected target, source, translation units, policies, and values. Independent declarations and
+namespace or policy variants keep the existing selection and ownership rules.
+Compatibility planning indexes observations once by physical declaration and parameter slot, so
+each selected use compares only its source bucket. Unsaved native annotation probes add no newlines;
+direct or macro-expanded `__LINE__` keeps each annotation's original line, including multiline
+parameters, trailing annotations, and native `#line` directives.
+
+The mode rejects a nonconstant string count expression such as `count + 1`: current count attributes
+accept a constant or a parameter index, not dynamic arithmetic. Unknown or unrepresentable counts
+report the source declaration and parameter. It also rejects a mixed raw pointer chain
+without a native typedef boundary instead of flattening its qualifiers. Supporting that raw form
+requires per-pointer-rank const qualifiers in the RDL/WinMD signature model. Named boundaries such
+as `PCWSTR *` and `PWSTR const *` remain representable.
 
 For example, the headers declare `PBYTE`, `PDWORD`, and `PORHKEY` in API signatures. RDL retains
 those names and separately records their representations:

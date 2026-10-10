@@ -10,6 +10,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         annotations: BTreeMap::new(),
         source_annotations: BTreeMap::new(),
         function_annotations: BTreeMap::new(),
+        sal_constant_sizes: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
         pointer_callback_aliases: BTreeSet::new(),
         pointer_only_class_layouts: BTreeMap::new(),
@@ -95,6 +96,71 @@ fn suppressed(snapshot: &Snapshot, fact: &Fact) -> bool {
         &DeclarationIndex::new(&snapshot.facts),
         &mut BTreeSet::new(),
     )
+}
+
+#[test]
+fn sal_count_observations_inspect_only_the_selected_source_bucket() {
+    const LOOKUPS: usize = 256;
+    for unrelated in [0, 1_000, 20_000] {
+        let first = function("first", 1, "Selected", "common.h", "value", true);
+        let mut second = first.clone();
+        second.origin.tu = "second".to_string();
+        let target = AnnotationTarget::Parameter {
+            declaration: first.origin.clone(),
+            index: 0,
+        };
+        let mut facts = vec![first, second];
+        facts.extend((0..unrelated).map(|index| {
+            function(
+                "first",
+                index + 10,
+                "Unrelated",
+                "unrelated.h",
+                "value",
+                true,
+            )
+        }));
+        let mut snapshot = snapshot(facts);
+        for fact in &snapshot.facts {
+            snapshot.sal_constant_sizes.insert(
+                AnnotationTarget::Parameter {
+                    declaration: fact.origin.clone(),
+                    index: 0,
+                },
+                Ok(SalSize {
+                    bytes: false,
+                    value: SalSizeValue::Constant(8),
+                }),
+            );
+        }
+        let facts = snapshot
+            .facts
+            .iter()
+            .map(|fact| (&fact.origin, fact))
+            .collect();
+        let start = std::time::Instant::now();
+        let observations = SalConstantObservations::new(&snapshot.sal_constant_sizes, &facts);
+        let build_ms = start.elapsed().as_secs_f64() * 1000.0;
+        assert_eq!(observations.by_use.len(), unrelated as usize + 1);
+        let size = snapshot.sal_constant_sizes.get(&target).unwrap();
+        let start = std::time::Instant::now();
+        for _ in 0..LOOKUPS {
+            assert_eq!(
+                snapshot
+                    .selected_sal_constant_size(&target, size, &facts, &observations)
+                    .unwrap(),
+                size.as_ref().unwrap(),
+            );
+        }
+        assert_eq!(observations.inspected.get(), 2 * LOOKUPS);
+        eprintln!(
+            "sal-count-lookup observations={} bucket=2 lookups={LOOKUPS} inspected={} \
+             build_ms={build_ms:.3} lookup_ms={:.3}",
+            snapshot.sal_constant_sizes.len(),
+            observations.inspected.get(),
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
+    }
 }
 
 #[test]
@@ -418,6 +484,7 @@ fn function_ambiguity_inventory_is_complete_and_stable() {
             selected_functions: None,
             display_names: None,
             source_names: None,
+            mutable_string_aliases: false,
         })
         .unwrap();
     let ambiguities = plan.function_ambiguities().collect::<Vec<_>>();

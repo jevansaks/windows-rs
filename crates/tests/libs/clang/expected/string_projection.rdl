@@ -1,0 +1,68 @@
+#[win32]
+mod Test {
+    #[library("test.dll")]
+    extern "C" fn AlteredConstantCounts(elements: Windows::Win32::PCWSTR, bytes: Windows::Win32::PCWSTR);
+    #[library("test.dll")]
+    extern "C" fn ConstantCounts(elements: Windows::Win32::PCWSTR, bytes: Windows::Win32::PCWSTR, expression: Windows::Win32::PCSTR);
+    struct CountedFields {
+        length: u32,
+        #[len_field("length")] text: Windows::Win32::PCSTR,
+        #[not_null_terminated] wide: Windows::Win32::PWSTR,
+        #[native_const] already_const: Windows::Win32::PCSTR,
+        inner: struct {
+            text: Windows::Win32::PCSTR,
+            #[not_null_terminated] buffer: Windows::Win32::PWSTR,
+        },
+        array: [Windows::Win32::PCSTR; 2],
+    }
+    #[library("test.dll")]
+    extern "C" fn GetMulti() -> #[null_null_terminated] Windows::Win32::PCWSTR;
+    #[library("test.dll")]
+    extern "C" fn GetMutable() -> Windows::Win32::PSTR;
+    #[library("test.dll")]
+    extern "C" fn GetNested() -> *const Windows::Win32::PCSTR;
+    #[library("test.dll")]
+    extern "C" fn GetNominalString() -> TEXT_HANDLE_ANSI;
+    #[library("test.dll")]
+    extern "C" fn GetNominalWideString() -> TEXT_HANDLE_W;
+    #[library("test.dll")]
+    extern "C" fn GetRawMulti() -> #[null_null_terminated] *const u16;
+    #[library("test.dll")]
+    extern "C" fn GetString() -> Windows::Win32::PCSTR;
+    #[guid(0x12345678_1234_1234_1234_123456789abc)]
+    interface IStrings {
+        fn Read(&self, value: Windows::Win32::PCSTR) -> Windows::Win32::PCWSTR;
+        fn Write(&self, #[out] value: Windows::Win32::PSTR) -> Windows::Win32::PSTR;
+    }
+    type LPVOID = *mut void;
+    #[library("test.dll")]
+    extern "C" fn MoreStrings(mutable_input: Windows::Win32::PSTR, #[out] mutable_output: Windows::Win32::PSTR, #[out] #[opt] optional_output: Windows::Win32::PSTR, declared_mutable: Windows::Win32::PCSTR, legacy_const: Windows::Win32::PCSTR, legacy_wide: Windows::Win32::PWSTR, legacy_wide_const: Windows::Win32::PCWSTR, count: u32, #[len_param(7)] #[in] #[out] counted_inout: Windows::Win32::PWSTR, #[size_param(7)] binary: *const u8, #[not_null_terminated] explicit_negative: Windows::Win32::PCSTR, #[len_param(7)] counted_or_z: Windows::Win32::PCWSTR, multi_ansi: Windows::Win32::PZZSTR, const_multi_ansi: Windows::Win32::PCZZSTR, multi_wide: Windows::Win32::PZZWSTR, const_multi_wide: Windows::Win32::PCZZWSTR, #[len_const(4)] constant_count: Windows::Win32::PCWSTR);
+    #[library("test.dll")]
+    extern "C" fn MultiRaw(#[null_null_terminated] value: *const u16);
+    struct NominalStrings {
+        narrow: TEXT_HANDLE_ANSI,
+        wide: TEXT_HANDLE_W,
+    }
+    #[library("test.dll")]
+    extern "C" fn PlainRaw(value: *const u16);
+    #[library("test.dll")]
+    extern "C" fn PointerGates(ordinary: *mut void, #[in] input: *mut void, handle: Windows::Win32::HANDLE, nested: *const LPVOID, nominal: TEXT_HANDLE);
+    const STRING_CAPACITY: i32 = 12;
+    extern fn StringCallback(input: Windows::Win32::PCSTR, #[out] output: Windows::Win32::PWSTR) -> Windows::Win32::PCWSTR;
+    struct Strings {
+        input: Windows::Win32::PCSTR,
+        output: Windows::Win32::PWSTR,
+        #[not_null_terminated] negative: Windows::Win32::PCWSTR,
+        #[null_null_terminated] multi: Windows::Win32::PCSTR,
+        nested: *mut Windows::Win32::PCWSTR,
+        outer_const: *const Windows::Win32::PWSTR,
+        raw: *const u16,
+    }
+    type TEXT_HANDLE = *mut i8;
+    type TEXT_HANDLE_ANSI = Windows::Win32::PCSTR;
+    type TEXT_HANDLE_W = Windows::Win32::PCWSTR;
+    #[library("test.dll")]
+    extern "C" fn UseNominalStrings(narrow: TEXT_HANDLE_ANSI, wide: TEXT_HANDLE_W, input: TEXT_HANDLE_ANSI, input_wide: TEXT_HANDLE_W, terminated: TEXT_HANDLE_ANSI, terminated_wide: TEXT_HANDLE_W);
+    #[library("test.dll")]
+    extern "C" fn UseStrings(input: Windows::Win32::PCSTR, #[out] output: Windows::Win32::PWSTR, #[opt] optional: Windows::Win32::PCWSTR, count: u32, #[len_param(3)] counted: Windows::Win32::PCSTR, #[size_param(3)] bytes: Windows::Win32::PSTR, #[len_param(3)] binary: *const i8, #[null_null_terminated] multi: *const u16, #[not_null_terminated] negative: Windows::Win32::PCSTR, narrow_buffer: Windows::Win32::PCCH, wide_buffer: Windows::Win32::PCWCH, nested: *mut Windows::Win32::PCWSTR, callback: StringCallback);
+}

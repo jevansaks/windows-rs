@@ -1,6 +1,6 @@
 use super::*;
 use clang_sys::*;
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -170,6 +170,7 @@ fn extract_impl(
     let mut constants = vec![];
     let mut value_declarations = vec![];
     let mut annotations = BTreeMap::new();
+    let mut sal_constant_sizes = BTreeMap::new();
     let mut declaration_guids = BTreeMap::new();
     let mut pointer_callback_aliases = BTreeSet::new();
     let mut pointer_only_class_layouts = BTreeMap::new();
@@ -180,11 +181,18 @@ fn extract_impl(
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
     for (input, parsed) in inputs.iter().zip(&translation_units) {
+        let local_arguments = input_arguments.get(&input.name);
+        let probe_arguments: Vec<_> = args
+            .iter()
+            .copied()
+            .chain(local_arguments.into_iter().flatten().map(String::as_str))
+            .collect();
         let mut output = ExtractionState {
             facts: &mut facts,
             constants: &mut constants,
             value_declarations: &mut value_declarations,
             annotations: &mut annotations,
+            sal_constant_sizes: &mut sal_constant_sizes,
             declaration_guids: &mut declaration_guids,
             pointer_callback_aliases: &mut pointer_callback_aliases,
             pointer_only_class_layouts: &mut pointer_only_class_layouts,
@@ -192,11 +200,12 @@ fn extract_impl(
             clang_flag_enums: &mut clang_flag_enums,
         };
         let (result, metrics) = parsed.translation_unit.extract(
+            parsed.translation_unit._index.as_ref().unwrap_or(&index),
             input,
+            &probe_arguments,
             &mut output,
             timing,
             validate_annotations,
-            parsed.translation_unit._index.as_ref().unwrap_or(&index),
         )?;
         if let Some(metrics) = metrics {
             traversal_cursors += metrics.cursors;
@@ -431,6 +440,7 @@ fn extract_impl(
         annotations,
         source_annotations,
         function_annotations,
+        sal_constant_sizes,
         declaration_guids,
         pointer_callback_aliases,
         pointer_only_class_layouts,
@@ -1485,24 +1495,33 @@ impl TranslationUnit {
             Contents: source.as_ptr(),
             Length: source.as_bytes().len().try_into().unwrap(),
         };
+        Self::parse_probe_files(index, &name, args, std::slice::from_mut(&mut unsaved))
+    }
+
+    fn parse_probe_files(
+        index: &Index,
+        name: &CStr,
+        args: &[&str],
+        unsaved: &mut [CXUnsavedFile],
+    ) -> Result<Self, Error> {
         let mut args: Vec<_> = args.iter().map(|arg| CString::new(*arg).unwrap()).collect();
         args.push(CString::new("-ferror-limit=0").unwrap());
-        let arg_pointers: Vec<_> = args.iter().map(|arg| arg.as_ptr()).collect();
+        let pointers: Vec<_> = args.iter().map(|arg| arg.as_ptr()).collect();
         let value = unsafe {
             clang_parseTranslationUnit(
                 index.0,
                 name.as_ptr(),
-                arg_pointers.as_ptr(),
-                arg_pointers.len().try_into().unwrap(),
-                &mut unsaved,
-                1,
+                pointers.as_ptr(),
+                pointers.len().try_into().unwrap(),
+                unsaved.as_mut_ptr(),
+                unsaved.len().try_into().unwrap(),
                 CXTranslationUnit_KeepGoing | CXTranslationUnit_SkipFunctionBodies,
             )
         };
         if value.is_null() {
             Err(Error(format!(
-                "failed to evaluate macro in `{}`",
-                input.name
+                "failed to evaluate native constants in `{}`",
+                name.to_string_lossy()
             )))
         } else {
             Ok(Self(value))
@@ -1623,11 +1642,12 @@ impl TranslationUnit {
 
     fn extract<'tu>(
         &'tu self,
-        input: &Input,
+        index: &'tu Index,
+        input: &'tu Input,
+        args: &[&str],
         output: &mut ExtractionState<'_>,
         timing: bool,
         validate_annotations: bool,
-        index: &Index,
     ) -> Result<(Extracted<'tu>, Option<ExtractionMetrics>), Error> {
         let total_time = timing.then(std::time::Instant::now);
         let phase_time = timing.then(std::time::Instant::now);
@@ -1635,7 +1655,13 @@ impl TranslationUnit {
             .map_err(|error| Error(format!("{}: {error}", input.name)))?;
         let definition_index_ms = elapsed_ms(phase_time);
         let phase_time = timing.then(std::time::Instant::now);
-        let macros = macro_definitions(self, unsafe { clang_getTranslationUnitCursor(self.0) });
+        let mut macros = macro_definitions(self, unsafe { clang_getTranslationUnitCursor(self.0) });
+        macros.count_probes = Some(CountProbes {
+            index,
+            input,
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            original: self,
+        });
         let macro_index_ms = elapsed_ms(phase_time);
         let phase_time = timing.then(std::time::Instant::now);
         let initial_facts = output.facts.len();
@@ -1649,6 +1675,7 @@ impl TranslationUnit {
             macros: &macros,
             pending_structs: vec![],
             pending_macros: vec![],
+            pending_callables: vec![],
             declare_handle_expansions: vec![],
             facts: &mut *output.facts,
             constants: &mut *output.constants,
@@ -1690,7 +1717,15 @@ impl TranslationUnit {
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         let declare_handle_expansions = std::mem::take(&mut traversal.declare_handle_expansions);
         let next_local = traversal.next;
+        let pending_callables = std::mem::take(&mut traversal.pending_callables);
         drop(traversal);
+        if let Err(error) = macros.resolve_constant_counts(timing) {
+            macros
+                .fail_constant_counts(&format!("native SAL count probe/context failure: {error}"));
+        }
+        for (index, cursor) in pending_callables {
+            macros.collect_constant_sizes(&output.facts[index], cursor, output.sal_constant_sizes);
+        }
         Ok((
             Extracted {
                 macros,
@@ -1719,6 +1754,7 @@ struct Traversal<'a> {
     macros: &'a MacroDefinitions<'a>,
     pending_structs: Vec<(usize, CXCursor)>,
     pending_macros: Vec<(usize, CXCursor)>,
+    pending_callables: Vec<(usize, CXCursor)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
@@ -1738,6 +1774,7 @@ struct ExtractionState<'a> {
     constants: &'a mut Vec<Constant>,
     value_declarations: &'a mut Vec<ValueDeclaration>,
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    sal_constant_sizes: &'a mut SalConstantSizes,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
@@ -2251,6 +2288,15 @@ fn extract_child(
                         }
                     }
                     let index = traversal.facts.len();
+                    if matches!(
+                        data,
+                        FactData::Function { .. }
+                            | FactData::NonEmittableFunction { .. }
+                            | FactData::Callback { .. }
+                            | FactData::Interface { .. }
+                    ) {
+                        traversal.pending_callables.push((index, child));
+                    }
                     let declaration_guid = matches!(fact_kind, FactKind::Class | FactKind::Struct)
                         .then(|| cursor_uuid(child))
                         .flatten();
@@ -2643,6 +2689,16 @@ struct MacroDefinitions<'tu> {
     expansion_orders: HashMap<String, Vec<(u32, usize)>>,
     cursor_orders: HashMap<String, Vec<(u32, u32, usize)>>,
     translation_unit: PhantomData<&'tu TranslationUnit>,
+    count_probes: Option<CountProbes<'tu>>,
+    count_requests: RefCell<BTreeMap<Location, (bool, BTreeSet<String>)>>,
+    count_values: RefCell<BTreeMap<(Location, String), Result<i32, String>>>,
+}
+
+struct CountProbes<'tu> {
+    index: &'tu Index,
+    input: &'tu Input,
+    args: Vec<String>,
+    original: &'tu TranslationUnit,
 }
 
 struct MacroDefinition {
@@ -2666,6 +2722,332 @@ impl MacroDefinition {
 }
 
 impl MacroDefinitions<'_> {
+    fn request_constant_count(&self, cursor: CXCursor, expression: &str) {
+        let Some((location, inline)) = count_annotation_site(cursor) else {
+            return;
+        };
+        self.count_requests
+            .borrow_mut()
+            .entry(location)
+            .or_insert_with(|| (inline, BTreeSet::new()))
+            .1
+            .insert(expression.to_string());
+    }
+
+    fn fail_constant_counts(&self, error: &str) {
+        for (location, (_, expressions)) in self.count_requests.borrow().iter() {
+            for expression in expressions {
+                self.count_values.borrow_mut().insert(
+                    (location.clone(), expression.clone()),
+                    Err(error.to_string()),
+                );
+            }
+        }
+    }
+
+    fn collect_constant_sizes(&self, fact: &Fact, cursor: CXCursor, sizes: &mut SalConstantSizes) {
+        let collect = |callable: CXCursor,
+                       params: &[Parameter],
+                       method: Option<usize>,
+                       sizes: &mut SalConstantSizes| {
+            let cursors: Vec<_> = cursor_children(callable)
+                .into_iter()
+                .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_ParmDecl)
+                .collect();
+            for (index, param) in params.iter().enumerate() {
+                let Some(SalSize {
+                    bytes,
+                    value: SalSizeValue::Expression(expression),
+                }) = &param.annotation.size
+                else {
+                    continue;
+                };
+                let Some(cursor) = cursors.get(index) else {
+                    continue;
+                };
+                let Some((location, _)) = count_annotation_site(*cursor) else {
+                    continue;
+                };
+                let Some(value) = self
+                    .count_values
+                    .borrow()
+                    .get(&(location.clone(), expression.clone()))
+                    .cloned()
+                else {
+                    continue;
+                };
+                let target = method.map_or_else(
+                    || AnnotationTarget::Parameter {
+                        declaration: fact.origin.clone(),
+                        index,
+                    },
+                    |method| AnnotationTarget::MethodParameter {
+                        declaration: fact.origin.clone(),
+                        method,
+                        parameter: index,
+                    },
+                );
+                let value = value.and_then(|count| {
+                    let mut annotation = ParamAnnotation {
+                        size: Some(SalSize { bytes: *bytes, value: SalSizeValue::Constant(count) }),
+                        ..Default::default()
+                    };
+                    normalize_constant_byte_size(unsafe { clang_getCursorType(*cursor) }, &mut annotation);
+                    let size = annotation.size.unwrap();
+                    if size.bytes {
+                        Err(format!("constant byte count `{expression}` ({count}) has no exact native element-size conversion"))
+                    } else {
+                        Ok(size)
+                    }
+                });
+                sizes.insert(target, value);
+            }
+        };
+        match &fact.data {
+            FactData::Function { params, .. }
+            | FactData::NonEmittableFunction {
+                signature: FunctionSignature { params, .. },
+                ..
+            }
+            | FactData::Callback { params, .. } => {
+                collect(cursor, params, None, sizes);
+                if matches!(fact.data, FactData::Callback { .. }) {
+                    for child in cursor_children(cursor)
+                        .into_iter()
+                        .filter(|child| unsafe { clang_getCursorKind(*child) == CXCursor_TypeRef })
+                    {
+                        let candidate = unsafe { clang_getCursorReferenced(child) };
+                        collect(candidate, params, None, sizes);
+                    }
+                }
+            }
+            FactData::Interface { methods, .. } => {
+                for (index, method) in cursor_children(cursor)
+                    .into_iter()
+                    .filter(|child| unsafe {
+                        clang_getCursorKind(*child) == CXCursor_CXXMethod
+                            && clang_CXXMethod_isVirtual(*child) != 0
+                    })
+                    .filter(|child| !method_overrides_base(*child))
+                    .enumerate()
+                {
+                    if let Some(params) = methods.get(index).map(|method| &method.params) {
+                        collect(method, params, Some(index), sizes);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn resolve_constant_counts(&self, timing: bool) -> Result<(), Error> {
+        let requests = self.count_requests.borrow();
+        if requests.is_empty() {
+            if timing {
+                let context = self.count_probes.as_ref().unwrap();
+                eprintln!(
+                    "windows-clang timing phase=sal-count-probes tu={:?} contexts=0 expressions=0 synthetic_tus=0 resolved=0 elapsed_ms=0",
+                    context.input.name
+                );
+            }
+            return Ok(());
+        }
+        let start = std::time::Instant::now();
+        let context = self.count_probes.as_ref().unwrap();
+        let mut files = BTreeMap::<String, Vec<(u32, Vec<String>)>>::new();
+        let mut keys = Vec::new();
+        for (location, (inline, expressions)) in requests.iter() {
+            let mut probe = Vec::new();
+            for expression in expressions {
+                let index = keys.len();
+                let annotation = format!("annotate(\"__clang_sal_count_{index}\", ({expression}))");
+                probe.push(if *inline {
+                    format!("{annotation}, ")
+                } else {
+                    format!("__attribute__(({annotation})) ")
+                });
+                keys.push((location.clone(), expression.clone()));
+            }
+            files
+                .entry(location.file.clone())
+                .or_default()
+                .push((location.offset, probe));
+        }
+        let mut sources = Vec::new();
+        let mut ranges = BTreeMap::<String, Vec<std::ops::Range<u32>>>::new();
+        let mut insertions = BTreeMap::<String, Vec<std::ops::Range<u32>>>::new();
+        for (file, probes) in files {
+            let name = CString::new(file.as_str()).unwrap();
+            let native_file = unsafe { clang_getFile(context.original.0, name.as_ptr()) };
+            let mut length = 0;
+            let contents =
+                unsafe { clang_getFileContents(context.original.0, native_file, &mut length) };
+            if contents.is_null() {
+                return Err(Error(format!("cannot read SAL count source `{file}`")));
+            }
+            let contents = unsafe { std::slice::from_raw_parts(contents.cast::<u8>(), length) };
+            let mut injected = Vec::new();
+            let mut previous = 0;
+            for (offset, probe) in probes {
+                let offset = offset as usize;
+                if offset < previous || offset > contents.len() {
+                    return Err(Error(format!(
+                        "invalid SAL count source offset in `{file}`"
+                    )));
+                }
+                injected.extend_from_slice(&contents[previous..offset]);
+                let start = injected.len() as u32;
+                // Probe the parameter in place without changing its scope or source line.
+                for declaration in probe {
+                    let range_start = injected.len() as u32;
+                    injected.extend_from_slice(declaration.as_bytes());
+                    ranges
+                        .entry(file.clone())
+                        .or_default()
+                        .push(range_start..injected.len() as u32);
+                }
+                insertions
+                    .entry(file.clone())
+                    .or_default()
+                    .push(start..injected.len() as u32);
+                previous = offset;
+            }
+            injected.extend_from_slice(&contents[previous..]);
+            sources.push((name, CString::new(injected).unwrap()));
+        }
+        let input_name = CString::new(context.input.name.as_str()).unwrap();
+        if !ranges.contains_key(&normalize_name(&context.input.name)) {
+            sources.push((
+                input_name.clone(),
+                CString::new(context.input.source.as_str()).unwrap(),
+            ));
+        }
+        let mut unsaved: Vec<_> = sources
+            .iter()
+            .map(|(name, source)| CXUnsavedFile {
+                Filename: name.as_ptr(),
+                Contents: source.as_ptr(),
+                Length: source.as_bytes().len().try_into().unwrap(),
+            })
+            .collect();
+        let args: Vec<_> = context.args.iter().map(String::as_str).collect();
+        let tu =
+            TranslationUnit::parse_probe_files(context.index, &input_name, &args, &mut unsaved)?;
+        let mut rejected = BTreeMap::new();
+        let mut failures = Vec::new();
+        let original_diagnostics = context.original.error_diagnostics();
+        for diagnostic in tu.error_diagnostics() {
+            if let Some(file_ranges) = ranges.get(&diagnostic.file) {
+                if let Some(range) = file_ranges
+                    .iter()
+                    .find(|range| range.contains(&diagnostic.offset))
+                {
+                    rejected.insert((diagnostic.file, range.start), diagnostic.spelling);
+                    continue;
+                }
+                let removed: u32 = insertions[&diagnostic.file]
+                    .iter()
+                    .filter(|range| range.end <= diagnostic.offset)
+                    .map(|range| range.end - range.start)
+                    .sum();
+                if original_diagnostics.iter().any(|original| {
+                    original.file == diagnostic.file
+                        && original.offset == diagnostic.offset - removed
+                        && original.spelling == diagnostic.spelling
+                }) {
+                    continue;
+                }
+            } else if original_diagnostics.contains(&diagnostic) {
+                continue;
+            }
+            failures.push(diagnostic.spelling);
+        }
+        fn collect(
+            cursor: CXCursor,
+            values: &mut BTreeMap<usize, (Location, Result<i32, String>)>,
+        ) {
+            if unsafe { clang_getCursorKind(cursor) } == CXCursor_AnnotateAttr
+                && let Some(index) = cx_string(unsafe { clang_getCursorSpelling(cursor) })
+                    .strip_prefix("__clang_sal_count_")
+                    .and_then(|index| index.parse().ok())
+                && let Some((location, _, _, _)) = cursor_locations(cursor)
+                && let Some(value) = cursor_children(cursor)
+                    .into_iter()
+                    .find_map(evaluate_integer)
+                && let Ok(value) = i32::try_from(value.1)
+                && value >= 0
+            {
+                match values.entry(index) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert((location, Ok(value)));
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        if entry.get().1 != Ok(value) {
+                            entry.get_mut().1 =
+                                Err("conflicting native SAL count observations".to_string());
+                        }
+                    }
+                }
+            }
+            for child in cursor_children(cursor) {
+                collect(child, values);
+            }
+        }
+        let mut values = BTreeMap::new();
+        collect(unsafe { clang_getTranslationUnitCursor(tu.0) }, &mut values);
+        for (index, key) in keys.iter().enumerate() {
+            let value = if !failures.is_empty() {
+                Err(format!(
+                    "native SAL count probe/context failure: {}",
+                    failures.join("; ")
+                ))
+            } else if let Some((location, value)) = values.get(&index) {
+                if let Some(range) = ranges
+                    .get(&location.file)
+                    .and_then(|ranges| ranges.iter().find(|range| range.contains(&location.offset)))
+                {
+                    if let Some(error) = rejected.get(&(location.file.clone(), range.start)) {
+                        Err(format!(
+                            "SAL count expression `{}` is not a supported compiler constant: {error}",
+                            key.1
+                        ))
+                    } else {
+                        value.clone()
+                    }
+                } else {
+                    Err("native SAL count probe/context failure: missing source range".to_string())
+                }
+            } else {
+                Err(format!(
+                    "SAL count expression `{}` is not a supported compiler constant",
+                    key.1
+                ))
+            };
+            self.count_values.borrow_mut().insert(key.clone(), value);
+        }
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=sal-count-probes tu={:?} \
+                 contexts={} expressions={} synthetic_tus=1 resolved={} rejected={} elapsed_ms={:.3}",
+                context.input.name,
+                requests.len(),
+                keys.len(),
+                self.count_values
+                    .borrow()
+                    .values()
+                    .filter(|value| value.is_ok())
+                    .count(),
+                self.count_values
+                    .borrow()
+                    .values()
+                    .filter(|value| value.is_err())
+                    .count(),
+                start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+        Ok(())
+    }
+
     fn contains_key(&self, name: &str) -> bool {
         self.definitions.contains_key(name)
     }
@@ -4414,6 +4796,7 @@ fn callable_params(
     allow_unresolved_size: bool,
 ) -> Result<Vec<Parameter>, String> {
     let mut params = vec![];
+    let mut param_cursors = vec![];
     for child in cursor_children(cursor)
         .into_iter()
         .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_ParmDecl)
@@ -4439,9 +4822,10 @@ fn callable_params(
             ty,
             annotation,
         });
+        param_cursors.push(child);
     }
     let names: BTreeSet<_> = params.iter().map(|param| param.name.clone()).collect();
-    for param in &mut params {
+    for (param, cursor) in params.iter_mut().zip(param_cursors) {
         let mut discard_size = false;
         if let Some(size) = &mut param.annotation.size {
             match &mut size.value {
@@ -4470,6 +4854,16 @@ fn callable_params(
         }
         if discard_size {
             param.annotation.size = None;
+        }
+        if let Some(SalSize {
+            value: SalSizeValue::Expression(expression),
+            ..
+        }) = &param.annotation.size
+            && !expression
+                .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+                .any(|name| names.contains(name))
+        {
+            macros.request_constant_count(cursor, expression);
         }
     }
     apply_source_annotations(cursor, macros, &mut params);
@@ -5222,6 +5616,18 @@ fn collect_record_field_annotations(
                     }
                 };
                 insert_annotations(annotations, target, annotation_values(child, macros)?);
+                let ty = unsafe { clang_getCursorType(child) };
+                if matches!(type_ref(ty), Some(TypeRef::InlineRecord(_))) {
+                    let mut path = prefix.to_vec();
+                    path.push(index);
+                    collect_record_field_annotations(
+                        unsafe { clang_getTypeDeclaration(ty) },
+                        origin,
+                        macros,
+                        annotations,
+                        &path,
+                    )?;
+                }
                 index += 1;
             }
             CXCursor_StructDecl | CXCursor_UnionDecl
@@ -6086,6 +6492,27 @@ fn parse_annotation_integer(value: &str) -> Option<i64> {
         value.parse().ok()?
     };
     Some(if negative { -magnitude } else { magnitude })
+}
+
+fn count_annotation_site(cursor: CXCursor) -> Option<(Location, bool)> {
+    let annotation = cursor_children(cursor).into_iter().find(|child| {
+        if unsafe { clang_getCursorKind(*child) } != CXCursor_AnnotateAttr {
+            return false;
+        }
+        let annotation = cx_string(unsafe { clang_getCursorSpelling(*child) });
+        (annotation.contains("_reads_")
+            || annotation.contains("_writes_")
+            || annotation.contains("_updates_"))
+            && annotation.contains('(')
+    })?;
+    let location = source_location(
+        unsafe { clang_getRangeStart(clang_getCursorExtent(annotation)) },
+        clang_getExpansionLocation,
+    )?;
+    let inline = cursor_tokens(annotation)
+        .first()
+        .is_some_and(|(_, token)| token == "annotate");
+    Some((location, inline))
 }
 
 fn parameter_annotation(cursor: CXCursor) -> ParamAnnotation {

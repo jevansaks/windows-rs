@@ -282,6 +282,126 @@ mod tests {
     }
 
     #[test]
+    fn constant_count_probes_preserve_native_scope_without_building_indexes() {
+        helpers::ensure_libclang();
+        let source = r#"
+            #define LIMIT 8
+            typedef char* PSTR;
+            struct CallbackOwner { int (*invoke)(int); };
+            extern "C" void Counted(
+                __attribute__((annotate("_In_reads_(LIMIT)"))) PSTR value);
+            constexpr int Helper(
+                __attribute__((annotate("_In_reads_(LIMIT)"))) PSTR value) {
+                typedef unsigned LocalType;
+                const int LocalConstant = 6;
+                return LocalConstant + 5;
+            }
+            constexpr int GlobalValue = Helper(nullptr);
+            const int GlobalPlain = 9;
+            enum { AnonymousValue = 7 };
+        "#;
+        for target in [
+            "i686-pc-windows-msvc",
+            "x86_64-pc-windows-msvc",
+            "aarch64-pc-windows-msvc",
+        ] {
+            let target_arg = format!("--target={target}");
+            let before = BUILDS.get();
+            let snapshot = extract(
+                [Input::new("count-scope.hpp", source)],
+                &["-x", "c++", "-std=c++20", &target_arg],
+            )
+            .unwrap();
+            assert_eq!(BUILDS.get(), before + 1);
+            for name in ["Counted", "Helper"] {
+                let fact = snapshot
+                    .facts
+                    .iter()
+                    .find(|fact| fact.name == name)
+                    .unwrap();
+                let params = match &fact.data {
+                    FactData::Function { params, .. } => params,
+                    FactData::NonEmittableFunction { signature, .. } => &signature.params,
+                    _ => panic!("{:?}", fact.data),
+                };
+                assert_eq!(
+                    params[0].annotation.size.as_ref().unwrap().value,
+                    SalSizeValue::Expression("LIMIT".to_string())
+                );
+                assert_eq!(
+                    snapshot.sal_constant_sizes[&AnnotationTarget::Parameter {
+                        declaration: fact.origin.clone(),
+                        index: 0
+                    }],
+                    Ok(SalSize {
+                        bytes: false,
+                        value: SalSizeValue::Constant(8)
+                    })
+                );
+            }
+            for name in ["LocalType", "LocalConstant"] {
+                assert!(snapshot.facts.iter().all(|fact| fact.name != name));
+                assert!(
+                    snapshot
+                        .constants
+                        .iter()
+                        .all(|constant| constant.name != name)
+                );
+                assert!(
+                    snapshot
+                        .value_declarations
+                        .iter()
+                        .all(|declaration| declaration.name != name)
+                );
+            }
+            for (name, value) in [
+                ("GlobalValue", 11),
+                ("GlobalPlain", 9),
+                ("AnonymousValue", 7),
+            ] {
+                let constant = snapshot
+                    .constants
+                    .iter()
+                    .find(|value| value.name == name)
+                    .unwrap();
+                assert_eq!(constant.value, Value::Signed(value));
+                assert_eq!(
+                    snapshot
+                        .value_declarations
+                        .iter()
+                        .filter(|declaration| declaration.origin == constant.root)
+                        .count(),
+                    1
+                );
+            }
+            let callback = snapshot
+                .facts
+                .iter()
+                .find(|fact| fact.name == "CallbackOwner_invoke")
+                .unwrap();
+            let origins: Vec<_> = snapshot
+                .facts
+                .iter()
+                .map(|fact| &fact.origin)
+                .chain(
+                    snapshot
+                        .value_declarations
+                        .iter()
+                        .map(|value| &value.origin),
+                )
+                .collect();
+            assert_eq!(
+                origins.len(),
+                origins.iter().copied().collect::<BTreeSet<_>>().len()
+            );
+            assert!(origins.iter().all(|origin| {
+                **origin == callback.origin || origin.local < callback.origin.local
+            }));
+            assert!(!EmitOptions::new("Test", &BTreeMap::new()).mutable_string_aliases);
+        }
+    }
+
+    #[test]
     fn only_original_extraction_builds_indexes() {
         helpers::ensure_libclang();
         let _library = Library::new().unwrap();

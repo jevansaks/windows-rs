@@ -748,6 +748,8 @@ pub struct EmitOptions<'a> {
     pub excluded_functions: Option<&'a BTreeSet<String>>,
     pub excluded_constants: Option<&'a BTreeSet<String>>,
     pub functions: Option<&'a BTreeSet<String>>,
+    /// Uses SDK PSTR/PWSTR types with per-use const and termination attributes.
+    pub mutable_string_aliases: bool,
 }
 
 impl<'a> EmitOptions<'a> {
@@ -763,6 +765,7 @@ impl<'a> EmitOptions<'a> {
             excluded_functions: None,
             excluded_constants: None,
             functions: None,
+            mutable_string_aliases: false,
         }
     }
 }
@@ -1338,6 +1341,7 @@ pub struct Snapshot {
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     source_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     function_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
@@ -1358,6 +1362,49 @@ pub struct Snapshot {
     header_partition_policy: bool,
     header_authority_partition: Option<String>,
     timing_target: Option<String>,
+}
+
+type SalConstantSizes = BTreeMap<AnnotationTarget, Result<SalSize, String>>;
+
+type SalConstantObservation<'a> = (&'a AnnotationTarget, &'a Result<SalSize, String>);
+
+struct SalConstantObservations<'a> {
+    by_use:
+        BTreeMap<&'a Location, BTreeMap<RouteAnnotationTarget, Vec<SalConstantObservation<'a>>>>,
+    #[cfg(test)]
+    inspected: Cell<usize>,
+}
+
+impl<'a> SalConstantObservations<'a> {
+    fn new(sizes: &'a SalConstantSizes, facts: &HashMap<&Origin, &'a Fact>) -> Self {
+        let mut by_use = BTreeMap::<_, BTreeMap<_, Vec<_>>>::new();
+        for (target, size) in sizes {
+            if let Some(fact) = facts.get(target.origin()) {
+                by_use
+                    .entry(&fact.spelling)
+                    .or_default()
+                    .entry(route_annotation_target(target).1)
+                    .or_default()
+                    .push((target, size));
+            }
+        }
+        Self {
+            by_use,
+            #[cfg(test)]
+            inspected: Cell::new(0),
+        }
+    }
+
+    fn get(
+        &self,
+        spelling: &Location,
+        slot: RouteAnnotationTarget,
+    ) -> &[SalConstantObservation<'a>] {
+        self.by_use
+            .get(spelling)
+            .and_then(|slots| slots.get(&slot))
+            .map_or(&[], Vec::as_slice)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1486,6 +1533,7 @@ impl PartialEq for Snapshot {
             && self.annotations == other.annotations
             && self.source_annotations == other.source_annotations
             && self.function_annotations == other.function_annotations
+            && self.sal_constant_sizes == other.sal_constant_sizes
             && self.declaration_guids == other.declaration_guids
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
@@ -1822,6 +1870,7 @@ impl Snapshot {
             selected_functions: options.functions,
             display_names: None,
             source_names: None,
+            mutable_string_aliases: options.mutable_string_aliases,
         })?;
         if timing {
             eprintln!(
@@ -2019,7 +2068,7 @@ impl Snapshot {
                 &fact.origin.tu,
                 &local_types,
                 &routed_types,
-                &plan.type_choices,
+                (&plan.type_choices, plan.sal_constant_sizes),
                 namespace,
             );
             let item = match &fact.data {
@@ -2034,7 +2083,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        &plan.type_choices,
+                        (&plan.type_choices, plan.sal_constant_sizes),
                         namespace,
                     );
                     write_callback(
@@ -2088,7 +2137,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        &plan.type_choices,
+                        (&plan.type_choices, plan.sal_constant_sizes),
                         namespace,
                     );
                     let item = write_named_record(
@@ -2187,7 +2236,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        &plan.type_choices,
+                        (&plan.type_choices, plan.sal_constant_sizes),
                         namespace,
                     );
                     let item = write_named_record(
@@ -2224,7 +2273,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        &plan.type_choices,
+                        (&plan.type_choices, plan.sal_constant_sizes),
                         namespace,
                     );
                     write_interface(
@@ -2289,7 +2338,7 @@ impl Snapshot {
                 &function.origin.tu,
                 &local_types,
                 &routed_types,
-                &plan.type_choices,
+                (&plan.type_choices, plan.sal_constant_sizes),
                 namespace,
             );
             let callable = CallableTarget::Function(&function.origin);
@@ -2302,13 +2351,15 @@ impl Snapshot {
             let result = if *result == TypeRef::Void {
                 String::new()
             } else {
+                let annotations = annotations_for(
+                    &self.function_annotations,
+                    &AnnotationTarget::Return(function.origin.clone()),
+                );
                 format!(
-                    " -> {}{}",
-                    annotation_inline(annotations_for(
-                        &self.function_annotations,
-                        &AnnotationTarget::Return(function.origin.clone()),
-                    ),)?,
-                    planned_emitted_type_name(result, &projection)
+                    " -> {}",
+                    projection
+                        .use_type(result, annotations)
+                        .annotated_name(annotations)?
                 )
             };
             let declaration_annotations = annotations_for(
@@ -2378,7 +2429,7 @@ impl Snapshot {
                 &constant.root.tu,
                 &local_types,
                 &routed_types,
-                &plan.type_choices,
+                (&plan.type_choices, plan.sal_constant_sizes),
                 namespace,
             );
             let ty = if routes.is_some()
@@ -4686,6 +4737,66 @@ impl Snapshot {
         Ok(owner)
     }
 
+    fn selected_sal_constant_size<'a>(
+        &self,
+        target: &AnnotationTarget,
+        size: &'a Result<SalSize, String>,
+        facts: &HashMap<&Origin, &Fact>,
+        observations: &SalConstantObservations<'_>,
+    ) -> Result<&'a SalSize, Error> {
+        let fact = facts.get(target.origin()).unwrap();
+        let policy = |fact: &Fact| {
+            self.root_owners.get(&fact.origin).or_else(|| {
+                self.root_partitions
+                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone()))
+            })
+        };
+        let selected_policy = policy(fact);
+        let resolved = size.as_ref().map_err(|error| {
+            Error(format!(
+                "selected target {target:?} policy={selected_policy:?}: {error}"
+            ))
+        })?;
+        let slot = route_annotation_target(target).1;
+        let parent = function_parent_path(fact, facts, None);
+        for &(observation_target, observation_size) in observations.get(&fact.spelling, slot) {
+            #[cfg(test)]
+            observations.inspected.set(observations.inspected.get() + 1);
+            if observation_target == target {
+                continue;
+            }
+            let Some(observation) = facts.get(observation_target.origin()) else {
+                continue;
+            };
+            let observation_policy = policy(observation);
+            let same_policy = match (selected_policy, observation_policy) {
+                (Some(left), Some(right)) => same_owner_policy(left, right),
+                (None, None) => true,
+                _ => false,
+            };
+            if !same_policy
+                || !same_source_declaration(fact, observation)
+                || function_parent_path(observation, facts, None) != parent
+                || observation_size == size
+            {
+                continue;
+            }
+            return Err(Error(format!(
+                "conflicting native SAL count contexts: source={}:{} \
+                 selected_target={target:?} tu={:?} policy={selected_policy:?} value={size:?}; \
+                 source={}:{} observed_target={observation_target:?} tu={:?} \
+                 policy={observation_policy:?} value={observation_size:?}",
+                fact.spelling.file,
+                fact.spelling.offset,
+                fact.origin.tu,
+                observation.spelling.file,
+                observation.spelling.offset,
+                observation.origin.tu,
+            )));
+        }
+        Ok(resolved)
+    }
+
     fn plan_partitioned(
         &self,
         options: &EmitOptions<'_>,
@@ -4711,6 +4822,7 @@ impl Snapshot {
             selected_functions: options.functions,
             display_names: Some(display_names),
             source_names: Some(source_names),
+            mutable_string_aliases: options.mutable_string_aliases,
         })
     }
 
@@ -4723,6 +4835,7 @@ impl Snapshot {
             selected_functions,
             display_names,
             source_names,
+            mutable_string_aliases,
         } = options;
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
@@ -4738,6 +4851,8 @@ impl Snapshot {
         let declarations = DeclarationIndex::new(&self.facts);
         let facts_by_origin: HashMap<_, _> =
             self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
+        let sal_constant_observations = mutable_string_aliases
+            .then(|| SalConstantObservations::new(&self.sal_constant_sizes, &facts_by_origin));
         let source_annotation_signatures = self.source_annotation_signatures();
         let source_fact_name = |fact: &Fact| {
             source_names.map_or_else(
@@ -5261,7 +5376,14 @@ impl Snapshot {
                         &callback_pointer_alias_requirements,
                         &mut pointer_alias_candidates,
                     );
-                    queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
+                    queue_type_edges(
+                        root,
+                        &self.projected_type_names,
+                        &self.annotations,
+                        mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                        fact_node,
+                        &mut queue,
+                    );
                 }
             }
             for root in &value_roots {
@@ -5278,7 +5400,14 @@ impl Snapshot {
                     &callback_pointer_alias_requirements,
                     &mut pointer_alias_candidates,
                 );
-                queue_type_edges(root, &self.projected_type_names, fact_node, &mut queue);
+                queue_type_edges(
+                    root,
+                    &self.projected_type_names,
+                    &self.annotations,
+                    mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                    fact_node,
+                    &mut queue,
+                );
             }
             for constant in &constants {
                 let root_node = dependency_diagnostics.add_root(
@@ -5314,21 +5443,73 @@ impl Snapshot {
                     &callback_pointer_alias_requirements,
                     &mut pointer_alias_candidates,
                 );
-                queue_function_edges(fact, fact_node, &mut queue);
+                queue_function_edges(
+                    fact,
+                    &self.function_annotations,
+                    mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                    fact_node,
+                    &mut queue,
+                );
             }
 
             while let Some((tu, edge, source)) = queue.pop() {
                 let (ty, parent_mutability) = match edge {
                     TypeEdge::Type(ty) => (ty, None),
                     TypeEdge::Pointee(ty, mutable) => (ty, Some(mutable)),
-                    TypeEdge::Parameter(param) => {
-                        let choice = parameter_string_name(param).map_or(
-                            TypeChoice::Declared(&param.ty),
-                            |name| TypeChoice::Canonical {
-                                name,
-                                mutable: false,
-                            },
-                        );
+                    TypeEdge::Use(ty, annotations) => {
+                        let choice = if mutable_string_aliases {
+                            string_type_choice(
+                                ty,
+                                tu,
+                                None,
+                                annotations,
+                                &facts_by_declaration,
+                                source_names,
+                                || Ok(None),
+                            )?
+                        } else {
+                            None
+                        }
+                        .unwrap_or(TypeChoice::Declared(ty));
+                        type_choices.insert((tu, edge), choice);
+                        queue.push((tu, choice.edge(), source));
+                        continue;
+                    }
+                    TypeEdge::Parameter(param, annotations, resolved_size) => {
+                        let choice = if mutable_string_aliases {
+                            string_type_choice(
+                                &param.ty,
+                                tu,
+                                Some(&param.annotation),
+                                annotations,
+                                &facts_by_declaration,
+                                source_names,
+                                || {
+                                    resolved_size
+                                        .map(|(target, size)| {
+                                            self.selected_sal_constant_size(
+                                                target,
+                                                size,
+                                                &facts_by_origin,
+                                                sal_constant_observations.as_ref().unwrap(),
+                                            )
+                                        })
+                                        .transpose()
+                                },
+                            )
+                            .map_err(|error| {
+                                parameter_use_error(error, param, source, &facts_by_origin)
+                            })?
+                            .unwrap_or(TypeChoice::Declared(&param.ty))
+                        } else {
+                            parameter_string_name(param).map_or(
+                                TypeChoice::Declared(&param.ty),
+                                |name| TypeChoice::Canonical {
+                                    name,
+                                    mutable: false,
+                                },
+                            )
+                        };
                         type_choices.insert((tu, edge), choice);
                         queue.push((tu, choice.edge(), source));
                         continue;
@@ -5358,14 +5539,51 @@ impl Snapshot {
                             &mut shape_cache,
                         ) {
                             Ok(fact) => fact,
-                            Err(error) if self.header_partition_policy => {
-                                dependency_diagnostics.block(reference, error.to_string(), source);
-                                continue;
+                            Err(error) => {
+                                let error =
+                                    if mutable_string_aliases && matches!(name, "PSTR" | "PWSTR") {
+                                        Error(format!(
+                                            "string projection in translation unit `{tu}`: {error}"
+                                        ))
+                                    } else {
+                                        error
+                                    };
+                                if self.header_partition_policy {
+                                    dependency_diagnostics.block(
+                                        reference,
+                                        error.to_string(),
+                                        source,
+                                    );
+                                    continue;
+                                }
+                                return Err(error);
                             }
-                            Err(error) => return Err(error),
                         };
+                        if mutable_string_aliases && matches!(name, "PSTR" | "PWSTR") {
+                            let valid = if let FactData::Typedef { target } = &fact.data {
+                                native_string_type(target, tu, &facts_by_declaration, source_names)
+                                    .is_some_and(|native| native.name == name && native.mutable)
+                            } else {
+                                false
+                            };
+                            if !valid {
+                                let error = Error(format!(
+                                    "string projection requires `{name}` to be a native mutable \
+                                     single-character pointer typedef in translation unit `{tu}`"
+                                ));
+                                if self.header_partition_policy {
+                                    dependency_diagnostics.block(
+                                        reference,
+                                        error.to_string(),
+                                        source,
+                                    );
+                                    continue;
+                                }
+                                return Err(error);
+                            }
+                        }
                         dependency_diagnostics.resolve(reference);
-                        if self.header_partition_policy
+                        if (self.header_partition_policy || mutable_string_aliases)
                             && canonical_string_name(name).is_some()
                             && is_pointer_alias_fact(
                                 fact,
@@ -5386,6 +5604,8 @@ impl Snapshot {
                             queue_type_edges(
                                 fact,
                                 &self.projected_type_names,
+                                &self.annotations,
+                                mutable_string_aliases.then_some(&self.sal_constant_sizes),
                                 fact_node,
                                 &mut queue,
                             );
@@ -5395,6 +5615,21 @@ impl Snapshot {
                 };
                 let (name, declaration) = match ty {
                     TypeRef::Pointer { .. } => {
+                        if mutable_string_aliases {
+                            let mut current = ty;
+                            let mut previous = None;
+                            while let TypeRef::Pointer { mutable, target } = current {
+                                if previous.is_some_and(|previous| previous != *mutable) {
+                                    return Err(Error(format!(
+                                        "mixed raw pointer constness in translation unit `{tu}` \
+                                         needs a native typedef boundary; RDL cannot represent \
+                                         different const qualifiers at each pointer rank"
+                                    )));
+                                }
+                                previous = Some(*mutable);
+                                current = target;
+                            }
+                        }
                         let (mutable, _, target) = pointer_run(ty);
                         queue.push((tu, TypeEdge::Pointee(target, mutable), source));
                         continue;
@@ -5416,7 +5651,7 @@ impl Snapshot {
                     }
                     TypeRef::InlineRecord(record) => {
                         for field in &record.fields {
-                            queue.push((tu, TypeEdge::Type(&field.ty), source));
+                            queue.push((tu, TypeEdge::Use(&field.ty, &[]), source));
                         }
                         continue;
                     }
@@ -5470,7 +5705,7 @@ impl Snapshot {
                 }
                 let pointer_alias_candidate =
                     pointer_alias_candidates.contains(&(tu, declaration, name.as_str()));
-                let retain_pointer_alias = self.header_partition_policy
+                let retain_pointer_alias = (self.header_partition_policy || mutable_string_aliases)
                     && (pointer_alias_candidate || canonical_string.is_some());
                 if let Some(canonical_string) = canonical_string
                     && canonical_typedef_declarations.contains(&(tu, declaration))
@@ -5688,7 +5923,14 @@ impl Snapshot {
                         &callback_pointer_alias_requirements,
                         &mut pointer_alias_candidates,
                     );
-                    queue_type_edges(fact, &self.projected_type_names, fact_node, &mut queue);
+                    queue_type_edges(
+                        fact,
+                        &self.projected_type_names,
+                        &self.annotations,
+                        mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                        fact_node,
+                        &mut queue,
+                    );
                 }
             }
 
@@ -6145,7 +6387,7 @@ impl Snapshot {
                         &fact.origin.tu,
                         &local_types,
                         &routed_types,
-                        &type_choices,
+                        (&type_choices, None),
                         None,
                     );
                     let target_name = planned_emitted_type_name(target, &projection);
@@ -6369,7 +6611,7 @@ impl Snapshot {
                             &constant.root.tu,
                             &local_types,
                             &routed_types,
-                            &type_choices,
+                            (&type_choices, None),
                             None,
                         );
                         constant_type_name(&constant.ty, &pointer_interface_aliases, &projection)
@@ -6445,6 +6687,7 @@ impl Snapshot {
             type_names,
             interface_names,
             type_choices,
+            sal_constant_sizes: mutable_string_aliases.then_some(&self.sal_constant_sizes),
             pointer_interface_aliases,
             interface_guids,
             flag_enums,
@@ -6610,6 +6853,7 @@ struct Plan<'a> {
     type_names: BTreeMap<String, String>,
     interface_names: BTreeSet<(String, String)>,
     type_choices: BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
+    sal_constant_sizes: Option<&'a SalConstantSizes>,
     pointer_interface_aliases: BTreeMap<String, String>,
     interface_guids: BTreeMap<String, String>,
     flag_enums: BTreeSet<(String, String)>,
@@ -6665,6 +6909,7 @@ struct PlanningOptions<'a> {
     selected_functions: Option<&'a BTreeSet<String>>,
     display_names: Option<&'a BTreeMap<String, String>>,
     source_names: Option<&'a PlanningSourceNames>,
+    mutable_string_aliases: bool,
 }
 
 struct PlanningSourceNames {
@@ -7131,6 +7376,7 @@ struct TypeProjection<'a> {
     local_types: &'a BTreeMap<Location, String>,
     routed_types: &'a BTreeMap<String, String>,
     type_choices: &'a BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
+    sal_constant_sizes: Option<&'a SalConstantSizes>,
     namespace: Option<&'a str>,
 }
 
@@ -7141,7 +7387,10 @@ impl<'a> TypeProjection<'a> {
         tu: &'a str,
         local_types: &'a BTreeMap<Location, String>,
         routed_types: &'a BTreeMap<String, String>,
-        type_choices: &'a BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
+        choices: (
+            &'a BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
+            Option<&'a SalConstantSizes>,
+        ),
         namespace: Option<&'a str>,
     ) -> Self {
         Self {
@@ -7150,7 +7399,8 @@ impl<'a> TypeProjection<'a> {
             tu,
             local_types,
             routed_types,
-            type_choices,
+            type_choices: choices.0,
+            sal_constant_sizes: choices.1,
             namespace,
         }
     }
@@ -7159,14 +7409,44 @@ impl<'a> TypeProjection<'a> {
         self.project(TypeEdge::Type(ty)).name
     }
 
-    fn parameter(&self, param: &Parameter) -> ProjectedType {
+    fn use_type(&self, ty: &TypeRef, annotations: &[Annotation]) -> ProjectedType {
+        self.project(TypeEdge::Use(ty, annotations))
+    }
+
+    fn parameter(
+        &self,
+        param: &Parameter,
+        annotations: &[Annotation],
+        target: &AnnotationTarget,
+    ) -> ProjectedType {
         if param.annotation.com_out_ptr {
             return ProjectedType {
                 name: "*mut *mut void".to_string(),
                 mutable: true,
+                annotations: Vec::new(),
             };
         }
-        self.project(TypeEdge::Parameter(param))
+        let resolved = self
+            .sal_constant_sizes
+            .and_then(|sizes| sizes.get_key_value(target));
+        let edge = TypeEdge::Parameter(param, annotations, resolved);
+        let mut projected = self.project(edge);
+        if matches!(
+            self.type_choices.get(&(self.tu, edge)),
+            Some(TypeChoice::String { .. })
+        ) && let Some((
+            _,
+            Ok(SalSize {
+                bytes: false,
+                value: SalSizeValue::Constant(count),
+            }),
+        )) = resolved
+        {
+            projected
+                .annotations
+                .push(Annotation::ArrayCountConst(count.to_string()));
+        }
+        projected
     }
 
     fn project(&self, edge: TypeEdge<'_>) -> ProjectedType {
@@ -7180,9 +7460,35 @@ impl<'a> TypeProjection<'a> {
                 return ProjectedType {
                     name: qualify_routed_type(&emitted, self.routed_types, self.namespace),
                     mutable: *mutable,
+                    annotations: Vec::new(),
                 };
             }
-            Some(TypeChoice::Declared(ty)) if matches!(edge, TypeEdge::Parameter(_)) => {
+            Some(TypeChoice::String {
+                name,
+                mutable,
+                not_null_terminated,
+                null_null_terminated,
+            }) => {
+                let emitted = self.type_names.get(*name).map_or(*name, String::as_str);
+                let mut annotations = Vec::new();
+                if !mutable {
+                    annotations.push(Annotation::Const);
+                }
+                if *not_null_terminated {
+                    annotations.push(Annotation::NotNullTerminated);
+                }
+                if *null_null_terminated {
+                    annotations.push(Annotation::NullNullTerminated);
+                }
+                return ProjectedType {
+                    name: qualify_routed_type(emitted, self.routed_types, self.namespace),
+                    mutable: false,
+                    annotations,
+                };
+            }
+            Some(TypeChoice::Declared(ty))
+                if matches!(edge, TypeEdge::Parameter(..) | TypeEdge::Use(..)) =>
+            {
                 return self.project(TypeEdge::Type(ty));
             }
             Some(TypeChoice::Declared(ty)) => *ty,
@@ -7198,12 +7504,14 @@ impl<'a> TypeProjection<'a> {
             return ProjectedType {
                 name: "*mut u8".to_string(),
                 mutable: true,
+                annotations: Vec::new(),
             };
         }
         if let TypeRef::OpaquePointer { mutable, .. } = ty {
             return ProjectedType {
                 name: format!("*{} void", if *mutable { "mut" } else { "const" }),
                 mutable: *mutable,
+                annotations: Vec::new(),
             };
         }
         if let TypeRef::Reference { mutable, target } = ty {
@@ -7215,6 +7523,7 @@ impl<'a> TypeProjection<'a> {
                 return ProjectedType {
                     name: self.project(TypeEdge::Pointee(target, *mutable)).name,
                     mutable: false,
+                    annotations: Vec::new(),
                 };
             }
             return self.pointer(target, *mutable, 1);
@@ -7223,6 +7532,7 @@ impl<'a> TypeProjection<'a> {
             return ProjectedType {
                 name: format!("[{}; {len}]", self.name(target)),
                 mutable: false,
+                annotations: Vec::new(),
             };
         }
         if let TypeRef::Generic { name, args, .. } = ty {
@@ -7236,6 +7546,7 @@ impl<'a> TypeProjection<'a> {
                         .join(", ")
                 ),
                 mutable: false,
+                annotations: Vec::new(),
             };
         }
         let (mutable, depth, target) = pointer_run(ty);
@@ -7275,6 +7586,7 @@ impl<'a> TypeProjection<'a> {
         ProjectedType {
             name,
             mutable: false,
+            annotations: Vec::new(),
         }
     }
 
@@ -7286,6 +7598,7 @@ impl<'a> TypeProjection<'a> {
                 self.project(TypeEdge::Pointee(target, mutable)).name
             ),
             mutable: depth != 0 && mutable,
+            annotations: Vec::new(),
         }
     }
 }
@@ -7293,6 +7606,30 @@ impl<'a> TypeProjection<'a> {
 struct ProjectedType {
     name: String,
     mutable: bool,
+    annotations: Vec<Annotation>,
+}
+
+impl ProjectedType {
+    fn annotations<'a>(&'a self, existing: &'a [Annotation]) -> Cow<'a, [Annotation]> {
+        if self.annotations.is_empty() {
+            return Cow::Borrowed(existing);
+        }
+        let mut result = existing.to_vec();
+        for annotation in &self.annotations {
+            if !result.contains(annotation) {
+                result.push(annotation.clone());
+            }
+        }
+        Cow::Owned(result)
+    }
+
+    fn annotated_name(&self, existing: &[Annotation]) -> Result<String, Error> {
+        Ok(format!(
+            "{}{}",
+            annotation_inline(&self.annotations(existing))?,
+            self.name
+        ))
+    }
 }
 
 struct ScopedDeclarationIndex {
@@ -9545,21 +9882,35 @@ fn validate_complete_layout(
 enum TypeEdge<'a> {
     Type(&'a TypeRef),
     Pointee(&'a TypeRef, bool),
-    Parameter(&'a Parameter),
+    Use(&'a TypeRef, &'a [Annotation]),
+    Parameter(
+        &'a Parameter,
+        &'a [Annotation],
+        Option<(&'a AnnotationTarget, &'a Result<SalSize, String>)>,
+    ),
     Projected(&'a str),
 }
 
 #[derive(Clone, Copy)]
 enum TypeChoice<'a> {
     Declared(&'a TypeRef),
-    Canonical { name: &'static str, mutable: bool },
+    Canonical {
+        name: &'static str,
+        mutable: bool,
+    },
+    String {
+        name: &'static str,
+        mutable: bool,
+        not_null_terminated: bool,
+        null_null_terminated: bool,
+    },
 }
 
 impl<'a> TypeChoice<'a> {
     fn edge(self) -> TypeEdge<'a> {
         match self {
             Self::Declared(ty) => TypeEdge::Type(ty),
-            Self::Canonical { name, .. } => TypeEdge::Projected(name),
+            Self::Canonical { name, .. } | Self::String { name, .. } => TypeEdge::Projected(name),
         }
     }
 }
@@ -10232,17 +10583,42 @@ fn queue_fact_type_refs(data: &FactData, tu: &str, queue: &mut Vec<(String, Type
 fn queue_type_edges<'a>(
     fact: &'a Fact,
     projected_type_names: &'a BTreeMap<Origin, String>,
+    annotations: &'a BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    sal_constant_sizes: Option<&'a SalConstantSizes>,
     source: DependencyNode<'a>,
     queue: &mut Vec<PendingTypeEdge<'a>>,
 ) {
     let tu = fact.origin.tu.as_str();
     let mut push = |edge| queue.push((tu, edge, source));
     match &fact.data {
+        FactData::Typedef {
+            target: TypeRef::InlineRecord(record),
+        } => {
+            queue_record_edges(
+                &record.fields,
+                annotations,
+                &fact.origin,
+                &[],
+                source,
+                queue,
+            );
+        }
         FactData::Typedef { target } => push(TypeEdge::Type(target)),
         FactData::Callback { params, result, .. } => {
-            push(TypeEdge::Type(result));
-            for param in params {
-                push(TypeEdge::Parameter(param));
+            push(TypeEdge::Use(
+                result,
+                annotations_for(annotations, &AnnotationTarget::Return(fact.origin.clone())),
+            ));
+            for (index, param) in params.iter().enumerate() {
+                let target = AnnotationTarget::Parameter {
+                    declaration: fact.origin.clone(),
+                    index,
+                };
+                push(TypeEdge::Parameter(
+                    param,
+                    annotations_for(annotations, &target),
+                    sal_constant_sizes.and_then(|sizes| sizes.get_key_value(&target)),
+                ));
             }
         }
         FactData::PropertyKey { ty, .. } => push(TypeEdge::Projected(
@@ -10254,18 +10630,34 @@ fn queue_type_edges<'a>(
             if let Some(base) = base {
                 push(TypeEdge::Type(base));
             }
-            for field in fields {
-                push(TypeEdge::Type(&field.ty));
-            }
+            queue_record_edges(fields, annotations, &fact.origin, &[], source, queue);
         }
         FactData::Interface { base, methods, .. } => {
             if let Some(base) = base {
                 push(TypeEdge::Type(base));
             }
-            for method in methods {
-                push(TypeEdge::Type(&method.result));
-                for param in &method.params {
-                    push(TypeEdge::Parameter(param));
+            for (index, method) in methods.iter().enumerate() {
+                push(TypeEdge::Use(
+                    &method.result,
+                    annotations_for(
+                        annotations,
+                        &AnnotationTarget::MethodReturn {
+                            declaration: fact.origin.clone(),
+                            index,
+                        },
+                    ),
+                ));
+                for (parameter, param) in method.params.iter().enumerate() {
+                    let target = AnnotationTarget::MethodParameter {
+                        declaration: fact.origin.clone(),
+                        method: index,
+                        parameter,
+                    };
+                    push(TypeEdge::Parameter(
+                        param,
+                        annotations_for(annotations, &target),
+                        sal_constant_sizes.and_then(|sizes| sizes.get_key_value(&target)),
+                    ));
                 }
             }
         }
@@ -10273,17 +10665,74 @@ fn queue_type_edges<'a>(
     }
 }
 
+fn queue_record_edges<'a>(
+    fields: &'a [Field],
+    annotations: &'a BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    origin: &'a Origin,
+    path: &[usize],
+    source: DependencyNode<'a>,
+    queue: &mut Vec<PendingTypeEdge<'a>>,
+) {
+    for (index, field) in fields.iter().enumerate() {
+        let mut nested_path = path.to_vec();
+        nested_path.push(index);
+        if let TypeRef::InlineRecord(record) = &field.ty {
+            if let Some(base) = &record.base {
+                queue.push((origin.tu.as_str(), TypeEdge::Type(base), source));
+            }
+            queue_record_edges(
+                &record.fields,
+                annotations,
+                origin,
+                &nested_path,
+                source,
+                queue,
+            );
+        } else {
+            let target = if path.is_empty() {
+                AnnotationTarget::Field {
+                    declaration: origin.clone(),
+                    index,
+                }
+            } else {
+                AnnotationTarget::NestedField {
+                    declaration: origin.clone(),
+                    path: nested_path,
+                }
+            };
+            queue.push((
+                origin.tu.as_str(),
+                TypeEdge::Use(&field.ty, annotations_for(annotations, &target)),
+                source,
+            ));
+        }
+    }
+}
+
 fn queue_function_edges<'a>(
     fact: &'a Fact,
+    annotations: &'a BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    sal_constant_sizes: Option<&'a SalConstantSizes>,
     source: DependencyNode<'a>,
     queue: &mut Vec<PendingTypeEdge<'a>>,
 ) {
     if let FactData::Function { params, result, .. } = &fact.data {
         let tu = fact.origin.tu.as_str();
         let mut push = |edge| queue.push((tu, edge, source));
-        push(TypeEdge::Type(result));
-        for param in params {
-            push(TypeEdge::Parameter(param));
+        push(TypeEdge::Use(
+            result,
+            annotations_for(annotations, &AnnotationTarget::Return(fact.origin.clone())),
+        ));
+        for (index, param) in params.iter().enumerate() {
+            let target = AnnotationTarget::Parameter {
+                declaration: fact.origin.clone(),
+                index,
+            };
+            push(TypeEdge::Parameter(
+                param,
+                annotations_for(annotations, &target),
+                sal_constant_sizes.and_then(|sizes| sizes.get_key_value(&target)),
+            ));
         }
     }
 }
@@ -10453,13 +10902,12 @@ fn write_callback(
     let result = if *result == TypeRef::Void {
         String::new()
     } else {
+        let annotations = annotations_for(annotations, &AnnotationTarget::Return(origin.clone()));
         format!(
-            " -> {}{}",
-            annotation_inline(annotations_for(
-                annotations,
-                &AnnotationTarget::Return(origin.clone()),
-            ))?,
-            projection.name(result)
+            " -> {}",
+            projection
+                .use_type(result, annotations)
+                .annotated_name(annotations)?
         )
     };
     Ok(format!(
@@ -10503,14 +10951,15 @@ fn write_params(
                     parameter: index,
                 },
             };
-            let ty = projection.parameter(param);
+            let metadata_annotations = annotations_for(annotations, &target);
+            let ty = projection.parameter(param, metadata_annotations, &target);
             Ok(format!(
                 "{}{}: {}",
                 param_attributes(
                     param,
                     params,
                     ty.mutable,
-                    annotations_for(annotations, &target),
+                    &ty.annotations(metadata_annotations),
                 )?,
                 rdl_ident(&param.name),
                 ty.name
@@ -10627,16 +11076,18 @@ fn write_interface(
             let return_type = if method.result == TypeRef::Void {
                 String::new()
             } else {
+                let annotations = annotations_for(
+                    annotations,
+                    &AnnotationTarget::MethodReturn {
+                        declaration: origin.clone(),
+                        index: method_index,
+                    },
+                );
                 format!(
-                    " -> {}{}",
-                    annotation_inline(annotations_for(
-                        annotations,
-                        &AnnotationTarget::MethodReturn {
-                            declaration: origin.clone(),
-                            index: method_index,
-                        },
-                    ))?,
-                    projection.name(&method.result)
+                    " -> {}",
+                    projection
+                        .use_type(&method.result, annotations)
+                        .annotated_name(annotations)?
                 )
             };
             result.push_str(&format!(
@@ -10703,6 +11154,143 @@ fn parameter_string_name(param: &Parameter) -> Option<&'static str> {
             canonical_string_name(name)
         }
         _ => None,
+    }
+}
+
+struct NativeStringType {
+    name: &'static str,
+    mutable: bool,
+    terminated: bool,
+    counted: bool,
+    double_terminated: bool,
+}
+
+fn native_string_type<'a>(
+    mut ty: &'a TypeRef,
+    tu: &str,
+    facts: &BTreeMap<(String, Location), &'a Fact>,
+    source_names: Option<&PlanningSourceNames>,
+) -> Option<NativeStringType> {
+    let mut seen = BTreeSet::new();
+    let mut terminated = false;
+    let mut counted = false;
+    let mut double_terminated = false;
+    while let TypeRef::Named { declaration, .. } = ty {
+        let fact = facts.get(&(tu.to_string(), declaration.clone()))?;
+        if !seen.insert(&fact.origin) {
+            return None;
+        }
+        if seen.len() == 1 {
+            let name = source_names.map_or(fact.name.as_str(), |names| names.fact_name(fact));
+            terminated = canonical_string_name(name).is_some();
+            counted = matches!(
+                name,
+                "PCH" | "LPCH" | "PCCH" | "LPCCH" | "PWCH" | "LPWCH" | "PCWCH" | "LPCWCH"
+            );
+            double_terminated = matches!(name, "PZZSTR" | "PCZZSTR" | "PZZWSTR" | "PCZZWSTR");
+        }
+        let FactData::Typedef { target } = &fact.data else {
+            return None;
+        };
+        ty = target;
+    }
+    let TypeRef::Pointer { mutable, target } = ty else {
+        return None;
+    };
+    let mut target = target.as_ref();
+    while let TypeRef::Named { declaration, .. } = target {
+        let fact = facts.get(&(tu.to_string(), declaration.clone()))?;
+        if !seen.insert(&fact.origin) {
+            return None;
+        }
+        let FactData::Typedef { target: next } = &fact.data else {
+            return None;
+        };
+        target = next;
+    }
+    let name = match target {
+        TypeRef::Scalar(Scalar::I8 | Scalar::U8) => "PSTR",
+        TypeRef::Scalar(Scalar::U16) => "PWSTR",
+        _ => return None,
+    };
+    Some(NativeStringType {
+        name,
+        mutable: *mutable,
+        terminated,
+        counted,
+        double_terminated,
+    })
+}
+
+fn string_type_choice<'a>(
+    ty: &'a TypeRef,
+    tu: &str,
+    param: Option<&ParamAnnotation>,
+    annotations: &[Annotation],
+    facts: &BTreeMap<(String, Location), &'a Fact>,
+    source_names: Option<&PlanningSourceNames>,
+    resolve_size: impl FnOnce() -> Result<Option<&'a SalSize>, Error>,
+) -> Result<Option<TypeChoice<'a>>, Error> {
+    let Some(native) = native_string_type(ty, tu, facts, source_names) else {
+        return Ok(None);
+    };
+    if matches!(ty, TypeRef::Named { .. })
+        && !native.terminated
+        && !native.counted
+        && !native.double_terminated
+    {
+        return Ok(None);
+    }
+    let terminated = native.double_terminated
+        || param.is_some_and(|param| param.null_terminated || param.null_null_terminated)
+        || annotations.contains(&Annotation::NullNullTerminated);
+    if !native.terminated && !native.counted && !terminated {
+        return Ok(None);
+    }
+    let resolved_size = resolve_size()?;
+    if let Some(SalSize {
+        value: SalSizeValue::Expression(value),
+        ..
+    }) = resolved_size.or_else(|| param.and_then(|param| param.size.as_ref()))
+    {
+        return Err(Error(format!(
+            "string projection cannot preserve SAL count expression `{value}` \
+             in translation unit `{tu}`"
+        )));
+    }
+    let counted = param.is_some_and(|param| param.size.is_some())
+        || annotations.iter().any(|annotation| {
+            matches!(
+                annotation,
+                Annotation::ArrayCountParam(_)
+                    | Annotation::ArrayCountConst(_)
+                    | Annotation::ArrayCountField(_)
+                    | Annotation::MemorySizeParam(_)
+            )
+        });
+    Ok(Some(TypeChoice::String {
+        name: native.name,
+        mutable: native.mutable,
+        not_null_terminated: !terminated && (native.counted || counted),
+        null_null_terminated: native.double_terminated,
+    }))
+}
+
+fn parameter_use_error(
+    error: Error,
+    param: &Parameter,
+    source: DependencyNode<'_>,
+    facts: &HashMap<&Origin, &Fact>,
+) -> Error {
+    if let DependencyNode::Fact(origin) = source
+        && let Some(fact) = facts.get(origin)
+    {
+        Error(format!(
+            "{}:{}: `{}` parameter `{}` in translation unit `{}`: {error}",
+            fact.spelling.file, fact.spelling.offset, fact.name, param.name, fact.origin.tu,
+        ))
+    } else {
+        error
     }
 }
 
@@ -10888,7 +11476,7 @@ fn write_record_fields(
     let mut index = 0;
     while index < fields.len() {
         let field = &fields[index];
-        let attributes = if let Some((annotations, origin, path)) = &field_annotations {
+        let metadata_annotations = if let Some((annotations, origin, path)) = &field_annotations {
             let target = if path.is_empty() {
                 AnnotationTarget::Field {
                     declaration: (*origin).clone(),
@@ -10902,10 +11490,21 @@ fn write_record_fields(
                     path,
                 }
             };
-            annotation_inline(annotations_for(annotations, &target))?
+            annotations_for(annotations, &target)
         } else {
-            String::new()
+            &[]
         };
+        let ty = if matches!(field.ty, TypeRef::InlineRecord(_)) {
+            None
+        } else {
+            Some(projection.use_type(&field.ty, metadata_annotations))
+        };
+        let attributes = annotation_inline(
+            &ty.as_ref()
+                .map_or(Cow::Borrowed(metadata_annotations), |ty| {
+                    ty.annotations(metadata_annotations)
+                }),
+        )?;
         if field.bit_width == Some(0) {
             index += 1;
             continue;
@@ -10940,7 +11539,7 @@ fn write_record_fields(
             result.push_str(&format!(
                 "{spaces}{attributes}{}: {},\n",
                 rdl_ident(&field.name),
-                projection.name(&field.ty)
+                ty.as_ref().unwrap().name
             ));
             index += 1;
             continue;
@@ -10954,7 +11553,7 @@ fn write_record_fields(
         };
         result.push_str(&format!(
             "{spaces}{attributes}{backing}: {} {{\n",
-            projection.name(&field.ty)
+            ty.as_ref().unwrap().name
         ));
         let mut cursor = group.offset;
         for member in &fields[group.start..group.end] {
@@ -11373,6 +11972,71 @@ fn origin(origin: &Origin) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sal_constant_probe_isolates_unknown_siblings_and_tu_values() {
+        helpers::ensure_libclang();
+        let source = r#"
+            typedef char* PSTR;
+            extern "C" void Mixed(
+                __attribute__((annotate("_In_reads_(LIMIT)"))) PSTR valid,
+                __attribute__((annotate("_In_reads_(UNKNOWN_COUNT)"))) PSTR unknown,
+                __attribute__((annotate("_In_reads_(LIMIT + 2)"))) PSTR sibling);
+        "#;
+        let snapshot = extract(
+            [
+                Input::new("first.hpp", format!("#define LIMIT 8\n{source}")),
+                Input::new("second.hpp", format!("#define LIMIT 12\n{source}")),
+                Input::new("no-count.hpp", "typedef int VALUE;"),
+            ],
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        for fact in snapshot.facts.iter().filter(|fact| fact.name == "Mixed") {
+            for (index, expected) in [
+                (0, if fact.origin.tu == "first.hpp" { 8 } else { 12 }),
+                (
+                    2,
+                    if fact.origin.tu == "first.hpp" {
+                        10
+                    } else {
+                        14
+                    },
+                ),
+            ] {
+                assert_eq!(
+                    snapshot.sal_constant_sizes[&AnnotationTarget::Parameter {
+                        declaration: fact.origin.clone(),
+                        index,
+                    }],
+                    Ok(SalSize {
+                        bytes: false,
+                        value: SalSizeValue::Constant(expected)
+                    }),
+                );
+            }
+            let unknown = &snapshot.sal_constant_sizes[&AnnotationTarget::Parameter {
+                declaration: fact.origin.clone(),
+                index: 1,
+            }];
+            assert!(unknown.as_ref().unwrap_err().contains("UNKNOWN_COUNT"));
+            let FactData::Function { params, .. } = &fact.data else {
+                panic!("Mixed is not a function");
+            };
+            assert_eq!(
+                params[0].annotation.size.as_ref().unwrap().value,
+                SalSizeValue::Expression("LIMIT".to_string())
+            );
+        }
+        let references = BTreeMap::new();
+        let excluded_constants = BTreeSet::from(["LIMIT".to_string()]);
+        let mut options = EmitOptions::new("Test", &references);
+        options.excluded_constants = Some(&excluded_constants);
+        options.library = Some("test.dll");
+        snapshot.emit_with_options(&options).unwrap();
+        options.mutable_string_aliases = true;
+        assert!(snapshot.emit_with_options(&options).is_err());
+    }
 
     mod native_class_layouts;
     mod planner_lookups;

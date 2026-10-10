@@ -101,6 +101,15 @@ uses become raw pointers; nested pointers retain a native alias when WinMD needs
 Noncanonical pointer aliases such as `HANDLE` stay named. Explicit SAL directions and buffer counts
 survive lowering, while an unannotated mutable pointer uses the raw-pointer output default.
 
+Set `EmitOptions::mutable_string_aliases` to opt into SDK `PSTR`/`PWSTR` uses with per-use const and
+termination attributes. The default string vocabulary remains unchanged. Native typedefs supply
+the character width and mutability; SAL and metadata annotations supply the use contract.
+Parameters, fields, callbacks, interface methods, and returns share this projection. Counted
+character buffers keep their counts and non-NUL contract, while raw pointers need positive
+termination evidence before becoming strings. Nested pointers and arrays keep native aliases where
+their qualifier boundary is needed. Missing SDK definitions, unrepresentable normalized-string
+counts, and mixed raw pointer qualifiers are reported rather than replaced with guessed types.
+
 Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
 to stderr without changing the generated RDL.
 
