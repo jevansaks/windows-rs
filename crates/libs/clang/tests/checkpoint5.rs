@@ -548,13 +548,12 @@ fn unrepresentable_sal_size_relations_are_reported() {
     let source = "extern \"C\" void Invalid(\
         __attribute__((annotate(\"_Out_writes_bytes_(4)\"))) void *buffer, unsigned int count);";
     let snapshot = extract([Input::new("invalid.hpp", source)], &["-x", "c++"]).unwrap();
-    let (_, reason) = snapshot
-        .unsupported()
-        .find(|(fact, _)| fact.name == "Invalid")
-        .unwrap();
+    assert_eq!(snapshot.unsupported().count(), 0);
     assert!(
-        reason.contains("constant byte-size SAL annotations are unsupported"),
-        "unexpected unsupported reason: {reason}"
+        snapshot
+            .emit_with_library("Test", "test.dll")
+            .unwrap()
+            .contains("#[size_const(4)] buffer: *mut void")
     );
 
     let expression = extract(

@@ -134,11 +134,6 @@ fn assert_constant_counts(index: &windows_metadata::reader::Index, compatibility
         let rows = function.params_by_sequence(counts.len()).unwrap();
         for (position, count) in counts.into_iter().enumerate() {
             let row = rows.params()[position].unwrap();
-            if !compatibility {
-                assert!(!row.has_attribute("NativeArrayInfoAttribute"));
-                assert!(!row.has_attribute("MemorySizeAttribute"));
-                continue;
-            }
             assert_eq!(
                 row.find_attribute("NativeArrayInfoAttribute")
                     .unwrap()
@@ -921,54 +916,26 @@ fn constant_counts_reject_repeated_selected_native_uses() {
             .plan_header_partitions(&policy, &NamespaceAuthorities::new())
             .unwrap();
         for partitioned in [false, true] {
-            options.mutable_string_aliases = false;
-            let rdl = if partitioned {
-                plan.clone()
-                    .emit_with_options(&options)
-                    .unwrap()
-                    .into_values()
-                    .collect()
-            } else {
-                snapshot.emit_with_options(&options).unwrap()
-            };
-            let index = compile_rdl(&rdl, &format!("shared-{name}-{partitioned}"));
-            let function = if name == "Same" {
-                let Item::Fn(function) = index.expect_item("Test", name) else {
-                    panic!("Same is not a function");
-                };
-                function
-            } else {
-                index
-                    .expect("Test", name)
-                    .methods()
-                    .find(|method| {
-                        method.name() == if name == "ICount" { "Count" } else { "Invoke" }
-                    })
-                    .unwrap()
-            };
-            assert!(
-                !function.params_by_sequence(1).unwrap().params()[0]
-                    .unwrap()
-                    .has_attribute("NativeArrayInfoAttribute")
-            );
-            options.mutable_string_aliases = true;
-            let error = if partitioned {
-                plan.clone().emit_with_options(&options).unwrap_err()
-            } else {
-                snapshot.emit_with_options(&options).unwrap_err()
-            }
-            .to_string();
-            for expected in [
-                "conflicting native SAL count contexts",
-                "common.h",
-                "first.cpp",
-                "second.cpp",
-                "selected_target=",
-                "policy=",
-                "Constant(8)",
-                "Constant(12)",
-            ] {
-                assert!(error.contains(expected), "{name}: {error}");
+            for compatibility in [false, true] {
+                options.mutable_string_aliases = compatibility;
+                let error = if partitioned {
+                    plan.clone().emit_with_options(&options).unwrap_err()
+                } else {
+                    snapshot.emit_with_options(&options).unwrap_err()
+                }
+                .to_string();
+                for expected in [
+                    "conflicting native SAL count contexts",
+                    "common.h",
+                    "first.cpp",
+                    "second.cpp",
+                    "selected_target=",
+                    "policy=",
+                    "Constant(8)",
+                    "Constant(12)",
+                ] {
+                    assert!(error.contains(expected), "{name}: {error}");
+                }
             }
         }
     }
@@ -995,20 +962,16 @@ fn constant_counts_keep_native_line_macro_context() {
                     panic!("{name} is not a function");
                 };
                 let row = function.params_by_sequence(1).unwrap().params()[0].unwrap();
-                if compatibility {
-                    assert_eq!(
-                        row.find_attribute("NativeArrayInfoAttribute")
-                            .unwrap()
-                            .value(),
-                        [(
-                            "CountConst".to_string(),
-                            windows_metadata::Value::I32(expected)
-                        )],
-                        "{name}",
-                    );
-                } else {
-                    assert!(!row.has_attribute("NativeArrayInfoAttribute"));
-                }
+                assert_eq!(
+                    row.find_attribute("NativeArrayInfoAttribute")
+                        .unwrap()
+                        .value(),
+                    [(
+                        "CountConst".to_string(),
+                        windows_metadata::Value::I32(expected)
+                    )],
+                    "{name}",
+                );
             }
         }
     }
@@ -1082,7 +1045,7 @@ fn constant_counts_keep_multiline_parameter_source() {
                     };
                     function
                 };
-                if compatibility {
+                {
                     let actual = function
                         .params_by_sequence(2)
                         .unwrap()
@@ -1105,11 +1068,6 @@ fn constant_counts_keep_multiline_parameter_source() {
                         })
                         .collect::<Vec<_>>();
                     assert_eq!(actual, expected, "{name}");
-                    continue;
-                }
-                for position in 0..2 {
-                    let row = function.params_by_sequence(2).unwrap().params()[position].unwrap();
-                    assert!(!row.has_attribute("NativeArrayInfoAttribute"));
                 }
             }
         }
@@ -1120,15 +1078,16 @@ fn constant_counts_keep_multiline_parameter_source() {
 fn constant_count_errors_only_affect_eligible_string_uses() {
     let source = r#"
         #define ODD 3
+        #define COUNT 8
         typedef char* PSTR;
         typedef unsigned short* PWSTR;
         typedef const unsigned short* PCWSTR;
         typedef PCWSTR TEXT_HANDLE_W;
         extern "C" void NativeAlias(PCWSTR value);
         extern "C" void Unrelated(
-            __attribute__((annotate("_In_reads_(UNKNOWN_COUNT)"))) void* binary,
+            __attribute__((annotate("_In_reads_(COUNT)"))) void* binary,
             __attribute__((annotate("_In_z_")))
-            __attribute__((annotate("_In_reads_(UNKNOWN_COUNT)"))) TEXT_HANDLE_W nominal,
+            __attribute__((annotate("_In_reads_(COUNT)"))) TEXT_HANDLE_W nominal,
             __attribute__((annotate("_In_reads_bytes_(ODD)"))) void* bytes,
             __attribute__((annotate("_In_reads_bytes_(ODD)"))) TEXT_HANDLE_W nominal_bytes);
     "#;
@@ -1142,10 +1101,22 @@ fn constant_count_errors_only_affect_eligible_string_uses() {
             let types = function.signature(&[]).types;
             assert_eq!(types[1], Type::value_named("Test", "TEXT_HANDLE_W"));
             assert_eq!(types[3], Type::value_named("Test", "TEXT_HANDLE_W"));
-            for row in function.params_by_sequence(4).unwrap().params() {
+            for (position, row) in function
+                .params_by_sequence(4)
+                .unwrap()
+                .params()
+                .iter()
+                .enumerate()
+            {
                 let row = row.unwrap();
-                assert!(!row.has_attribute("NativeArrayInfoAttribute"));
-                assert!(!row.has_attribute("MemorySizeAttribute"));
+                assert_eq!(
+                    row.buffer_relationship(),
+                    Some(if position < 2 {
+                        windows_metadata::reader::BufferRelationship::ElementsConst(8)
+                    } else {
+                        windows_metadata::reader::BufferRelationship::BytesConst(3)
+                    })
+                );
             }
         }
         let source = r#"
@@ -1154,16 +1125,47 @@ fn constant_count_errors_only_affect_eligible_string_uses() {
             typedef const unsigned short* PCWSTR;
             extern "C" void Use(__attribute__((annotate("_In_reads_bytes_(ODD)"))) PCWSTR value);
         "#;
-        emit(source, false, partitioned).unwrap();
-        let error = emit(source, true, partitioned).unwrap_err().to_string();
-        assert!(
-            error.contains("no exact native element-size conversion"),
-            "{error}"
-        );
-        assert!(
-            error.contains("Use") && error.contains("value") && error.contains("strings.hpp"),
-            "{error}"
-        );
+        for compatibility in [false, true] {
+            let rdl = emit(source, compatibility, partitioned).unwrap();
+            let index = compile_rdl(&rdl, &format!("odd-bytes-{compatibility}-{partitioned}"));
+            let Item::Fn(function) = index.expect_item("Test", "Use") else {
+                panic!("{rdl}")
+            };
+            assert_eq!(
+                function.params_by_sequence(1).unwrap().params()[0]
+                    .unwrap()
+                    .buffer_relationship(),
+                Some(windows_metadata::reader::BufferRelationship::BytesConst(3))
+            );
+            assert_eq!(
+                function.signature(&[]).types[0],
+                Type::value_named("Test", if compatibility { "PWSTR" } else { "PCWSTR" })
+            );
+            let unknown = source.replace("ODD)", "UNKNOWN_COUNT)");
+            if compatibility {
+                let error = emit(&unknown, compatibility, partitioned)
+                    .unwrap_err()
+                    .to_string();
+                assert!(
+                    error.contains("UNKNOWN_COUNT") && error.contains("value"),
+                    "{error}"
+                );
+            } else {
+                let rdl = emit(&unknown, compatibility, partitioned).unwrap();
+                let index = compile_rdl(&rdl, &format!("unknown-default-{partitioned}"));
+                let Item::Fn(function) = index.expect_item("Test", "Use") else {
+                    panic!("{rdl}")
+                };
+                assert_eq!(
+                    function.signature(&[]).types[0],
+                    Type::value_named("Test", "PCWSTR")
+                );
+                assert_eq!(
+                    function.params().next().unwrap().buffer_relationship(),
+                    None
+                );
+            }
+        }
     }
 }
 

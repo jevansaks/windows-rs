@@ -524,7 +524,7 @@ The primary vocabulary controls:
 | Handle lifetime | `raii_free`, `invalid_handle`, `free_with`, `do_not_release` |
 | Relationships | `retained`, `also_usable_for`, `associated_enum`, `associated_constant` |
 | Parameter projection | `in`, `out`, `optional`, `reserved`, `retval`, `com_out_ptr` |
-| Parameter buffer sizes | `array_count_param`, `array_count_const`, `memory_size_param` |
+| Parameter buffer sizes | `array_count_param`, `array_count_const`, `memory_size_param`, `memory_size_const` |
 | Field buffer sizes | `array_count_field` |
 | String and value metadata | `ansi`, `unicode`, `native_encoding`, `const` |
 | Native opaque classes | `native_opaque` |
@@ -622,21 +622,29 @@ not the function, callback, or interface declaration. Existing matching attribut
 Compiler constant SAL counts are evaluated at each parameter annotation's native expansion location
 with the same translation unit and compiler arguments. Macro redefinitions keep their value at each
 use. Native probes do not rewrite the annotation text or the declared type. Constant byte sizes use
-the native pointee size to produce an exact element count; parameter byte sizes remain byte sizes.
+the native pointee size to produce an exact element count when possible. Otherwise `size_const`
+preserves the exact byte count, including void buffers and odd byte counts on wide pointers.
+Parameter byte sizes remain byte sizes.
 One added native parse batches all requested expressions in a translation unit; inputs without
-requests add none. Resolved counts are separate from raw annotations and are consumed only for an
-eligible selected string use. Equivalent observations of that same physical declaration, native
+requests add none. Resolved counts are separate from raw annotations and are consumed for every
+selected emitted buffer, independently of `mutable_string_aliases`. Equivalent observations of the
+same physical declaration, native
 parent path, parameter slot, and complete partition policy must agree. Conflicts identify the
 selected target, source, translation units, policies, and values. Independent declarations and
 namespace or policy variants keep the existing selection and ownership rules.
-Compatibility planning indexes observations once by physical declaration and parameter slot, so
+Planning indexes observations once by physical declaration and parameter slot, so
 each selected use compares only its source bucket. Unsaved native annotation probes add no newlines;
 direct or macro-expanded `__LINE__` keeps each annotation's original line, including multiline
 parameters, trailing annotations, and native `#line` directives.
 
-The mode rejects a nonconstant string count expression such as `count + 1`: current count attributes
-accept a constant or a parameter index, not dynamic arithmetic. Unknown or unrepresentable counts
-report the source declaration and parameter. It also rejects a mixed raw pointer chain
+Count attributes accept a constant or a parameter index, not dynamic arithmetic. An unsupported
+hint such as `count + 1` keeps the canonical raw or nominal parameter and its native annotation,
+without a count attribute. Emission reports the source and parameter on stderr;
+`Snapshot::sal_count_diagnostics` and `HeaderPartitionPlan::sal_count_diagnostics` return the same
+selected-use diagnostics as structured records. Unselected declarations and non-emittable helpers
+do not contribute diagnostics. The optional eligible-string projection rejects an unsupported
+count when it needs that relationship. Negative, out-of-range, and contradictory compiler counts
+remain errors in both modes. The optional string mode rejects a mixed raw pointer chain
 without a native typedef boundary instead of flattening its qualifiers. Supporting that raw form
 requires per-pointer-rank const qualifiers in the RDL/WinMD signature model. Named boundaries such
 as `PCWSTR *` and `PWSTR const *` remain representable.

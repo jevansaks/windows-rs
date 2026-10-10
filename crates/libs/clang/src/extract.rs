@@ -2691,7 +2691,7 @@ struct MacroDefinitions<'tu> {
     translation_unit: PhantomData<&'tu TranslationUnit>,
     count_probes: Option<CountProbes<'tu>>,
     count_requests: RefCell<BTreeMap<Location, (bool, BTreeSet<String>)>>,
-    count_values: RefCell<BTreeMap<(Location, String), Result<i32, String>>>,
+    count_values: RefCell<BTreeMap<(Location, String), Result<i32, SalCountError>>>,
 }
 
 struct CountProbes<'tu> {
@@ -2739,7 +2739,7 @@ impl MacroDefinitions<'_> {
             for expression in expressions {
                 self.count_values.borrow_mut().insert(
                     (location.clone(), expression.clone()),
-                    Err(error.to_string()),
+                    Err(SalCountError::Invalid(error.to_string())),
                 );
             }
         }
@@ -2787,18 +2787,19 @@ impl MacroDefinitions<'_> {
                         parameter: index,
                     },
                 );
-                let value = value.and_then(|count| {
+                let value = value.map(|count| {
                     let mut annotation = ParamAnnotation {
-                        size: Some(SalSize { bytes: *bytes, value: SalSizeValue::Constant(count) }),
+                        size: Some(SalSize {
+                            bytes: *bytes,
+                            value: SalSizeValue::Constant(count),
+                        }),
                         ..Default::default()
                     };
-                    normalize_constant_byte_size(unsafe { clang_getCursorType(*cursor) }, &mut annotation);
-                    let size = annotation.size.unwrap();
-                    if size.bytes {
-                        Err(format!("constant byte count `{expression}` ({count}) has no exact native element-size conversion"))
-                    } else {
-                        Ok(size)
-                    }
+                    normalize_constant_byte_size(
+                        unsafe { clang_getCursorType(*cursor) },
+                        &mut annotation,
+                    );
+                    annotation.size.unwrap()
                 });
                 sizes.insert(target, value);
             }
@@ -2964,7 +2965,7 @@ impl MacroDefinitions<'_> {
         }
         fn collect(
             cursor: CXCursor,
-            values: &mut BTreeMap<usize, (Location, Result<i32, String>)>,
+            values: &mut BTreeMap<usize, (Location, Result<i32, SalCountError>)>,
         ) {
             if unsafe { clang_getCursorKind(cursor) } == CXCursor_AnnotateAttr
                 && let Some(index) = cx_string(unsafe { clang_getCursorSpelling(cursor) })
@@ -2974,17 +2975,25 @@ impl MacroDefinitions<'_> {
                 && let Some(value) = cursor_children(cursor)
                     .into_iter()
                     .find_map(evaluate_integer)
-                && let Ok(value) = i32::try_from(value.1)
-                && value >= 0
             {
+                let value = i32::try_from(value.1)
+                    .ok()
+                    .filter(|value| *value >= 0)
+                    .ok_or_else(|| {
+                        SalCountError::Invalid(format!(
+                            "native SAL count `{}` is outside the nonnegative i32 range",
+                            value.1
+                        ))
+                    });
                 match values.entry(index) {
                     std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert((location, Ok(value)));
+                        entry.insert((location, value));
                     }
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        if entry.get().1 != Ok(value) {
-                            entry.get_mut().1 =
-                                Err("conflicting native SAL count observations".to_string());
+                        if entry.get().1 != value {
+                            entry.get_mut().1 = Err(SalCountError::Invalid(
+                                "conflicting native SAL count observations".to_string(),
+                            ));
                         }
                     }
                 }
@@ -2997,32 +3006,40 @@ impl MacroDefinitions<'_> {
         collect(unsafe { clang_getTranslationUnitCursor(tu.0) }, &mut values);
         for (index, key) in keys.iter().enumerate() {
             let value = if !failures.is_empty() {
-                Err(format!(
+                Err(SalCountError::Invalid(format!(
                     "native SAL count probe/context failure: {}",
                     failures.join("; ")
-                ))
+                )))
             } else if let Some((location, value)) = values.get(&index) {
                 if let Some(range) = ranges
                     .get(&location.file)
                     .and_then(|ranges| ranges.iter().find(|range| range.contains(&location.offset)))
                 {
                     if let Some(error) = rejected.get(&(location.file.clone(), range.start)) {
-                        Err(format!(
+                        Err(SalCountError::Unsupported(format!(
                             "SAL count expression `{}` is not a supported compiler constant: {error}",
                             key.1
-                        ))
+                        )))
                     } else {
                         value.clone()
                     }
                 } else {
-                    Err("native SAL count probe/context failure: missing source range".to_string())
+                    Err(SalCountError::Invalid(
+                        "native SAL count probe/context failure: missing source range".to_string(),
+                    ))
                 }
             } else {
-                Err(format!(
+                Err(SalCountError::Unsupported(format!(
                     "SAL count expression `{}` is not a supported compiler constant",
                     key.1
-                ))
+                )))
             };
+            let value = value.map_err(|error| match error {
+                SalCountError::Invalid(reason) => {
+                    SalCountError::Invalid(format!("SAL count expression `{}`: {reason}", key.1))
+                }
+                unsupported => unsupported,
+            });
             self.count_values.borrow_mut().insert(key.clone(), value);
         }
         if timing {
@@ -4845,9 +4862,6 @@ fn callable_params(
                         size.value = SalSizeValue::Expression(format!("*{name}"));
                     }
                 }
-                SalSizeValue::Constant(_) if size.bytes => {
-                    return Err("constant byte-size SAL annotations are unsupported".to_string());
-                }
                 SalSizeValue::Expression(_) => {}
                 _ => {}
             }
@@ -5056,6 +5070,7 @@ fn validate_win32metadata_annotation(
             | "array_count_const"
             | "array_count_field"
             | "memory_size_param"
+            | "memory_size_const"
             | "ignore_if_return"
             | "also_usable_for"
             | "associated_enum"
@@ -5167,8 +5182,8 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
             )
         }
         "retained" | "ignore_if_return" | "array_count_param" | "array_count_const"
-        | "memory_size_param" | "in" | "out" | "optional" | "reserved" | "retval"
-        | "com_out_ptr" => target == CXCursor_ParmDecl,
+        | "memory_size_param" | "memory_size_const" | "in" | "out" | "optional" | "reserved"
+        | "retval" | "com_out_ptr" => target == CXCursor_ParmDecl,
         "array_count_field" => target == CXCursor_FieldDecl,
         "also_usable_for" => target == CXCursor_TypedefDecl,
         "associated_enum" => matches!(
@@ -5385,6 +5400,7 @@ fn annotation_value(raw: RawAnnotation) -> Option<Annotation> {
         "array_count_const" => Annotation::ArrayCountConst(value?),
         "array_count_field" => Annotation::ArrayCountField(value?),
         "memory_size_param" => Annotation::MemorySizeParam(value?),
+        "memory_size_const" => Annotation::MemorySizeConst(value?),
         "can_return_errors_as_success" => Annotation::CanReturnErrorsAsSuccess,
         "can_return_multiple_success_values" => Annotation::CanReturnMultipleSuccessValues,
         "retained" => Annotation::Retained,
@@ -6139,6 +6155,7 @@ fn annotation_key(annotation: &Annotation) -> &'static str {
         Annotation::ArrayCountConst(_) => "array_count_const",
         Annotation::ArrayCountField(_) => "array_count_field",
         Annotation::MemorySizeParam(_) => "memory_size_param",
+        Annotation::MemorySizeConst(_) => "memory_size_const",
         Annotation::CanReturnErrorsAsSuccess => "can_return_errors_as_success",
         Annotation::CanReturnMultipleSuccessValues => "can_return_multiple_success_values",
         Annotation::Retained => "retained",

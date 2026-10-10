@@ -172,7 +172,10 @@ fn write_attribute_definitions(path: &Path) {
         &mut file,
         "MemorySizeAttribute",
         &[],
-        &[("BytesParamIndex", metadata::Type::I16)],
+        &[
+            ("BytesParamIndex", metadata::Type::I16),
+            ("BytesConst", metadata::Type::I32),
+        ],
     );
     define_attribute(&mut file, "ReservedAttribute", &[], &[]);
     define_attribute(&mut file, "DoesNotReturnAttribute", &[], &[]);
@@ -200,6 +203,113 @@ fn assert_attribute(
     let attribute = param.find_attribute(name).unwrap();
     assert_eq!(attribute.namespace(), METADATA_NAMESPACE);
     assert_eq!(attribute.value(), values);
+}
+
+#[test]
+fn constant_bytes_compile_against_the_default_library() {
+    let scratch = scratch("constant_bytes_default");
+    let output = scratch.join("output.winmd");
+    let rdl = scratch.join("output.rdl");
+    let roundtrip = scratch.join("roundtrip.winmd");
+    windows_rdl::reader()
+        .reference_default()
+        .input_text(
+            "mod Test { #[library(\"test.dll\")] extern \"system\"
+                fn Buffers(#[size_const(36)] #[out] opaque: *mut void,
+                           #[size_const(3)] #[out] wide: *mut u16);
+            }",
+        )
+        .output(&output)
+        .write()
+        .unwrap();
+    windows_rdl::writer()
+        .input(&output)
+        .filter("Test")
+        .output(&rdl)
+        .write()
+        .unwrap();
+    windows_rdl::reader()
+        .reference_default()
+        .input(&rdl)
+        .output(&roundtrip)
+        .write()
+        .unwrap();
+    for path in [&output, &roundtrip] {
+        let index = metadata::reader::Index::read(path).unwrap();
+        let metadata::reader::Item::Fn(function) = index.expect_item("Test", "Buffers") else {
+            panic!()
+        };
+        assert_eq!(
+            function.signature(&[]).types,
+            [
+                metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1),
+                metadata::Type::PtrMut(Box::new(metadata::Type::U16), 1),
+            ]
+        );
+        for (param, count) in function.params().zip([36, 3]) {
+            assert_eq!(param.flags(), metadata::ParamAttributes::Out);
+            assert_eq!(
+                param.buffer_relationship(),
+                Some(metadata::reader::BufferRelationship::BytesConst(count))
+            );
+            assert!(!param.has_attribute("NativeArrayInfoAttribute"));
+        }
+    }
+}
+
+#[test]
+fn constant_bytes_compile_and_round_trip_without_element_conversion() {
+    let scratch = scratch("constant_bytes");
+    let input = scratch.join("input.winmd");
+    let rdl = scratch.join("output.rdl");
+    let roundtrip = scratch.join("roundtrip.winmd");
+    windows_rdl::reader()
+        .input_text(include_str!("../../../../../metadata/metadata.rdl"))
+        .input_text(
+            "mod Test { #[library(\"test.dll\")] extern \"system\"
+                fn Buffers(#[size_const(36)] #[out] opaque: *mut void,
+                           #[size_const(3)] #[out] wide: *mut u16);
+            }",
+        )
+        .output(&input)
+        .write()
+        .unwrap();
+    windows_rdl::writer()
+        .input(&input)
+        .filter("Test")
+        .output(&rdl)
+        .write()
+        .unwrap();
+    let source = std::fs::read_to_string(&rdl).unwrap();
+    assert!(source.contains("#[size_const(36)]"), "{source}");
+    assert!(source.contains("#[size_const(3)]"), "{source}");
+    windows_rdl::reader()
+        .input_text(include_str!("../../../../../metadata/metadata.rdl"))
+        .input_text(&source)
+        .output(&roundtrip)
+        .write()
+        .unwrap();
+    for path in [&input, &roundtrip] {
+        let index = metadata::reader::Index::read(path).unwrap();
+        let metadata::reader::Item::Fn(function) = index.expect_item("Test", "Buffers") else {
+            panic!()
+        };
+        assert_eq!(
+            function.signature(&[]).types,
+            [
+                metadata::Type::PtrMut(Box::new(metadata::Type::Void), 1),
+                metadata::Type::PtrMut(Box::new(metadata::Type::U16), 1),
+            ]
+        );
+        for (param, count) in function.params().zip([36, 3]) {
+            assert_eq!(param.flags(), metadata::ParamAttributes::Out);
+            assert_eq!(
+                param.buffer_relationship(),
+                Some(metadata::reader::BufferRelationship::BytesConst(count))
+            );
+            assert!(!param.has_attribute("NativeArrayInfoAttribute"));
+        }
+    }
 }
 
 #[test]

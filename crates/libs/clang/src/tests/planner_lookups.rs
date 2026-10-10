@@ -148,6 +148,8 @@ fn sal_count_observations_inspect_only_the_selected_source_bucket() {
             assert_eq!(
                 snapshot
                     .selected_sal_constant_size(&target, size, &facts, &observations)
+                    .unwrap()
+                    .as_ref()
                     .unwrap(),
                 size.as_ref().unwrap(),
             );

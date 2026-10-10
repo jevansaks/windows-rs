@@ -60,7 +60,7 @@ fn param_hint(
                     .is_some_and(|size| size <= i32::MAX as usize)
             })
             .map_or(ParamHint::None, ParamHint::ArrayFixed),
-        None => ParamHint::None,
+        Some(BufferRelationship::BytesConst(_)) | None => ParamHint::None,
     }
 }
 

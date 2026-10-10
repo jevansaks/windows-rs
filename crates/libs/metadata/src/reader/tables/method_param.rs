@@ -17,6 +17,7 @@ pub enum BufferRelationship {
     ElementsParam(i16),
     BytesParam(i16),
     ElementsConst(i32),
+    BytesConst(i32),
 }
 
 impl std::fmt::Debug for MethodParam<'_> {
@@ -68,6 +69,12 @@ impl MethodParam<'_> {
         let mut result = None;
 
         for attribute in self.attributes() {
+            if !matches!(
+                attribute.namespace(),
+                "Windows.Win32.Metadata" | "Windows.Win32.Foundation.Metadata"
+            ) {
+                continue;
+            }
             for (name, value) in attribute.value() {
                 let relationship = match (attribute.name(), name.as_str(), value) {
                     ("NativeArrayInfoAttribute", "CountParamIndex", Value::I16(value)) => {
@@ -79,8 +86,11 @@ impl MethodParam<'_> {
                     ("MemorySizeAttribute", "BytesParamIndex", Value::I16(value)) => {
                         BufferRelationship::BytesParam(value)
                     }
+                    ("MemorySizeAttribute", "BytesConst", Value::I32(value)) => {
+                        BufferRelationship::BytesConst(value)
+                    }
                     ("NativeArrayInfoAttribute", "CountParamIndex" | "CountConst", _)
-                    | ("MemorySizeAttribute", "BytesParamIndex", _) => return None,
+                    | ("MemorySizeAttribute", "BytesParamIndex" | "BytesConst", _) => return None,
                     _ => continue,
                 };
 

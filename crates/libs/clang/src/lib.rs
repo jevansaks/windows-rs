@@ -966,6 +966,7 @@ pub enum Annotation {
     ArrayCountConst(String),
     ArrayCountField(String),
     MemorySizeParam(String),
+    MemorySizeConst(String),
     CanReturnErrorsAsSuccess,
     CanReturnMultipleSuccessValues,
     Retained,
@@ -1364,9 +1365,32 @@ pub struct Snapshot {
     timing_target: Option<String>,
 }
 
-type SalConstantSizes = BTreeMap<AnnotationTarget, Result<SalSize, String>>;
+/// An unsupported size hint on a selected native parameter that is retained without a count.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SalCountDiagnostic {
+    pub declaration: Origin,
+    pub source: Location,
+    pub parameter: String,
+    pub reason: String,
+}
 
-type SalConstantObservation<'a> = (&'a AnnotationTarget, &'a Result<SalSize, String>);
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum SalCountError {
+    Unsupported(String),
+    Invalid(String),
+}
+
+impl Display for SalCountError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unsupported(reason) | Self::Invalid(reason) => reason.fmt(formatter),
+        }
+    }
+}
+
+type SalConstantSizes = BTreeMap<AnnotationTarget, Result<SalSize, SalCountError>>;
+
+type SalConstantObservation<'a> = (&'a AnnotationTarget, &'a Result<SalSize, SalCountError>);
 
 struct SalConstantObservations<'a> {
     by_use:
@@ -1664,6 +1688,18 @@ impl Snapshot {
         Ok(result)
     }
 
+    /// Reports unrepresented size hints for the selected ordinary output without emitting RDL.
+    pub fn sal_count_diagnostics(
+        &self,
+        options: &EmitOptions<'_>,
+    ) -> Result<Vec<SalCountDiagnostic>, Error> {
+        Ok(self
+            .plan_with_options(options)?
+            .sal_count_diagnostics
+            .into_iter()
+            .collect())
+    }
+
     pub fn emit_by_header_with_options(
         &self,
         options: &EmitOptions<'_>,
@@ -1862,16 +1898,7 @@ impl Snapshot {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
         let plan_time = timing.then(std::time::Instant::now);
-        let plan = self.plan(PlanningOptions {
-            references: options.references,
-            excluded_types: options.excluded_types.or(options.excluded),
-            excluded_functions: options.excluded_functions.or(options.excluded),
-            excluded_constants: options.excluded_constants.or(options.excluded),
-            selected_functions: options.functions,
-            display_names: None,
-            source_names: None,
-            mutable_string_aliases: options.mutable_string_aliases,
-        })?;
+        let plan = self.plan_with_options(options)?;
         if timing {
             eprintln!(
                 "windows-clang timing phase=planning target={target} facts={} constants={} types={} values={} functions={} output_constants={} elapsed_ms={:.3}",
@@ -1887,6 +1914,19 @@ impl Snapshot {
         self.format_items(plan, options, None, None)
     }
 
+    fn plan_with_options<'a>(&'a self, options: &'a EmitOptions<'_>) -> Result<Plan<'a>, Error> {
+        self.plan(PlanningOptions {
+            references: options.references,
+            excluded_types: options.excluded_types.or(options.excluded),
+            excluded_functions: options.excluded_functions.or(options.excluded),
+            excluded_constants: options.excluded_constants.or(options.excluded),
+            selected_functions: options.functions,
+            display_names: None,
+            source_names: None,
+            mutable_string_aliases: options.mutable_string_aliases,
+        })
+    }
+
     fn format_items(
         &self,
         mut plan: Plan<'_>,
@@ -1897,6 +1937,13 @@ impl Snapshot {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
         let emission_time = timing.then(std::time::Instant::now);
+        for diagnostic in &plan.sal_count_diagnostics {
+            eprintln!(
+                "windows-clang: unsupported SAL count projection: {}; \
+                 retaining native parameter without a count relationship",
+                diagnostic.reason
+            );
+        }
         let mut local_types = BTreeMap::new();
         let mut routed_types = BTreeMap::new();
         let facts_by_origin = routes.is_some().then(|| {
@@ -4740,10 +4787,10 @@ impl Snapshot {
     fn selected_sal_constant_size<'a>(
         &self,
         target: &AnnotationTarget,
-        size: &'a Result<SalSize, String>,
+        size: &'a Result<SalSize, SalCountError>,
         facts: &HashMap<&Origin, &Fact>,
         observations: &SalConstantObservations<'_>,
-    ) -> Result<&'a SalSize, Error> {
+    ) -> Result<&'a Result<SalSize, SalCountError>, Error> {
         let fact = facts.get(target.origin()).unwrap();
         let policy = |fact: &Fact| {
             self.root_owners.get(&fact.origin).or_else(|| {
@@ -4752,11 +4799,6 @@ impl Snapshot {
             })
         };
         let selected_policy = policy(fact);
-        let resolved = size.as_ref().map_err(|error| {
-            Error(format!(
-                "selected target {target:?} policy={selected_policy:?}: {error}"
-            ))
-        })?;
         let slot = route_annotation_target(target).1;
         let parent = function_parent_path(fact, facts, None);
         for &(observation_target, observation_size) in observations.get(&fact.spelling, slot) {
@@ -4794,7 +4836,7 @@ impl Snapshot {
                 observation.origin.tu,
             )));
         }
-        Ok(resolved)
+        Ok(size)
     }
 
     fn plan_partitioned(
@@ -4851,8 +4893,8 @@ impl Snapshot {
         let declarations = DeclarationIndex::new(&self.facts);
         let facts_by_origin: HashMap<_, _> =
             self.facts.iter().map(|fact| (&fact.origin, fact)).collect();
-        let sal_constant_observations = mutable_string_aliases
-            .then(|| SalConstantObservations::new(&self.sal_constant_sizes, &facts_by_origin));
+        let sal_constant_observations =
+            SalConstantObservations::new(&self.sal_constant_sizes, &facts_by_origin);
         let source_annotation_signatures = self.source_annotation_signatures();
         let source_fact_name = |fact: &Fact| {
             source_names.map_or_else(
@@ -5353,8 +5395,10 @@ impl Snapshot {
             functions.iter().map(|function| function.fact),
         );
         let mut type_choices = BTreeMap::new();
+        let mut sal_count_diagnostics = BTreeSet::new();
         let (facts_by_name, mut retained_pointer_aliases, dependency_diagnostics) = loop {
             type_choices.clear();
+            sal_count_diagnostics.clear();
             let mut facts = BTreeSet::new();
             let mut queue = vec![];
             let mut pointer_alias_candidates = BTreeSet::new();
@@ -5380,7 +5424,7 @@ impl Snapshot {
                         root,
                         &self.projected_type_names,
                         &self.annotations,
-                        mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                        Some(&self.sal_constant_sizes),
                         fact_node,
                         &mut queue,
                     );
@@ -5404,7 +5448,7 @@ impl Snapshot {
                     root,
                     &self.projected_type_names,
                     &self.annotations,
-                    mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                    Some(&self.sal_constant_sizes),
                     fact_node,
                     &mut queue,
                 );
@@ -5446,7 +5490,7 @@ impl Snapshot {
                 queue_function_edges(
                     fact,
                     &self.function_annotations,
-                    mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                    Some(&self.sal_constant_sizes),
                     fact_node,
                     &mut queue,
                 );
@@ -5465,7 +5509,6 @@ impl Snapshot {
                                 annotations,
                                 &facts_by_declaration,
                                 source_names,
-                                || Ok(None),
                             )?
                         } else {
                             None
@@ -5484,18 +5527,6 @@ impl Snapshot {
                                 annotations,
                                 &facts_by_declaration,
                                 source_names,
-                                || {
-                                    resolved_size
-                                        .map(|(target, size)| {
-                                            self.selected_sal_constant_size(
-                                                target,
-                                                size,
-                                                &facts_by_origin,
-                                                sal_constant_observations.as_ref().unwrap(),
-                                            )
-                                        })
-                                        .transpose()
-                                },
                             )
                             .map_err(|error| {
                                 parameter_use_error(error, param, source, &facts_by_origin)
@@ -5510,6 +5541,61 @@ impl Snapshot {
                                 },
                             )
                         };
+                        let selected_size = resolved_size
+                            .map(|(target, size)| {
+                                self.selected_sal_constant_size(
+                                    target,
+                                    size,
+                                    &facts_by_origin,
+                                    &sal_constant_observations,
+                                )
+                            })
+                            .transpose()
+                            .map_err(|error| {
+                                parameter_use_error(error, param, source, &facts_by_origin)
+                            })?;
+                        let failure = if let Some(Err(error)) = selected_size {
+                            Some(error.clone())
+                        } else {
+                            match selected_size
+                                .and_then(|size| size.as_ref().ok())
+                                .or(param.annotation.size.as_ref())
+                                .map(|size| &size.value)
+                            {
+                                Some(SalSizeValue::Expression(value)) => {
+                                    Some(SalCountError::Unsupported(format!(
+                                        "cannot preserve SAL count expression `{value}` \
+                                     in translation unit `{tu}`"
+                                    )))
+                                }
+                                Some(SalSizeValue::Constant(value)) if *value < 0 => Some(
+                                    SalCountError::Invalid(format!("negative SAL count `{value}`")),
+                                ),
+                                _ => None,
+                            }
+                        };
+                        if let Some(failure) = failure {
+                            let error = parameter_use_error(
+                                Error(failure.to_string()),
+                                param,
+                                source,
+                                &facts_by_origin,
+                            );
+                            if matches!(failure, SalCountError::Invalid(_))
+                                || matches!(choice, TypeChoice::String { .. })
+                            {
+                                return Err(error);
+                            }
+                            let DependencyNode::Fact(origin) = source else {
+                                return Err(error);
+                            };
+                            sal_count_diagnostics.insert(SalCountDiagnostic {
+                                declaration: origin.clone(),
+                                source: facts_by_origin[origin].spelling.clone(),
+                                parameter: param.name.clone(),
+                                reason: error.to_string(),
+                            });
+                        }
                         type_choices.insert((tu, edge), choice);
                         queue.push((tu, choice.edge(), source));
                         continue;
@@ -5605,7 +5691,7 @@ impl Snapshot {
                                 fact,
                                 &self.projected_type_names,
                                 &self.annotations,
-                                mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                                Some(&self.sal_constant_sizes),
                                 fact_node,
                                 &mut queue,
                             );
@@ -5927,7 +6013,7 @@ impl Snapshot {
                         fact,
                         &self.projected_type_names,
                         &self.annotations,
-                        mutable_string_aliases.then_some(&self.sal_constant_sizes),
+                        Some(&self.sal_constant_sizes),
                         fact_node,
                         &mut queue,
                     );
@@ -6687,7 +6773,8 @@ impl Snapshot {
             type_names,
             interface_names,
             type_choices,
-            sal_constant_sizes: mutable_string_aliases.then_some(&self.sal_constant_sizes),
+            sal_constant_sizes: Some(&self.sal_constant_sizes),
+            sal_count_diagnostics,
             pointer_interface_aliases,
             interface_guids,
             flag_enums,
@@ -6696,6 +6783,23 @@ impl Snapshot {
 }
 
 impl HeaderPartitionPlan {
+    /// Reports unrepresented size hints using this plan's header and selection policies.
+    pub fn sal_count_diagnostics(
+        &self,
+        options: &EmitOptions<'_>,
+    ) -> Result<Vec<SalCountDiagnostic>, Error> {
+        let (mut snapshot, display_names, source_names) = self
+            .snapshot
+            .clone()
+            .into_partitioned_planning_snapshot(options);
+        snapshot.project_suppressed_declare_handles();
+        Ok(snapshot
+            .plan_partitioned(options, &display_names, &source_names)?
+            .sal_count_diagnostics
+            .into_iter()
+            .collect())
+    }
+
     pub fn audit(&self, options: &EmitOptions<'_>) -> Result<PartitionAudit, Error> {
         let (mut snapshot, display_names, source_names) = self
             .snapshot
@@ -6854,6 +6958,7 @@ struct Plan<'a> {
     interface_names: BTreeSet<(String, String)>,
     type_choices: BTreeMap<(&'a str, TypeEdge<'a>), TypeChoice<'a>>,
     sal_constant_sizes: Option<&'a SalConstantSizes>,
+    sal_count_diagnostics: BTreeSet<SalCountDiagnostic>,
     pointer_interface_aliases: BTreeMap<String, String>,
     interface_guids: BTreeMap<String, String>,
     flag_enums: BTreeSet<(String, String)>,
@@ -7419,32 +7524,32 @@ impl<'a> TypeProjection<'a> {
         annotations: &[Annotation],
         target: &AnnotationTarget,
     ) -> ProjectedType {
-        if param.annotation.com_out_ptr {
-            return ProjectedType {
-                name: "*mut *mut void".to_string(),
-                mutable: true,
-                annotations: Vec::new(),
-            };
-        }
         let resolved = self
             .sal_constant_sizes
             .and_then(|sizes| sizes.get_key_value(target));
         let edge = TypeEdge::Parameter(param, annotations, resolved);
-        let mut projected = self.project(edge);
-        if matches!(
-            self.type_choices.get(&(self.tu, edge)),
-            Some(TypeChoice::String { .. })
-        ) && let Some((
+        let mut projected = if param.annotation.com_out_ptr {
+            ProjectedType {
+                name: "*mut *mut void".to_string(),
+                mutable: true,
+                annotations: Vec::new(),
+            }
+        } else {
+            self.project(edge)
+        };
+        if let Some((
             _,
             Ok(SalSize {
-                bytes: false,
+                bytes,
                 value: SalSizeValue::Constant(count),
             }),
         )) = resolved
         {
-            projected
-                .annotations
-                .push(Annotation::ArrayCountConst(count.to_string()));
+            projected.annotations.push(if *bytes {
+                Annotation::MemorySizeConst(count.to_string())
+            } else {
+                Annotation::ArrayCountConst(count.to_string())
+            });
         }
         projected
     }
@@ -9886,7 +9991,7 @@ enum TypeEdge<'a> {
     Parameter(
         &'a Parameter,
         &'a [Annotation],
-        Option<(&'a AnnotationTarget, &'a Result<SalSize, String>)>,
+        Option<(&'a AnnotationTarget, &'a Result<SalSize, SalCountError>)>,
     ),
     Projected(&'a str),
 }
@@ -10858,6 +10963,12 @@ fn annotation_rdl(annotation: &Annotation) -> Result<Option<String>, Error> {
             })?;
             format!("#[size_param({value})]")
         }
+        Annotation::MemorySizeConst(value) => {
+            let value = value
+                .parse::<i32>()
+                .map_err(|_| Error(format!("memory size `{value}` is not an i32")))?;
+            format!("#[size_const({value})]")
+        }
         Annotation::CanReturnErrorsAsSuccess => "#[errors_as_success]".to_string(),
         Annotation::CanReturnMultipleSuccessValues => "#[multiple_success_values]".to_string(),
         Annotation::Retained => "#[retained]".to_string(),
@@ -10996,10 +11107,8 @@ fn param_attributes(
                 };
                 result.push_str(&format!("#[{attr}({index})] "));
             }
-            SalSizeValue::Constant(_) => {
-                return Err(Error(
-                    "constant byte-size SAL annotations are unsupported".to_string(),
-                ));
+            SalSizeValue::Constant(value) => {
+                result.push_str(&format!("#[size_const({value})] "));
             }
             SalSizeValue::Expression(_) => {}
         }
@@ -11229,7 +11338,6 @@ fn string_type_choice<'a>(
     annotations: &[Annotation],
     facts: &BTreeMap<(String, Location), &'a Fact>,
     source_names: Option<&PlanningSourceNames>,
-    resolve_size: impl FnOnce() -> Result<Option<&'a SalSize>, Error>,
 ) -> Result<Option<TypeChoice<'a>>, Error> {
     let Some(native) = native_string_type(ty, tu, facts, source_names) else {
         return Ok(None);
@@ -11247,17 +11355,6 @@ fn string_type_choice<'a>(
     if !native.terminated && !native.counted && !terminated {
         return Ok(None);
     }
-    let resolved_size = resolve_size()?;
-    if let Some(SalSize {
-        value: SalSizeValue::Expression(value),
-        ..
-    }) = resolved_size.or_else(|| param.and_then(|param| param.size.as_ref()))
-    {
-        return Err(Error(format!(
-            "string projection cannot preserve SAL count expression `{value}` \
-             in translation unit `{tu}`"
-        )));
-    }
     let counted = param.is_some_and(|param| param.size.is_some())
         || annotations.iter().any(|annotation| {
             matches!(
@@ -11266,6 +11363,7 @@ fn string_type_choice<'a>(
                     | Annotation::ArrayCountConst(_)
                     | Annotation::ArrayCountField(_)
                     | Annotation::MemorySizeParam(_)
+                    | Annotation::MemorySizeConst(_)
             )
         });
     Ok(Some(TypeChoice::String {
@@ -12019,7 +12117,13 @@ mod tests {
                 declaration: fact.origin.clone(),
                 index: 1,
             }];
-            assert!(unknown.as_ref().unwrap_err().contains("UNKNOWN_COUNT"));
+            assert!(
+                unknown
+                    .as_ref()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("UNKNOWN_COUNT")
+            );
             let FactData::Function { params, .. } = &fact.data else {
                 panic!("Mixed is not a function");
             };
@@ -12034,6 +12138,7 @@ mod tests {
         options.excluded_constants = Some(&excluded_constants);
         options.library = Some("test.dll");
         snapshot.emit_with_options(&options).unwrap();
+        assert!(!snapshot.sal_count_diagnostics(&options).unwrap().is_empty());
         options.mutable_string_aliases = true;
         assert!(snapshot.emit_with_options(&options).is_err());
     }

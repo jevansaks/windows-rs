@@ -69,6 +69,11 @@ pub(crate) const PSEUDO_ATTRS: &[PseudoAttr] = &[
         prop: Some("BytesParamIndex"),
     },
     PseudoAttr {
+        short: "size_const",
+        metadata: "MemorySizeAttribute",
+        prop: Some("BytesConst"),
+    },
+    PseudoAttr {
         short: "reserved",
         metadata: "ReservedAttribute",
         prop: None,
@@ -488,5 +493,22 @@ mod tests {
         let pseudo = pseudo_for_metadata("RetValAttribute", &[])
             .expect("RetValAttribute should map to a pseudo");
         assert_eq!(pseudo.short, "retval");
+    }
+
+    #[test]
+    fn constant_byte_pseudo_requires_the_exact_sole_property() {
+        let pseudo =
+            pseudo_for_metadata("MemorySizeAttribute", &["BytesConst".to_string()]).unwrap();
+        assert_eq!(pseudo.short, "size_const");
+        assert!(
+            pseudo_for_metadata("NativeArrayInfoAttribute", &["BytesConst".to_string()]).is_none()
+        );
+        assert!(
+            pseudo_for_metadata(
+                "MemorySizeAttribute",
+                &["BytesConst".to_string(), "BytesParamIndex".to_string()]
+            )
+            .is_none()
+        );
     }
 }

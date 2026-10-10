@@ -349,6 +349,9 @@ WDK metadata has at least one representable direction flag.
   to carry them, so attributes on its sequence 0 row are not represented.
 - **Count relationships:** `#[len_param(N)]` and `#[size_param(N)]` store raw zero-based signature
   positions. Reordering parameters without updating `N` changes the relationship.
+  `#[len_const(N)]` stores an `i32` element count in `NativeArrayInfoAttribute.CountConst`;
+  `#[size_const(N)]` stores an `i32` byte count in `MemorySizeAttribute.BytesConst`. Byte counts
+  do not require a known element size or exact division.
 - **Pointer constness:** `metadata::Type` stores one constness bit with a pointer depth. Uniform
   chains such as `*mut *mut T` and `*const *const T` round-trip. Mixed chains are rejected before
   metadata is written, including chains nested inside a reference.

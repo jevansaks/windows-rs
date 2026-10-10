@@ -203,8 +203,11 @@ malformed input for a later validator.
 Output, InputOutput, Unspecified}`. `is_optional`, `is_reserved`, and `is_retval_attribute` expose
 their independent metadata facts. These helpers do not inspect pointer mutability, infer a default
 for an unspecified direction, combine `ReservedAttribute` with `Optional`, or decide whether a
-parameter should become a language return value. Array and byte-count attributes remain available
-through `attributes()` because each projection validates different public-surface shapes.
+parameter should become a language return value. `buffer_relationship()` decodes element and byte
+counts independently: `NativeArrayInfoAttribute.CountConst: i32` stores elements, while
+`MemorySizeAttribute.BytesConst: i32` stores bytes. Parameter links use the corresponding signed
+`i16` fields. Wrong attribute types, wrong value types, and competing relationships yield no decoded
+relationship; consumers validate signed ranges and public-surface shapes.
 
 ### Determinism and the winmd writer
 

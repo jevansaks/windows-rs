@@ -49,12 +49,13 @@ mod Windows {
                 CountFieldName: String,
             }
             // Records that a pointer parameter is a byte buffer whose size in bytes is
-            // given by another parameter (`BytesParamIndex`); derived from SAL
-            // `_*_bytes_` buffer macros.
-            // RDL: `#[size_param(N)]`.
+            // given by another parameter (`BytesParamIndex`) or constant (`BytesConst`);
+            // derived from SAL `_*_bytes_` buffer macros.
+            // RDL: `#[size_param(N)]` or `#[size_const(N)]`.
             attribute MemorySizeAttribute {
                 fn();
                 BytesParamIndex: i16,
+                BytesConst: i32,
             }
             // Marks a parameter that is reserved and must be zero/null (SAL `_Reserved_`).
             // RDL: `#[reserved]`.

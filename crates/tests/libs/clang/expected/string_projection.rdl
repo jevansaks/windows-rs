@@ -1,9 +1,9 @@
 #[win32]
 mod Test {
     #[library("test.dll")]
-    extern "C" fn AlteredConstantCounts(elements: Windows::Win32::PCWSTR, bytes: Windows::Win32::PCWSTR);
+    extern "C" fn AlteredConstantCounts(#[len_const(12)] elements: Windows::Win32::PCWSTR, #[len_const(6)] bytes: Windows::Win32::PCWSTR);
     #[library("test.dll")]
-    extern "C" fn ConstantCounts(elements: Windows::Win32::PCWSTR, bytes: Windows::Win32::PCWSTR, expression: Windows::Win32::PCSTR);
+    extern "C" fn ConstantCounts(#[len_const(8)] elements: Windows::Win32::PCWSTR, #[len_const(4)] bytes: Windows::Win32::PCWSTR, #[len_const(10)] expression: Windows::Win32::PCSTR);
     struct CountedFields {
         length: u32,
         #[len_field("length")] text: Windows::Win32::PCSTR,

@@ -75,6 +75,13 @@ fn index_with_markers(rows: &[(&str, u16, ParamAttributes, &[&str])]) -> reader:
 fn index_with_buffer_relationships(
     rows: &[(&str, &[(&str, &[(String, Value)])])],
 ) -> reader::Index {
+    index_with_buffer_relationships_in("Windows.Win32.Metadata", rows)
+}
+
+fn index_with_buffer_relationships_in(
+    namespace: &str,
+    rows: &[(&str, &[(&str, &[(String, Value)])])],
+) -> reader::Index {
     let mut file = writer::File::new("test");
 
     file.TypeDef(
@@ -99,8 +106,7 @@ fn index_with_buffer_relationships(
     for (position, (name, attributes)) in rows.iter().enumerate() {
         let param = file.Param(name, position as u16 + 1, ParamAttributes::In);
         for (attribute, values) in *attributes {
-            let parent =
-                writer::MemberRefParent::TypeRef(file.TypeRef("Windows.Win32.Metadata", attribute));
+            let parent = writer::MemberRefParent::TypeRef(file.TypeRef(namespace, attribute));
             let signature = Signature {
                 flags: MethodCallAttributes::HASTHIS,
                 return_type: Type::Void,
@@ -234,6 +240,65 @@ fn malformed_buffer_relationships_are_ignored() {
     assert_eq!(params.params()[0].unwrap().buffer_relationship(), None);
     assert_eq!(params.params()[1].unwrap().buffer_relationship(), None);
     assert_eq!(params.params()[2].unwrap().buffer_relationship(), None);
+}
+
+#[test]
+fn constant_bytes_preserve_signed_values_and_reject_wrong_contracts() {
+    for value in [i32::MIN, -1, 0, i32::MAX] {
+        let bytes = vec![("BytesConst".to_string(), Value::I32(value))];
+        for namespace in [
+            "Windows.Win32.Metadata",
+            "Windows.Win32.Foundation.Metadata",
+        ] {
+            let index = index_with_buffer_relationships_in(
+                namespace,
+                &[("bytes", &[("MemorySizeAttribute", &bytes)])],
+            );
+            assert_eq!(
+                method(&index)
+                    .params()
+                    .next()
+                    .unwrap()
+                    .buffer_relationship(),
+                Some(reader::BufferRelationship::BytesConst(value))
+            );
+        }
+    }
+    let bytes = vec![("BytesConst".to_string(), Value::I32(36))];
+    let wrong_type = vec![("BytesConst".to_string(), Value::I16(36))];
+    let elements = vec![("CountConst".to_string(), Value::I32(9))];
+    let duplicate = vec![
+        ("BytesConst".to_string(), Value::I32(36)),
+        ("BytesConst".to_string(), Value::I32(36)),
+    ];
+    let index = index_with_buffer_relationships(&[
+        ("wrong_type", &[("MemorySizeAttribute", &wrong_type)]),
+        ("wrong_attribute", &[("NativeArrayInfoAttribute", &bytes)]),
+        ("unrelated", &[("UnrelatedAttribute", &bytes)]),
+        ("duplicate", &[("MemorySizeAttribute", &duplicate)]),
+        (
+            "competing",
+            &[
+                ("MemorySizeAttribute", &bytes),
+                ("NativeArrayInfoAttribute", &elements),
+            ],
+        ),
+    ]);
+    for param in method(&index).params() {
+        assert_eq!(param.buffer_relationship(), None);
+    }
+    let index = index_with_buffer_relationships_in(
+        "Unrelated",
+        &[("bytes", &[("MemorySizeAttribute", &bytes)])],
+    );
+    assert_eq!(
+        method(&index)
+            .params()
+            .next()
+            .unwrap()
+            .buffer_relationship(),
+        None
+    );
 }
 
 #[test]
