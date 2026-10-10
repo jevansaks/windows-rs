@@ -1168,6 +1168,30 @@ pub enum CallingConvention {
     C,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum FunctionLinkage {
+    None,
+    Internal,
+    UniqueExternal,
+    External,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum FunctionExclusion {
+    Definition { linkage: FunctionLinkage },
+    NonExternalLinkage { linkage: FunctionLinkage },
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct FunctionSignature {
+    pub link_name: String,
+    pub convention: CallingConvention,
+    pub params: Vec<Parameter>,
+    pub result: TypeRef,
+    pub variadic: bool,
+    pub noreturn: bool,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum FactData {
     Callback {
@@ -1206,6 +1230,10 @@ pub enum FactData {
         result: TypeRef,
         variadic: bool,
         noreturn: bool,
+    },
+    NonEmittableFunction {
+        reason: FunctionExclusion,
+        signature: FunctionSignature,
     },
     Interface {
         base: Option<TypeRef>,
@@ -7851,6 +7879,7 @@ fn fact_data_kind(data: &FactData) -> &'static str {
         FactData::Enum { .. } => "Enum",
         FactData::EnumFlag { .. } => "EnumFlag",
         FactData::Function { .. } => "Function",
+        FactData::NonEmittableFunction { .. } => "NonEmittableFunction",
         FactData::Guid { .. } => "Guid",
         FactData::Interface { .. } => "Interface",
         FactData::Macro { .. } => "Macro",

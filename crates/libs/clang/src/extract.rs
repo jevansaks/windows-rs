@@ -6,6 +6,9 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::Arc;
 
+mod definitions;
+use definitions::Definitions;
+
 pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
     extract_with_options(inputs, args, &ExtractionOptions::default())
 }
@@ -188,16 +191,19 @@ fn extract_impl(
             embeddable_class_layouts: &mut embeddable_class_layouts,
             clang_flag_enums: &mut clang_flag_enums,
         };
-        let (result, metrics) =
-            parsed
-                .translation_unit
-                .extract(input, &mut output, timing, validate_annotations)?;
+        let (result, metrics) = parsed.translation_unit.extract(
+            input,
+            &mut output,
+            timing,
+            validate_annotations,
+            parsed.translation_unit._index.as_ref().unwrap_or(&index),
+        )?;
         if let Some(metrics) = metrics {
             traversal_cursors += metrics.cursors;
             traversal_facts += metrics.facts;
             traversal_constants += metrics.constants;
             eprintln!(
-                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} root_cache_misses={} exclusion_cache_misses={} macro_index_ms={:.3} traversal_ms={:.3} elapsed_ms={:.3}",
+                "windows-clang timing phase=extract-tu target={} tu={:?} macro_definitions={} macro_expansion_files={} cursors={} facts={} constants={} root_cache_misses={} exclusion_cache_misses={} definition_index_builds=1 definition_observations={} definition_lookups={} definition_index_ms={:.3} macro_index_ms={:.3} traversal_ms={:.3} elapsed_ms={:.3}",
                 target.as_deref().unwrap(),
                 input.name,
                 metrics.macro_definitions,
@@ -207,6 +213,9 @@ fn extract_impl(
                 metrics.constants,
                 metrics.root_cache_misses,
                 metrics.exclusion_cache_misses,
+                metrics.definition_observations,
+                metrics.definition_lookups,
+                metrics.definition_index_ms,
                 metrics.macro_index_ms,
                 metrics.traversal_ms,
                 metrics.elapsed_ms
@@ -1366,6 +1375,9 @@ struct Evaluated {
 }
 
 struct ExtractionMetrics {
+    definition_observations: usize,
+    definition_lookups: usize,
+    definition_index_ms: f64,
     macro_definitions: usize,
     macro_expansion_files: usize,
     cursors: u32,
@@ -1615,8 +1627,13 @@ impl TranslationUnit {
         output: &mut ExtractionState<'_>,
         timing: bool,
         validate_annotations: bool,
+        index: &Index,
     ) -> Result<(Extracted<'tu>, Option<ExtractionMetrics>), Error> {
         let total_time = timing.then(std::time::Instant::now);
+        let phase_time = timing.then(std::time::Instant::now);
+        let mut definitions = Definitions::new(self.0, index)
+            .map_err(|error| Error(format!("{}: {error}", input.name)))?;
+        let definition_index_ms = elapsed_ms(phase_time);
         let phase_time = timing.then(std::time::Instant::now);
         let macros = macro_definitions(self, unsafe { clang_getTranslationUnitCursor(self.0) });
         let macro_index_ms = elapsed_ms(phase_time);
@@ -1624,6 +1641,7 @@ impl TranslationUnit {
         let initial_facts = output.facts.len();
         let initial_constants = output.constants.len();
         let mut traversal = Traversal {
+            definitions: &mut definitions,
             tu: &input.name,
             paths: SourcePaths::new(input),
             next: 0,
@@ -1654,6 +1672,9 @@ impl TranslationUnit {
             return Err(error);
         }
         let metrics = timing.then(|| ExtractionMetrics {
+            definition_observations: traversal.definitions.observations,
+            definition_lookups: traversal.definitions.lookups,
+            definition_index_ms,
             macro_definitions: macros.definitions.len(),
             macro_expansion_files: macros.expansion_orders.len(),
             cursors: traversal.next,
@@ -1690,6 +1711,7 @@ impl Drop for TranslationUnit {
 }
 
 struct Traversal<'a> {
+    definitions: &'a mut Definitions,
     tu: &'a str,
     paths: SourcePaths<'a>,
     next: u32,
@@ -1974,6 +1996,9 @@ fn extract_child(
     let local = traversal.next;
     traversal.next += 1;
     let kind = unsafe { clang_getCursorKind(child) };
+    if kind == CXCursor_CompoundStmt {
+        return;
+    }
     if kind == CXCursor_AnnotateAttr {
         if !traversal.validate_annotations {
             return;
@@ -2186,10 +2211,21 @@ fn extract_child(
                     }
                     let deferred_struct = !root && fact_kind == FactKind::Struct;
                     let deferred_macro = !root && fact_kind == FactKind::Macro;
+                    let definition = if fact_kind == FactKind::Function {
+                        match traversal.definitions.definition(child) {
+                            Ok(definition) => definition,
+                            Err(error) => {
+                                traversal.error = Some(error);
+                                return;
+                            }
+                        }
+                    } else {
+                        (unsafe { clang_isCursorDefinition(child) }) != 0
+                    };
                     let data = if deferred_struct || deferred_macro {
                         FactData::None
                     } else {
-                        fact_data(child, fact_kind, traversal.macros)
+                        fact_data(child, fact_kind, traversal.macros, definition)
                     };
                     if fact_kind == FactKind::Typedef
                         && matches!(data, FactData::Callback { .. })
@@ -2225,7 +2261,7 @@ fn extract_child(
                         name,
                         spelling,
                         expansion,
-                        definition: unsafe { clang_isCursorDefinition(child) } != 0,
+                        definition,
                         main_file,
                         root,
                         system,
@@ -2460,6 +2496,7 @@ fn decode_reachable_structs(
                 cursor,
                 FactKind::Struct,
                 &extracted[extraction_index].macros,
+                false,
             );
             let mut dependencies = HashSet::new();
             fact_type_names(&data, &mut dependencies);
@@ -2487,7 +2524,7 @@ fn decode_selected_macro_definitions(
     for extraction in extracted {
         for &(index, cursor) in &extraction.pending_macros {
             if roots.contains(facts[index].name.as_str()) {
-                facts[index].data = fact_data(cursor, FactKind::Macro, &extraction.macros);
+                facts[index].data = fact_data(cursor, FactKind::Macro, &extraction.macros, false);
             }
         }
     }
@@ -3624,7 +3661,12 @@ fn fact_kind(kind: CXCursorKind) -> Option<FactKind> {
     })
 }
 
-fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> FactData {
+fn fact_data(
+    cursor: CXCursor,
+    kind: FactKind,
+    macros: &MacroDefinitions,
+    definition: bool,
+) -> FactData {
     match kind {
         FactKind::Enum => {
             let ty = unsafe { clang_getEnumDeclIntegerType(cursor) };
@@ -3648,45 +3690,46 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
             }
         }
         FactKind::Function => {
-            if unsafe { clang_getCursorLinkage(cursor) } != CXLinkage_External
-                || unsafe { clang_isCursorDefinition(cursor) } != 0
-            {
-                return FactData::Unsupported {
-                    reason: "function is not an external declaration".to_string(),
-                };
-            }
-            let variadic = unsafe { clang_Cursor_isVariadic(cursor) } != 0;
-            let result_ty = unsafe { clang_getCursorResultType(cursor) };
-            let Some(result) = type_ref(result_ty) else {
-                return FactData::Unsupported {
-                    reason: format!(
-                        "function has unsupported result type `{}`",
-                        cx_string(unsafe { clang_getTypeSpelling(result_ty) })
-                    ),
-                };
+            let linkage = match unsafe { clang_getCursorLinkage(cursor) } {
+                CXLinkage_NoLinkage => FunctionLinkage::None,
+                CXLinkage_Internal => FunctionLinkage::Internal,
+                CXLinkage_UniqueExternal => FunctionLinkage::UniqueExternal,
+                CXLinkage_External => FunctionLinkage::External,
+                linkage => {
+                    return FactData::Unsupported {
+                        reason: format!("function has unsupported linkage `{linkage}`"),
+                    };
+                }
             };
-            let params = match callable_params(cursor, macros, false) {
-                Ok(params) => params,
+            let signature = match native_function_signature(cursor, macros) {
+                Ok(signature) => signature,
                 Err(reason) => return FactData::Unsupported { reason },
             };
-            let function_ty = unsafe { clang_getCursorType(cursor) };
-            let Some(convention) = (if variadic {
-                calling_convention_fact(function_ty)
+            let reason = if definition {
+                Some(FunctionExclusion::Definition { linkage })
+            } else if linkage != FunctionLinkage::External {
+                Some(FunctionExclusion::NonExternalLinkage { linkage })
             } else {
-                source_calling_convention(cursor, macros)
-                    .or_else(|| calling_convention_fact(function_ty))
-            }) else {
-                return FactData::Unsupported {
-                    reason: "function has an unsupported calling convention".to_string(),
-                };
+                None
             };
-            FactData::Function {
-                link_name: external_link_name(cursor),
+            if let Some(reason) = reason {
+                return FactData::NonEmittableFunction { reason, signature };
+            }
+            let FunctionSignature {
+                link_name,
                 convention,
                 params,
                 result,
                 variadic,
-                noreturn: function_is_noreturn(cursor),
+                noreturn,
+            } = signature;
+            FactData::Function {
+                link_name,
+                convention,
+                params,
+                result,
+                variadic,
+                noreturn,
             }
         }
         FactKind::Macro => {
@@ -3854,6 +3897,36 @@ fn fact_data(cursor: CXCursor, kind: FactKind, macros: &MacroDefinitions) -> Fac
         }
         _ => FactData::None,
     }
+}
+
+fn native_function_signature(
+    cursor: CXCursor,
+    macros: &MacroDefinitions,
+) -> Result<FunctionSignature, String> {
+    let variadic = unsafe { clang_Cursor_isVariadic(cursor) } != 0;
+    let result_ty = unsafe { clang_getCursorResultType(cursor) };
+    let result = type_ref(result_ty).ok_or_else(|| {
+        format!(
+            "function has unsupported result type `{}`",
+            cx_string(unsafe { clang_getTypeSpelling(result_ty) }),
+        )
+    })?;
+    let params = callable_params(cursor, macros, false)?;
+    let function_ty = unsafe { clang_getCursorType(cursor) };
+    let convention = (if variadic {
+        calling_convention_fact(function_ty)
+    } else {
+        source_calling_convention(cursor, macros).or_else(|| calling_convention_fact(function_ty))
+    })
+    .ok_or_else(|| "function has an unsupported calling convention".to_string())?;
+    Ok(FunctionSignature {
+        link_name: external_link_name(cursor),
+        convention,
+        params,
+        result,
+        variadic,
+        noreturn: function_is_noreturn(cursor),
+    })
 }
 
 fn native_opaque_class_layout(cursor: CXCursor) -> Option<FactData> {
@@ -4950,7 +5023,12 @@ fn function_annotation_source_range<'a>(
     previous: &[Fact],
     cursor: CXCursor,
 ) -> Option<AnnotationSourceRange<'a>> {
-    let FactData::Function { link_name, .. } = &fact.data else {
+    let (FactData::Function { link_name, .. }
+    | FactData::NonEmittableFunction {
+        signature: FunctionSignature { link_name, .. },
+        ..
+    }) = &fact.data
+    else {
         return None;
     };
     let (file, _, end) = cursor_expansion_extent(cursor)?;
@@ -4970,9 +5048,9 @@ fn function_annotation_source_range<'a>(
                 && candidate.expansion.offset < fact.expansion.offset
                 && matches!(
                     &candidate.data,
-                    FactData::Function {
-                        link_name: candidate_link_name,
-                        ..
+                    FactData::Function { link_name: candidate_link_name, .. }
+                    | FactData::NonEmittableFunction {
+                        signature: FunctionSignature { link_name: candidate_link_name, .. }, ..
                     } if candidate_link_name == link_name
                 )
         })

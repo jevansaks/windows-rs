@@ -101,6 +101,20 @@ constant-probe translation units keep their existing bounded probe scheduling.
 
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
+Each original translation unit builds one native definition index using
+`clang_indexTranslationUnit` on that same parsed unit. Function cursors join by native hash and
+cursor equality; missing or conflicting evidence is an extraction error. Synthetic constant probes
+do not build this index. Parsing still skips function bodies, so native body semantics are not
+validated. Traversal also skips body subtrees that Clang retains for constexpr evaluation, excluding
+their declarations from both metadata facts and native value-source evidence. Global constants can
+still use constexpr helpers in their initializers.
+
+Supported function definitions and non-external declarations retain
+`FactData::NonEmittableFunction`, with a typed `FunctionExclusion` and native `FunctionSignature`.
+Signatures and annotations use the same compiler extraction as ordinary external declarations.
+These facts never become RDL functions, imports, or dependency roots, including under explicit
+selection. A forward declaration remains independent from a later definition. Unsupported required
+signature data remains `FactData::Unsupported`.
 Native scalar `const` and `constexpr` declarations become constants when Clang can evaluate their
 initializers. They retain their source names, declared scalar widths and signedness, declaration
 provenance, and annotations. Mutable, unevaluable, and unsupported declarations are not constants;

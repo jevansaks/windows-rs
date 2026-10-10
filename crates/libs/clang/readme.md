@@ -33,6 +33,11 @@ The builder reads inputs and references, invokes the extractor, emits RDL, and w
 Use [`Input`][input], `extract`, and `EmitOptions` directly when a generator needs to inspect or
 combine immutable snapshots before emission.
 
+Supported definitions and non-external functions retain typed native signatures in
+`FactData::NonEmittableFunction` without becoming imports. Native indexing recovers each declaration's
+definition status under the existing body-skipping parse; it does not validate body semantics.
+Unsupported signatures remain visible through `Snapshot::unsupported`.
+
 Native scalar `const` and `constexpr` declarations retain their source names, scalar types, and
 annotations when Clang can evaluate their initializers. Root selection also applies to these
 constants; mutable and unevaluable declarations are not emitted as constants.
