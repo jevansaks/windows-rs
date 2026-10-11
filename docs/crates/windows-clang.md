@@ -253,6 +253,27 @@ traversed-header declaration has an explicit owner and its link name is selected
 `EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
 change non-header emission.
 
+Tag root selection follows named typedef chains through exact name, physical declaration, and
+translation-unit matches. A chain ending at the selected native definition does not compete with
+that definition. Incomplete interface targets retain the existing UUID and declaration-kind checks.
+Missing, cyclic, ambiguous, or cross-translation-unit targets do not prove a matching declaration;
+conflicting complete definitions remain fatal. Native facts, Origins, alias edges, and header owners
+are unchanged.
+
+Field-bearing native COM structs retain their record fields, size, alignment, and declaration
+identity. Original translation-unit extraction also captures a private pointer contract: native
+IID, public nonvirtual primary base, ordered virtual slots, effective target calling conventions,
+and parameter and result types. Header planning can bind an unowned struct dependency to one eligible
+owned interface only when those contracts agree. Referenced data-record and enum types are checked
+in each original translation unit; equal names or type-reference locations do not prove equal
+layouts. Parameter names and metadata annotations come from the owned provider, not the helper.
+Pointer and COM out-pointer uses can use the interface. By-value, reference, object-array, and
+count-annotated object-buffer uses require the native record layout and remain errors, including
+when another use of the same type is a valid pointer. Arrays of COM pointers remain pointer uses.
+Missing or ambiguous providers, unsupported inheritance or virtual slots, and incompatible contracts
+are fatal in both strict emission and enum-diagnostic emission. This uses the existing extraction
+and header-plan APIs without an additional selector.
+
 An exact unowned enum dependency retains its native declaration and alias path. A matching owned
 source declaration can constrain its projection when kind, original name, physical location,
 definition data, and the complete original parent chain agree. Parent comparison includes kind,

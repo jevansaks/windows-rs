@@ -287,6 +287,8 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         class_canonical_origins,
         class_canonical_anchors,
         shared_enum_identities,
+        native_com_contracts,
+        unproved_com_records,
         module_free_headers: _,
         observation_only_class_origins,
         pointer_callback_aliases,
@@ -393,6 +395,25 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         }
     }
     let bytes = receipt.category("layouts");
+    bytes.map::<Origin, Arc<NativeComContract>>(native_com_contracts.len());
+    let mut contracts = HashSet::new();
+    for (origin, contract) in native_com_contracts {
+        bytes.origin(origin);
+        if contracts.insert(Arc::as_ptr(contract)) {
+            bytes.boxed(contract.as_ref());
+            bytes.string(&contract.guid);
+            bytes.vector(&contract.bases);
+            for base in &contract.bases {
+                bytes.string(base);
+            }
+            bytes.vector(&contract.slots);
+            for slot in &contract.slots {
+                bytes.string(&slot.name);
+                bytes.parameters(&slot.params);
+                bytes.ty(&slot.result);
+            }
+        }
+    }
     bytes.map::<Origin, FactData>(pointer_only_class_layouts.len());
     for (origin, data) in pointer_only_class_layouts {
         bytes.origin(origin);
@@ -404,6 +425,7 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         pointer_callback_aliases,
         embeddable_class_layouts,
         clang_flag_enums,
+        unproved_com_records,
     ] {
         bytes.map::<Origin, ()>(origins.len());
         for origin in origins {

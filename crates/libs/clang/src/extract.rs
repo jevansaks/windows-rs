@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 mod definitions;
 use definitions::Definitions;
+mod com_contracts;
 mod owned_bytes;
 mod shared_enums;
 
@@ -227,6 +228,8 @@ fn extract_impl(
         class_canonical_origins,
         class_canonical_anchors,
         shared_enum_identities,
+        native_com_contracts,
+        unproved_com_records,
         module_free_headers: _,
         observation_only_class_origins,
         pointer_callback_aliases,
@@ -452,6 +455,8 @@ fn extract_impl(
         class_canonical_origins,
         class_canonical_anchors,
         shared_enum_identities,
+        native_com_contracts,
+        unproved_com_records,
         observation_only_class_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
@@ -1524,6 +1529,11 @@ impl TranslationUnit {
             &traversal.seen,
             traversal.class_canonical_origins,
         )?;
+        com_contracts::capture(
+            &traversal,
+            output.native_com_contracts,
+            output.unproved_com_records,
+        );
         if output.module_free_headers {
             shared_enums::capture(&traversal, output.shared_enum_identities);
         }
@@ -1650,6 +1660,8 @@ struct ExtractionState<'a> {
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
     shared_enum_identities: &'a mut BTreeMap<Origin, SharedEnumIdentity>,
+    native_com_contracts: &'a mut BTreeMap<Origin, Arc<NativeComContract>>,
+    unproved_com_records: &'a mut BTreeSet<Origin>,
     module_free_headers: bool,
 }
 
@@ -1669,6 +1681,8 @@ struct ExtractionBuffers {
     embeddable_class_layouts: BTreeSet<Origin>,
     clang_flag_enums: BTreeSet<Origin>,
     shared_enum_identities: BTreeMap<Origin, SharedEnumIdentity>,
+    native_com_contracts: BTreeMap<Origin, Arc<NativeComContract>>,
+    unproved_com_records: BTreeSet<Origin>,
     module_free_headers: bool,
 }
 
@@ -1689,6 +1703,8 @@ impl ExtractionBuffers {
             embeddable_class_layouts: &mut self.embeddable_class_layouts,
             clang_flag_enums: &mut self.clang_flag_enums,
             shared_enum_identities: &mut self.shared_enum_identities,
+            native_com_contracts: &mut self.native_com_contracts,
+            unproved_com_records: &mut self.unproved_com_records,
             module_free_headers: self.module_free_headers,
         }
     }
@@ -1717,6 +1733,10 @@ impl ExtractionBuffers {
         self.clang_flag_enums.append(&mut other.clang_flag_enums);
         self.shared_enum_identities
             .append(&mut other.shared_enum_identities);
+        self.native_com_contracts
+            .append(&mut other.native_com_contracts);
+        self.unproved_com_records
+            .append(&mut other.unproved_com_records);
     }
 }
 
@@ -2184,6 +2204,8 @@ mod owned_tests {
         let mut flags = BTreeSet::new();
         let mut observation_only = BTreeSet::new();
         let mut shared_enum_identities = BTreeMap::new();
+        let mut native_com_contracts = BTreeMap::new();
+        let mut unproved_com_records = BTreeSet::new();
         let mut input = Input::new(
             "disposed.hpp",
             "#define TEXT \"payload\"\n#define ALIAS TEXT\nstruct Deferred { int (*call)(int); };\n",
@@ -2213,6 +2235,8 @@ mod owned_tests {
                 embeddable_class_layouts: &mut embeddable,
                 clang_flag_enums: &mut flags,
                 shared_enum_identities: &mut shared_enum_identities,
+                native_com_contracts: &mut native_com_contracts,
+                unproved_com_records: &mut unproved_com_records,
                 module_free_headers: false,
             };
             tu.extract(&index, &input, &[], &mut output, false, false)

@@ -7,6 +7,7 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter, Write};
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn timings_enabled() -> bool {
     ["WINDOWS_CLANG_TIMINGS", "WINDOWS_CLANG_TIMING"]
@@ -67,6 +68,7 @@ fn elapsed_ms(start: Option<std::time::Instant>) -> f64 {
         .unwrap_or_default()
 }
 
+mod com_pointer;
 mod enum_diagnostics;
 mod extract;
 use enum_diagnostics::*;
@@ -1194,6 +1196,23 @@ pub struct Method {
     pub special: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeComMethod {
+    name: String,
+    convention: i32,
+    params: Vec<Parameter>,
+    result: TypeRef,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeComContract {
+    guid: String,
+    has_fields: bool,
+    pointer_width: i32,
+    bases: Vec<String>,
+    slots: Vec<NativeComMethod>,
+}
+
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ParamAnnotation {
     pub input: bool,
@@ -1448,6 +1467,8 @@ pub struct Snapshot {
     class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
     class_canonical_anchors: BTreeMap<Origin, ClassCanonicalAnchor>,
     shared_enum_identities: BTreeMap<Origin, SharedEnumIdentity>,
+    native_com_contracts: BTreeMap<Origin, Arc<NativeComContract>>,
+    unproved_com_records: BTreeSet<Origin>,
     observation_only_class_origins: BTreeSet<Origin>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
@@ -1676,6 +1697,8 @@ impl PartialEq for Snapshot {
             && self.class_canonical_origins == other.class_canonical_origins
             && self.class_canonical_anchors == other.class_canonical_anchors
             && self.shared_enum_identities == other.shared_enum_identities
+            && self.native_com_contracts == other.native_com_contracts
+            && self.unproved_com_records == other.unproved_com_records
             && self.observation_only_class_origins == other.observation_only_class_origins
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
@@ -5408,6 +5431,14 @@ impl Snapshot {
             .iter()
             .map(|fact| ((fact.origin.tu.clone(), fact.spelling.clone()), fact))
             .collect();
+        let com_context = com_pointer::Context {
+            snapshot: self,
+            declarations: &declarations,
+            facts_by_declaration: &facts_by_declaration,
+            source_names,
+            excluded_types,
+        };
+        let com_bindings = com_pointer::Bindings::new(&com_context, &facts_by_origin);
         let extended_reference_enums: BTreeSet<_> = excluded_types
             .into_iter()
             .flatten()
@@ -5559,6 +5590,7 @@ impl Snapshot {
                         &facts_index,
                         &mut shape_cache,
                         source_names,
+                        &com_bindings,
                     ) {
                         Ok(root) => {
                             let tagged = authority
@@ -5741,6 +5773,7 @@ impl Snapshot {
                     &facts_index,
                     &mut shape_cache,
                     source_names,
+                    &com_bindings,
                 ) {
                     Ok(root) => {
                         root_names.insert(name);
@@ -5992,6 +6025,36 @@ impl Snapshot {
             }
 
             while let Some((tu, edge, source)) = queue.pop() {
+                let value_type = match edge {
+                    TypeEdge::Use(ty, annotations) => Some((ty, annotations, false, false)),
+                    TypeEdge::Parameter(param, annotations, size) => Some((
+                        &param.ty,
+                        annotations,
+                        param.annotation.size.is_some() || size.is_some(),
+                        false,
+                    )),
+                    TypeEdge::Type(ty)
+                        if !matches!(
+                            source,
+                            DependencyNode::Fact(origin)
+                                if matches!(facts_by_origin[origin].data, FactData::Typedef { .. })
+                        ) =>
+                    {
+                        Some((ty, &[][..], false, false))
+                    }
+                    TypeEdge::Pointee(ty, _) => Some((ty, &[][..], false, true)),
+                    _ => None,
+                };
+                if let Some((ty, annotations, counted, pointer)) = value_type {
+                    com_bindings.validate_use(
+                        ty,
+                        tu,
+                        annotations,
+                        counted,
+                        pointer,
+                        &com_context,
+                    )?;
+                }
                 let (ty, parent_mutability) = match edge {
                     TypeEdge::Type(ty) => (ty, None),
                     TypeEdge::Pointee(ty, mutable) => (ty, Some(mutable)),
@@ -6464,7 +6527,29 @@ impl Snapshot {
                     }
                 };
                 let mut fact = selected;
+                let com_provider = com_bindings.provider_for(fact, &facts_index);
+                if let Some(provider) = com_provider {
+                    let provider = provider.map_err(|failure| Error(failure.message(name)))?;
+                    if provider.name == fact.name {
+                        fact = provider;
+                        if matches!(edge, TypeEdge::Pointee(..)) {
+                            type_choices.insert((tu, edge), TypeChoice::ComInterface(ty));
+                        }
+                    }
+                }
+                let complete_com_record = typedef_tag_declaration(selected, &facts_index)
+                    .or(Some(selected))
+                    .is_some_and(|target| {
+                        self.unproved_com_records.contains(&target.origin)
+                            || (matches!(target.data, FactData::Record { .. })
+                                && self
+                                    .native_com_contracts
+                                    .get(&target.origin)
+                                    .is_some_and(|contract| contract.has_fields))
+                    });
                 if !self.root_owners.contains_key(&fact.origin)
+                    && com_provider.is_none()
+                    && !complete_com_record
                     && let Some(guid) = declaration_uuid(self, &declarations, name, tu, declaration)
                 {
                     let owned: Vec<_> = facts_index
@@ -6770,6 +6855,7 @@ impl Snapshot {
                     &facts_index,
                     &mut shape_cache,
                     source_names,
+                    &com_bindings,
                 ) {
                     Ok(fact) => fact,
                     Err(error) => {
@@ -7415,17 +7501,29 @@ impl Snapshot {
         let mut pointer_interface_aliases = BTreeMap::new();
         for fact in &self.facts {
             let FactData::Typedef {
-                target: TypeRef::Pointer { target, .. },
+                target:
+                    TypeRef::Pointer {
+                        mutable,
+                        target: native_target,
+                    },
             } = &fact.data
             else {
                 continue;
             };
             let (TypeRef::Named { name: target, .. } | TypeRef::Generic { name: target, .. }) =
-                target.as_ref()
+                native_target.as_ref()
             else {
                 continue;
             };
-            if !interface_names.contains(&(fact.origin.tu.clone(), target.clone())) {
+            if !interface_names.contains(&(fact.origin.tu.clone(), target.clone()))
+                && !matches!(
+                    type_choices.get(&(
+                        fact.origin.tu.as_str(),
+                        TypeEdge::Pointee(native_target, *mutable),
+                    )),
+                    Some(TypeChoice::ComInterface(_))
+                )
+            {
                 continue;
             }
             let projected = type_names
@@ -7856,7 +7954,7 @@ struct SharedEnumDefinition {
 
 #[derive(Clone, Debug, PartialEq)]
 struct SharedEnumIdentity {
-    definition: std::sync::Arc<SharedEnumDefinition>,
+    definition: Arc<SharedEnumDefinition>,
     enumeration: Origin,
 }
 
@@ -8688,7 +8786,7 @@ impl<'a> TypeProjection<'a> {
             {
                 return self.project(TypeEdge::Type(ty));
             }
-            Some(TypeChoice::Declared(ty)) => *ty,
+            Some(TypeChoice::Declared(ty) | TypeChoice::ComInterface(ty)) => *ty,
             None => match edge {
                 TypeEdge::Type(ty) | TypeEdge::Pointee(ty, _) => {
                     assert!(!matches!(ty, TypeRef::Named { .. }));
@@ -8748,10 +8846,15 @@ impl<'a> TypeProjection<'a> {
         }
         let (mutable, depth, target) = pointer_run(ty);
         if depth != 0
-            && let TypeRef::Named { name, .. } | TypeRef::Generic { name, .. } = target
-            && self
-                .interface_names
-                .contains(&(self.tu.to_string(), name.clone()))
+            && (matches!(
+                self.type_choices
+                    .get(&(self.tu, TypeEdge::Pointee(target, mutable))),
+                Some(TypeChoice::ComInterface(_))
+            ) || matches!(
+                target,
+                TypeRef::Named { name, .. } | TypeRef::Generic { name, .. }
+                    if self.interface_names.contains(&(self.tu.to_string(), name.clone()))
+            ))
         {
             return self.pointer(target, mutable, depth - 1);
         }
@@ -9586,6 +9689,53 @@ fn is_tag_declaration(fact: &Fact) -> bool {
     )
 }
 
+fn typedef_declaration<'a>(
+    fact: &'a Fact,
+    facts_index: &HashMap<&str, Vec<&'a Fact>>,
+) -> Option<&'a Fact> {
+    if !matches!(
+        fact.data,
+        FactData::Typedef {
+            target: TypeRef::Named { .. }
+        }
+    ) {
+        return None;
+    }
+    let mut current = fact;
+    let mut seen = HashSet::new();
+    while let FactData::Typedef {
+        target: TypeRef::Named { name, declaration },
+    } = &current.data
+    {
+        if !seen.insert(&current.origin) {
+            return None;
+        }
+        let mut targets = facts_index
+            .get(name.as_str())?
+            .iter()
+            .copied()
+            .filter(|target| {
+                target.origin.tu == current.origin.tu && target.spelling == *declaration
+            });
+        let target = targets.next()?;
+        if targets.any(|candidate| !same_source_declaration(target, candidate)) {
+            return None;
+        }
+        current = target;
+    }
+    Some(current)
+}
+
+fn typedef_tag_declaration<'a>(
+    fact: &'a Fact,
+    facts_index: &HashMap<&str, Vec<&'a Fact>>,
+) -> Option<&'a Fact> {
+    typedef_declaration(fact, facts_index).filter(|target| {
+        is_tag_declaration(target)
+            || matches!(target.data, FactData::Class { .. }) && !target.definition
+    })
+}
+
 fn incomplete_declaration_matches_definition(declaration: &Fact, definition: &Fact) -> bool {
     !declaration.definition
         && declaration.kind == definition.kind
@@ -9725,7 +9875,25 @@ fn choose_proven_type_root<'a>(
     facts_index: &HashMap<&str, Vec<&'a Fact>>,
     shape_cache: &mut ShapeCache,
     source_names: Option<&PlanningSourceNames>,
+    com_bindings: &com_pointer::Bindings<'a>,
 ) -> Result<&'a Fact, Error> {
+    if roots
+        .iter()
+        .any(|fact| com_bindings.provider_for(fact, facts_index).is_some())
+    {
+        let mut proved = Vec::with_capacity(roots.len());
+        for fact in roots {
+            let provider = com_bindings
+                .provider_for(fact, facts_index)
+                .transpose()
+                .map_err(|failure| Error(failure.message(name)))?;
+            let replacement = provider
+                .filter(|provider| provider.name == name)
+                .unwrap_or(fact);
+            proved.push(replacement);
+        }
+        return choose_type_root_cached(name, &proved, facts_index, shape_cache);
+    }
     if let Some(names) = source_names
         && !roots.is_empty()
         && roots
@@ -9781,44 +9949,36 @@ fn choose_type_root_cached<'a>(
     {
         return emittable_type(name, preferred_fact(&distinct));
     }
-    if let Some(target_name) = distinct.first().and_then(|first| match &first.data {
-        FactData::Typedef {
-            target: TypeRef::Named { name, .. },
-        } => Some(name),
-        _ => None,
-    }) && distinct.iter().all(|fact| {
-        matches!(
-            &fact.data,
+    let proved_named_typedef_targets = distinct.iter().all(|fact| {
+        !matches!(
+            fact.data,
             FactData::Typedef {
-                target: TypeRef::Named { name, .. }
-            } if name == target_name
-        )
-    }) {
+                target: TypeRef::Named { .. }
+            }
+        ) || typedef_declaration(fact, facts_index).is_some()
+    });
+    if proved_named_typedef_targets
+        && let Some(target_name) = distinct.first().and_then(|first| match &first.data {
+            FactData::Typedef {
+                target: TypeRef::Named { name, .. },
+            } => Some(name),
+            _ => None,
+        })
+        && distinct.iter().all(|fact| {
+            matches!(
+                &fact.data,
+                FactData::Typedef {
+                    target: TypeRef::Named { name, .. }
+                } if name == target_name
+            )
+        })
+    {
         let complete: Vec<_> = distinct
             .iter()
             .copied()
             .filter(|fact| {
-                let FactData::Typedef {
-                    target: TypeRef::Named { name, declaration },
-                } = &fact.data
-                else {
-                    return false;
-                };
-                facts_index
-                    .get(name.as_str())
-                    .into_iter()
-                    .flatten()
-                    .any(|target| {
-                        target.origin.tu == fact.origin.tu
-                            && target.spelling == *declaration
-                            && target.definition
-                            && matches!(
-                                target.data,
-                                FactData::Enum { .. }
-                                    | FactData::Record { .. }
-                                    | FactData::Interface { .. }
-                            )
-                    })
+                typedef_tag_declaration(fact, facts_index)
+                    .is_some_and(|target| target.definition && is_tag_declaration(target))
             })
             .collect();
         if let [complete] = complete.as_slice() {
@@ -9847,7 +10007,8 @@ fn choose_type_root_cached<'a>(
             }
         }
     }
-    if let Some(first) = distinct.first()
+    if proved_named_typedef_targets
+        && let Some(first) = distinct.first()
         && let FactData::Typedef {
             target: first_target,
         } = &first.data
@@ -10332,14 +10493,11 @@ fn choose_type_root_cached<'a>(
         })
         && distinct.iter().all(|fact| {
             declarations.contains(fact)
-                || matches!(
-                    &fact.data,
-                    FactData::Typedef {
-                        target: TypeRef::Named { declaration, .. }
-                    } if declarations.iter().any(|target| {
-                        target.origin.tu == fact.origin.tu && target.spelling == *declaration
-                    })
-                )
+                || typedef_tag_declaration(fact, facts_index).is_some_and(|target| {
+                    declarations
+                        .iter()
+                        .any(|declaration| same_source_declaration(target, declaration))
+                })
         })
     {
         return emittable_type(name, preferred_fact(&declarations));
@@ -10366,26 +10524,16 @@ fn choose_type_root_cached<'a>(
             if fact_uuid(fact) == Some(guid) {
                 return matches!(fact.data, FactData::Interface { .. });
             }
-            let FactData::Typedef {
-                target: TypeRef::Named { name, declaration },
-            } = &fact.data
-            else {
+            let Some(target) = typedef_tag_declaration(fact, facts_index) else {
                 return false;
             };
-            facts_index
-                .get(name.as_str())
-                .into_iter()
-                .flatten()
-                .any(|target| {
-                    target.origin.tu == fact.origin.tu
-                        && target.spelling == *declaration
-                        && fact_uuid(target) == Some(guid)
-                        && target.kind == root.kind
-                        && matches!(
-                            target.data,
-                            FactData::Class { .. } | FactData::Interface { .. }
-                        )
-                })
+            fact_uuid(target) == Some(guid)
+                && target.kind == root.kind
+                && matches!(
+                    target.data,
+                    FactData::Class { .. } | FactData::Interface { .. }
+                )
+                && (!target.definition || same_source_declaration(target, root))
         })
     {
         return Ok(root);
@@ -10399,12 +10547,11 @@ fn choose_type_root_cached<'a>(
         });
         let definitions_and_aliases = distinct.iter().all(|fact| {
             definitions.contains(fact)
-                || matches!(
-                    &fact.data,
-                    FactData::Typedef {
-                        target: TypeRef::Named { declaration, .. }
-                    } if definitions.iter().any(|definition| definition.spelling == *declaration)
-                )
+                || typedef_tag_declaration(fact, facts_index).is_some_and(|target| {
+                    definitions
+                        .iter()
+                        .any(|definition| same_source_declaration(target, definition))
+                })
         });
         if equivalent_definitions && definitions_and_aliases {
             return Ok(root);
@@ -10413,12 +10560,8 @@ fn choose_type_root_cached<'a>(
     if let [root] = definitions.as_slice() {
         let aliases_target_root = distinct.iter().all(|fact| {
             fact.origin == root.origin
-                || matches!(
-                    &fact.data,
-                    FactData::Typedef {
-                        target: TypeRef::Named { declaration, .. }
-                    } if declaration == &root.spelling
-                )
+                || typedef_tag_declaration(fact, facts_index)
+                    .is_some_and(|target| same_source_declaration(target, root))
         });
         if aliases_target_root {
             return Ok(root);
@@ -10441,23 +10584,13 @@ fn choose_type_root_cached<'a>(
                     && ((fact.parent.is_none() && root.parent.is_none())
                         || (fact.origin.tu == root.origin.tu
                             && (fact.parent == root.parent || linked_nested_declaration))))
-                || matches!(
-                    &fact.data,
-                    FactData::Typedef {
-                        target: TypeRef::Named { declaration, .. }
-                    } if facts_index
-                        .get(name)
-                        .into_iter()
-                        .flatten()
-                        .any(|target| {
-                            target.origin.tu == fact.origin.tu
-                                && target.spelling == *declaration
-                                && target.kind == root.kind
-                                && (target.origin == root.origin || !target.definition)
-                                && target.parent.is_none()
-                                && root.parent.is_none()
-                        })
-                )
+                || typedef_tag_declaration(fact, facts_index).is_some_and(|target| {
+                    target.name == name
+                        && target.kind == root.kind
+                        && (target.origin == root.origin || !target.definition)
+                        && target.parent.is_none()
+                        && root.parent.is_none()
+                })
         });
         if compatible_declarations_and_aliases {
             return Ok(root);
@@ -11211,6 +11344,7 @@ enum TypeEdge<'a> {
 #[derive(Clone, Copy)]
 enum TypeChoice<'a> {
     Declared(&'a TypeRef),
+    ComInterface(&'a TypeRef),
     Canonical {
         name: &'static str,
         mutable: bool,
@@ -11226,7 +11360,7 @@ enum TypeChoice<'a> {
 impl<'a> TypeChoice<'a> {
     fn edge(self) -> TypeEdge<'a> {
         match self {
-            Self::Declared(ty) => TypeEdge::Type(ty),
+            Self::Declared(ty) | Self::ComInterface(ty) => TypeEdge::Type(ty),
             Self::Canonical { name, .. } | Self::String { name, .. } => TypeEdge::Projected(name),
         }
     }
@@ -13357,6 +13491,7 @@ mod tests {
         assert!(snapshot.emit_with_options(&options).is_err());
     }
 
+    mod com_pointer;
     mod native_class_layouts;
     mod planner_lookups;
     mod producer_corrections;

@@ -15,6 +15,8 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         class_canonical_origins: BTreeMap::new(),
         class_canonical_anchors: BTreeMap::new(),
         shared_enum_identities: BTreeMap::new(),
+        native_com_contracts: BTreeMap::new(),
+        unproved_com_records: BTreeSet::new(),
         observation_only_class_origins: BTreeSet::new(),
         pointer_callback_aliases: BTreeSet::new(),
         pointer_only_class_layouts: BTreeMap::new(),

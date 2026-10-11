@@ -1,6 +1,540 @@
 use super::*;
 
 #[test]
+fn canonical_tag_aliases_preserve_native_definition() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("canonical_alias");
+    let tag = root.join("tag.hpp");
+    let helper = root.join("helper.hpp");
+    let mut baseline = None;
+    for reversed in [false, true] {
+        let provider = Input::new(
+            root.join("provider.hpp").to_str().unwrap(),
+            "#include \"helper.hpp\"\n#define NATIVE_TAG_COMPLETE\n#include \"tag.hpp\"\n",
+        )
+        .with_roots([tag.to_str().unwrap(), helper.to_str().unwrap()])
+        .partitioned("provider.hpp");
+        let client = Input::new(
+            root.join("client.hpp").to_str().unwrap(),
+            "#include \"helper.hpp\"\nextern \"C\" void UseTag(NativeTag* value);\n",
+        )
+        .with_roots([
+            helper.to_str().unwrap(),
+            root.join("client.hpp").to_str().unwrap(),
+        ])
+        .partitioned("client.hpp");
+        let mut policy = HeaderPartitionPolicy::new();
+        for input in [&provider, &client] {
+            policy.add_traversed_header_for_input(
+                input.input.name.clone(),
+                helper.to_str().unwrap(),
+                RootPartition::new("Tag", "Test.Tag"),
+            );
+        }
+        policy.add_traversed_header_for_input(
+            provider.input.name.clone(),
+            tag.to_str().unwrap(),
+            RootPartition::new("Tag", "Test.Tag"),
+        );
+        policy.add_traversed_header_for_input(
+            client.input.name.clone(),
+            client.input.name.clone(),
+            RootPartition::new("Api", "Test.Api"),
+        );
+        let mut inputs = vec![provider, client];
+        if reversed {
+            inputs.reverse();
+        }
+        let snapshot =
+            extract_partitioned_with_options(inputs, ARGS, &ExtractionOptions::new()).unwrap();
+        let alias = snapshot
+            .facts
+            .iter()
+            .find(|fact| {
+                fact.name == "NativeTag"
+                    && fact.spelling.file.ends_with("tag.hpp")
+                    && fact.kind == FactKind::Typedef
+            })
+            .unwrap();
+        let exact_target = |fact: &Fact| {
+            let FactData::Typedef {
+                target: TypeRef::Named { name, declaration },
+            } = &fact.data
+            else {
+                panic!("expected a native named typedef");
+            };
+            let targets = snapshot
+                .facts
+                .iter()
+                .filter(|target| {
+                    target.origin.tu == fact.origin.tu
+                        && target.name == *name
+                        && target.spelling == *declaration
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(targets.len(), 1);
+            targets[0]
+        };
+        let bridge = exact_target(alias);
+        assert_eq!(bridge.kind, FactKind::Typedef);
+        assert!(bridge.spelling.file.ends_with("helper.hpp"));
+        let definition = exact_target(bridge);
+        assert!(definition.definition);
+        assert!(definition.spelling.file.ends_with("tag.hpp"));
+        assert!(matches!(
+            &definition.data,
+            FactData::Interface { guid: Some(guid), methods, .. }
+                if guid == "6b44d453-343e-4246-826d-208c460655c5" && methods.len() == 1
+        ));
+        let references = BTreeMap::new();
+        let mut options = EmitOptions::new("Test.Common", &references);
+        options.library = Some("native.dll");
+        let plan = snapshot
+            .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+            .unwrap();
+        let strict = plan.clone().emit_with_options(&options).unwrap();
+        let report = plan.emit_with_enum_diagnostics(&options).unwrap();
+        assert_eq!(strict, report.partitions);
+        assert!(report.omissions.is_empty());
+        let output = strict.values().cloned().collect::<String>();
+        assert_eq!(output.matches("interface NativeTag").count(), 1, "{output}");
+        assert!(
+            output.contains("fn UseTag(value: *mut Test::Tag::NativeTag)"),
+            "{output}"
+        );
+        let winmd = std::env::temp_dir().join(format!(
+            "windows-clang-canonical-tag-{}-{reversed}.winmd",
+            std::process::id(),
+        ));
+        windows_rdl::reader()
+            .input_texts(strict.values())
+            .reference_default()
+            .output(&winmd)
+            .write()
+            .unwrap();
+        let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+        assert_eq!(index.expect("Test.Tag", "NativeTag").methods().count(), 1);
+        index.expect("Test.Api", "Apis");
+        std::fs::remove_file(&winmd).unwrap();
+        if let Some(baseline) = &baseline {
+            assert_eq!(&strict, baseline);
+        } else {
+            baseline = Some(strict);
+        }
+    }
+}
+
+#[test]
+fn canonical_tag_aliases_reject_unproved_targets() {
+    let definition = test_fact(
+        1,
+        None,
+        FactKind::Struct,
+        "NativeTag",
+        Location {
+            file: "definition.hpp".to_string(),
+            offset: 1,
+        },
+        FactData::Interface {
+            base: None,
+            guid: Some("6b44d453-343e-4246-826d-208c460655c5".to_string()),
+            methods: Vec::new(),
+        },
+    );
+    let named = |fact: &Fact| TypeRef::Named {
+        name: fact.name.clone(),
+        declaration: fact.spelling.clone(),
+    };
+    let bridge = test_fact(
+        2,
+        None,
+        FactKind::Typedef,
+        "NativeTag",
+        Location {
+            file: "bridge.hpp".to_string(),
+            offset: 2,
+        },
+        FactData::Typedef {
+            target: named(&definition),
+        },
+    );
+    let alias = test_fact(
+        3,
+        None,
+        FactKind::Typedef,
+        "NativeTag",
+        Location {
+            file: "alias.hpp".to_string(),
+            offset: 3,
+        },
+        FactData::Typedef {
+            target: named(&bridge),
+        },
+    );
+    for case in [
+        "missing",
+        "cycle",
+        "ambiguous",
+        "other_tu",
+        "other_name",
+        "other_definition",
+        "pointer",
+    ] {
+        let mut facts = vec![definition.clone(), alias.clone()];
+        let mut target = bridge.clone();
+        match case {
+            "missing" => {}
+            "cycle" => {
+                target.data = FactData::Typedef {
+                    target: named(&alias),
+                };
+                facts.push(target);
+            }
+            "ambiguous" => {
+                facts.push(target.clone());
+                target.origin.local = 4;
+                target.data = FactData::Typedef {
+                    target: TypeRef::Scalar(Scalar::I32),
+                };
+                facts.push(target);
+            }
+            "other_tu" => {
+                target.origin.tu = "other".to_string();
+                facts.push(target);
+            }
+            "other_name" => {
+                target.name = "Other".to_string();
+                facts.push(target);
+            }
+            "other_definition" => {
+                let mut other = definition.clone();
+                other.origin.local = 4;
+                other.spelling.file = "other.hpp".to_string();
+                other.data = FactData::Interface {
+                    base: None,
+                    guid: Some("6b44d453-343e-4246-826d-208c460655c5".to_string()),
+                    methods: vec![Method {
+                        name: "Different".to_string(),
+                        params: Vec::new(),
+                        result: TypeRef::Void,
+                        special: false,
+                    }],
+                };
+                target.data = FactData::Typedef {
+                    target: named(&other),
+                };
+                facts.extend([target, other]);
+            }
+            "pointer" => {
+                target.data = FactData::Typedef {
+                    target: TypeRef::Pointer {
+                        mutable: true,
+                        target: Box::new(named(&definition)),
+                    },
+                };
+                facts.push(target);
+            }
+            _ => unreachable!(),
+        }
+        for _ in 0..2 {
+            let mut index = HashMap::<&str, Vec<&Fact>>::new();
+            for fact in &facts {
+                index.entry(&fact.name).or_default().push(fact);
+            }
+            assert_eq!(
+                typedef_tag_declaration(&alias, &index).is_some(),
+                case == "other_definition",
+                "{case}"
+            );
+            for roots in [[&definition, &alias], [&bridge, &alias]] {
+                let error = choose_type_root("NativeTag", &roots, &index).unwrap_err();
+                assert!(error.0.contains("ambiguous type root"), "{case}: {error}");
+            }
+            facts.reverse();
+        }
+    }
+}
+
+#[test]
+fn canonical_tag_aliases_reject_conflicting_native_contexts() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("canonical_alias");
+    for (second_source, fields) in [
+        ("#define NATIVE_TAG_ALTERNATE\n", false),
+        ("#define NATIVE_TAG_FIELDS\n", true),
+    ] {
+        for reversed in [false, true] {
+            let mut policy = HeaderPartitionPolicy::new();
+            let mut inputs = Vec::new();
+            for (name, alternate) in [("first.hpp", ""), ("second.hpp", second_source)] {
+                let input = Input::new(
+                root.join(name).to_str().unwrap(),
+                format!(
+                    "#include \"helper.hpp\"\n#define NATIVE_TAG_COMPLETE\n{alternate}#include \"tag.hpp\"\n"
+                ),
+            )
+            .with_roots([
+                root.join("helper.hpp").to_str().unwrap(),
+                root.join("tag.hpp").to_str().unwrap(),
+            ])
+            .partitioned(name);
+                for header in ["helper.hpp", "tag.hpp"] {
+                    policy.add_traversed_header_for_input(
+                        input.input.name.clone(),
+                        root.join(header).to_str().unwrap(),
+                        RootPartition::new("Tag", "Test.Tag"),
+                    );
+                }
+                inputs.push(input);
+            }
+            if reversed {
+                inputs.reverse();
+            }
+            let snapshot = extract_partitioned(inputs, ARGS).unwrap();
+            let definitions = snapshot
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.name == "NativeTag"
+                        && fact.definition
+                        && matches!(
+                            fact.data,
+                            FactData::Interface { .. } | FactData::Record { .. }
+                        )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(definitions.len(), 2);
+            assert_eq!(definitions[0].spelling, definitions[1].spelling);
+            assert_ne!(definitions[0].data, definitions[1].data);
+            assert_eq!(
+                definitions
+                    .iter()
+                    .any(|fact| matches!(fact.data, FactData::Record { .. })),
+                fields
+            );
+            if fields {
+                let record = definitions
+                    .iter()
+                    .find(|fact| matches!(fact.data, FactData::Record { .. }))
+                    .unwrap();
+                assert_eq!(record.kind, FactKind::Struct);
+                assert_eq!(
+                    snapshot.fact_uuid(record),
+                    Some("6b44d453-343e-4246-826d-208c460655c5")
+                );
+                let forward = snapshot
+                    .facts
+                    .iter()
+                    .find(|fact| {
+                        fact.origin.tu == record.origin.tu
+                            && fact.name == record.name
+                            && !fact.definition
+                    })
+                    .unwrap();
+                assert_eq!(
+                    snapshot.class_canonical_origins.get(&forward.origin),
+                    snapshot.class_canonical_origins.get(&record.origin)
+                );
+                assert!(
+                    snapshot
+                        .class_canonical_origins
+                        .contains_key(&record.origin)
+                );
+                let contract = &snapshot.native_com_contracts[&record.origin];
+                assert_eq!(contract.guid, snapshot.fact_uuid(record).unwrap());
+                assert_eq!(contract.bases, ["d10e84c3-5079-4d3d-8d9f-28f1ef9c643d"]);
+                assert_eq!(contract.slots.len(), 2);
+                assert_eq!(contract.slots[0].name, "BaseCall");
+                assert_eq!(contract.slots[1].name, "Call");
+                assert_eq!(
+                    snapshot.native_com_contracts[&forward.origin],
+                    snapshot.native_com_contracts[&record.origin]
+                );
+            }
+            let plan = snapshot
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .unwrap();
+            let references = BTreeMap::new();
+            let options = EmitOptions::new("Test.Common", &references);
+            let strict = plan.clone().emit_with_options(&options).unwrap_err();
+            let report = plan.emit_with_enum_diagnostics(&options).unwrap_err();
+            assert_eq!(strict.0, report.0);
+            assert!(
+                strict.0.contains("ambiguous type root `NativeTag`"),
+                "{strict}"
+            );
+        }
+    }
+}
+
+#[test]
+fn canonical_tag_aliases_reject_another_incomplete_tag() {
+    let mut facts = Vec::new();
+    for (name, definition, local) in [("NativeTag", true, 1), ("OtherTag", false, 2)] {
+        let mut fact = test_fact(
+            local,
+            None,
+            FactKind::Struct,
+            name,
+            Location {
+                file: "types.hpp".to_string(),
+                offset: local,
+            },
+            FactData::Record {
+                base: None,
+                fields: Vec::new(),
+                size: if definition { 1 } else { -2 },
+                align: if definition { 1 } else { -2 },
+                packing: None,
+                alignment: None,
+                union: false,
+            },
+        );
+        fact.definition = definition;
+        facts.push(fact);
+    }
+    facts.push(test_fact(
+        3,
+        None,
+        FactKind::Typedef,
+        "NativeTag",
+        Location {
+            file: "alias.hpp".to_string(),
+            offset: 3,
+        },
+        FactData::Typedef {
+            target: TypeRef::Named {
+                name: "OtherTag".to_string(),
+                declaration: facts[1].spelling.clone(),
+            },
+        },
+    ));
+    for _ in 0..2 {
+        let mut index = HashMap::<&str, Vec<&Fact>>::new();
+        for fact in &facts {
+            index.entry(&fact.name).or_default().push(fact);
+        }
+        let roots = index["NativeTag"].clone();
+        let alias = roots
+            .iter()
+            .find(|fact| fact.kind == FactKind::Typedef)
+            .unwrap();
+        assert_eq!(
+            typedef_tag_declaration(alias, &index).unwrap().name,
+            "OtherTag"
+        );
+        let error = choose_type_root("NativeTag", &roots, &index).unwrap_err();
+        assert!(
+            error.0.contains("ambiguous type root `NativeTag`"),
+            "{error}"
+        );
+        facts.reverse();
+    }
+}
+
+#[test]
+fn canonical_tag_aliases_preserve_incomplete_and_equivalent_definitions() {
+    let named = |fact: &Fact| TypeRef::Named {
+        name: fact.name.clone(),
+        declaration: fact.spelling.clone(),
+    };
+    for complete in [false, true] {
+        let mut facts = Vec::new();
+        for (tu, file) in [("first", "first.hpp"), ("second", "second.hpp")] {
+            let mut tag = test_fact_in_tu(
+                tu,
+                1,
+                None,
+                FactKind::Struct,
+                "RecordTag",
+                Location {
+                    file: if complete { file } else { "common.hpp" }.to_string(),
+                    offset: 1,
+                },
+                FactData::Record {
+                    base: None,
+                    fields: Vec::new(),
+                    size: i64::from(complete),
+                    align: 1,
+                    packing: None,
+                    alignment: None,
+                    union: false,
+                },
+            );
+            tag.definition = complete;
+            let bridge = test_fact_in_tu(
+                tu,
+                2,
+                None,
+                FactKind::Typedef,
+                "RecordTag",
+                Location {
+                    file: file.to_string(),
+                    offset: 2,
+                },
+                FactData::Typedef {
+                    target: named(&tag),
+                },
+            );
+            let alias = test_fact_in_tu(
+                tu,
+                3,
+                None,
+                FactKind::Typedef,
+                "RecordTag",
+                Location {
+                    file: file.to_string(),
+                    offset: 3,
+                },
+                FactData::Typedef {
+                    target: named(&bridge),
+                },
+            );
+            facts.extend([tag, bridge, alias]);
+        }
+        for _ in 0..2 {
+            let mut index = HashMap::<&str, Vec<&Fact>>::new();
+            for fact in &facts {
+                index.entry(&fact.name).or_default().push(fact);
+            }
+            let roots = facts.iter().collect::<Vec<_>>();
+            let selected = choose_type_root("RecordTag", &roots, &index).unwrap();
+            assert_eq!(selected.kind, FactKind::Struct);
+            assert_eq!(selected.definition, complete);
+            assert_eq!(
+                selected.spelling.file,
+                if complete { "first.hpp" } else { "common.hpp" }
+            );
+            facts.reverse();
+        }
+        if complete {
+            let record = facts
+                .iter_mut()
+                .find(|fact| fact.origin.tu == "second" && fact.kind == FactKind::Struct)
+                .unwrap();
+            let FactData::Record { size, .. } = &mut record.data else {
+                unreachable!();
+            };
+            *size = 2;
+            let mut index = HashMap::<&str, Vec<&Fact>>::new();
+            for fact in &facts {
+                index.entry(&fact.name).or_default().push(fact);
+            }
+            let roots = facts.iter().collect::<Vec<_>>();
+            assert!(choose_type_root("RecordTag", &roots, &index).is_err());
+        }
+    }
+}
+
+#[test]
 fn enum_conflicts_report_complete_partial_closure() {
     helpers::ensure_libclang();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -2358,6 +2892,8 @@ mod excluded_enum_raw_context {
             class_canonical_origins: BTreeMap::new(),
             class_canonical_anchors: BTreeMap::new(),
             shared_enum_identities: BTreeMap::new(),
+            native_com_contracts: BTreeMap::new(),
+            unproved_com_records: BTreeSet::new(),
             observation_only_class_origins: BTreeSet::new(),
             pointer_callback_aliases: BTreeSet::new(),
             pointer_only_class_layouts: BTreeMap::new(),
