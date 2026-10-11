@@ -264,6 +264,23 @@ give the foreign declaration an owner or substitute another same-named enum. Con
 data, parent contexts, or multiple owner policies remain fatal. The new authority and parent indexes
 are skipped when header policy is inactive or no owned enum exclusion can constrain a dependency.
 
+Callers with a textual, module-free header corpus can opt in with
+`ExtractionOptions::with_module_free_headers`. This is a domain guarantee for every original
+translation unit, not a compiler flag. Default extraction does not admit cross-header enum identity.
+The native traversal captures global external typedef enums only when canonical cursor equality
+proves the local alias target and the complete declaration contains decimal literal initializers,
+no explicit base, and no scoped enum. Native enum and alias USRs, raw declaration tokens,
+representation, and enumerators must all agree. Macros, anonymous or internal contexts, and
+unsupported declarations do not acquire this proof from equal evaluated values.
+
+Header planning can satisfy an excluded presentation's exact dependency through a proved compatible
+public enum provider. Original facts, Origins, and local alias-to-enum edges remain unchanged.
+The chosen provider retains its own owner and namespace; excluded metadata is not transferred.
+Missing providers, differing literal definitions, or conflicting public owner policies remain fatal.
+This provider selection applies only to distinct physical enum declarations. A single declaration,
+including repeated observations from several translation units, keeps normal exact dependency
+resolution and default ownership.
+
 An `associated_enum` annotation on a selected root adds the matching enum provider from its
 annotation-compatible redeclarations to dependency closure. Those redeclarations may come from
 other extraction inputs in the aggregate snapshot. A provider that has no traversed-header owner

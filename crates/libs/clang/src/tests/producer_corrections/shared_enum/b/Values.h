@@ -1,0 +1,4 @@
+typedef enum {
+    SHARED_CURVE_NONE = 0,
+    SHARED_CURVE_FADE = 2,
+} SHARED_CURVE;

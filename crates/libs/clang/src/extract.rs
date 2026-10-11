@@ -8,6 +8,7 @@ use std::sync::Arc;
 mod definitions;
 use definitions::Definitions;
 mod owned_bytes;
+mod shared_enums;
 
 pub fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
     extract_with_options(inputs, args, &ExtractionOptions::default())
@@ -123,6 +124,7 @@ fn extract_impl(
         input_arguments: &input_arguments,
         timing,
         validate_annotations,
+        module_free_headers: options.module_free_headers,
     };
     let shared_library = library.shared();
     #[cfg(test)]
@@ -157,7 +159,10 @@ fn extract_impl(
             elapsed_ms(traversal_time)
         );
     }
-    let mut output = ExtractionBuffers::default();
+    let mut output = ExtractionBuffers {
+        module_free_headers: context.module_free_headers,
+        ..Default::default()
+    };
     let mut included_files = vec![];
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
@@ -221,6 +226,8 @@ fn extract_impl(
         declaration_guids,
         class_canonical_origins,
         class_canonical_anchors,
+        shared_enum_identities,
+        module_free_headers: _,
         observation_only_class_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
@@ -444,6 +451,7 @@ fn extract_impl(
         declaration_guids,
         class_canonical_origins,
         class_canonical_anchors,
+        shared_enum_identities,
         observation_only_class_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
@@ -1025,6 +1033,7 @@ struct NativeContext<'a> {
     input_arguments: &'a BTreeMap<String, Vec<String>>,
     timing: bool,
     validate_annotations: bool,
+    module_free_headers: bool,
 }
 
 struct NativeExtraction {
@@ -1057,7 +1066,10 @@ fn extract_original(
         TranslationUnit::parse(&index, input, &arguments).map_err(NativeFailure::Parse)?;
     let parse_ms = elapsed_ms(start);
     let included_files = translation_unit.included_files(&input.name);
-    let mut output = ExtractionBuffers::default();
+    let mut output = ExtractionBuffers {
+        module_free_headers: context.module_free_headers,
+        ..Default::default()
+    };
     let (extracted, metrics) = translation_unit
         .extract(
             &index,
@@ -1512,6 +1524,9 @@ impl TranslationUnit {
             &traversal.seen,
             traversal.class_canonical_origins,
         )?;
+        if output.module_free_headers {
+            shared_enums::capture(&traversal, output.shared_enum_identities);
+        }
         let metrics = timing.then(|| ExtractionMetrics {
             definition_observations: traversal.definitions.observations,
             definition_lookups: traversal.definitions.lookups,
@@ -1634,6 +1649,8 @@ struct ExtractionState<'a> {
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
+    shared_enum_identities: &'a mut BTreeMap<Origin, SharedEnumIdentity>,
+    module_free_headers: bool,
 }
 
 #[derive(Default)]
@@ -1651,6 +1668,8 @@ struct ExtractionBuffers {
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
     clang_flag_enums: BTreeSet<Origin>,
+    shared_enum_identities: BTreeMap<Origin, SharedEnumIdentity>,
+    module_free_headers: bool,
 }
 
 impl ExtractionBuffers {
@@ -1669,6 +1688,8 @@ impl ExtractionBuffers {
             pointer_only_class_layouts: &mut self.pointer_only_class_layouts,
             embeddable_class_layouts: &mut self.embeddable_class_layouts,
             clang_flag_enums: &mut self.clang_flag_enums,
+            shared_enum_identities: &mut self.shared_enum_identities,
+            module_free_headers: self.module_free_headers,
         }
     }
 
@@ -1694,6 +1715,8 @@ impl ExtractionBuffers {
         self.embeddable_class_layouts
             .append(&mut other.embeddable_class_layouts);
         self.clang_flag_enums.append(&mut other.clang_flag_enums);
+        self.shared_enum_identities
+            .append(&mut other.shared_enum_identities);
     }
 }
 
@@ -2160,6 +2183,7 @@ mod owned_tests {
         let mut embeddable = BTreeSet::new();
         let mut flags = BTreeSet::new();
         let mut observation_only = BTreeSet::new();
+        let mut shared_enum_identities = BTreeMap::new();
         let mut input = Input::new(
             "disposed.hpp",
             "#define TEXT \"payload\"\n#define ALIAS TEXT\nstruct Deferred { int (*call)(int); };\n",
@@ -2188,6 +2212,8 @@ mod owned_tests {
                 pointer_only_class_layouts: &mut layouts,
                 embeddable_class_layouts: &mut embeddable,
                 clang_flag_enums: &mut flags,
+                shared_enum_identities: &mut shared_enum_identities,
+                module_free_headers: false,
             };
             tu.extract(&index, &input, &[], &mut output, false, false)
                 .unwrap()

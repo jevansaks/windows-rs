@@ -1,5 +1,270 @@
 use super::*;
 
+#[test]
+fn shared_literal_enum_single_unowned_dependency() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("shared_enum");
+    let foreign = root.join("foreign.hpp");
+    let input = Input::new(
+        foreign.to_str().unwrap(),
+        std::fs::read_to_string(&foreign).unwrap(),
+    )
+    .with_roots([foreign.to_str().unwrap()])
+    .partitioned("foreign.hpp");
+    let mut policy = HeaderPartitionPolicy::new();
+    policy.add_traversed_header_for_input(
+        input.input.name.clone(),
+        foreign.to_str().unwrap(),
+        RootPartition::new("Foreign", "Test.Foreign"),
+    );
+    let mut outputs = Vec::new();
+    for options in [
+        ExtractionOptions::new(),
+        ExtractionOptions::new().with_module_free_headers(),
+    ] {
+        let snapshot = extract_partitioned_with_options([input.clone()], ARGS, &options).unwrap();
+        let enumeration = snapshot
+            .facts
+            .iter()
+            .find(|fact| matches!(fact.data, FactData::Enum { .. }))
+            .unwrap();
+        assert!(!enumeration.root);
+        assert!(!snapshot.root_owners.contains_key(&enumeration.origin));
+        assert_eq!(
+            snapshot
+                .shared_enum_identities
+                .contains_key(&enumeration.origin),
+            options.module_free_headers
+        );
+        let output = snapshot
+            .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+            .unwrap()
+            .emit_with_options(&EmitOptions::new("Test", &BTreeMap::new()))
+            .unwrap();
+        assert_eq!(
+            output
+                .values()
+                .filter(|rdl| rdl.contains("enum SHARED_CURVE"))
+                .count(),
+            1
+        );
+        assert!(output.iter().any(|(route, rdl)| {
+            route.partition == "Foreign" && rdl.contains("struct SHARED_CURVE_REF")
+        }));
+        outputs.push(output);
+    }
+    assert_eq!(outputs[0], outputs[1]);
+    println!("shared_literal_enum single_unowned default=opt_in assertions=passed");
+}
+
+#[test]
+fn shared_literal_enum_public_provider() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("shared_enum");
+    for case in [
+        "shared",
+        "duplicate_provider",
+        "values",
+        "tokens",
+        "macro",
+        "internal",
+        "anonymous",
+        "excluded",
+        "owners",
+        "unproved",
+        "default",
+    ] {
+        let b_header = match case {
+            "values" => "Values.h",
+            "tokens" => "Tokens.h",
+            "macro" => "Macro.h",
+            "internal" => "Internal.h",
+            "anonymous" => "Anonymous.h",
+            _ => "Curve.h",
+        };
+        for reversed in [false, true] {
+            let a = root.join("a").join("Curve.h");
+            let b = root.join("b").join(b_header);
+            let foreign = root.join("foreign.hpp");
+            let mut policy = HeaderPartitionPolicy::new();
+            let mut inputs = Vec::new();
+            for (wrapper, header, source, owner) in [
+                (
+                    "a.hpp",
+                    &a,
+                    "#include \"a/Curve.h\"\n".to_string(),
+                    RootPartition::new("A", "Test.A").with_exclusion("SHARED_CURVE"),
+                ),
+                (
+                    "b.hpp",
+                    &b,
+                    format!("#include \"b/{b_header}\"\n"),
+                    if case == "excluded" {
+                        RootPartition::new("B", "Test.B").with_exclusion("SHARED_CURVE")
+                    } else {
+                        RootPartition::new("B", "Test.B")
+                    },
+                ),
+                (
+                    "foreign.hpp",
+                    &foreign,
+                    std::fs::read_to_string(&foreign).unwrap(),
+                    RootPartition::new("Foreign", "Test.Foreign"),
+                ),
+            ] {
+                let path = root.join(wrapper);
+                let input = Input::new(path.to_str().unwrap(), source)
+                    .with_roots([
+                        a.to_str().unwrap(),
+                        b.to_str().unwrap(),
+                        foreign.to_str().unwrap(),
+                    ])
+                    .partitioned(wrapper);
+                policy.add_traversed_header_for_input(
+                    input.input.name.clone(),
+                    header.to_str().unwrap(),
+                    owner,
+                );
+                inputs.push(input);
+            }
+            if matches!(case, "owners" | "duplicate_provider") {
+                let input = Input::new(
+                    root.join("c.hpp").to_str().unwrap(),
+                    format!("#include \"b/{b_header}\"\n"),
+                )
+                .with_roots([b.to_str().unwrap()])
+                .partitioned("c.hpp");
+                policy.add_traversed_header_for_input(
+                    input.input.name.clone(),
+                    b.to_str().unwrap(),
+                    if case == "duplicate_provider" {
+                        RootPartition::new("B", "Test.B")
+                    } else {
+                        RootPartition::new("C", "Test.C")
+                    },
+                );
+                inputs.push(input);
+            }
+            if reversed {
+                inputs.swap(0, 1);
+            }
+            let options = if case == "default" {
+                ExtractionOptions::new()
+            } else {
+                ExtractionOptions::new().with_module_free_headers()
+            };
+            let mut snapshot = extract_partitioned_with_options(inputs, ARGS, &options).unwrap();
+            if case == "unproved" {
+                snapshot.shared_enum_identities.clear();
+            }
+            let referrer = snapshot
+                .facts
+                .iter()
+                .find(|fact| fact.name == "SHARED_CURVE_REF")
+                .unwrap();
+            let FactData::Record { fields, .. } = &referrer.data else {
+                panic!()
+            };
+            let TypeRef::Named { name, declaration } = &fields[0].ty else {
+                panic!()
+            };
+            let aliases: Vec<_> = snapshot
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.origin.tu == referrer.origin.tu
+                        && fact.name == *name
+                        && fact.spelling == *declaration
+                })
+                .collect();
+            let [alias] = aliases.as_slice() else {
+                panic!("exact local alias missing")
+            };
+            let FactData::Typedef {
+                target: TypeRef::Named { name, declaration },
+            } = &alias.data
+            else {
+                panic!()
+            };
+            let enums: Vec<_> = snapshot
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.origin.tu == alias.origin.tu
+                        && fact.name == *name
+                        && fact.spelling == *declaration
+                        && matches!(fact.data, FactData::Enum { .. })
+                })
+                .collect();
+            let [enumeration] = enums.as_slice() else {
+                panic!("exact local enum missing")
+            };
+            assert_eq!(alias.spelling.file, normalize_name(a.to_str().unwrap()));
+            assert_eq!(enumeration.spelling.file, alias.spelling.file);
+            if matches!(case, "shared" | "duplicate_provider") {
+                assert!(snapshot.shared_enum_identities.contains_key(&alias.origin));
+                assert!(
+                    snapshot
+                        .shared_enum_identities
+                        .contains_key(&enumeration.origin)
+                );
+                if case == "duplicate_provider" {
+                    let providers: Vec<_> = snapshot
+                        .facts
+                        .iter()
+                        .filter(|fact| {
+                            matches!(fact.data, FactData::Enum { .. })
+                                && fact.spelling.file == normalize_name(b.to_str().unwrap())
+                        })
+                        .collect();
+                    assert_eq!(providers.len(), 2);
+                    assert_ne!(providers[0].origin.tu, providers[1].origin.tu);
+                    assert!(providers.iter().all(|fact| {
+                        snapshot.shared_enum_identities.contains_key(&fact.origin)
+                    }));
+                }
+            }
+            let outcome = snapshot
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .and_then(|plan| {
+                    plan.emit_with_options(&EmitOptions::new("Test", &BTreeMap::new()))
+                });
+            if matches!(case, "shared" | "duplicate_provider") {
+                let output = outcome.unwrap();
+                let enums: Vec<_> = output
+                    .iter()
+                    .filter(|(_, rdl)| rdl.contains("enum SHARED_CURVE"))
+                    .collect();
+                assert_eq!(enums.len(), 1, "{output:#?}");
+                assert_eq!(enums[0].0.partition, "B");
+                assert!(
+                    output
+                        .iter()
+                        .any(|(route, rdl)| route.partition == "Foreign"
+                            && rdl.contains("curve: Test::B::SHARED_CURVE")),
+                    "{output:#?}"
+                );
+                assert!(
+                    !output
+                        .values()
+                        .any(|rdl| rdl.contains("Test::A::SHARED_CURVE"))
+                );
+            } else {
+                assert!(outcome.is_err(), "{case} reversed={reversed}: {outcome:#?}");
+            }
+            println!("shared_literal_enum case={case} reversed={reversed} assertions=passed");
+        }
+    }
+}
+
 const ARGS: &[&str] = &[
     "-x",
     "c++",
@@ -1696,6 +1961,7 @@ mod excluded_enum_raw_context {
             declaration_guids: BTreeMap::new(),
             class_canonical_origins: BTreeMap::new(),
             class_canonical_anchors: BTreeMap::new(),
+            shared_enum_identities: BTreeMap::new(),
             observation_only_class_origins: BTreeSet::new(),
             pointer_callback_aliases: BTreeSet::new(),
             pointer_only_class_layouts: BTreeMap::new(),

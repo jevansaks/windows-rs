@@ -92,11 +92,15 @@ pub struct Input {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExtractionOptions {
     parallelism: usize,
+    module_free_headers: bool,
 }
 
 impl Default for ExtractionOptions {
     fn default() -> Self {
-        Self { parallelism: 1 }
+        Self {
+            parallelism: 1,
+            module_free_headers: false,
+        }
     }
 }
 
@@ -116,6 +120,15 @@ impl ExtractionOptions {
 
     pub fn parallelism(&self) -> usize {
         self.parallelism
+    }
+
+    /// Admits a corpus of textual headers with no modules or imported declarations.
+    ///
+    /// The caller guarantees this domain for every original translation unit. Native global
+    /// typedef enums with complete matching literal definitions may then share a public provider.
+    pub fn with_module_free_headers(mut self) -> Self {
+        self.module_free_headers = true;
+        self
     }
 }
 
@@ -1392,6 +1405,7 @@ pub struct Snapshot {
     declaration_guids: BTreeMap<Origin, String>,
     class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
     class_canonical_anchors: BTreeMap<Origin, ClassCanonicalAnchor>,
+    shared_enum_identities: BTreeMap<Origin, SharedEnumIdentity>,
     observation_only_class_origins: BTreeSet<Origin>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
@@ -1619,6 +1633,7 @@ impl PartialEq for Snapshot {
             && self.declaration_guids == other.declaration_guids
             && self.class_canonical_origins == other.class_canonical_origins
             && self.class_canonical_anchors == other.class_canonical_anchors
+            && self.shared_enum_identities == other.shared_enum_identities
             && self.observation_only_class_origins == other.observation_only_class_origins
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
@@ -5479,8 +5494,13 @@ impl Snapshot {
                             .any(|fact| defines_local_type(name, fact)));
                 if !excluded {
                     let authority = self.authority_candidates(&roots.types, &declarations);
-                    match choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)
-                    {
+                    match choose_proven_type_root(
+                        name,
+                        &authority,
+                        &facts_index,
+                        &mut shape_cache,
+                        source_names,
+                    ) {
                         Ok(root) => {
                             let tagged = authority
                                 .iter()
@@ -5611,7 +5631,13 @@ impl Snapshot {
                     continue;
                 }
                 let authority = self.authority_candidates(&matches, &declarations);
-                match choose_type_root_cached(&name, &authority, &facts_index, &mut shape_cache) {
+                match choose_proven_type_root(
+                    &name,
+                    &authority,
+                    &facts_index,
+                    &mut shape_cache,
+                    source_names,
+                ) {
                     Ok(root) => {
                         root_names.insert(name);
                         type_roots.push(root);
@@ -6238,6 +6264,24 @@ impl Snapshot {
                     }
                     return Err(error);
                 };
+                if matches!(fact.data, FactData::Enum { .. })
+                    && let Some(provider) = source_names
+                        .filter(|names| {
+                            !names
+                                .excluded_native_dependencies
+                                .get(&fact.origin)
+                                .is_some_and(|binding| binding.conflicting)
+                        })
+                        .and_then(|names| names.shared_enum_providers.get(&fact.origin))
+                {
+                    match provider {
+                        Ok(origin) => fact = facts_by_origin[origin],
+                        Err(error) => {
+                            dependency_diagnostics.block(reference, error.clone(), source);
+                            continue;
+                        }
+                    }
+                }
                 if let Some(source_names) = source_names
                     && let Some(binding) =
                         source_names.excluded_native_dependencies.get(&fact.origin)
@@ -6391,8 +6435,13 @@ impl Snapshot {
             let mut facts_by_name = BTreeMap::new();
             for (name, choices) in grouped {
                 let authority = self.authority_candidates(&choices, &declarations);
-                let selected =
-                    choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
+                let selected = choose_proven_type_root(
+                    name,
+                    &authority,
+                    &facts_index,
+                    &mut shape_cache,
+                    source_names,
+                )?;
                 facts_by_name.insert(name, selected);
             }
             if timing && self.header_partition_policy {
@@ -7343,16 +7392,32 @@ struct ExcludedNativeDependency {
     conflicting: bool,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct SharedEnumDefinition {
+    enum_usr: String,
+    alias_usr: String,
+    tokens: Vec<String>,
+    data: FactData,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct SharedEnumIdentity {
+    definition: std::sync::Arc<SharedEnumDefinition>,
+    enumeration: Origin,
+}
+
 struct PlanningSourceNames {
     facts: BTreeMap<Origin, String>,
     constants: BTreeMap<(Origin, Origin, Location), BTreeSet<String>>,
     excluded_native_dependencies: BTreeMap<Origin, ExcludedNativeDependency>,
+    shared_enum_providers: BTreeMap<Origin, Result<Origin, String>>,
     #[cfg(test)]
     exclusion_index_sizes: (usize, usize),
 }
 
 impl PlanningSourceNames {
     fn new(snapshot: &Snapshot) -> Self {
+        let shared_enum_providers = Self::shared_enum_providers(snapshot);
         let mut excluded_native_dependencies = BTreeMap::new();
         #[cfg(test)]
         let mut exclusion_index_sizes = (0, 0);
@@ -7469,9 +7534,88 @@ impl PlanningSourceNames {
             facts,
             constants,
             excluded_native_dependencies,
+            shared_enum_providers,
             #[cfg(test)]
             exclusion_index_sizes,
         }
+    }
+
+    fn shared_enum_providers(snapshot: &Snapshot) -> BTreeMap<Origin, Result<Origin, String>> {
+        let mut result = BTreeMap::new();
+        if !snapshot.header_partition_policy || snapshot.shared_enum_identities.is_empty() {
+            return result;
+        }
+        let facts: BTreeMap<_, _> = snapshot
+            .facts
+            .iter()
+            .filter(|fact| {
+                matches!(fact.kind, FactKind::Enum | FactKind::Typedef)
+                    && snapshot.shared_enum_identities.contains_key(&fact.origin)
+            })
+            .map(|fact| (&fact.origin, fact))
+            .collect();
+        let mut groups: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for (origin, identity) in &snapshot.shared_enum_identities {
+            if facts.contains_key(origin) {
+                groups
+                    .entry((
+                        &identity.definition.enum_usr,
+                        &identity.definition.alias_usr,
+                    ))
+                    .or_default()
+                    .push((origin, identity));
+            }
+        }
+        for members in groups.values() {
+            let declarations: BTreeSet<_> = members
+                .iter()
+                .filter_map(|(_, identity)| {
+                    facts.get(&identity.enumeration).map(|fact| &fact.spelling)
+                })
+                .collect();
+            if declarations.len() <= 1 {
+                continue;
+            }
+            let first = &members[0].1.definition;
+            let compatible = members.iter().all(|(_, identity)| {
+                identity.definition == *first
+                    && facts
+                        .get(&identity.enumeration)
+                        .is_some_and(|fact| fact.data == identity.definition.data)
+            });
+            let providers: Vec<_> = members
+                .iter()
+                .filter_map(|(origin, identity)| {
+                    if **origin != identity.enumeration {
+                        return None;
+                    }
+                    let fact = facts.get(*origin)?;
+                    let owner = snapshot.root_owners.get(*origin)?;
+                    (fact.root
+                        && !owner.exclusions.contains(&fact.name)
+                        && !snapshot.suppressed_type_origins.contains(*origin))
+                    .then_some((fact, owner))
+                })
+                .collect();
+            let selected = if !compatible {
+                Err("conflicting native shared-enum literal definitions".into())
+            } else if let Some((provider, owner)) = providers.first() {
+                if providers
+                    .iter()
+                    .any(|(_, candidate)| !same_owner_policy(candidate, owner))
+                {
+                    Err("shared native enum has conflicting public namespace owners".into())
+                } else {
+                    Ok(provider.origin.clone())
+                }
+            } else {
+                Err("shared native enum has no eligible public provider".into())
+            };
+            for (origin, _) in members {
+                result.insert((*origin).clone(), selected.clone());
+            }
+        }
+        result
     }
 
     fn raw_enum_parent_context<'a>(
@@ -9091,6 +9235,48 @@ fn choose_type_root<'a>(
     facts_index: &HashMap<&str, Vec<&'a Fact>>,
 ) -> Result<&'a Fact, Error> {
     choose_type_root_cached(name, roots, facts_index, &mut ShapeCache::default())
+}
+
+fn choose_proven_type_root<'a>(
+    name: &str,
+    roots: &[&'a Fact],
+    facts_index: &HashMap<&str, Vec<&'a Fact>>,
+    shape_cache: &mut ShapeCache,
+    source_names: Option<&PlanningSourceNames>,
+) -> Result<&'a Fact, Error> {
+    if let Some(names) = source_names
+        && !roots.is_empty()
+        && roots
+            .iter()
+            .all(|fact| names.shared_enum_providers.contains_key(&fact.origin))
+    {
+        let provider = names.shared_enum_providers[&roots[0].origin]
+            .as_ref()
+            .map_err(|error| Error(error.clone()))?;
+        for fact in roots {
+            if names.shared_enum_providers[&fact.origin]
+                .as_ref()
+                .map_err(|error| Error(error.clone()))?
+                != provider
+            {
+                return Err(Error(format!(
+                    "conflicting shared enum providers for `{name}`"
+                )));
+            }
+        }
+        if let Some(fact) = facts_index
+            .get(name)
+            .into_iter()
+            .flatten()
+            .find(|fact| &fact.origin == provider)
+        {
+            return emittable_type(name, fact);
+        }
+        return Err(Error(format!(
+            "missing proved shared enum provider for `{name}`"
+        )));
+    }
+    choose_type_root_cached(name, roots, facts_index, shape_cache)
 }
 
 fn choose_type_root_cached<'a>(

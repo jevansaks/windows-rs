@@ -1,0 +1,5 @@
+#define FADE_VALUE 1
+typedef enum {
+    SHARED_CURVE_NONE = 0,
+    SHARED_CURVE_FADE = FADE_VALUE,
+} SHARED_CURVE;

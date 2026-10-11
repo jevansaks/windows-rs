@@ -286,6 +286,8 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         declaration_guids,
         class_canonical_origins,
         class_canonical_anchors,
+        shared_enum_identities,
+        module_free_headers: _,
         observation_only_class_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
@@ -372,6 +374,23 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         bytes.string(&anchor.template_name);
         bytes.location(&anchor.template_spelling);
         bytes.location(&anchor.template_expansion);
+    }
+    bytes.map::<Origin, SharedEnumIdentity>(shared_enum_identities.len());
+    let mut definitions = HashSet::new();
+    for (origin, identity) in shared_enum_identities {
+        bytes.origin(origin);
+        bytes.origin(&identity.enumeration);
+        if definitions.insert(Arc::as_ptr(&identity.definition)) {
+            let definition = identity.definition.as_ref();
+            bytes.boxed(definition);
+            bytes.string(&definition.enum_usr);
+            bytes.string(&definition.alias_usr);
+            bytes.vector(&definition.tokens);
+            for token in &definition.tokens {
+                bytes.string(token);
+            }
+            bytes.data(&definition.data);
+        }
     }
     let bytes = receipt.category("layouts");
     bytes.map::<Origin, FactData>(pointer_only_class_layouts.len());
