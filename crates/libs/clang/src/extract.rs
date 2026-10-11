@@ -1370,7 +1370,7 @@ impl TranslationUnit {
                     file: if file.is_null() {
                         String::new()
                     } else {
-                        normalize_name(&cx_string(unsafe { clang_getFileName(file) }))
+                        source_file_name(file)
                     },
                     line,
                     column,
@@ -1400,7 +1400,7 @@ impl TranslationUnit {
             }
             if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 if !file.is_null() {
-                    let path = normalize_name(&cx_string(unsafe { clang_getFileName(file) }));
+                    let path = source_file_name(file);
                     if !path.is_empty() {
                         visit.paths.push(path);
                     }
@@ -3280,7 +3280,7 @@ fn bind_class_origins(
                     let mut offset = 0;
                     get(location, &mut file, &mut line, &mut column, &mut offset);
                     (
-                        (!file.is_null()).then(|| cx_string(clang_getFileName(file))),
+                        (!file.is_null()).then(|| source_file_name(file)),
                         line,
                         column,
                         offset,
@@ -5221,6 +5221,37 @@ fn cursor_locations(cursor: CXCursor) -> Option<(Location, Location, bool, bool)
 
 type LocationFn = unsafe fn(CXSourceLocation, *mut CXFile, *mut u32, *mut u32, *mut u32);
 
+fn source_file_name(file: CXFile) -> String {
+    let real = cx_string(unsafe { clang_File_tryGetRealPathName(file) });
+    let name = if real.is_empty() {
+        cx_string(unsafe { clang_getFileName(file) })
+    } else {
+        real
+    };
+    normalize_name(&name)
+}
+
+#[cfg(test)]
+pub(super) fn source_file_path_witness(
+    input: &Input,
+    args: &[&str],
+    path: &str,
+) -> Result<(String, String, String), Error> {
+    let _library = Library::new()?;
+    let index = Index::new()?;
+    let unit = TranslationUnit::parse(&index, input, args)?;
+    let path = CString::new(path).map_err(|_| Error("invalid test file path".into()))?;
+    let file = unsafe { clang_getFile(unit.0, path.as_ptr()) };
+    if file.is_null() {
+        return Err(Error("native test file was not observed".into()));
+    }
+    Ok((
+        cx_string(unsafe { clang_getFileName(file) }),
+        cx_string(unsafe { clang_File_tryGetRealPathName(file) }),
+        source_file_name(file),
+    ))
+}
+
 fn source_location(location: CXSourceLocation, get: LocationFn) -> Option<Location> {
     unsafe {
         let mut file: CXFile = std::ptr::null_mut();
@@ -5233,7 +5264,7 @@ fn source_location(location: CXSourceLocation, get: LocationFn) -> Option<Locati
             &mut offset,
         );
         (!file.is_null()).then(|| Location {
-            file: normalize_name(&cx_string(clang_getFileName(file))),
+            file: source_file_name(file),
             offset,
         })
     }

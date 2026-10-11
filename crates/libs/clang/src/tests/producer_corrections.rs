@@ -646,3 +646,455 @@ fn referenced_uuid_generic_specialization_keeps_flat_and_colored_contracts() {
     );
     assert!(flat[1].contains("GetMap(value: *mut MAP)"), "{:?}", flat[1]);
 }
+
+#[test]
+fn real_file_enum_root_identity_baseline() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("enum_roots");
+    let shared = root.join("SharedFlags.h");
+    let lower = root.join(if cfg!(windows) {
+        "sharedflags.h"
+    } else {
+        "SharedFlags.h"
+    });
+    let separate = root.join("distinct").join("SharedFlags.h");
+    let same_file = std::fs::canonicalize(&shared);
+    let lower_file = std::fs::canonicalize(&lower);
+    let separate_file = std::fs::canonicalize(&separate);
+    let owner = RootPartition::new("Audio.Apo", "Test.Audio.Apo");
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(shared.to_str().unwrap(), owner.clone())
+        .with_traversed_header(separate.to_str().unwrap(), owner);
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Test.Audio.Apo", &references);
+    let include = format!("-I{}", root.display());
+    let mut args = ARGS.to_vec();
+    args.extend(["-std=c++20", &include]);
+    if cfg!(windows) {
+        args.push("-DCASE_VARIANT_INCLUDE");
+    }
+    let mut evidence = format!(
+        "pid={}\nruntime={:?}\nargs={args:?}\npolicy={policy:#?}\n\
+         upper={same_file:?}\nlower={lower_file:?}\nseparate={separate_file:?}\n",
+        std::process::id(),
+        std::env::var_os("LIBCLANG_PATH"),
+    );
+    let mut cases = vec![
+        ("identical", ["identical_first.hpp", "identical_second.hpp"]),
+        (
+            "portable_alias",
+            ["identical_first.hpp", "alias_second.hpp"],
+        ),
+        (
+            "distinct_files",
+            ["distinct_first.hpp", "distinct_second.hpp"],
+        ),
+        ("macro_conflict", ["macro_first.hpp", "macro_second.hpp"]),
+    ];
+    if cfg!(windows) {
+        cases.push(("case_variant", ["case_first.hpp", "case_second.hpp"]));
+    }
+    writeln!(evidence, "windows_case_variant_exercised={}", cfg!(windows)).unwrap();
+    let mut results = Vec::new();
+    for (case, wrappers, reversed) in cases
+        .into_iter()
+        .flat_map(|(case, wrappers)| [false, true].map(|reversed| (case, wrappers, reversed)))
+    {
+        let mut wrappers = wrappers;
+        if reversed {
+            wrappers.reverse();
+        }
+        let inputs: Vec<_> = wrappers
+            .into_iter()
+            .map(|name| {
+                let path = root.join(name);
+                Input::new(
+                    path.to_str().unwrap(),
+                    std::fs::read_to_string(&path).unwrap(),
+                )
+                .with_roots([
+                    shared.to_str().unwrap(),
+                    lower.to_str().unwrap(),
+                    separate.to_str().unwrap(),
+                ])
+                .partitioned(name)
+                .with_root(
+                    path.to_str().unwrap(),
+                    if name.contains("first") {
+                        "Audio.Apo"
+                    } else {
+                        "TermServ"
+                    },
+                    if name.contains("first") {
+                        "Test.Audio.Apo"
+                    } else {
+                        "Test.System.RemoteDesktop"
+                    },
+                )
+            })
+            .collect();
+        writeln!(
+            evidence,
+            "\nCASE={case} reversed={reversed}\ninputs={inputs:#?}"
+        )
+        .unwrap();
+        let extracted = extract_partitioned_with_options(
+            inputs,
+            &args,
+            &ExtractionOptions::new().with_parallelism(1),
+        );
+        let (flat, colored, exact_aliases) = match extracted {
+            Ok(snapshot) => {
+                writeln!(evidence, "native_snapshot={snapshot:#?}").unwrap();
+                let mut exact_aliases = 0;
+                for alias in snapshot
+                    .facts
+                    .iter()
+                    .filter(|fact| fact.name == "BufferFlags")
+                {
+                    let FactData::Typedef {
+                        target: TypeRef::Named { name, declaration },
+                    } = &alias.data
+                    else {
+                        continue;
+                    };
+                    let targets: Vec<_> = snapshot
+                        .facts
+                        .iter()
+                        .filter(|target| {
+                            target.origin.tu == alias.origin.tu
+                                && target.name == *name
+                                && target.spelling == *declaration
+                                && matches!(target.data, FactData::Enum { .. })
+                        })
+                        .collect();
+                    writeln!(
+                        evidence,
+                        "local_alias_origin={:?} target={declaration:?} matches={targets:#?}",
+                        alias.origin
+                    )
+                    .unwrap();
+                    for target in &targets {
+                        let FactData::Enum {
+                            repr,
+                            variants,
+                            fixed,
+                            scoped,
+                        } = &target.data
+                        else {
+                            unreachable!()
+                        };
+                        assert_eq!(*repr, Scalar::I32);
+                        assert!(!fixed);
+                        assert!(!scoped);
+                        let silent = if case == "macro_conflict"
+                            && alias.origin.tu.ends_with("macro_second.hpp")
+                        {
+                            3
+                        } else {
+                            2
+                        };
+                        assert_eq!(
+                            variants
+                                .iter()
+                                .map(|v| (v.name.as_str(), v.value))
+                                .collect::<Vec<_>>(),
+                            [
+                                ("BUFFER_INVALID", 0),
+                                ("BUFFER_VALID", 1),
+                                ("BUFFER_SILENT", silent),
+                            ]
+                        );
+                    }
+                    exact_aliases += usize::from(targets.len() == 1);
+                }
+                let flat = snapshot
+                    .emit_with_options(&options)
+                    .map_err(|e| e.to_string());
+                let colored = snapshot
+                    .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                    .map_err(|e| e.to_string())
+                    .and_then(|plan| {
+                        writeln!(
+                            evidence,
+                            "effective_snapshot={:#?}\nroot_conflicts={:#?}",
+                            plan.snapshot, plan.root_conflicts,
+                        )
+                        .unwrap();
+                        for fact in plan
+                            .snapshot
+                            .facts
+                            .iter()
+                            .filter(|f| f.name == "BufferFlags")
+                        {
+                            let owner = &plan.snapshot.root_owners[&fact.origin];
+                            assert_eq!(owner.partition, "Audio.Apo");
+                            assert_eq!(owner.namespace, "Test.Audio.Apo");
+                        }
+                        plan.emit_with_options(&options).map_err(|e| e.to_string())
+                    });
+                (flat, colored, exact_aliases)
+            }
+            Err(error) => {
+                let error = error.to_string();
+                writeln!(evidence, "extraction_error={error}").unwrap();
+                (Err(error.clone()), Err(error), 0)
+            }
+        };
+        writeln!(
+            evidence,
+            "flat={flat:#?}\ncolored={colored:#?}\nexact_local_aliases={exact_aliases}"
+        )
+        .unwrap();
+        results.push((case, reversed, flat, colored, exact_aliases));
+    }
+    println!("{evidence}");
+    if let Some(path) = std::env::var_os("WINDOWS_CLANG_ENUM_ROOT_CAPTURE") {
+        std::fs::write(path, &evidence).unwrap();
+    }
+
+    assert_eq!(
+        same_file.as_ref().unwrap(),
+        lower_file.as_ref().unwrap(),
+        "case-variant fixture must resolve to the same physical file"
+    );
+    assert_ne!(
+        same_file.as_ref().unwrap(),
+        separate_file.as_ref().unwrap(),
+        "equal-content negative must use a distinct real file"
+    );
+    for (case, _, flat, colored, aliases) in &results {
+        assert_eq!(
+            *aliases, 2,
+            "{case}: missing exact TU-local native typedef joins"
+        );
+        if matches!(*case, "distinct_files" | "macro_conflict") {
+            assert!(flat.is_err(), "{case}: {flat:?}");
+            assert!(colored.is_err(), "{case}: {colored:?}");
+        }
+    }
+    let mut expected = None;
+    for (case, _, flat, colored, _) in results
+        .iter()
+        .filter(|(case, ..)| !matches!(*case, "distinct_files" | "macro_conflict"))
+    {
+        let flat = flat
+            .as_ref()
+            .unwrap_or_else(|error| panic!("{case}: {error}"));
+        let colored = colored
+            .as_ref()
+            .unwrap_or_else(|error| panic!("{case}: {error}"));
+        assert_eq!(colored.len(), 1, "{case}: {colored:?}");
+        if let Some((expected_flat, expected_colored)) = expected {
+            assert_eq!(flat, expected_flat, "{case}");
+            assert_eq!(colored, expected_colored, "{case}");
+        } else {
+            expected = Some((flat, colored));
+        }
+        for output in std::iter::once(flat).chain(colored.values()) {
+            assert_eq!(output.matches("enum BufferFlags").count(), 1, "{output}");
+            for value in [
+                "BUFFER_INVALID = 0",
+                "BUFFER_VALID = 1",
+                "BUFFER_SILENT = 2",
+            ] {
+                assert!(output.contains(value), "{case}: {output}");
+            }
+        }
+    }
+}
+
+#[test]
+fn native_file_entry_paths_resolve_aliases_and_preserve_virtual_names() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("enum_roots");
+    let include = format!("-I{}", root.display());
+    let mut args = ARGS.to_vec();
+    args.push(&include);
+    let mut paths = vec!["SharedFlags.h", "distinct/../SharedFlags.h"];
+    if cfg!(windows) {
+        paths.push("sharedflags.h");
+    }
+    let mut expected = None;
+    for (index, path) in paths.into_iter().enumerate() {
+        let input = Input::new(
+            root.join(format!("path-witness-{index}.hpp"))
+                .to_str()
+                .unwrap(),
+            format!("#include \"{path}\"\n"),
+        );
+        let witness =
+            extract::source_file_path_witness(&input, &args, root.join(path).to_str().unwrap())
+                .unwrap();
+        println!("native_path_witness={witness:?}");
+        assert!(
+            !witness.1.is_empty(),
+            "real file has no native real path: {witness:?}"
+        );
+        assert_eq!(witness.2, normalize_name(&witness.1));
+        if let Some(expected) = &expected {
+            assert_eq!(&witness.2, expected);
+        } else {
+            expected = Some(witness.2);
+        }
+    }
+    let source = "typedef enum VirtualFlags { VirtualValue=1 } VirtualFlags;";
+    let inputs: Vec<_> = ["Virtual.hpp", "virtual.hpp"]
+        .into_iter()
+        .map(|name| {
+            let path = root.join("nonexistent").join(name);
+            assert!(!path.exists());
+            Input::new(path.to_str().unwrap(), source)
+        })
+        .collect();
+    for input in &inputs {
+        let witness = extract::source_file_path_witness(input, ARGS, &input.name).unwrap();
+        println!("virtual_path_witness={witness:?}");
+        assert!(witness.1.is_empty(), "{witness:?}");
+        assert_eq!(witness.2, input.name);
+    }
+    let snapshot = extract_with_options(inputs.clone(), ARGS, &ExtractionOptions::new()).unwrap();
+    for input in &inputs {
+        let facts: Vec<_> = snapshot
+            .facts
+            .iter()
+            .filter(|f| f.name == "VirtualFlags" && f.origin.tu == input.name)
+            .collect();
+        assert_eq!(facts.len(), 2);
+        assert!(
+            facts
+                .iter()
+                .all(|f| f.spelling.file == input.name && f.expansion.file == input.name)
+        );
+    }
+    assert_ne!(inputs[0].name, inputs[1].name);
+    assert!(
+        snapshot
+            .emit("Virtual")
+            .unwrap_err()
+            .to_string()
+            .contains("ambiguous type root")
+    );
+}
+
+#[test]
+fn independent_root_failures_are_fatal_and_ordered_before_dependencies() {
+    helpers::ensure_libclang();
+    let first = Input::new(
+        "inventory-first.hpp",
+        "#define CConstant 1\n\
+         struct ACollision { int value; }; extern \"C\" int ACollision(int value);\n\
+         enum BType { BValue=1 };\n\
+         class __declspec(uuid(\"11111111-2222-3333-4455-66778899aabb\")) DValue;\n\
+         namespace Hidden { enum EAssociated { EValue=1 }; }\n\
+         struct ValidRoot { __attribute__((annotate(\"win32metadata:associated_enum=EAssociated\"))) int value; };\n\
+         extern \"C\" int ValidCall(int value);",
+    );
+    let second = Input::new(
+        "inventory-second.hpp",
+        "#define CConstant 2\n\
+         enum BType { BValue=2 };\n\
+         class __declspec(uuid(\"22222222-3333-4444-5566-778899aabbcc\")) DValue;\n\
+         namespace Hidden { enum EAssociated { EValue=2 }; }",
+    );
+    let policy = HeaderPartitionPolicy::new()
+        .with_traversed_header(&first.name, RootPartition::new("Owner", "Test.Inventory"))
+        .with_traversed_header(&second.name, RootPartition::new("Owner", "Test.Inventory"));
+    let references = BTreeMap::from([(
+        "UnusedReference".to_string(),
+        TypeReference::new("Other", "UnusedReference", TypeReferenceKind::Interface),
+    )]);
+    let selected = BTreeSet::from([
+        "ACollision".to_string(),
+        "FMissing".to_string(),
+        "ValidCall".to_string(),
+    ]);
+    let mut options = EmitOptions::new("Test.Inventory", &references);
+    options.library = Some("test.dll");
+    options.functions = Some(&selected);
+    let mut errors = Vec::new();
+    for inputs in [[first.clone(), second.clone()], [second, first]] {
+        let snapshot = extract_with_options(inputs, ARGS, &ExtractionOptions::new()).unwrap();
+        let error = snapshot
+            .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+            .unwrap()
+            .emit_with_options(&options)
+            .unwrap_err()
+            .to_string();
+        println!("root_inventory={error}");
+        for message in [
+            "type and function roots collide on `ACollision`",
+            "ambiguous type root `BType`",
+            "ambiguous constant root `CConstant`",
+            "ambiguous value root `DValue`",
+            "associated enum `EAssociated`",
+            "selected function `FMissing` was not found",
+        ] {
+            assert!(error.contains(message), "{error}");
+        }
+        assert!(
+            !error.contains("selected function `ACollision` was not found"),
+            "{error}"
+        );
+        assert!(!error.contains("ValidCall"), "{error}");
+        assert!(!error.contains("#[win32]"), "{error}");
+        assert!(error.contains("inventory-first.hpp#"), "{error}");
+        assert!(error.contains("namespace: \"Test.Inventory\""), "{error}");
+        let positions: Vec<_> = [
+            "ACollision",
+            "BType",
+            "CConstant",
+            "DValue",
+            "EAssociated",
+            "FMissing",
+        ]
+        .map(|name| error.find(&format!("`{name}`")).unwrap())
+        .into_iter()
+        .collect();
+        assert!(
+            positions.windows(2).all(|pair| pair[0] < pair[1]),
+            "{error}"
+        );
+        errors.push(error);
+    }
+    assert_eq!(errors[0], errors[1]);
+    assert!(
+        snapshot("struct ValidRoot { int value; };")
+            .emit("Valid")
+            .unwrap()
+            .contains("struct ValidRoot")
+    );
+}
+
+#[test]
+fn root_inventory_preserves_single_and_function_only_error_text() {
+    let error =
+        snapshot("struct SingleCollision { int value; }; extern \"C\" int SingleCollision(int);")
+            .emit_with_library("Test", "test.dll")
+            .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "type and function roots collide on `SingleCollision`"
+    );
+    let errors = ["first function failure", "second function failure"]
+        .map(|message| RootSelectionError {
+            name: "Function".to_string(),
+            category: "function",
+            error: Error(message.to_string()),
+            candidates: BTreeSet::new(),
+        })
+        .into_iter()
+        .collect();
+    assert_eq!(
+        aggregate_root_selection_errors(errors).to_string(),
+        "ambiguous function roots (2):\n  first function failure\n  second function failure",
+    );
+}

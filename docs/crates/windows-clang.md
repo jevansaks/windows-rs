@@ -186,14 +186,16 @@ or repeated includes. Authored names remain reserved. Conflicting complete callb
 separate native observations and fail normal emission rather than selecting a signature winner.
 `included_files` returns `IncludedFile` records for the physical files visited in each original
 translation unit, including the main input and headers that produced no fact or constant. The
-`input` field is the normalized `Input::name` used by `Origin::tu`; `path` is the slash-normalized
-filename reported by libclang.
+`input` field is the normalized `Input::name` used by `Origin::tu`; `path` is libclang's
+slash-normalized real file path. Declaration locations, type-reference targets, and native
+canonical anchors use the same path rule. Libclang's empty real-path result for an unsaved or
+virtual file retains its lexical filename. Input names and byte offsets are unchanged.
 
 Inclusion records are grouped by extraction input order, then sorted by ASCII-case-insensitive
 path with original spelling as the tie-break. Duplicate path spellings within an input are
 collapsed case-insensitively. The records do not include synthetic translation units used to
 evaluate constants, skipped conditional includes, or headers supplied by a precompiled header.
-Paths are not filesystem-canonicalized, so symlinks and junctions may retain different spellings.
+Path resolution uses libclang's FileEntry cache, without filesystem queries per cursor.
 These records are extraction provenance only and do not change root selection or emission.
 
 ### Aggregate header partition planning
@@ -456,6 +458,11 @@ typedef-projection, and dependency UUID lookups. Each bucket retains snapshot fa
 duplicate and unowned declarations. UUID lookup collects UUIDs from all matching observations and
 returns a value only when that set contains exactly one distinct UUID. The index is local to each
 planning or routing operation and is built after owner settings and remaps have been applied.
+
+Root selection reports independent type, value, constant, function, collision, and associated-enum
+failures together, ordered by root name and category. Mixed inventories include retained source,
+translation-unit, namespace, and owner evidence. Any root error stops planning before dependency
+closure or RDL emission; single-error text and function-only aggregation remain unchanged.
 
 An authority-routed dependency uses the partition identity set by `with_authority_partition`; if
 none is set, its namespace is the deterministic fallback partition. Its header remains the

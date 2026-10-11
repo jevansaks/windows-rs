@@ -5409,7 +5409,9 @@ impl Snapshot {
         let mut type_roots = vec![];
         let mut value_roots = vec![];
         let mut functions = vec![];
-        let mut function_root_errors = vec![];
+        let mut root_errors = vec![];
+        let mut failed_type_roots = BTreeSet::new();
+        let mut failed_function_roots = BTreeSet::new();
         let mut constants = vec![];
         let mut root_names = BTreeSet::new();
         let mut shape_cache = ShapeCache::default();
@@ -5417,22 +5419,49 @@ impl Snapshot {
         let coclass_aliases = self.coclass_aliases()?;
         for (name, roots) in roots {
             if !roots.types.is_empty() && !roots.functions.is_empty() {
-                return Err(Error(format!(
-                    "type and function roots collide on `{name}`"
-                )));
+                let candidates: Vec<_> = roots
+                    .types
+                    .iter()
+                    .chain(&roots.functions)
+                    .copied()
+                    .collect();
+                root_errors.push(root_selection_error(
+                    self,
+                    name,
+                    "collision",
+                    Error(format!("type and function roots collide on `{name}`")),
+                    &candidates,
+                    &[],
+                ));
             }
-            let value = if roots.values.is_empty()
-                || excluded_constants.is_some_and(|excluded| excluded.contains(name))
+            if !roots.values.is_empty()
+                && !excluded_constants.is_some_and(|excluded| excluded.contains(name))
             {
-                None
-            } else {
-                Some(choose_value_root(name, &roots.values)?)
-            };
-            let constant = if roots.constants.is_empty() {
-                None
-            } else {
-                Some(self.choose_constant_root(name, &roots.constants)?)
-            };
+                match choose_value_root(name, &roots.values) {
+                    Ok(value) => value_roots.push(value),
+                    Err(error) => root_errors.push(root_selection_error(
+                        self,
+                        name,
+                        "value",
+                        error,
+                        &roots.values,
+                        &[],
+                    )),
+                }
+            }
+            if !roots.constants.is_empty() {
+                match self.choose_constant_root(name, &roots.constants) {
+                    Ok(constant) => constants.push(constant),
+                    Err(error) => root_errors.push(root_selection_error(
+                        self,
+                        name,
+                        "constant",
+                        error,
+                        &[],
+                        &roots.constants,
+                    )),
+                }
+            }
             let types_alias_value_class =
                 types_alias_value_class(&roots.types, &roots.values, &coclass_aliases);
             if !roots.types.is_empty() && !types_alias_value_class {
@@ -5450,24 +5479,40 @@ impl Snapshot {
                             .any(|fact| defines_local_type(name, fact)));
                 if !excluded {
                     let authority = self.authority_candidates(&roots.types, &declarations);
-                    let root =
-                        choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)?;
-                    let tagged = authority
-                        .iter()
-                        .any(|fact| self.root_owners.contains_key(&fact.origin));
-                    let routed = authority
-                        .iter()
-                        .any(|fact| self.fact_authority_namespace(fact, &declarations).is_some());
-                    if tagged
-                        || routed
-                        || !matches!(root.data, FactData::Typedef { .. })
-                        || (self.root_partitions.is_empty() && !self.header_partition_policy)
+                    match choose_type_root_cached(name, &authority, &facts_index, &mut shape_cache)
                     {
-                        root_names.insert(name.to_string());
-                        type_roots.push(root);
+                        Ok(root) => {
+                            let tagged = authority
+                                .iter()
+                                .any(|fact| self.root_owners.contains_key(&fact.origin));
+                            let routed = authority.iter().any(|fact| {
+                                self.fact_authority_namespace(fact, &declarations).is_some()
+                            });
+                            if tagged
+                                || routed
+                                || !matches!(root.data, FactData::Typedef { .. })
+                                || (self.root_partitions.is_empty()
+                                    && !self.header_partition_policy)
+                            {
+                                root_names.insert(name.to_string());
+                                type_roots.push(root);
+                            }
+                        }
+                        Err(error) => {
+                            failed_type_roots.insert(name.to_string());
+                            root_errors.push(root_selection_error(
+                                self,
+                                name,
+                                "type",
+                                error,
+                                &authority,
+                                &[],
+                            ));
+                        }
                     }
                 }
-            } else if !roots.functions.is_empty() {
+            }
+            if !roots.functions.is_empty() {
                 let mut by_link_name: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
                 for function in roots.functions {
                     let FactData::Function { link_name, .. } = &function.data else {
@@ -5486,7 +5531,15 @@ impl Snapshot {
                     ) {
                         Ok(selection) => selection,
                         Err(error) => {
-                            function_root_errors.push(error);
+                            failed_function_roots.insert(link_name.to_string());
+                            root_errors.push(root_selection_error(
+                                self,
+                                name,
+                                "function",
+                                error,
+                                &roots,
+                                &[],
+                            ));
                             continue;
                         }
                     };
@@ -5502,15 +5555,6 @@ impl Snapshot {
                     });
                 }
             }
-            if let Some(value) = value {
-                value_roots.push(value);
-            }
-            if let Some(constant) = constant {
-                constants.push(constant);
-            }
-        }
-        if !function_root_errors.is_empty() {
-            return Err(aggregate_function_root_errors(function_root_errors));
         }
         if self.header_partition_policy {
             // Associated enum names are semantic type dependencies of selected roots.
@@ -5540,6 +5584,7 @@ impl Snapshot {
                 .collect();
             for name in associated_enums {
                 if root_names.contains(&name)
+                    || failed_type_roots.contains(&name)
                     || (excluded_types.is_some_and(|excluded| excluded.contains(&name))
                         && !extended_reference_enums.contains(&name))
                 {
@@ -5566,10 +5611,20 @@ impl Snapshot {
                     continue;
                 }
                 let authority = self.authority_candidates(&matches, &declarations);
-                let root =
-                    choose_type_root_cached(&name, &authority, &facts_index, &mut shape_cache)?;
-                root_names.insert(name);
-                type_roots.push(root);
+                match choose_type_root_cached(&name, &authority, &facts_index, &mut shape_cache) {
+                    Ok(root) => {
+                        root_names.insert(name);
+                        type_roots.push(root);
+                    }
+                    Err(error) => root_errors.push(root_selection_error(
+                        self,
+                        &name,
+                        "associated enum",
+                        error,
+                        &authority,
+                        &[],
+                    )),
+                }
             }
         }
         if let Some(selected) = selected_functions {
@@ -5580,11 +5635,21 @@ impl Snapshot {
                     _ => None,
                 })
                 .collect();
-            if let Some(missing) = selected.iter().find(|name| !found.contains(name.as_str())) {
-                return Err(Error(format!(
-                    "selected function `{missing}` was not found"
-                )));
+            for missing in selected.iter().filter(|name| {
+                !found.contains(name.as_str()) && !failed_function_roots.contains(name.as_str())
+            }) {
+                root_errors.push(root_selection_error(
+                    self,
+                    missing,
+                    "selected function",
+                    Error(format!("selected function `{missing}` was not found")),
+                    &[],
+                    &[],
+                ));
             }
+        }
+        if !root_errors.is_empty() {
+            return Err(aggregate_root_selection_errors(root_errors));
         }
         if timing {
             eprintln!(
@@ -9654,6 +9719,86 @@ fn constant_types_match(left: &TypeRef, right: &TypeRef) -> bool {
         (TypeRef::InlineRecord(left), TypeRef::InlineRecord(right)) => left == right,
         _ => false,
     }
+}
+
+struct RootSelectionError {
+    name: String,
+    category: &'static str,
+    error: Error,
+    candidates: BTreeSet<String>,
+}
+
+fn root_selection_error(
+    snapshot: &Snapshot,
+    name: &str,
+    category: &'static str,
+    error: Error,
+    facts: &[&Fact],
+    constants: &[&Constant],
+) -> RootSelectionError {
+    let candidates = facts.iter().map(|fact| {
+        format!(
+            "{} {:?}/{} spelling={}:{} expansion={}:{} parent={:?} definition={} root={} namespace={:?} owner={:?}",
+            origin(&fact.origin), fact.kind, fact_data_kind(&fact.data),
+            fact.spelling.file, fact.spelling.offset, fact.expansion.file, fact.expansion.offset,
+            fact.parent, fact.definition, fact.root,
+            snapshot.fact_namespace_authorities.get(&fact.origin)
+                .or_else(|| snapshot.namespace_authorities.get(&fact.name)),
+            snapshot.root_owners.get(&fact.origin),
+        )
+    }).chain(constants.iter().map(|constant| {
+        format!(
+            "{} definition={} spelling={}:{} type={:?} value={:?} owner={:?}",
+            origin(&constant.root), origin(&constant.definition),
+            constant.spelling.file, constant.spelling.offset, constant.ty, constant.value,
+            snapshot.constant_root_owners.get(&(constant.root.clone(), constant.name.clone())),
+        )
+    })).collect();
+    RootSelectionError {
+        name: name.to_string(),
+        category,
+        error,
+        candidates,
+    }
+}
+
+fn aggregate_root_selection_errors(mut errors: Vec<RootSelectionError>) -> Error {
+    if errors.len() == 1 {
+        return errors.pop().unwrap().error;
+    }
+    if errors.iter().all(|error| error.category == "function") {
+        return aggregate_function_root_errors(
+            errors.into_iter().map(|error| error.error).collect(),
+        );
+    }
+    errors.sort_by(|left, right| {
+        (&left.name, left.category, &left.error.0).cmp(&(
+            &right.name,
+            right.category,
+            &right.error.0,
+        ))
+    });
+    let count = errors.len();
+    let messages = errors
+        .into_iter()
+        .map(|error| {
+            let candidates = if error.candidates.is_empty() {
+                "no observed candidates".to_string()
+            } else {
+                error
+                    .candidates
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .join("\n    ")
+            };
+            format!(
+                "  {} `{}`: {}\n    {candidates}",
+                error.category, error.name, error.error
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Error(format!("root selection errors ({count}):\n{messages}"))
 }
 
 fn aggregate_function_root_errors(mut errors: Vec<Error>) -> Error {
