@@ -1,6 +1,402 @@
 use super::*;
 
 #[test]
+fn enum_conflicts_report_complete_partial_closure() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("shared_enum");
+    for case in [
+        "compatible",
+        "values",
+        "tokens",
+        "excluded",
+        "unproved",
+        "macro",
+        "owners",
+        "annotations",
+        "annotations_excluded",
+        "annotations_excluded_unproved",
+    ] {
+        let conflict = case != "compatible";
+        let b_header = match case {
+            "values" | "annotations" => "Values.h",
+            "tokens" => "Tokens.h",
+            "macro" => "Macro.h",
+            _ => "Curve.h",
+        };
+        for reversed in [false, true] {
+            let a = root.join("a").join("Curve.h");
+            let b = root.join("b").join(b_header);
+            let partial = root.join("partial.hpp");
+            let annotations = case.starts_with("annotations");
+            let api = if annotations {
+                root.join("partial_annotations.hpp")
+            } else {
+                partial.clone()
+            };
+            let mut inputs = Vec::new();
+            let mut policy = HeaderPartitionPolicy::new();
+            for (wrapper, source, header, owner) in [
+                (
+                    "partial-a.hpp",
+                    "#include \"a/Curve.h\"\n".to_string(),
+                    &a,
+                    RootPartition::new("A", "Test.A").with_exclusion("SHARED_CURVE"),
+                ),
+                (
+                    "partial-b.hpp",
+                    format!("#include \"b/{b_header}\"\n"),
+                    &b,
+                    if matches!(
+                        case,
+                        "excluded" | "annotations_excluded" | "annotations_excluded_unproved"
+                    ) {
+                        RootPartition::new("B", "Test.B").with_exclusion("SHARED_CURVE")
+                    } else {
+                        RootPartition::new("B", "Test.B")
+                    },
+                ),
+                (
+                    if annotations {
+                        "partial_annotations.hpp"
+                    } else {
+                        "partial.hpp"
+                    },
+                    std::fs::read_to_string(&api).unwrap(),
+                    &api,
+                    RootPartition::new("Api", "Test.Api").with_exclusion("SHARED_CURVE"),
+                ),
+            ] {
+                let input = Input::new(root.join(wrapper).to_str().unwrap(), source)
+                    .with_roots([
+                        a.to_str().unwrap(),
+                        b.to_str().unwrap(),
+                        api.to_str().unwrap(),
+                        partial.to_str().unwrap(),
+                    ])
+                    .partitioned(wrapper);
+                policy.add_traversed_header_for_input(
+                    input.input.name.clone(),
+                    header.to_str().unwrap(),
+                    owner,
+                );
+                if header == &api && annotations {
+                    policy.add_traversed_header_for_input(
+                        input.input.name.clone(),
+                        partial.to_str().unwrap(),
+                        RootPartition::new("Api", "Test.Api").with_exclusion("SHARED_CURVE"),
+                    );
+                }
+                inputs.push(input);
+            }
+            if case == "owners" {
+                let input = Input::new(
+                    root.join("partial-c.hpp").to_str().unwrap(),
+                    "#include \"b/Curve.h\"\n",
+                )
+                .with_roots([b.to_str().unwrap()])
+                .partitioned("partial-c.hpp");
+                policy.add_traversed_header_for_input(
+                    input.input.name.clone(),
+                    b.to_str().unwrap(),
+                    RootPartition::new("C", "Test.C"),
+                );
+                inputs.push(input);
+            }
+            if reversed {
+                inputs.swap(0, 1);
+            }
+            let extraction = if matches!(case, "unproved" | "annotations_excluded_unproved") {
+                ExtractionOptions::new()
+            } else {
+                ExtractionOptions::new().with_module_free_headers()
+            };
+            let snapshot = extract_partitioned_with_options(inputs, ARGS, &extraction).unwrap();
+            let native: BTreeMap<_, _> = snapshot
+                .facts
+                .iter()
+                .map(|fact| {
+                    (
+                        fact.origin.clone(),
+                        (fact.name.clone(), fact.spelling.clone()),
+                    )
+                })
+                .collect();
+            let authorities = NamespaceAuthorities::new()
+                .with_exact("TransitiveFunction", "Test.Forced")
+                .with_exact("BrokenInterface", "Test.Forced");
+            let references = BTreeMap::new();
+            let mut options = EmitOptions::new("Test.Common", &references);
+            options.library = Some("partial.dll");
+            if case == "values" && !reversed {
+                let mut mixed = snapshot.clone();
+                let record = mixed
+                    .facts
+                    .iter_mut()
+                    .find(|fact| fact.name == "GoodRecord")
+                    .unwrap();
+                let FactData::Record { fields, .. } = &mut record.data else {
+                    panic!()
+                };
+                fields[0].ty = TypeRef::Named {
+                    name: "MissingNativeType".to_string(),
+                    declaration: Location {
+                        file: api.to_string_lossy().into_owned(),
+                        offset: u32::MAX,
+                    },
+                };
+                assert!(
+                    mixed
+                        .into_header_partition_plan(&policy, &authorities)
+                        .unwrap()
+                        .emit_with_enum_diagnostics(&options)
+                        .is_err()
+                );
+            }
+            let plan = snapshot
+                .into_header_partition_plan(&policy, &authorities)
+                .unwrap();
+            let strict = plan.clone().emit_with_options(&options);
+            let report = plan.emit_with_enum_diagnostics(&options).unwrap();
+            assert_eq!(report.is_partial(), conflict);
+            let output = report.partitions.values().cloned().collect::<String>();
+            assert!(output.contains("IndependentFunction"));
+            assert!(output.contains("struct GoodRecord"));
+            let dependent_names = [
+                "SHARED_CURVE",
+                "BrokenRecord",
+                "TransitiveRecord",
+                "BrokenInterface",
+                "TransitiveInterface",
+                "DirectEnumFunction",
+                "DirectRecordFunction",
+                "TransitiveFunction",
+                "InterfaceFunction",
+                "TransitiveInterfaceFunction",
+                "BrokenCallback",
+                "CallbackFunction",
+                "AnnotatedRecord",
+                "AnnotatedRecordFunction",
+                "AnnotatedFunction",
+            ];
+            let affected: Vec<_> = dependent_names
+                .into_iter()
+                .filter(|name| {
+                    annotations
+                        || !matches!(
+                            *name,
+                            "AnnotatedRecord" | "AnnotatedRecordFunction" | "AnnotatedFunction"
+                        )
+                })
+                .collect();
+            if conflict {
+                assert!(strict.is_err());
+                let names: BTreeSet<_> = report
+                    .omissions
+                    .iter()
+                    .map(|omission| omission.declaration.name.as_str())
+                    .collect();
+                assert_eq!(names, affected.iter().copied().collect(), "{report:#?}");
+                for name in &affected {
+                    assert!(names.contains(name), "missing {name}: {report:#?}");
+                    assert!(
+                        (*name == "SHARED_CURVE" && matches!(case, "unproved" | "macro"))
+                            || !output.contains(*name),
+                        "retained {name}: {output}"
+                    );
+                }
+                assert!(!names.contains("IndependentFunction"));
+                assert!(!names.contains("GoodRecord"));
+                for omission in &report.omissions {
+                    assert!(!omission.reason.is_empty());
+                    assert!(!omission.declaration.namespace.is_empty());
+                    if matches!(
+                        omission.declaration.name.as_str(),
+                        "TransitiveFunction" | "BrokenInterface"
+                    ) {
+                        assert_eq!(omission.declaration.namespace, "Test.Forced");
+                    }
+                    assert_eq!(
+                        native[&omission.declaration.origin],
+                        (
+                            omission.declaration.name.clone(),
+                            omission.declaration.source.clone()
+                        ),
+                    );
+                    assert_eq!(
+                        omission.dependency_chain.first(),
+                        Some(&omission.declaration)
+                    );
+                    assert!(
+                        omission
+                            .dependency_chain
+                            .last()
+                            .is_some_and(|declaration| declaration.name == "SHARED_CURVE"
+                                && declaration.kind == Some(FactKind::Enum)),
+                        "{omission:#?}"
+                    );
+                }
+                if matches!(case, "unproved" | "macro") {
+                    assert!(
+                        output.contains("enum SHARED_CURVE"),
+                        "{output}\n{report:#?}"
+                    );
+                    assert!(
+                        report
+                            .omissions
+                            .iter()
+                            .any(|omission| omission.declaration.name == "SHARED_CURVE"
+                                && omission.declaration.source.file
+                                    == normalize_name(a.to_str().unwrap()))
+                    );
+                }
+                if matches!(
+                    case,
+                    "excluded"
+                        | "unproved"
+                        | "macro"
+                        | "annotations_excluded"
+                        | "annotations_excluded_unproved"
+                ) {
+                    assert!(report.omissions.iter().any(
+                        |omission| omission.cause == EnumOmissionCause::ExcludedDependency
+                    ));
+                }
+                assert!(report.omissions.iter().any(|omission| {
+                    omission.declaration.name == "TransitiveFunction"
+                        && omission
+                            .dependency_chain
+                            .iter()
+                            .any(|declaration| declaration.name == "TransitiveRecord")
+                        && omission
+                            .dependency_chain
+                            .iter()
+                            .any(|declaration| declaration.name == "BrokenRecord")
+                }));
+                assert!(
+                    report
+                        .omissions
+                        .iter()
+                        .any(|omission| omission.declaration.name == "BrokenInterface"
+                            && omission.declaration.methods == ["UseCurve", "IndependentMethod"])
+                );
+                assert!(
+                    report
+                        .omissions
+                        .iter()
+                        .any(
+                            |omission| omission.declaration.name == "TransitiveInterface"
+                                && omission.declaration.methods == ["ExtraMethod"]
+                        )
+                );
+            } else {
+                assert!(report.omissions.is_empty());
+                assert_eq!(strict.unwrap(), report.partitions);
+                for name in &affected {
+                    assert!(
+                        output.contains(*name),
+                        "missing compatible {name}: {output}"
+                    );
+                }
+            }
+            let winmd = std::env::temp_dir().join(format!(
+                "windows-clang-enum-report-{}-{case}-{reversed}.winmd",
+                std::process::id(),
+            ));
+            windows_rdl::reader()
+                .input_texts(report.partitions.values())
+                .reference_default()
+                .output(&winmd)
+                .write()
+                .unwrap();
+            let index = windows_metadata::reader::Index::read(&winmd).unwrap();
+            index.expect("Test.Api", "GoodRecord");
+            assert!(
+                index
+                    .expect("Test.Api", "Apis")
+                    .methods()
+                    .any(|method| method.name() == "IndependentFunction")
+            );
+            if conflict {
+                assert_eq!(
+                    index
+                        .expect("Test.Api", "Apis")
+                        .methods()
+                        .map(|method| method.name())
+                        .collect::<BTreeSet<_>>(),
+                    BTreeSet::from(["IndependentFunction"])
+                );
+                for name in affected.into_iter().filter(|name| *name != "SHARED_CURVE") {
+                    assert!(index.iter().all(|(_, candidate, _)| candidate != name));
+                    assert!(index.type_refs().all(|reference| reference.name() != name));
+                }
+                assert_eq!(
+                    index.get("Test.B", "SHARED_CURVE").count(),
+                    usize::from(matches!(case, "unproved" | "macro")),
+                );
+            } else {
+                index.expect("Test.Forced", "BrokenInterface");
+                assert!(
+                    index
+                        .expect("Test.Forced", "Apis")
+                        .methods()
+                        .any(|method| method.name() == "TransitiveFunction")
+                );
+            }
+            std::fs::remove_file(&winmd).unwrap();
+            println!(
+                "enum_partial case={case} conflict={conflict} reversed={reversed} omissions={} winmd=valid assertions=passed",
+                report.omissions.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn enum_diagnostics_keep_non_enum_failures_fatal() {
+    let snapshot = snapshot("struct ValidRecord { int value; };");
+    let input = snapshot.facts[0].origin.tu.clone();
+    let mut policy = HeaderPartitionPolicy::new();
+    policy.add_traversed_header_for_input(&input, &input, RootPartition::new("Api", "Test.Api"));
+    let plan = snapshot
+        .clone()
+        .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    let references = BTreeMap::new();
+    assert!(
+        plan.emit_with_enum_diagnostics(&EmitOptions::new("invalid..namespace", &references))
+            .is_err()
+    );
+
+    let mut snapshot = snapshot;
+    let record = snapshot
+        .facts
+        .iter_mut()
+        .find(|fact| fact.name == "ValidRecord")
+        .unwrap();
+    let FactData::Record { fields, .. } = &mut record.data else {
+        panic!()
+    };
+    fields[0].ty = TypeRef::Named {
+        name: "MissingNativeType".to_string(),
+        declaration: Location {
+            file: input.clone(),
+            offset: 9999,
+        },
+    };
+    let plan = snapshot
+        .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+        .unwrap();
+    assert!(
+        plan.emit_with_enum_diagnostics(&EmitOptions::new("Test.Common", &references))
+            .is_err()
+    );
+}
+
+#[test]
 fn shared_literal_enum_single_unowned_dependency() {
     helpers::ensure_libclang();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -67,7 +67,9 @@ fn elapsed_ms(start: Option<std::time::Instant>) -> f64 {
         .unwrap_or_default()
 }
 
+mod enum_diagnostics;
 mod extract;
+use enum_diagnostics::*;
 pub use extract::{
     extract, extract_partitioned, extract_partitioned_with_options, extract_with_options,
 };
@@ -213,6 +215,46 @@ pub struct RdlPartition {
     pub partition: String,
     pub namespace: String,
     pub header: String,
+}
+
+/// The native declaration removed from a partial metadata result.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct OmittedDeclaration {
+    pub origin: Origin,
+    pub kind: Option<FactKind>,
+    pub name: String,
+    pub source: Location,
+    pub namespace: String,
+    /// All methods of an omitted interface, including methods with otherwise valid signatures.
+    pub methods: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum EnumOmissionCause {
+    ConflictingDeclarations,
+    ExcludedDependency,
+}
+
+/// A whole declaration omitted because its dependency closure reaches an unusable enum.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct MetadataOmission {
+    pub declaration: OmittedDeclaration,
+    pub cause: EnumOmissionCause,
+    pub reason: String,
+    /// Native declarations from the omitted API through its aliases to the blocking enum.
+    pub dependency_chain: Vec<OmittedDeclaration>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeaderPartitionReport {
+    pub partitions: BTreeMap<RdlPartition, String>,
+    pub omissions: Vec<MetadataOmission>,
+}
+
+impl HeaderPartitionReport {
+    pub fn is_partial(&self) -> bool {
+        !self.omissions.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -2115,6 +2157,8 @@ impl Snapshot {
             display_names: None,
             source_names: None,
             mutable_string_aliases: options.mutable_string_aliases,
+            allow_enum_omissions: false,
+            omission_namespace: options.namespace,
         })
     }
 
@@ -5062,6 +5106,16 @@ impl Snapshot {
         display_names: &BTreeMap<String, String>,
         source_names: &PlanningSourceNames,
     ) -> Result<Plan<'_>, Error> {
+        self.plan_partitioned_with_enum_policy(options, display_names, source_names, false)
+    }
+
+    fn plan_partitioned_with_enum_policy(
+        &self,
+        options: &EmitOptions<'_>,
+        display_names: &BTreeMap<String, String>,
+        source_names: &PlanningSourceNames,
+        allow_enum_omissions: bool,
+    ) -> Result<Plan<'_>, Error> {
         let references = scoped_planning_map(options.references, display_names);
         let excluded_types =
             scoped_planning_set(options.excluded_types.or(options.excluded), display_names);
@@ -5082,6 +5136,8 @@ impl Snapshot {
             display_names: Some(display_names),
             source_names: Some(source_names),
             mutable_string_aliases: options.mutable_string_aliases,
+            allow_enum_omissions,
+            omission_namespace: options.namespace,
         })
     }
 
@@ -5095,6 +5151,8 @@ impl Snapshot {
             display_names,
             source_names,
             mutable_string_aliases,
+            allow_enum_omissions,
+            omission_namespace,
         } = options;
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
@@ -5425,6 +5483,7 @@ impl Snapshot {
         let mut value_roots = vec![];
         let mut functions = vec![];
         let mut root_errors = vec![];
+        let mut enum_root_failures = vec![];
         let mut failed_type_roots = BTreeSet::new();
         let mut failed_function_roots = BTreeSet::new();
         let mut constants = vec![];
@@ -5520,14 +5579,27 @@ impl Snapshot {
                         }
                         Err(error) => {
                             failed_type_roots.insert(name.to_string());
-                            root_errors.push(root_selection_error(
-                                self,
-                                name,
-                                "type",
-                                error,
-                                &authority,
-                                &[],
-                            ));
+                            if allow_enum_omissions
+                                && let Some(failure) = enum_selection_failure(
+                                    &authority,
+                                    &facts_by_declaration,
+                                    &facts_by_origin,
+                                    self,
+                                    source_names,
+                                    error.to_string(),
+                                )
+                            {
+                                enum_root_failures.push(failure);
+                            } else {
+                                root_errors.push(root_selection_error(
+                                    self,
+                                    name,
+                                    "type",
+                                    error,
+                                    &authority,
+                                    &[],
+                                ));
+                            }
                         }
                     }
                 }
@@ -5576,9 +5648,11 @@ impl Snapshot {
                 }
             }
         }
-        if self.header_partition_policy {
+        let selected_annotations = self
+            .header_partition_policy
+            .then(|| self.annotations_with_selected_functions());
+        if let Some(selected_annotations) = &selected_annotations {
             // Associated enum names are semantic type dependencies of selected roots.
-            let selected_annotations = self.annotations_with_selected_functions();
             let selected_origins: BTreeSet<_> = type_roots
                 .iter()
                 .chain(value_roots.iter())
@@ -5628,6 +5702,36 @@ impl Snapshot {
                     })
                     .collect();
                 if matches.is_empty() {
+                    if allow_enum_omissions && !references.contains_key(&name) {
+                        let excluded: Vec<_> = facts_index
+                            .get(name.as_str())
+                            .into_iter()
+                            .chain(exact_dependency_facts_index.get(name.as_str()))
+                            .flatten()
+                            .copied()
+                            .filter(|fact| self.root_owners.contains_key(&fact.origin))
+                            .filter(|fact| {
+                                self.type_projection_suppressed(
+                                    fact,
+                                    &declarations,
+                                    &mut BTreeSet::new(),
+                                )
+                            })
+                            .collect();
+                        if let Some(mut failure) = enum_selection_failure(
+                            &excluded,
+                            &facts_by_declaration,
+                            &facts_by_origin,
+                            self,
+                            source_names,
+                            format!(
+                                "owner-excluded associated enum `{name}` has no eligible provider"
+                            ),
+                        ) {
+                            failure.cause = EnumOmissionCause::ExcludedDependency;
+                            enum_root_failures.push(failure);
+                        }
+                    }
                     continue;
                 }
                 let authority = self.authority_candidates(&matches, &declarations);
@@ -5642,14 +5746,29 @@ impl Snapshot {
                         root_names.insert(name);
                         type_roots.push(root);
                     }
-                    Err(error) => root_errors.push(root_selection_error(
-                        self,
-                        &name,
-                        "associated enum",
-                        error,
-                        &authority,
-                        &[],
-                    )),
+                    Err(error) => {
+                        if allow_enum_omissions
+                            && let Some(failure) = enum_selection_failure(
+                                &authority,
+                                &facts_by_declaration,
+                                &facts_by_origin,
+                                self,
+                                source_names,
+                                error.to_string(),
+                            )
+                        {
+                            enum_root_failures.push(failure);
+                        } else {
+                            root_errors.push(root_selection_error(
+                                self,
+                                &name,
+                                "associated enum",
+                                error,
+                                &authority,
+                                &[],
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -5689,9 +5808,24 @@ impl Snapshot {
             &declarations,
             functions.iter().map(|function| function.fact),
         );
+        let failed_enum_sources: HashMap<_, _> = enum_root_failures
+            .iter()
+            .flat_map(|failure| {
+                failure
+                    .declarations
+                    .iter()
+                    .filter(|fact| matches!(fact.data, FactData::Enum { .. }))
+                    .map(move |fact| {
+                        let name =
+                            source_names.map_or(fact.name.as_str(), |names| names.fact_name(fact));
+                        ((name, &fact.spelling), failure)
+                    })
+            })
+            .collect();
         let mut type_choices = BTreeMap::new();
         let mut sal_count_diagnostics = BTreeSet::new();
-        let (facts_by_name, mut retained_pointer_aliases, dependency_diagnostics) = loop {
+        let mut omissions = BTreeSet::new();
+        let (mut facts_by_name, mut retained_pointer_aliases, mut dependency_diagnostics) = loop {
             type_choices.clear();
             sal_count_diagnostics.clear();
             let mut facts = BTreeSet::new();
@@ -5707,6 +5841,9 @@ impl Snapshot {
                     &root.origin.tu,
                     &root.expansion,
                 );
+                if allow_enum_omissions {
+                    dependency_diagnostics.set_root_origin(root_node, &root.origin);
+                }
                 let fact_node = DependencyNode::Fact(&root.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
                 if facts.insert(root.origin.clone()) {
@@ -5732,6 +5869,9 @@ impl Snapshot {
                     &root.origin.tu,
                     &root.expansion,
                 );
+                if allow_enum_omissions {
+                    dependency_diagnostics.set_root_origin(root_node, &root.origin);
+                }
                 let fact_node = DependencyNode::Fact(&root.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
                 collect_fact_pointer_alias_candidates(
@@ -5755,6 +5895,9 @@ impl Snapshot {
                     &constant.root.tu,
                     &constant.spelling,
                 );
+                if allow_enum_omissions {
+                    dependency_diagnostics.set_root_origin(root_node, &constant.root);
+                }
                 collect_pointer_alias_candidates(
                     &constant.ty,
                     constant.root.tu.as_str(),
@@ -5775,6 +5918,9 @@ impl Snapshot {
                     &fact.origin.tu,
                     &fact.expansion,
                 );
+                if allow_enum_omissions {
+                    dependency_diagnostics.set_root_origin(root_node, &fact.origin);
+                }
                 let fact_node = DependencyNode::Fact(&fact.origin);
                 dependency_diagnostics.add_edge(root_node, fact_node);
                 collect_fact_pointer_alias_candidates(
@@ -5789,6 +5935,60 @@ impl Snapshot {
                     fact_node,
                     &mut queue,
                 );
+            }
+            for failure in &enum_root_failures {
+                dependency_diagnostics.block_enum_failure(failure, None, &facts_by_declaration);
+            }
+            if allow_enum_omissions {
+                let selected_nodes: HashMap<_, _> = dependency_diagnostics
+                    .root_origins
+                    .iter()
+                    .map(|(index, origin)| {
+                        let node = if dependency_diagnostics.roots[*index].kind == "constant" {
+                            DependencyNode::Root(*index)
+                        } else {
+                            DependencyNode::Fact(origin)
+                        };
+                        (*origin, node)
+                    })
+                    .collect();
+                let mut enum_targets: HashMap<&str, Vec<&Fact>> = HashMap::new();
+                for fact in type_roots
+                    .iter()
+                    .copied()
+                    .chain(
+                        enum_root_failures
+                            .iter()
+                            .flat_map(|failure| failure.declarations.iter().copied()),
+                    )
+                    .chain(
+                        source_names
+                            .into_iter()
+                            .flat_map(|names| names.shared_enum_providers.iter())
+                            .filter(|(_, provider)| provider.is_err())
+                            .map(|(origin, _)| facts_by_origin[origin]),
+                    )
+                {
+                    if underlying_enum_fact(fact, &facts_by_declaration, &mut BTreeSet::new())
+                        .is_some()
+                    {
+                        enum_targets.entry(&fact.name).or_default().push(fact);
+                    }
+                }
+                for (target, annotations) in selected_annotations.iter().flatten() {
+                    let Some(&source) = selected_nodes.get(target.origin()) else {
+                        continue;
+                    };
+                    for annotation in annotations {
+                        let Annotation::AssociatedEnum(name) = annotation else {
+                            continue;
+                        };
+                        for fact in enum_targets.get(name.as_str()).into_iter().flatten() {
+                            dependency_diagnostics
+                                .add_edge(source, DependencyNode::Fact(&fact.origin));
+                        }
+                    }
+                }
             }
 
             while let Some((tu, edge, source)) = queue.pop() {
@@ -5930,11 +6130,28 @@ impl Snapshot {
                                         error
                                     };
                                 if self.header_partition_policy {
-                                    dependency_diagnostics.block(
-                                        reference,
-                                        error.to_string(),
-                                        source,
-                                    );
+                                    if allow_enum_omissions
+                                        && let Some(failure) = enum_selection_failure(
+                                            &matches,
+                                            &facts_by_declaration,
+                                            &facts_by_origin,
+                                            self,
+                                            source_names,
+                                            error.to_string(),
+                                        )
+                                    {
+                                        dependency_diagnostics.block_enum_failure(
+                                            &failure,
+                                            Some(source),
+                                            &facts_by_declaration,
+                                        );
+                                    } else {
+                                        dependency_diagnostics.block(
+                                            reference,
+                                            error.to_string(),
+                                            source,
+                                        );
+                                    }
                                     continue;
                                 }
                                 return Err(error);
@@ -6017,6 +6234,13 @@ impl Snapshot {
                     }
                     TypeRef::Reference { mutable, target } => {
                         queue.push((tu, TypeEdge::Pointee(target, *mutable), source));
+                        continue;
+                    }
+                    TypeRef::FunctionPointer { params, result, .. } if allow_enum_omissions => {
+                        queue.push((tu, TypeEdge::Type(result), source));
+                        for param in params {
+                            queue.push((tu, TypeEdge::Type(param), source));
+                        }
                         continue;
                     }
                     TypeRef::FunctionPointer { .. } | TypeRef::OpaquePointer { .. } => continue,
@@ -6184,7 +6408,24 @@ impl Snapshot {
                     ) {
                         Ok(fact) => fact,
                         Err(error) if self.header_partition_policy => {
-                            dependency_diagnostics.block(reference, error.to_string(), source);
+                            if allow_enum_omissions
+                                && let Some(failure) = enum_selection_failure(
+                                    choices,
+                                    &facts_by_declaration,
+                                    &facts_by_origin,
+                                    self,
+                                    source_names,
+                                    error.to_string(),
+                                )
+                            {
+                                dependency_diagnostics.block_enum_failure(
+                                    &failure,
+                                    Some(source),
+                                    &facts_by_declaration,
+                                );
+                            } else {
+                                dependency_diagnostics.block(reference, error.to_string(), source);
+                            }
                             continue;
                         }
                         Err(error) => return Err(error),
@@ -6194,7 +6435,28 @@ impl Snapshot {
                         {
                             Ok(fact) => fact,
                             Err(error) if self.header_partition_policy => {
-                                dependency_diagnostics.block(reference, error.to_string(), source);
+                                if allow_enum_omissions
+                                    && let Some(failure) = enum_selection_failure(
+                                        choices,
+                                        &facts_by_declaration,
+                                        &facts_by_origin,
+                                        self,
+                                        source_names,
+                                        error.to_string(),
+                                    )
+                                {
+                                    dependency_diagnostics.block_enum_failure(
+                                        &failure,
+                                        Some(source),
+                                        &facts_by_declaration,
+                                    );
+                                } else {
+                                    dependency_diagnostics.block(
+                                        reference,
+                                        error.to_string(),
+                                        source,
+                                    );
+                                }
                                 continue;
                             }
                             Err(error) => return Err(error),
@@ -6264,6 +6526,21 @@ impl Snapshot {
                     }
                     return Err(error);
                 };
+                if allow_enum_omissions
+                    && matches!(fact.data, FactData::Enum { .. })
+                    && let Some(failure) = failed_enum_sources.get(&(
+                        source_names.map_or(fact.name.as_str(), |names| names.fact_name(fact)),
+                        &fact.spelling,
+                    ))
+                {
+                    dependency_diagnostics.block_enum_fact(
+                        fact,
+                        failure.cause,
+                        &failure.reason,
+                        Some(source),
+                    );
+                    continue;
+                }
                 if matches!(fact.data, FactData::Enum { .. })
                     && let Some(provider) = source_names
                         .filter(|names| {
@@ -6277,7 +6554,16 @@ impl Snapshot {
                     match provider {
                         Ok(origin) => fact = facts_by_origin[origin],
                         Err(error) => {
-                            dependency_diagnostics.block(reference, error.clone(), source);
+                            if allow_enum_omissions {
+                                dependency_diagnostics.block_enum_fact(
+                                    fact,
+                                    error.cause(),
+                                    error.message(),
+                                    Some(source),
+                                );
+                                continue;
+                            }
+                            dependency_diagnostics.block(reference, error.message(), source);
                             continue;
                         }
                     }
@@ -6331,7 +6617,20 @@ impl Snapshot {
                              policies do not establish one excluded authority",
                         );
                     }
-                    dependency_diagnostics.block(reference, reason, source);
+                    if allow_enum_omissions {
+                        dependency_diagnostics.block_enum_fact(
+                            fact,
+                            if binding.conflicting {
+                                EnumOmissionCause::ConflictingDeclarations
+                            } else {
+                                EnumOmissionCause::ExcludedDependency
+                            },
+                            &reason,
+                            Some(source),
+                        );
+                    } else {
+                        dependency_diagnostics.block(reference, reason, source);
+                    }
                     continue;
                 }
                 let native_name = source_fact_name(fact);
@@ -6385,7 +6684,7 @@ impl Snapshot {
                 }
             }
 
-            if dependency_diagnostics.is_blocked() {
+            if dependency_diagnostics.is_blocked() && !allow_enum_omissions {
                 if timing && self.header_partition_policy {
                     eprintln!(
                         "windows-clang timing phase=plan-dependencies target={target} \
@@ -6400,13 +6699,43 @@ impl Snapshot {
                 }
                 return Err(dependency_diagnostics.error());
             }
+            let known_blockers = dependency_diagnostics.unique_blockers();
+            let known_affected = if allow_enum_omissions && dependency_diagnostics.is_blocked() {
+                Some(dependency_diagnostics.enum_affected(
+                    self,
+                    source_names,
+                    omission_namespace,
+                    &facts_by_origin,
+                    &declarations,
+                )?)
+            } else {
+                None
+            };
             let mut grouped: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
-            for fact in facts.into_iter().map(|origin| facts_by_origin[&origin]) {
+            for fact in facts
+                .into_iter()
+                .map(|origin| facts_by_origin[&origin])
+                .filter(|fact| {
+                    !known_affected
+                        .as_ref()
+                        .is_some_and(|affected| affected.origins.contains(&fact.origin))
+                })
+            {
                 grouped.entry(&fact.name).or_default().push(fact);
             }
 
             let collisions: Vec<_> = constants
                 .iter()
+                .filter(|constant| {
+                    !known_affected.as_ref().is_some_and(|affected| {
+                        affected.roots.contains(&DependencyRoot {
+                            kind: "constant",
+                            name: &constant.name,
+                            tu: &constant.root.tu,
+                            source: &constant.spelling,
+                        })
+                    })
+                })
                 .filter_map(|constant| {
                     grouped
                         .get(constant.name.as_str())
@@ -6435,23 +6764,79 @@ impl Snapshot {
             let mut facts_by_name = BTreeMap::new();
             for (name, choices) in grouped {
                 let authority = self.authority_candidates(&choices, &declarations);
-                let selected = choose_proven_type_root(
+                let selected = match choose_proven_type_root(
                     name,
                     &authority,
                     &facts_index,
                     &mut shape_cache,
                     source_names,
-                )?;
+                ) {
+                    Ok(fact) => fact,
+                    Err(error) => {
+                        if allow_enum_omissions
+                            && let Some(failure) = enum_selection_failure(
+                                &authority,
+                                &facts_by_declaration,
+                                &facts_by_origin,
+                                self,
+                                source_names,
+                                error.to_string(),
+                            )
+                        {
+                            dependency_diagnostics.block_enum_failure(
+                                &failure,
+                                None,
+                                &facts_by_declaration,
+                            );
+                            continue;
+                        }
+                        return Err(error);
+                    }
+                };
                 facts_by_name.insert(name, selected);
+            }
+            if allow_enum_omissions && dependency_diagnostics.is_blocked() {
+                let affected = match known_affected {
+                    Some(affected)
+                        if dependency_diagnostics.unique_blockers() == known_blockers =>
+                    {
+                        affected
+                    }
+                    _ => dependency_diagnostics.enum_affected(
+                        self,
+                        source_names,
+                        omission_namespace,
+                        &facts_by_origin,
+                        &declarations,
+                    )?,
+                };
+                omissions.extend(affected.omissions);
+                facts_by_name.retain(|_, fact| !affected.origins.contains(&fact.origin));
+                type_roots.retain(|fact| !affected.origins.contains(&fact.origin));
+                value_roots.retain(|fact| !affected.origins.contains(&fact.origin));
+                functions.retain(|function| !affected.origins.contains(&function.fact.origin));
+                constants.retain(|constant| {
+                    !affected.roots.contains(&DependencyRoot {
+                        kind: "constant",
+                        name: &constant.name,
+                        tu: &constant.root.tu,
+                        source: &constant.spelling,
+                    })
+                });
+                for root in affected.roots {
+                    root_names.remove(root.name);
+                }
             }
             if timing && self.header_partition_policy {
                 eprintln!(
                     "windows-clang timing phase=plan-dependencies target={target} \
                      selected_roots={} processed_unique_dependencies={} \
-                     resolved_dependencies={} unique_blockers=0 elapsed_ms={:.3}",
+                     resolved_dependencies={} unique_blockers={} omissions={} elapsed_ms={:.3}",
                     dependency_diagnostics.selected_roots(),
                     dependency_diagnostics.processed_references(),
                     dependency_diagnostics.resolved_references(),
+                    dependency_diagnostics.unique_blockers(),
+                    omissions.len(),
                     elapsed_ms(phase_time),
                 );
                 phase_time = Some(std::time::Instant::now());
@@ -6889,12 +7274,46 @@ impl Snapshot {
                 })
                 .collect();
             if !blockers.is_empty() {
-                return Err(owner_exclusion_error(
-                    self,
-                    &dependency_diagnostics,
-                    &blockers,
-                    display_names,
-                ));
+                if allow_enum_omissions
+                    && blockers
+                        .iter()
+                        .all(|fact| matches!(fact.data, FactData::Enum { .. }))
+                {
+                    for fact in blockers {
+                        dependency_diagnostics.block_enum_fact(
+                            fact,
+                            EnumOmissionCause::ExcludedDependency,
+                            "owner-excluded enum has no retained public alias",
+                            None,
+                        );
+                    }
+                    let affected = dependency_diagnostics.enum_affected(
+                        self,
+                        source_names,
+                        omission_namespace,
+                        &facts_by_origin,
+                        &declarations,
+                    )?;
+                    omissions.extend(affected.omissions);
+                    facts_by_name.retain(|_, fact| !affected.origins.contains(&fact.origin));
+                    value_roots.retain(|fact| !affected.origins.contains(&fact.origin));
+                    functions.retain(|function| !affected.origins.contains(&function.fact.origin));
+                    constants.retain(|constant| {
+                        !affected.roots.contains(&DependencyRoot {
+                            kind: "constant",
+                            name: &constant.name,
+                            tu: &constant.root.tu,
+                            source: &constant.spelling,
+                        })
+                    });
+                } else {
+                    return Err(owner_exclusion_error(
+                        self,
+                        &dependency_diagnostics,
+                        &blockers,
+                        display_names,
+                    ));
+                }
             }
         }
         let mut types: Vec<_> = facts_by_name
@@ -7136,6 +7555,7 @@ impl Snapshot {
             );
         }
         Ok(Plan {
+            omissions: omissions.into_iter().collect(),
             types,
             values,
             functions,
@@ -7189,11 +7609,39 @@ impl HeaderPartitionPlan {
         self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
+        Ok(self.emit_report(options, false)?.partitions)
+    }
+
+    /// Emits valid partial metadata for enum conflicts and reports every affected declaration.
+    ///
+    /// An affected record or interface is omitted whole, including all interface methods.
+    /// Non-enum planning failures and invalid configuration remain errors.
+    pub fn emit_with_enum_diagnostics(
+        self,
+        options: &EmitOptions<'_>,
+    ) -> Result<HeaderPartitionReport, Error> {
+        self.emit_report(options, true)
+    }
+
+    fn emit_report(
+        self,
+        options: &EmitOptions<'_>,
+        allow_enum_omissions: bool,
+    ) -> Result<HeaderPartitionReport, Error> {
+        if allow_enum_omissions {
+            validate_namespace(options.namespace)?;
+        }
         let target = self.snapshot.timing_target.clone();
         let (mut snapshot, display_names, source_names) =
             self.snapshot.into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
+        let plan = snapshot.plan_partitioned_with_enum_policy(
+            options,
+            &display_names,
+            &source_names,
+            allow_enum_omissions,
+        )?;
+        let omissions = plan.omissions.clone();
         let ambiguity_summary = plan.function_ambiguity_summary();
         let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
         let mut conflicts = self.root_conflicts;
@@ -7215,7 +7663,10 @@ impl HeaderPartitionPlan {
         if let Some(summary) = ambiguity_summary {
             eprintln!("{summary}");
         }
-        Ok(result)
+        Ok(HeaderPartitionReport {
+            partitions: result,
+            omissions,
+        })
     }
 }
 
@@ -7320,6 +7771,7 @@ enum OutputKind {
 }
 
 struct Plan<'a> {
+    omissions: Vec<MetadataOmission>,
     types: Vec<PlannedFact<'a>>,
     values: Vec<PlannedFact<'a>>,
     functions: Vec<PlannedFunction<'a>>,
@@ -7385,6 +7837,8 @@ struct PlanningOptions<'a> {
     display_names: Option<&'a BTreeMap<String, String>>,
     source_names: Option<&'a PlanningSourceNames>,
     mutable_string_aliases: bool,
+    allow_enum_omissions: bool,
+    omission_namespace: &'a str,
 }
 
 struct ExcludedNativeDependency {
@@ -7406,11 +7860,37 @@ struct SharedEnumIdentity {
     enumeration: Origin,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SharedEnumProviderFailure {
+    ConflictingDefinitions,
+    ConflictingOwners,
+    MissingProvider,
+}
+
+impl SharedEnumProviderFailure {
+    fn message(self) -> &'static str {
+        match self {
+            Self::ConflictingDefinitions => "conflicting native shared-enum literal definitions",
+            Self::ConflictingOwners => "shared native enum has conflicting public namespace owners",
+            Self::MissingProvider => "shared native enum has no eligible public provider",
+        }
+    }
+
+    fn cause(self) -> EnumOmissionCause {
+        match self {
+            Self::MissingProvider => EnumOmissionCause::ExcludedDependency,
+            Self::ConflictingDefinitions | Self::ConflictingOwners => {
+                EnumOmissionCause::ConflictingDeclarations
+            }
+        }
+    }
+}
+
 struct PlanningSourceNames {
     facts: BTreeMap<Origin, String>,
     constants: BTreeMap<(Origin, Origin, Location), BTreeSet<String>>,
     excluded_native_dependencies: BTreeMap<Origin, ExcludedNativeDependency>,
-    shared_enum_providers: BTreeMap<Origin, Result<Origin, String>>,
+    shared_enum_providers: BTreeMap<Origin, Result<Origin, SharedEnumProviderFailure>>,
     #[cfg(test)]
     exclusion_index_sizes: (usize, usize),
 }
@@ -7540,7 +8020,9 @@ impl PlanningSourceNames {
         }
     }
 
-    fn shared_enum_providers(snapshot: &Snapshot) -> BTreeMap<Origin, Result<Origin, String>> {
+    fn shared_enum_providers(
+        snapshot: &Snapshot,
+    ) -> BTreeMap<Origin, Result<Origin, SharedEnumProviderFailure>> {
         let mut result = BTreeMap::new();
         if !snapshot.header_partition_policy || snapshot.shared_enum_identities.is_empty() {
             return result;
@@ -7598,18 +8080,18 @@ impl PlanningSourceNames {
                 })
                 .collect();
             let selected = if !compatible {
-                Err("conflicting native shared-enum literal definitions".into())
+                Err(SharedEnumProviderFailure::ConflictingDefinitions)
             } else if let Some((provider, owner)) = providers.first() {
                 if providers
                     .iter()
                     .any(|(_, candidate)| !same_owner_policy(candidate, owner))
                 {
-                    Err("shared native enum has conflicting public namespace owners".into())
+                    Err(SharedEnumProviderFailure::ConflictingOwners)
                 } else {
                     Ok(provider.origin.clone())
                 }
             } else {
-                Err("shared native enum has no eligible public provider".into())
+                Err(SharedEnumProviderFailure::MissingProvider)
             };
             for (origin, _) in members {
                 result.insert((*origin).clone(), selected.clone());
@@ -9252,11 +9734,11 @@ fn choose_proven_type_root<'a>(
     {
         let provider = names.shared_enum_providers[&roots[0].origin]
             .as_ref()
-            .map_err(|error| Error(error.clone()))?;
+            .map_err(|error| Error(error.message().to_string()))?;
         for fact in roots {
             if names.shared_enum_providers[&fact.origin]
                 .as_ref()
-                .map_err(|error| Error(error.clone()))?
+                .map_err(|error| Error(error.message().to_string()))?
                 != provider
             {
                 return Err(Error(format!(
@@ -10787,6 +11269,8 @@ struct DependencyClosureDiagnostics<'a> {
     processed: HashSet<DependencyReference<'a>>,
     resolved: HashSet<DependencyReference<'a>>,
     blockers: BTreeMap<DependencyBlocker<'a>, HashSet<DependencyNode<'a>>>,
+    enum_blockers: BTreeMap<DependencyBlocker<'a>, EnumOmissionCause>,
+    root_origins: HashMap<usize, &'a Origin>,
 }
 
 impl<'a> DependencyClosureDiagnostics<'a> {

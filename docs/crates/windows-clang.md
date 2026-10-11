@@ -276,10 +276,29 @@ unsupported declarations do not acquire this proof from equal evaluated values.
 Header planning can satisfy an excluded presentation's exact dependency through a proved compatible
 public enum provider. Original facts, Origins, and local alias-to-enum edges remain unchanged.
 The chosen provider retains its own owner and namespace; excluded metadata is not transferred.
-Missing providers, differing literal definitions, or conflicting public owner policies remain fatal.
+Missing providers, differing literal definitions, or conflicting public owner policies remain fatal
+for strict emission.
 This provider selection applies only to distinct physical enum declarations. A single declaration,
 including repeated observations from several translation units, keeps normal exact dependency
 resolution and default ownership.
+
+`HeaderPartitionPlan::emit_with_enum_diagnostics` is an explicit partial-output policy. It returns
+`HeaderPartitionReport` with readable RDL partitions and structured `MetadataOmission` entries;
+`is_partial()` is true whenever an omission is reported. Enum conflicts and required excluded enums
+remove every affected declaration through the existing dependency closure. Records and interfaces
+are removed whole, not field by field or method by method. Each entry retains the native Origin,
+source, namespace, cause, and a dependency chain to the blocking enum. An omitted interface lists
+all its methods, including otherwise valid methods. Explicit namespace authority takes precedence
+over the header owner's namespace in the report, as it does for emitted declarations. The report
+includes native enum and typedef observations, so several entries can describe one public type.
+An API affected by several enum blockers has an entry for each cause and dependency chain.
+Independent declarations remain eligible. Already-blocked aliases do not compete with an
+independent enum provider during output grouping.
+
+This policy does not choose an arbitrary enum provider, reinterpret values, or create cross-header
+identity. Compatible shared enums emit the complete surface with no omissions. Existing
+`emit_with_options` and other default APIs remain strict. Compiler/extraction errors, invalid
+configuration, non-enum selection failures, and structural validation errors remain fatal.
 
 An `associated_enum` annotation on a selected root adds the matching enum provider from its
 annotation-compatible redeclarations to dependency closure. Those redeclarations may come from

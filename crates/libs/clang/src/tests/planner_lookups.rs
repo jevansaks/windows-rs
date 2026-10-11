@@ -673,6 +673,8 @@ fn function_ambiguity_inventory_is_complete_and_stable() {
             display_names: None,
             source_names: None,
             mutable_string_aliases: false,
+            allow_enum_omissions: false,
+            omission_namespace: "",
         })
         .unwrap();
     let ambiguities = plan.function_ambiguities().collect::<Vec<_>>();
