@@ -1098,3 +1098,843 @@ fn root_inventory_preserves_single_and_function_only_error_text() {
         "ambiguous function roots (2):\n  first function failure\n  second function failure",
     );
 }
+
+#[test]
+fn guarded_enum_input_qualified_owner_exclusion_baseline() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("guarded_enum");
+    let first = root.join("a").join("Curve.h");
+    let second = root.join("b").join("Curve.h");
+    let references = BTreeMap::from([(
+        "UnrelatedReference".to_string(),
+        TypeReference::new(
+            "Test.External",
+            "UnrelatedReference",
+            TypeReferenceKind::Type,
+        ),
+    )]);
+    let options = EmitOptions::new("Test.Common", &references);
+    let cases = [
+        ("excluded", vec!["a.hpp", "b.hpp"]),
+        ("excluded_foreign", vec!["a.hpp", "b.hpp", "foreign.hpp"]),
+        ("distinct_colors", vec!["a.hpp", "b.hpp", "foreign.hpp"]),
+        ("same_color", vec!["a.hpp", "b.hpp"]),
+        ("macro_conflict", vec!["a.hpp", "b.hpp", "b_conflict.hpp"]),
+    ];
+    let mut evidence = format!(
+        "pid={}\nruntime={:?}\nargs={ARGS:?}\nfirst={first:?}\nsecond={second:?}\n",
+        std::process::id(),
+        std::env::var_os("LIBCLANG_PATH"),
+    );
+    let mut results = Vec::new();
+    let mut calls = 0;
+    let mut tu_visits = 0;
+    for (case, wrappers, reversed) in cases
+        .into_iter()
+        .flat_map(|(case, wrappers)| [false, true].map(move |r| (case, wrappers.clone(), r)))
+    {
+        let mut wrappers = wrappers;
+        if reversed {
+            wrappers.reverse();
+        }
+        let excludes = matches!(case, "excluded" | "excluded_foreign" | "macro_conflict");
+        let shared_color = case == "same_color";
+        let first_owner = RootPartition::new(
+            "A",
+            if shared_color {
+                "Test.Shared"
+            } else {
+                "Test.A"
+            },
+        );
+        let first_owner = if excludes {
+            first_owner.with_exclusion("AUDIO_CURVE_TYPE")
+        } else {
+            first_owner
+        };
+        let second_owner = RootPartition::new(
+            "B",
+            if shared_color {
+                "Test.Shared"
+            } else {
+                "Test.B"
+            },
+        );
+        let mut policy = HeaderPartitionPolicy::new();
+        let mut inputs = Vec::new();
+        writeln!(evidence, "\nCASE={case} reversed={reversed}").unwrap();
+        for wrapper in &wrappers {
+            let path = root.join(wrapper);
+            let input = Input::new(
+                path.to_str().unwrap(),
+                std::fs::read_to_string(&path).unwrap(),
+            )
+            .with_roots([first.to_str().unwrap(), second.to_str().unwrap()])
+            .partitioned(*wrapper);
+            let (header, owner) = if wrapper.starts_with('b') {
+                (&second, &second_owner)
+            } else {
+                (&first, &first_owner)
+            };
+            policy.add_traversed_header_for_input(
+                input.input.name.clone(),
+                header.to_str().unwrap(),
+                owner.clone(),
+            );
+            writeln!(
+                evidence,
+                "raw_absolute_wrapper={path:?} qualifier={:?} header={header:?} \
+                 caller={wrapper:?} original_roots={:?}",
+                input.input.name, input.roots,
+            )
+            .unwrap();
+            inputs.push(input);
+        }
+        writeln!(evidence, "inputs={inputs:#?}\npolicy={policy:#?}").unwrap();
+        calls += 1;
+        tu_visits += inputs.len();
+        let extracted = extract_partitioned_with_options(
+            inputs,
+            ARGS,
+            &ExtractionOptions::new().with_parallelism(1),
+        );
+        let mut aliases = 0;
+        let mut exact_aliases = 0;
+        let mut suppressed_a = 0;
+        let mut retained_b = 0;
+        let mut associated_slots = 0;
+        let (flat, colored) = match extracted {
+            Err(error) => {
+                let message = error.to_string();
+                writeln!(evidence, "extraction_error={message}").unwrap();
+                (Err(message.clone()), Err(message))
+            }
+            Ok(snapshot) => {
+                writeln!(evidence, "raw_native_snapshot={snapshot:#?}").unwrap();
+                for alias in snapshot
+                    .facts
+                    .iter()
+                    .filter(|fact| fact.name == "AUDIO_CURVE_TYPE")
+                    .filter(|fact| matches!(fact.data, FactData::Typedef { .. }))
+                {
+                    aliases += 1;
+                    if let FactData::Typedef {
+                        target: TypeRef::Named { name, declaration },
+                    } = &alias.data
+                    {
+                        let targets: Vec<_> = snapshot
+                            .facts
+                            .iter()
+                            .filter(|target| {
+                                target.origin.tu == alias.origin.tu
+                                    && target.name == *name
+                                    && target.spelling == *declaration
+                                    && matches!(target.data, FactData::Enum { .. })
+                            })
+                            .collect();
+                        exact_aliases += usize::from(targets.len() == 1);
+                        writeln!(
+                            evidence,
+                            "native_alias={alias:#?}\nexact_local_enum_targets={targets:#?}"
+                        )
+                        .unwrap();
+                    }
+                }
+                associated_slots = snapshot
+                    .annotations
+                    .iter()
+                    .filter(|(_, annotations)| {
+                        annotations.iter().any(|annotation| {
+                            matches!(
+                                annotation,
+                                Annotation::AssociatedEnum(name) if name == "AUDIO_CURVE_TYPE"
+                            )
+                        })
+                    })
+                    .count();
+                let flat = snapshot
+                    .emit_with_options(&options)
+                    .map_err(|e| e.to_string());
+                let colored = snapshot
+                    .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                    .map_err(|e| e.to_string())
+                    .and_then(|plan| {
+                        writeln!(
+                            evidence,
+                            "header_plan_snapshot={:#?}\nroot_conflicts={:#?}",
+                            plan.snapshot, plan.root_conflicts,
+                        )
+                        .unwrap();
+                        let (prepared, display_names, source_names) = plan
+                            .snapshot
+                            .clone()
+                            .into_partitioned_planning_snapshot(&options);
+                        writeln!(
+                            evidence,
+                            "prepared_snapshot={prepared:#?}\ndisplay_names={display_names:#?}\n\
+                             source_fact_names={:#?}\nsource_constant_names={:#?}",
+                            source_names.facts, source_names.constants,
+                        )
+                        .unwrap();
+                        for fact in &prepared.facts {
+                            if !matches!(
+                                fact.data,
+                                FactData::Enum { .. } | FactData::Typedef { .. }
+                            ) {
+                                continue;
+                            }
+                            let owner = prepared.root_owners.get(&fact.origin);
+                            let suppressed =
+                                prepared.suppressed_type_origins.contains(&fact.origin);
+                            writeln!(
+                                evidence,
+                                "prepared_type={fact:#?} owner={owner:#?} suppressed={suppressed}"
+                            )
+                            .unwrap();
+                            if owner.is_some_and(|owner| owner.partition == "A")
+                                && suppressed
+                                && !fact.root
+                            {
+                                suppressed_a += 1;
+                            }
+                            if owner.is_some_and(|owner| owner.partition == "B")
+                                && !suppressed
+                                && fact.root
+                            {
+                                retained_b += 1;
+                            }
+                        }
+                        let selection = prepared
+                            .plan_partitioned(&options, &display_names, &source_names)
+                            .map(|plan| {
+                                plan.types
+                                    .into_iter()
+                                    .map(|planned| (planned.name, planned.fact))
+                                    .collect::<Vec<_>>()
+                            })
+                            .map_err(|e| e.to_string());
+                        writeln!(evidence, "actual_prepared_type_selection={selection:#?}")
+                            .unwrap();
+                        plan.emit_with_options(&options).map_err(|e| e.to_string())
+                    });
+                (flat, colored)
+            }
+        };
+        writeln!(
+            evidence,
+            "flat={flat:#?}\ncolored={colored:#?}\naliases={aliases} \
+             exact_aliases={exact_aliases} suppressed_a={suppressed_a} retained_b={retained_b} \
+             associated_slots={associated_slots}"
+        )
+        .unwrap();
+        results.push((
+            case,
+            reversed,
+            wrappers.len(),
+            flat,
+            colored,
+            aliases,
+            exact_aliases,
+            suppressed_a,
+            retained_b,
+            associated_slots,
+        ));
+    }
+    writeln!(
+        evidence,
+        "native_calls={calls} authored_tu_visits={tu_visits}"
+    )
+    .unwrap();
+    println!("{evidence}");
+    assert_eq!(calls, 10);
+    assert_eq!(tu_visits, 26);
+    assert_ne!(
+        std::fs::canonicalize(&first).unwrap(),
+        std::fs::canonicalize(&second).unwrap(),
+    );
+    for (case, _, tus, _, colored, aliases, joins, _, _, slots) in &results {
+        assert_eq!(aliases, tus, "{case}: missing native typedefs");
+        assert_eq!(
+            joins, tus,
+            "{case}: missing exact TU-local native enum targets"
+        );
+        assert!(*slots > 0, "{case}: missing actual selected B annotation");
+        if matches!(*case, "same_color" | "macro_conflict") {
+            let error = colored.as_ref().unwrap_err();
+            assert!(error.contains("ambiguous type root"), "{case}: {error}");
+            assert!(error.contains("AUDIO_CURVE_TYPE"), "{case}: {error}");
+            assert!(error.contains("Enum/Enum"), "{case}: {error}");
+        }
+    }
+    let mut excluded_output = None;
+    for (case, _, tus, _, colored, _, _, suppressed, retained, _) in &results {
+        if matches!(*case, "same_color" | "macro_conflict") {
+            continue;
+        }
+        let colored = colored
+            .as_ref()
+            .unwrap_or_else(|error| panic!("{case}: {error}"));
+        let enums: Vec<_> = colored
+            .iter()
+            .filter(|(_, rdl)| rdl.contains("enum AUDIO_CURVE_TYPE"))
+            .collect();
+        if *case == "distinct_colors" {
+            assert_eq!(enums.len(), 2, "{case}: {colored:#?}");
+            assert!(enums.iter().any(|(route, _)| route.partition == "A"));
+            assert!(enums.iter().any(|(route, _)| route.partition == "B"));
+        } else {
+            assert_eq!(*suppressed, 2 * (tus - 1), "{case}");
+            assert_eq!(*retained, 2, "{case}");
+            assert_eq!(enums.len(), 1, "{case}: {colored:#?}");
+            assert_eq!(enums[0].0.partition, "B");
+            assert_eq!(enums[0].0.namespace, "Test.B");
+            assert_eq!(enums[0].0.header, normalize_name(second.to_str().unwrap()));
+            if let Some(expected) = excluded_output {
+                assert_eq!(colored, expected, "{case}");
+            } else {
+                excluded_output = Some(colored);
+            }
+        }
+        for (_, rdl) in enums {
+            assert!(rdl.contains("AUDIO_CURVE_TYPE_NONE = 0"), "{rdl}");
+            assert!(rdl.contains("AUDIO_CURVE_TYPE_WINDOWS_FADE = 1"), "{rdl}");
+        }
+        let b = colored
+            .iter()
+            .find(|(route, _)| route.partition == "B")
+            .unwrap()
+            .1;
+        assert!(b.contains("struct B_ROOT"), "{b}");
+        assert!(b.contains("associated_enum(\"AUDIO_CURVE_TYPE\")"), "{b}");
+    }
+    for pair in results.chunks_exact(2) {
+        assert_eq!(pair[0].4, pair[1].4, "{}: reversed output/error", pair[0].0);
+    }
+}
+
+#[test]
+fn guarded_enum_exact_source_dependency_exclusion() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("guarded_enum");
+    let a = root.join("a").join("Curve.h");
+    let b = root.join("b").join("Curve.h");
+    let references = BTreeMap::new();
+    let excluded_types = BTreeSet::from(["B_ROOT".to_string()]);
+    let mut options = EmitOptions::new("Test.Common", &references);
+    options.excluded_types = Some(&excluded_types);
+    for case in ["excluded_a", "retained_a", "native_b"] {
+        for reversed in [false, true] {
+            let foreign_wrapper = if case == "native_b" {
+                "foreign_b_ref.hpp"
+            } else {
+                "foreign_ref.hpp"
+            };
+            let foreign = root.join(foreign_wrapper);
+            let mut wrappers = ["a.hpp", "b.hpp", foreign_wrapper];
+            if reversed {
+                wrappers.swap(0, 1);
+            }
+            let mut inputs = Vec::new();
+            let mut qualifiers = BTreeMap::new();
+            let mut policy = HeaderPartitionPolicy::new();
+            for wrapper in wrappers {
+                let path = root.join(wrapper);
+                let input = Input::new(
+                    path.to_str().unwrap(),
+                    std::fs::read_to_string(&path).unwrap(),
+                )
+                .with_roots([
+                    a.to_str().unwrap(),
+                    b.to_str().unwrap(),
+                    foreign.to_str().unwrap(),
+                ])
+                .partitioned(wrapper);
+                let (header, mut owner) = match wrapper {
+                    "a.hpp" => (&a, RootPartition::new("A", "Test.A")),
+                    "b.hpp" => (&b, RootPartition::new("B", "Test.B")),
+                    _ => (&foreign, RootPartition::new("Foreign", "Test.Foreign")),
+                };
+                if (wrapper == "a.hpp" && case != "retained_a")
+                    || (wrapper == "b.hpp" && case == "retained_a")
+                {
+                    owner = owner.with_exclusion("AUDIO_CURVE_TYPE");
+                }
+                qualifiers.insert(wrapper, input.input.name.clone());
+                policy.add_traversed_header_for_input(
+                    input.input.name.clone(),
+                    header.to_str().unwrap(),
+                    owner,
+                );
+                inputs.push(input);
+            }
+            let snapshot = extract_partitioned_with_options(
+                inputs,
+                ARGS,
+                &ExtractionOptions::new().with_parallelism(1),
+            )
+            .unwrap();
+            let referrers: Vec<_> = snapshot
+                .facts
+                .iter()
+                .filter(|fact| fact.name == "FOREIGN_CURVE_REF")
+                .collect();
+            let [referrer] = referrers.as_slice() else {
+                panic!("missing exact foreign referrer");
+            };
+            let FactData::Record { fields, .. } = &referrer.data else {
+                panic!("foreign referrer is not a record");
+            };
+            let TypeRef::Named { name, declaration } = &fields[0].ty else {
+                panic!("foreign field is not a native named dependency");
+            };
+            let aliases: Vec<_> = snapshot
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.origin.tu == referrer.origin.tu
+                        && fact.name == *name
+                        && fact.spelling == *declaration
+                })
+                .collect();
+            let [alias] = aliases.as_slice() else {
+                panic!("foreign field does not have one exact native alias");
+            };
+            let FactData::Typedef {
+                target: TypeRef::Named { name, declaration },
+            } = &alias.data
+            else {
+                panic!("foreign alias does not have a native declaration target");
+            };
+            let targets: Vec<_> = snapshot
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.origin.tu == alias.origin.tu
+                        && fact.name == *name
+                        && fact.spelling == *declaration
+                        && matches!(fact.data, FactData::Enum { .. })
+                })
+                .collect();
+            let [target] = targets.as_slice() else {
+                panic!("foreign alias does not have one exact native enum target");
+            };
+            let provider = if case == "native_b" { "b.hpp" } else { "a.hpp" };
+            assert!(snapshot.facts.iter().any(|fact| {
+                fact.origin.tu == qualifiers[provider] && same_source_declaration(target, fact)
+            }));
+            let referrer_origin = referrer.origin.clone();
+            let referrer_location = referrer.spelling.clone();
+            let alias_origin = alias.origin.clone();
+            let target_origin = target.origin.clone();
+            let alias_location = alias.spelling.clone();
+            let enum_location = target.spelling.clone();
+            let header_plan = snapshot
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .unwrap();
+            assert!(
+                !header_plan
+                    .snapshot
+                    .root_owners
+                    .contains_key(&target_origin)
+            );
+            let outcome = header_plan.emit_with_options(&options);
+            let evidence = if case == "excluded_a" {
+                let error = outcome.unwrap_err().to_string();
+                assert!(
+                    error.contains("owner-excluded native dependency `AUDIO_CURVE_TYPE`"),
+                    "{error}"
+                );
+                assert!(
+                    error.contains("partition `A` namespace `Test.A`"),
+                    "{error}"
+                );
+                assert!(error.contains("FOREIGN_CURVE_REF"), "{error}");
+                assert!(error.contains("exact dependency path"), "{error}");
+                assert!(
+                    error.contains(&format!(
+                        "{}:{}",
+                        alias_location.file, alias_location.offset
+                    )),
+                    "{error}"
+                );
+                assert!(
+                    error.contains(&format!("{}:{}", enum_location.file, enum_location.offset)),
+                    "{error}"
+                );
+                assert!(
+                    error.starts_with("header partition dependency closure found "),
+                    "{error}"
+                );
+                assert!(
+                    error.ends_with(
+                        "later layout, ownership, and RDL validation has not run for this failed plan"
+                    ),
+                    "{error}"
+                );
+                assert!(!error.contains("ambiguous type root"), "{error}");
+                format!("Err({error})")
+            } else {
+                let output = outcome.unwrap();
+                let provider = if case == "native_b" { "B" } else { "A" };
+                let enums: Vec<_> = output
+                    .iter()
+                    .filter(|(_, rdl)| rdl.contains("enum AUDIO_CURVE_TYPE"))
+                    .collect();
+                assert_eq!(enums.len(), 1, "{output:#?}");
+                assert_eq!(enums[0].0.partition, provider);
+                assert!(output.iter().any(|(route, rdl)| {
+                    route.partition == "Foreign" && rdl.contains("struct FOREIGN_CURVE_REF")
+                }));
+                format!("Ok({output:#?})")
+            };
+            println!(
+                "\nDEPENDENCY_CASE={case} reversed={reversed}\n\
+                 native_referrer={referrer_origin:?} at {}:{} -> \
+                 native_alias={alias_origin:?} at {}:{} -> \
+                 native_enum={target_origin:?} at {}:{}\n\
+                 actual_outcome={evidence}",
+                referrer_location.file,
+                referrer_location.offset,
+                alias_location.file,
+                alias_location.offset,
+                enum_location.file,
+                enum_location.offset,
+            );
+        }
+    }
+}
+
+mod excluded_enum_raw_context {
+    use super::*;
+
+    fn record() -> FactData {
+        FactData::Record {
+            base: None,
+            fields: Vec::new(),
+            size: 4,
+            align: 4,
+            packing: None,
+            alignment: None,
+            union: false,
+        }
+    }
+
+    fn owner(input: &str, excluded: bool) -> RootOwner {
+        RootOwner {
+            input: input.to_string(),
+            root: "enum.h".to_string(),
+            partition: input.to_string(),
+            namespace: format!("Test.{input}"),
+            remaps: BTreeMap::new(),
+            exclusions: if excluded {
+                BTreeSet::from(["E".to_string()])
+            } else {
+                BTreeSet::new()
+            },
+            libraries: BTreeMap::new(),
+            u32_types: BTreeSet::new(),
+            flags: BTreeSet::new(),
+            preserved_auto_function_pointer_levels: BTreeSet::new(),
+            exclude_empty_records: false,
+        }
+    }
+
+    fn sample() -> Snapshot {
+        let mut facts = Vec::new();
+        for tu in ["owned", "foreign"] {
+            let parent = test_fact_in_tu(
+                tu,
+                1,
+                None,
+                FactKind::Struct,
+                "Parent",
+                Location {
+                    file: "parent.h".to_string(),
+                    offset: 4,
+                },
+                record(),
+            );
+            let mut enumeration = test_fact_in_tu(
+                tu,
+                2,
+                Some(parent.origin.clone()),
+                FactKind::Enum,
+                "E",
+                Location {
+                    file: "enum.h".to_string(),
+                    offset: 10,
+                },
+                FactData::Enum {
+                    repr: Scalar::I32,
+                    variants: Vec::new(),
+                    fixed: false,
+                    scoped: false,
+                },
+            );
+            enumeration.root = tu == "owned";
+            facts.extend([parent, enumeration]);
+        }
+        Snapshot {
+            root_owners: BTreeMap::from([(facts[1].origin.clone(), owner("owned", true))]),
+            facts,
+            constants: Vec::new(),
+            value_declarations: Vec::new(),
+            included_files: Vec::new(),
+            declare_handles: Vec::new(),
+            annotations: BTreeMap::new(),
+            source_annotations: BTreeMap::new(),
+            function_annotations: BTreeMap::new(),
+            sal_constant_sizes: BTreeMap::new(),
+            declaration_guids: BTreeMap::new(),
+            class_canonical_origins: BTreeMap::new(),
+            class_canonical_anchors: BTreeMap::new(),
+            observation_only_class_origins: BTreeSet::new(),
+            pointer_callback_aliases: BTreeSet::new(),
+            pointer_only_class_layouts: BTreeMap::new(),
+            embeddable_class_layouts: BTreeSet::new(),
+            clang_flag_enums: BTreeSet::new(),
+            constant_root_owners: BTreeMap::new(),
+            root_partitions: BTreeMap::new(),
+            partition_inputs: BTreeMap::new(),
+            input_order: BTreeMap::new(),
+            partition_exclusions: Vec::new(),
+            forced_flags: BTreeSet::new(),
+            suppressed_type_origins: BTreeSet::new(),
+            projected_type_names: BTreeMap::new(),
+            namespace_authorities: BTreeMap::new(),
+            fact_namespace_authorities: BTreeMap::new(),
+            constant_namespace_authorities: BTreeMap::new(),
+            header_partition_policy: true,
+            header_authority_partition: None,
+            timing_target: None,
+        }
+    }
+
+    fn conflicting(snapshot: &Snapshot) -> bool {
+        PlanningSourceNames::new(snapshot).excluded_native_dependencies[&Origin {
+            tu: "foreign".to_string(),
+            local: 2,
+        }]
+            .conflicting
+    }
+
+    #[test]
+    fn strict_match() {
+        let snapshot = sample();
+        let names = PlanningSourceNames::new(&snapshot);
+        assert_eq!(names.exclusion_index_sizes, (1, 2));
+        assert!(!conflicting(&snapshot));
+        assert_eq!(names.facts.len(), snapshot.facts.len());
+    }
+
+    #[test]
+    fn named_parent_source_and_data_disagreement() {
+        for changed in ["source", "data", "definition", "kind"] {
+            let mut snapshot = sample();
+            let parent = &mut snapshot.facts[2];
+            match changed {
+                "source" => parent.spelling.offset += 1,
+                "data" => {
+                    parent.data = FactData::Class {
+                        guid: "different".to_string(),
+                    }
+                }
+                "definition" => parent.definition = false,
+                "kind" => parent.kind = FactKind::Class,
+                _ => unreachable!(),
+            }
+            assert!(conflicting(&snapshot), "{changed}");
+        }
+    }
+
+    #[test]
+    fn missing_cyclic_anonymous_and_cross_tu() {
+        for changed in ["missing", "cycle", "anonymous", "cross_tu", "duplicate"] {
+            let mut snapshot = sample();
+            match changed {
+                "missing" => snapshot.facts.retain(|fact| fact.kind == FactKind::Enum),
+                "cycle" => {
+                    for index in [0, 2] {
+                        snapshot.facts[index].parent = Some(snapshot.facts[index].origin.clone());
+                    }
+                }
+                "anonymous" => {
+                    for index in [0, 2] {
+                        snapshot.facts[index].name.clear();
+                    }
+                }
+                "cross_tu" => snapshot.facts[3].parent = Some(snapshot.facts[0].origin.clone()),
+                "duplicate" => snapshot.facts.push(snapshot.facts[2].clone()),
+                _ => unreachable!(),
+            }
+            assert!(conflicting(&snapshot), "{changed}");
+        }
+    }
+
+    #[test]
+    fn private_specializations() {
+        for generated in [false, true] {
+            let mut snapshot = sample();
+            for index in [0, 2] {
+                let parent = &snapshot.facts[index];
+                let anchor = Origin {
+                    tu: parent.origin.tu.clone(),
+                    local: 99,
+                };
+                let canonical = if generated {
+                    CanonicalRecord::CompilerGenerated {
+                        anchor,
+                        kind: CanonicalRecordKind::Struct,
+                    }
+                } else {
+                    snapshot.class_canonical_anchors.insert(
+                        anchor.clone(),
+                        ClassCanonicalAnchor {
+                            kind: CanonicalRecordKind::Struct,
+                            parent: None,
+                            name: parent.name.clone(),
+                            spelling: parent.spelling.clone(),
+                            expansion: parent.expansion.clone(),
+                            main_file: false,
+                            system: false,
+                            template_name: "Template".to_string(),
+                            template_spelling: parent.spelling.clone(),
+                            template_expansion: parent.expansion.clone(),
+                            template_partial: false,
+                        },
+                    );
+                    CanonicalRecord::Source(anchor)
+                };
+                snapshot
+                    .class_canonical_origins
+                    .insert(parent.origin.clone(), canonical);
+            }
+            assert!(conflicting(&snapshot));
+        }
+    }
+
+    #[test]
+    fn inactive_work() {
+        for active in [false, true] {
+            let mut snapshot = sample();
+            snapshot.header_partition_policy = active;
+            if active {
+                snapshot
+                    .root_owners
+                    .values_mut()
+                    .for_each(|owner| owner.exclusions.clear());
+            }
+            let names = PlanningSourceNames::new(&snapshot);
+            assert_eq!(names.exclusion_index_sizes, (0, 0));
+            assert!(names.excluded_native_dependencies.is_empty());
+            assert_eq!(names.facts.len(), snapshot.facts.len());
+        }
+    }
+
+    #[test]
+    fn retains_nonexcluding_owned_candidates() {
+        let mut snapshot = sample();
+        let mut parent = snapshot.facts[0].clone();
+        parent.origin.tu = "retained".to_string();
+        let mut enumeration = snapshot.facts[1].clone();
+        enumeration.origin.tu = "retained".to_string();
+        enumeration.parent = Some(parent.origin.clone());
+        snapshot
+            .root_owners
+            .insert(enumeration.origin.clone(), owner("retained", false));
+        snapshot.facts.extend([parent, enumeration]);
+        let names = PlanningSourceNames::new(&snapshot);
+        assert_eq!(names.exclusion_index_sizes, (2, 3));
+        assert!(conflicting(&snapshot));
+        assert_eq!(
+            names
+                .excluded_native_dependencies
+                .values()
+                .next()
+                .unwrap()
+                .authorities
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn capture_precedes_pointer_class_promotion() {
+        let mut snapshot = sample();
+        let parent = snapshot.facts[0].clone();
+        let foreign_parent_origin = snapshot.facts[2].origin.clone();
+        snapshot.facts[0].data = FactData::Unsupported {
+            reason: "raw parent".to_string(),
+        };
+        snapshot
+            .pointer_only_class_layouts
+            .insert(parent.origin.clone(), record());
+        let function = test_fact_in_tu(
+            "owned",
+            3,
+            None,
+            FactKind::Function,
+            "Selected",
+            Location {
+                file: "function.h".to_string(),
+                offset: 1,
+            },
+            FactData::Function {
+                link_name: "Selected".to_string(),
+                convention: CallingConvention::Platform,
+                params: vec![Parameter {
+                    name: "parent".to_string(),
+                    ty: TypeRef::Pointer {
+                        mutable: true,
+                        target: Box::new(TypeRef::Named {
+                            name: parent.name.clone(),
+                            declaration: parent.spelling.clone(),
+                        }),
+                    },
+                    annotation: ParamAnnotation::default(),
+                }],
+                result: TypeRef::Void,
+                variadic: false,
+                noreturn: false,
+            },
+        );
+        snapshot
+            .root_owners
+            .insert(function.origin.clone(), owner("owned", false));
+        snapshot.facts.push(function);
+        assert!(conflicting(&snapshot));
+        let references = BTreeMap::new();
+        let functions = BTreeSet::from(["Selected".to_string()]);
+        let mut options = EmitOptions::new("Test", &references);
+        options.functions = Some(&functions);
+        let (prepared, _, names) = snapshot.into_partitioned_planning_snapshot(&options);
+        let promoted = prepared
+            .facts
+            .iter()
+            .find(|fact| fact.origin == parent.origin)
+            .unwrap();
+        let foreign = prepared
+            .facts
+            .iter()
+            .find(|fact| fact.origin == foreign_parent_origin)
+            .unwrap();
+        assert_eq!(promoted.data, foreign.data);
+        assert!(
+            names
+                .excluded_native_dependencies
+                .values()
+                .next()
+                .unwrap()
+                .conflicting
+        );
+        assert_eq!(names.facts[&parent.origin], parent.name);
+    }
+}

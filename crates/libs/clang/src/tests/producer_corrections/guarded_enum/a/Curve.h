@@ -1,0 +1,7 @@
+#ifndef _AUDIO_CURVE_TYPE_
+#define _AUDIO_CURVE_TYPE_
+typedef enum {
+    AUDIO_CURVE_TYPE_NONE = 0,
+    AUDIO_CURVE_TYPE_WINDOWS_FADE = 1
+} AUDIO_CURVE_TYPE;
+#endif

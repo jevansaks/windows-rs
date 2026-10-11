@@ -253,6 +253,17 @@ traversed-header declaration has an explicit owner and its link name is selected
 `EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
 change non-header emission.
 
+An exact unowned enum dependency retains its native declaration and alias path. A matching owned
+source declaration can constrain its projection when kind, original name, physical location,
+definition data, and the complete original parent chain agree. Parent comparison includes kind,
+name, physical source, definition status, and data before pointer-class layout promotion. Missing,
+cyclic, anonymous, or unproved private specialization contexts remain unknown and conflicting.
+If that authority excludes the required enum,
+planning reports the selected referrer and alias path before grouping by output name. It does not
+give the foreign declaration an owner or substitute another same-named enum. Conflicting source
+data, parent contexts, or multiple owner policies remain fatal. The new authority and parent indexes
+are skipped when header policy is inactive or no owned enum exclusion can constrain a dependency.
+
 An `associated_enum` annotation on a selected root adds the matching enum provider from its
 annotation-compatible redeclarations to dependency closure. Those redeclarations may come from
 other extraction inputs in the aggregate snapshot. A provider that has no traversed-header owner

@@ -3076,8 +3076,8 @@ impl Snapshot {
         mut self,
         options: &EmitOptions<'_>,
     ) -> (Self, BTreeMap<String, String>, PlanningSourceNames) {
-        self.promote_selected_pointer_class_layouts(options);
         let source_names = PlanningSourceNames::new(&self);
+        self.promote_selected_pointer_class_layouts(options);
         self.apply_partition_type_settings();
         self.apply_partition_exclusions();
         self.apply_partition_remaps();
@@ -6238,6 +6238,58 @@ impl Snapshot {
                     }
                     return Err(error);
                 };
+                if let Some(source_names) = source_names
+                    && let Some(binding) =
+                        source_names.excluded_native_dependencies.get(&fact.origin)
+                {
+                    let mut reason = if binding.conflicting {
+                        format!("conflicting exact native source authority for `{name}`")
+                    } else {
+                        format!(
+                            "owner-excluded native dependency `{name}` is required without a \
+                             retained public alias"
+                        )
+                    };
+                    if let DependencyNode::Fact(origin) = source {
+                        let parent = facts_by_origin[origin];
+                        write!(
+                            reason,
+                            "\n   exact dependency path: `{}` at {}:{} -> `{}` at {}:{} \
+                             in translation unit `{tu}`",
+                            source_names.fact_name(parent),
+                            parent.spelling.file,
+                            parent.spelling.offset,
+                            source_names.fact_name(fact),
+                            fact.spelling.file,
+                            fact.spelling.offset,
+                        )
+                        .unwrap();
+                    }
+                    for origin in &binding.authorities {
+                        let authority = facts_by_origin[origin];
+                        let owner = &self.root_owners[origin];
+                        write!(
+                            reason,
+                            "\n   source authority: partition `{}` namespace `{}`, input `{}`, \
+                             declaration {}:{}, origin {:?}",
+                            owner.partition,
+                            owner.namespace,
+                            owner.input,
+                            authority.spelling.file,
+                            authority.spelling.offset,
+                            authority.origin,
+                        )
+                        .unwrap();
+                    }
+                    if binding.conflicting {
+                        reason.push_str(
+                            "\n   native declaration/payload/parent context or source owner \
+                             policies do not establish one excluded authority",
+                        );
+                    }
+                    dependency_diagnostics.block(reference, reason, source);
+                    continue;
+                }
                 let native_name = source_fact_name(fact);
                 let canonical = canonical_named_type(&native_name);
                 let string_alias =
@@ -7286,13 +7338,117 @@ struct PlanningOptions<'a> {
     mutable_string_aliases: bool,
 }
 
+struct ExcludedNativeDependency {
+    authorities: Vec<Origin>,
+    conflicting: bool,
+}
+
 struct PlanningSourceNames {
     facts: BTreeMap<Origin, String>,
     constants: BTreeMap<(Origin, Origin, Location), BTreeSet<String>>,
+    excluded_native_dependencies: BTreeMap<Origin, ExcludedNativeDependency>,
+    #[cfg(test)]
+    exclusion_index_sizes: (usize, usize),
 }
 
 impl PlanningSourceNames {
     fn new(snapshot: &Snapshot) -> Self {
+        let mut excluded_native_dependencies = BTreeMap::new();
+        #[cfg(test)]
+        let mut exclusion_index_sizes = (0, 0);
+        if snapshot.header_partition_policy {
+            let excluded_groups: HashSet<_> = snapshot
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.definition
+                        && matches!(fact.data, FactData::Enum { .. })
+                        && snapshot
+                            .root_owners
+                            .get(&fact.origin)
+                            .is_some_and(|owner| owner.exclusions.contains(&fact.name))
+                })
+                .map(|fact| {
+                    (
+                        std::mem::discriminant(&fact.kind),
+                        fact.name.as_str(),
+                        &fact.spelling,
+                    )
+                })
+                .collect();
+            if !excluded_groups.is_empty() {
+                let mut authorities: HashMap<_, Vec<&Fact>> = HashMap::new();
+                let mut parents = HashMap::new();
+                for fact in &snapshot.facts {
+                    if matches!(
+                        fact.kind,
+                        FactKind::Namespace | FactKind::Class | FactKind::Struct | FactKind::Union
+                    ) {
+                        parents
+                            .entry(&fact.origin)
+                            .and_modify(|entry| *entry = None)
+                            .or_insert(Some(fact));
+                    }
+                    let key = (
+                        std::mem::discriminant(&fact.kind),
+                        fact.name.as_str(),
+                        &fact.spelling,
+                    );
+                    if fact.definition
+                        && matches!(fact.data, FactData::Enum { .. })
+                        && snapshot.root_owners.contains_key(&fact.origin)
+                        && excluded_groups.contains(&key)
+                    {
+                        authorities.entry(key).or_default().push(fact);
+                    }
+                }
+                #[cfg(test)]
+                {
+                    exclusion_index_sizes =
+                        (authorities.values().map(Vec::len).sum(), parents.len());
+                }
+                for fact in &snapshot.facts {
+                    if !fact.definition
+                        || !matches!(fact.data, FactData::Enum { .. })
+                        || snapshot.root_owners.contains_key(&fact.origin)
+                    {
+                        continue;
+                    }
+                    let Some(choices) = authorities.get(&(
+                        std::mem::discriminant(&fact.kind),
+                        fact.name.as_str(),
+                        &fact.spelling,
+                    )) else {
+                        continue;
+                    };
+                    let context = Self::raw_enum_parent_context(fact, &parents, snapshot);
+                    let conflicting = choices.len() != 1
+                        || context.is_none()
+                        || choices.iter().any(|candidate| {
+                            !same_source_declaration(fact, candidate)
+                                || match (
+                                    &context,
+                                    Self::raw_enum_parent_context(candidate, &parents, snapshot),
+                                ) {
+                                    (Some(left), Some(right)) => {
+                                        left.len() != right.len()
+                                            || left.iter().zip(&right).any(|(left, right)| {
+                                                !same_source_declaration(left, right)
+                                            })
+                                    }
+                                    _ => true,
+                                }
+                        });
+                    excluded_native_dependencies.insert(
+                        fact.origin.clone(),
+                        ExcludedNativeDependency {
+                            authorities: choices.iter().map(|fact| fact.origin.clone()).collect(),
+                            conflicting,
+                        },
+                    );
+                }
+            }
+        }
         let facts = snapshot
             .facts
             .iter()
@@ -7309,7 +7465,48 @@ impl PlanningSourceNames {
                 .or_default()
                 .insert(constant.name.clone());
         }
-        Self { facts, constants }
+        Self {
+            facts,
+            constants,
+            excluded_native_dependencies,
+            #[cfg(test)]
+            exclusion_index_sizes,
+        }
+    }
+
+    fn raw_enum_parent_context<'a>(
+        fact: &Fact,
+        parents: &HashMap<&Origin, Option<&'a Fact>>,
+        snapshot: &Snapshot,
+    ) -> Option<Vec<&'a Fact>> {
+        let mut result = Vec::new();
+        let mut seen = HashSet::new();
+        let mut parent = fact.parent.as_ref();
+        while let Some(origin) = parent {
+            if origin.tu != fact.origin.tu || !seen.insert(origin) {
+                return None;
+            }
+            let current = parents.get(origin).copied().flatten()?;
+            if current.name.is_empty()
+                || current.spelling.file.is_empty()
+                || snapshot.observation_only_class_origins.contains(origin)
+                || snapshot.class_canonical_anchors.contains_key(origin)
+                || snapshot
+                    .class_canonical_origins
+                    .get(origin)
+                    .is_some_and(|canonical| {
+                        matches!(canonical, CanonicalRecord::CompilerGenerated { .. })
+                            || snapshot
+                                .class_canonical_anchors
+                                .contains_key(canonical.anchor())
+                    })
+            {
+                return None;
+            }
+            result.push(current);
+            parent = current.parent.as_ref();
+        }
+        Some(result)
     }
 
     fn fact_name<'a>(&'a self, fact: &'a Fact) -> &'a str {
