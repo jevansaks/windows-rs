@@ -13,6 +13,8 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         sal_constant_sizes: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
         class_canonical_origins: BTreeMap::new(),
+        class_canonical_anchors: BTreeMap::new(),
+        observation_only_class_origins: BTreeSet::new(),
         pointer_callback_aliases: BTreeSet::new(),
         pointer_only_class_layouts: BTreeMap::new(),
         embeddable_class_layouts: BTreeSet::new(),

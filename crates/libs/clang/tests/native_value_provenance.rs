@@ -351,7 +351,7 @@ fn native_values_preserve_physical_sources_when_original_roots_are_folded() {
 }
 
 #[test]
-fn recovered_midl_values_keep_their_native_enum_fact() {
+fn named_midl_values_keep_their_native_enum_fact() {
     helpers::ensure_libclang();
     let snapshot = extract(
         [Input::new(
@@ -362,12 +362,40 @@ fn recovered_midl_values_keep_their_native_enum_fact() {
     )
     .unwrap();
     assert!(snapshot.value_declarations().is_empty());
-    assert_eq!(snapshot.constants().len(), 2);
+    assert!(snapshot.constants().is_empty());
     check_origins(&snapshot);
-    for constant in snapshot.constants() {
-        assert_eq!(constant.root, constant.definition);
-        let source = source_key(snapshot.facts(), &[], &constant.root).unwrap();
-        assert_eq!(source.kind, SourceKind::Fact(FactKind::Enum));
-        assert_eq!(source.name, "__MIDL_generated_values");
-    }
+    let enumerations: Vec<_> = snapshot
+        .facts()
+        .iter()
+        .filter(|fact| fact.name == "__MIDL_generated_values")
+        .collect();
+    let [enumeration] = enumerations.as_slice() else {
+        panic!("native enum must have one physical fact: {enumerations:?}");
+    };
+    assert!(enumeration.definition && enumeration.main_file && enumeration.root);
+    assert!(!enumeration.system);
+    let source = source_key(snapshot.facts(), &[], &enumeration.origin).unwrap();
+    assert_eq!(source.kind, SourceKind::Fact(FactKind::Enum));
+    assert_eq!(source.name, "__MIDL_generated_values");
+    assert_eq!(source.spelling.file, "midl-value.cpp");
+    assert_eq!(source.spelling, source.expansion);
+    assert!(source.parent.is_none());
+    let FactData::Enum {
+        repr,
+        variants,
+        fixed,
+        scoped,
+    } = &enumeration.data
+    else {
+        panic!("{enumeration:?}");
+    };
+    assert_eq!(*repr, Scalar::I32);
+    assert!(!fixed && !scoped);
+    assert_eq!(
+        variants
+            .iter()
+            .map(|variant| (variant.name.as_str(), variant.value))
+            .collect::<Vec<_>>(),
+        [("MIDL_NONE", 0), ("MIDL_ONE", 1)]
+    );
 }

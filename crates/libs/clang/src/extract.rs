@@ -220,6 +220,8 @@ fn extract_impl(
         sal_constant_sizes,
         declaration_guids,
         class_canonical_origins,
+        class_canonical_anchors,
+        observation_only_class_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
         embeddable_class_layouts,
@@ -344,7 +346,7 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
-    recover_midl_artifacts(&inputs, &mut facts, &mut constants);
+    recover_midl_artifacts(&inputs, &mut facts, &constants);
     if timing {
         eprintln!(
             "windows-clang timing phase=midl-recovery target={} elapsed_ms={:.3}",
@@ -441,6 +443,8 @@ fn extract_impl(
         sal_constant_sizes,
         declaration_guids,
         class_canonical_origins,
+        class_canonical_anchors,
+        observation_only_class_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
         embeddable_class_layouts,
@@ -824,118 +828,9 @@ fn identify_declare_handles(
     result.into_iter().collect()
 }
 
-fn recover_midl_artifacts(inputs: &[Input], facts: &mut [Fact], constants: &mut Vec<Constant>) {
+fn recover_midl_artifacts(inputs: &[Input], facts: &mut [Fact], constants: &[Constant]) {
     let mut sources = HashMap::new();
     let reference_counts = reference_counts(facts, constants);
-    let mut named_typedefs = HashSet::new();
-    let mut typedefs_by_file: HashMap<(String, String), Vec<usize>> = HashMap::new();
-    for (index, fact) in facts.iter().enumerate() {
-        let FactData::Typedef { target } = &fact.data else {
-            continue;
-        };
-        if let TypeRef::Named { name, declaration } = target {
-            named_typedefs.insert((fact.origin.tu.clone(), name.clone(), declaration.clone()));
-        }
-        if fact.root {
-            typedefs_by_file
-                .entry((fact.origin.tu.clone(), fact.spelling.file.clone()))
-                .or_default()
-                .push(index);
-        }
-    }
-    for typedefs in typedefs_by_file.values_mut() {
-        typedefs.sort_by_key(|index| facts[*index].spelling.offset);
-    }
-
-    let mut enum_recoveries = vec![];
-    for (enum_index, enum_fact) in facts.iter().enumerate() {
-        let FactData::Enum { repr, variants, .. } = &enum_fact.data else {
-            continue;
-        };
-        let generated_name = midl_generated_name(&enum_fact.name);
-        let private_alias_name = midl_private_alias_name(&enum_fact.name);
-        if !enum_fact.root || (!generated_name && private_alias_name.is_none()) {
-            continue;
-        }
-        if named_typedefs.contains(&(
-            enum_fact.origin.tu.clone(),
-            enum_fact.name.clone(),
-            enum_fact.spelling.clone(),
-        )) {
-            continue;
-        }
-        if reference_counts
-            .get(&(enum_fact.origin.tu.clone(), enum_fact.name.clone()))
-            .copied()
-            .unwrap_or_default()
-            != 0
-        {
-            continue;
-        }
-        let adjacent_alias = typedefs_by_file
-            .get(&(enum_fact.origin.tu.clone(), enum_fact.spelling.file.clone()))
-            .and_then(|typedefs| {
-                typedefs.iter().find_map(|index| {
-                    if facts[*index].spelling.offset <= enum_fact.spelling.offset {
-                        return None;
-                    }
-                    scalar_type(&facts[*index].data, &facts[*index].origin.tu, facts)
-                        .map(|scalar| (*index, scalar))
-                })
-            })
-            .and_then(|(index, scalar)| {
-                let fact = &facts[index];
-                (adjacent_midl_enum_alias(inputs, &mut sources, enum_fact, fact)
-                    && (generated_name
-                        || private_alias_name.is_some_and(|name| {
-                            name == fact.name
-                                && midl_generated_header(inputs, &sources, &enum_fact.spelling.file)
-                        }))
-                    && variants.iter().all(|variant| {
-                        value_for_midl_scalar(variant.value, *repr, scalar).is_some()
-                    }))
-                .then_some(index)
-            });
-        if !generated_name && adjacent_alias.is_none() {
-            continue;
-        }
-        enum_recoveries.push((
-            enum_index,
-            adjacent_alias,
-            *repr,
-            variants.clone(),
-            enum_fact.origin.clone(),
-            enum_fact.spelling.clone(),
-        ));
-    }
-    for (enum_index, alias_index, enum_repr, variants, origin, spelling) in enum_recoveries {
-        let (ty, scalar) = if let Some(alias_index) = alias_index {
-            (
-                TypeRef::Named {
-                    name: facts[alias_index].name.clone(),
-                    declaration: facts[alias_index].spelling.clone(),
-                },
-                scalar_type(
-                    &facts[alias_index].data,
-                    &facts[alias_index].origin.tu,
-                    facts,
-                )
-                .unwrap(),
-            )
-        } else {
-            (TypeRef::Scalar(enum_repr), enum_repr)
-        };
-        facts[enum_index].root = false;
-        constants.extend(variants.into_iter().map(|variant| Constant {
-            root: origin.clone(),
-            definition: origin.clone(),
-            spelling: spelling.clone(),
-            name: variant.name,
-            ty: ty.clone(),
-            value: value_for_midl_scalar(variant.value, enum_repr, scalar).unwrap(),
-        }));
-    }
-
     let mut opaque_recoveries = vec![];
     for (alias_index, alias_fact) in facts.iter().enumerate() {
         let FactData::Typedef {
@@ -992,25 +887,6 @@ fn midl_generated_name(name: &str) -> bool {
     name.starts_with("__MIDL")
 }
 
-fn midl_private_alias_name(name: &str) -> Option<&str> {
-    name.strip_prefix('_')
-        .filter(|name| !name.is_empty() && !name.starts_with('_'))
-}
-
-fn midl_generated_header(inputs: &[Input], sources: &HashMap<String, String>, file: &str) -> bool {
-    inputs
-        .iter()
-        .find(|input| input.name == file)
-        .map(|input| input.source.as_str())
-        .or_else(|| sources.get(file).map(String::as_str))
-        .is_some_and(|source| {
-            source
-                .lines()
-                .take(10)
-                .any(|line| line.contains("File created by MIDL compiler version"))
-        })
-}
-
 fn input_segment(
     inputs: &[Input],
     sources: &mut HashMap<String, String>,
@@ -1038,34 +914,6 @@ fn input_segment(
         .map(str::to_string)
 }
 
-fn adjacent_midl_enum_alias(
-    inputs: &[Input],
-    sources: &mut HashMap<String, String>,
-    enum_fact: &Fact,
-    alias_fact: &Fact,
-) -> bool {
-    let Some(source) = input_segment(inputs, sources, &enum_fact.spelling, &alias_fact.spelling)
-    else {
-        return false;
-    };
-    let compact: String = source
-        .chars()
-        .filter(|character| !character.is_whitespace())
-        .collect();
-    let declaration = compact
-        .strip_prefix(&enum_fact.name)
-        .or_else(|| compact.strip_prefix(&format!("enum{}", enum_fact.name)));
-    let Some(declaration) = declaration else {
-        return false;
-    };
-    declaration.starts_with('{')
-        && declaration
-            .rfind('}')
-            .is_some_and(|end| declaration[end..].starts_with("};typedef"))
-        && declaration.matches('{').count() == 1
-        && declaration.matches('}').count() == 1
-}
-
 fn midl_record_pointer_alias(
     inputs: &[Input],
     sources: &mut HashMap<String, String>,
@@ -1087,85 +935,6 @@ fn midl_record_pointer_alias(
             && declaration.ends_with("}*")
             && declaration.matches('{').count() == 1
             && declaration.matches('}').count() == 1
-    })
-}
-
-fn scalar_type(data: &FactData, tu: &str, facts: &[Fact]) -> Option<Scalar> {
-    fn resolve(
-        ty: &TypeRef,
-        tu: &str,
-        facts: &[Fact],
-        seen: &mut HashSet<Location>,
-    ) -> Option<Scalar> {
-        match ty {
-            TypeRef::Scalar(scalar) => Some(*scalar),
-            TypeRef::Named { declaration, .. } if seen.insert(declaration.clone()) => {
-                let fact = facts
-                    .iter()
-                    .find(|fact| fact.origin.tu == tu && fact.spelling == *declaration)?;
-                match &fact.data {
-                    FactData::Typedef { target } => resolve(target, tu, facts, seen),
-                    FactData::Enum { repr, .. } => Some(*repr),
-                    _ => None,
-                }
-            }
-            _ => None,
-        }
-    }
-
-    let FactData::Typedef { target } = data else {
-        return None;
-    };
-    match resolve(target, tu, facts, &mut HashSet::new())? {
-        scalar @ (Scalar::I8
-        | Scalar::U8
-        | Scalar::I16
-        | Scalar::U16
-        | Scalar::I32
-        | Scalar::U32
-        | Scalar::I64
-        | Scalar::U64) => Some(scalar),
-        Scalar::Bool | Scalar::F32 | Scalar::F64 => None,
-    }
-}
-
-fn value_for_scalar(value: i64, scalar: Scalar) -> Option<Value> {
-    match scalar {
-        Scalar::U8 => u8::try_from(value)
-            .ok()
-            .map(|value| Value::Unsigned(u64::from(value))),
-        Scalar::U16 => u16::try_from(value)
-            .ok()
-            .map(|value| Value::Unsigned(u64::from(value))),
-        Scalar::U32 => u32::try_from(value)
-            .ok()
-            .map(|value| Value::Unsigned(u64::from(value))),
-        Scalar::U64 => u64::try_from(value).ok().map(Value::Unsigned),
-        Scalar::I8 => i8::try_from(value)
-            .ok()
-            .map(|value| Value::Signed(i64::from(value))),
-        Scalar::I16 => i16::try_from(value)
-            .ok()
-            .map(|value| Value::Signed(i64::from(value))),
-        Scalar::I32 => i32::try_from(value)
-            .ok()
-            .map(|value| Value::Signed(i64::from(value))),
-        Scalar::I64 => Some(Value::Signed(value)),
-        Scalar::Bool | Scalar::F32 | Scalar::F64 => None,
-    }
-}
-
-fn value_for_midl_scalar(value: i64, source: Scalar, target: Scalar) -> Option<Value> {
-    value_for_scalar(value, target).or_else(|| match (source, target) {
-        (Scalar::I8, Scalar::U8) => Some(Value::Unsigned(u64::from(value as u8))),
-        (Scalar::I16, Scalar::U16) => Some(Value::Unsigned(u64::from(value as u16))),
-        (Scalar::I32, Scalar::U32) => Some(Value::Unsigned(u64::from(value as u32))),
-        (Scalar::I64, Scalar::U64) => Some(Value::Unsigned(value as u64)),
-        (Scalar::U8, Scalar::I8) => Some(Value::Signed(i64::from(value as i8))),
-        (Scalar::U16, Scalar::I16) => Some(Value::Signed(i64::from(value as i16))),
-        (Scalar::U32, Scalar::I32) => Some(Value::Signed(i64::from(value as i32))),
-        (Scalar::U64, Scalar::I64) => Some(Value::Signed(value)),
-        _ => None,
     })
 }
 
@@ -1714,6 +1483,8 @@ impl TranslationUnit {
             annotations: &mut *output.annotations,
             declaration_guids: &mut *output.declaration_guids,
             class_canonical_origins: &mut *output.class_canonical_origins,
+            class_canonical_anchors: &mut *output.class_canonical_anchors,
+            observation_only_class_origins: &mut *output.observation_only_class_origins,
             pointer_callback_aliases: &mut *output.pointer_callback_aliases,
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
@@ -1734,6 +1505,7 @@ impl TranslationUnit {
         if let Some(error) = traversal.error.take() {
             return Err(error);
         }
+        observe_specialization_anchors(self.0, &mut traversal)?;
         bind_class_origins(
             self.0,
             &traversal.pending_classes,
@@ -1838,6 +1610,8 @@ struct Traversal<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     class_canonical_origins: &'a mut BTreeMap<Origin, CanonicalRecord>,
+    class_canonical_anchors: &'a mut BTreeMap<Origin, ClassCanonicalAnchor>,
+    observation_only_class_origins: &'a mut BTreeSet<Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1854,6 +1628,8 @@ struct ExtractionState<'a> {
     sal_constant_sizes: &'a mut SalConstantSizes,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
     class_canonical_origins: &'a mut BTreeMap<Origin, CanonicalRecord>,
+    class_canonical_anchors: &'a mut BTreeMap<Origin, ClassCanonicalAnchor>,
+    observation_only_class_origins: &'a mut BTreeSet<Origin>,
     pointer_callback_aliases: &'a mut BTreeSet<Origin>,
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
@@ -1869,6 +1645,8 @@ struct ExtractionBuffers {
     sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
     class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
+    class_canonical_anchors: BTreeMap<Origin, ClassCanonicalAnchor>,
+    observation_only_class_origins: BTreeSet<Origin>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
@@ -1885,6 +1663,8 @@ impl ExtractionBuffers {
             sal_constant_sizes: &mut self.sal_constant_sizes,
             declaration_guids: &mut self.declaration_guids,
             class_canonical_origins: &mut self.class_canonical_origins,
+            class_canonical_anchors: &mut self.class_canonical_anchors,
+            observation_only_class_origins: &mut self.observation_only_class_origins,
             pointer_callback_aliases: &mut self.pointer_callback_aliases,
             pointer_only_class_layouts: &mut self.pointer_only_class_layouts,
             embeddable_class_layouts: &mut self.embeddable_class_layouts,
@@ -1903,6 +1683,10 @@ impl ExtractionBuffers {
         self.declaration_guids.append(&mut other.declaration_guids);
         self.class_canonical_origins
             .append(&mut other.class_canonical_origins);
+        self.class_canonical_anchors
+            .append(&mut other.class_canonical_anchors);
+        self.observation_only_class_origins
+            .append(&mut other.observation_only_class_origins);
         self.pointer_callback_aliases
             .append(&mut other.pointer_callback_aliases);
         self.pointer_only_class_layouts
@@ -2370,10 +2154,12 @@ mod owned_tests {
         let mut sizes = BTreeMap::new();
         let mut guids = BTreeMap::new();
         let mut class_origins = BTreeMap::new();
+        let mut class_anchors = BTreeMap::new();
         let mut aliases = BTreeSet::new();
         let mut layouts = BTreeMap::new();
         let mut embeddable = BTreeSet::new();
         let mut flags = BTreeSet::new();
+        let mut observation_only = BTreeSet::new();
         let mut input = Input::new(
             "disposed.hpp",
             "#define TEXT \"payload\"\n#define ALIAS TEXT\nstruct Deferred { int (*call)(int); };\n",
@@ -2396,6 +2182,8 @@ mod owned_tests {
                 sal_constant_sizes: &mut sizes,
                 declaration_guids: &mut guids,
                 class_canonical_origins: &mut class_origins,
+                class_canonical_anchors: &mut class_anchors,
+                observation_only_class_origins: &mut observation_only,
                 pointer_callback_aliases: &mut aliases,
                 pointer_only_class_layouts: &mut layouts,
                 embeddable_class_layouts: &mut embeddable,
@@ -2881,7 +2669,7 @@ fn extract_children(cursor: CXCursor, parent: Option<&Origin>, traversal: &mut T
     ) -> CXChildVisitResult {
         let visit = unsafe { &mut *(data as *mut Visit<'_, '_, '_>) };
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            extract_child(cursor, parent_cursor, visit.parent, visit.traversal);
+            extract_child(cursor, parent_cursor, visit.parent, visit.traversal, false);
         })) {
             Ok(()) if visit.traversal.error.is_none() => CXChildVisit_Continue,
             Ok(()) => CXChildVisit_Break,
@@ -2910,6 +2698,7 @@ fn extract_child(
     cursor_parent: CXCursor,
     parent: Option<&Origin>,
     traversal: &mut Traversal<'_>,
+    identity_only: bool,
 ) {
     if let Some((spelling, _, _, _)) = cursor_locations(child)
         && traversal.is_source_excluded(&spelling.file)
@@ -2919,7 +2708,61 @@ fn extract_child(
     let local = traversal.next;
     traversal.next += 1;
     let kind = unsafe { clang_getCursorKind(child) };
-    if kind == CXCursor_CompoundStmt {
+    if kind == CXCursor_TypeRef
+        && unsafe { clang_getCursorKind(cursor_parent) } == CXCursor_FriendDecl
+    {
+        let declaration = unsafe { clang_getCursorReferenced(child) };
+        let declaration_kind = unsafe { clang_getCursorKind(declaration) };
+        if matches!(declaration_kind, CXCursor_ClassDecl | CXCursor_StructDecl) {
+            if unsafe { clang_Cursor_getTranslationUnit(declaration) }
+                != unsafe { clang_Cursor_getTranslationUnit(child) }
+            {
+                traversal.error = Some(Error("foreign native friend record observation".into()));
+                return;
+            }
+            let hash = unsafe { clang_hashCursor(declaration) };
+            let observed = traversal.seen.get(&hash).is_some_and(|bucket| {
+                bucket.iter().any(|(candidate, _)| unsafe {
+                    clang_equalCursors(declaration, *candidate) != 0
+                })
+            });
+            if !observed {
+                let semantic = unsafe { clang_getCursorSemanticParent(declaration) };
+                let semantic_hash = unsafe { clang_hashCursor(semantic) };
+                let semantic_origin = traversal
+                    .seen
+                    .get(&semantic_hash)
+                    .into_iter()
+                    .flatten()
+                    .find(|(candidate, _)| unsafe { clang_equalCursors(semantic, *candidate) != 0 })
+                    .map(|(_, origin)| origin.clone());
+                if semantic_origin.is_none()
+                    && unsafe { clang_getCursorKind(semantic) } != CXCursor_TranslationUnit
+                {
+                    traversal.error = Some(Error(
+                        "missing native friend semantic parent observation".into(),
+                    ));
+                    return;
+                }
+                extract_child(
+                    declaration,
+                    unsafe { clang_getCursorLexicalParent(declaration) },
+                    semantic_origin.as_ref(),
+                    traversal,
+                    true,
+                );
+                if traversal.error.is_some() {
+                    return;
+                }
+            }
+        }
+    }
+    if matches!(
+        kind,
+        CXCursor_CompoundStmt
+            | CXCursor_ClassTemplate
+            | CXCursor_ClassTemplatePartialSpecialization
+    ) {
         return;
     }
     if kind == CXCursor_AnnotateAttr {
@@ -3109,17 +2952,31 @@ fn extract_child(
             {
                 child_parent = Some(origin.clone());
                 repeated = true;
+                if !identity_only && traversal.observation_only_class_origins.remove(origin) {
+                    let fact = traversal
+                        .facts
+                        .iter_mut()
+                        .find(|fact| fact.origin == *origin)
+                        .unwrap();
+                    fact.root = traversal.paths.is_root(&fact.spelling.file);
+                    repeated = false;
+                }
                 if clang_flag_enum {
                     traversal.clang_flag_enums.insert(origin.clone());
                 }
             } else if let Some((spelling, expansion, _, system)) = cursor_locations(child) {
                 let main_file = spelling.file == traversal.tu;
-                let root = traversal.paths.is_root(&spelling.file);
+                let root = !identity_only && traversal.paths.is_root(&spelling.file);
                 let origin = Origin {
                     tu: traversal.tu.to_string(),
                     local,
                 };
                 seen.push((child, origin.clone()));
+                if identity_only {
+                    traversal
+                        .observation_only_class_origins
+                        .insert(origin.clone());
+                }
                 child_parent = Some(origin.clone());
                 let annotated_function =
                     fact_kind == FactKind::Function && has_win32metadata_annotation(child);
@@ -3237,7 +3094,7 @@ fn extract_child(
         }
     }
 
-    if !repeated {
+    if !repeated && !identity_only {
         extract_children(child, child_parent.as_ref().or(parent), traversal);
     }
 }
@@ -3253,6 +3110,119 @@ fn enum_has_flag_attribute(cursor: CXCursor) -> bool {
     cursor_children(cursor)
         .into_iter()
         .any(|child| unsafe { clang_getCursorKind(child) } == CXCursor_FlagEnum)
+}
+
+fn observe_specialization_anchors(
+    tu: CXTranslationUnit,
+    traversal: &mut Traversal<'_>,
+) -> Result<(), Error> {
+    for index in 0..traversal.pending_classes.len() {
+        let record = traversal.pending_classes[index].1;
+        let canonical = unsafe { clang_getCanonicalCursor(record) };
+        let hash = unsafe { clang_hashCursor(canonical) };
+        if traversal.seen.get(&hash).is_some_and(|bucket| {
+            bucket
+                .iter()
+                .any(|(cursor, _)| unsafe { clang_equalCursors(*cursor, canonical) } != 0)
+        }) {
+            continue;
+        }
+        let template = unsafe { clang_getSpecializedCursorTemplate(record) };
+        let canonical_template = unsafe { clang_getSpecializedCursorTemplate(canonical) };
+        if unsafe {
+            clang_Cursor_isNull(record) != 0
+                || clang_Cursor_isNull(canonical) != 0
+                || clang_Cursor_isNull(template) != 0
+                || clang_Cursor_isNull(canonical_template) != 0
+                || clang_Cursor_getTranslationUnit(record) != tu
+                || clang_Cursor_getTranslationUnit(canonical) != tu
+                || clang_Cursor_getTranslationUnit(template) != tu
+                || clang_Cursor_getTranslationUnit(canonical_template) != tu
+                || !matches!(
+                    clang_getCursorKind(record),
+                    CXCursor_ClassDecl | CXCursor_StructDecl
+                )
+                || !matches!(
+                    clang_getCursorKind(canonical),
+                    CXCursor_ClassDecl | CXCursor_StructDecl
+                )
+                || !matches!(
+                    clang_getCursorKind(template),
+                    CXCursor_ClassTemplate | CXCursor_ClassTemplatePartialSpecialization
+                )
+                || clang_equalCursors(template, canonical_template) == 0
+                || clang_isCursorDefinition(canonical) != 0
+                || clang_equalCursors(clang_getCanonicalCursor(canonical), canonical) == 0
+        } {
+            continue;
+        }
+        let Some((spelling, expansion, main_file, system)) = cursor_locations(canonical) else {
+            continue;
+        };
+        let Some((template_spelling, template_expansion, _, _)) = cursor_locations(template) else {
+            continue;
+        };
+        if traversal.is_source_excluded(&spelling.file)
+            || traversal.is_source_excluded(&template_spelling.file)
+        {
+            return Err(Error(
+                "excluded native class canonical specialization source".into(),
+            ));
+        }
+        let semantic = unsafe { clang_getCursorSemanticParent(canonical) };
+        let parent = traversal
+            .seen
+            .get(&unsafe { clang_hashCursor(semantic) })
+            .into_iter()
+            .flatten()
+            .find(|(cursor, _)| unsafe { clang_equalCursors(*cursor, semantic) } != 0)
+            .map(|(_, origin)| origin.clone());
+        if parent.is_none() && unsafe { clang_getCursorKind(semantic) } != CXCursor_TranslationUnit
+        {
+            return Err(Error(
+                "missing native canonical specialization semantic parent".into(),
+            ));
+        }
+        let origin = Origin {
+            tu: traversal.tu.to_string(),
+            local: traversal.next,
+        };
+        traversal.next += 1;
+        let anchor = ClassCanonicalAnchor {
+            kind: match unsafe { clang_getCursorKind(canonical) } {
+                CXCursor_ClassDecl => CanonicalRecordKind::Class,
+                CXCursor_StructDecl => CanonicalRecordKind::Struct,
+                _ => unreachable!(),
+            },
+            parent,
+            name: cx_string(unsafe { clang_getCursorSpelling(canonical) }),
+            spelling,
+            expansion,
+            main_file,
+            system,
+            template_name: cx_string(unsafe { clang_getCursorSpelling(template) }),
+            template_spelling,
+            template_expansion,
+            template_partial: unsafe { clang_getCursorKind(template) }
+                == CXCursor_ClassTemplatePartialSpecialization,
+        };
+        if traversal
+            .class_canonical_anchors
+            .insert(origin.clone(), anchor)
+            .is_some()
+        {
+            return Err(Error(
+                "conflicting native class canonical anchor origin".into(),
+            ));
+        }
+        traversal
+            .seen
+            .entry(hash)
+            .or_default()
+            .push((canonical, origin.clone()));
+        traversal.pending_classes.push((origin, canonical));
+    }
+    Ok(())
 }
 
 fn bind_class_origins(
@@ -3303,9 +3273,78 @@ fn bind_class_origins(
             || source_location(location, clang_getExpansionLocation).is_some();
         let identity = if has_source {
             CanonicalRecord::Source(matched.cloned().ok_or_else(|| {
+                let raw_source = |location, get: LocationFn| unsafe {
+                    let mut file = std::ptr::null_mut();
+                    let mut line = 0;
+                    let mut column = 0;
+                    let mut offset = 0;
+                    get(location, &mut file, &mut line, &mut column, &mut offset);
+                    (
+                        (!file.is_null()).then(|| cx_string(clang_getFileName(file))),
+                        line,
+                        column,
+                        offset,
+                    )
+                };
+                let record_location = unsafe { clang_getCursorLocation(*cursor) };
+                let record_name = cx_string(unsafe { clang_getCursorSpelling(*cursor) });
+                let canonical_name = cx_string(unsafe { clang_getCursorSpelling(canonical) });
+                let bucket_equality: Vec<_> = seen
+                    .get(&hash)
+                    .into_iter()
+                    .flatten()
+                    .map(|(candidate, candidate_origin)| unsafe {
+                        (
+                            candidate_origin,
+                            clang_hashCursor(*candidate),
+                            clang_equalCursors(canonical, *candidate),
+                            clang_equalCursors(*cursor, *candidate),
+                        )
+                    })
+                    .collect();
+                let all_exact_seen_origins: Vec<_> = seen
+                    .values()
+                    .flatten()
+                    .filter_map(|(candidate, candidate_origin)| unsafe {
+                        (clang_equalCursors(canonical, *candidate) != 0)
+                            .then(|| (candidate_origin, clang_hashCursor(*candidate)))
+                    })
+                    .collect();
                 Error(format!(
-                    "missing exact native class canonical origin for {}",
-                    super::origin(origin)
+                    "missing exact native class canonical origin for {}: \
+                     record_name={record_name:?} record_kind={} record_hash={} \
+                     record_spelling={:?} record_expansion={:?} \
+                     record_name_empty={} record_anonymous={} record_definition={} \
+                     record_locations_available={} record_main_file={} record_system={} \
+                     canonical_name={canonical_name:?} canonical_kind={} canonical_hash={hash} \
+                     canonical_spelling={:?} canonical_expansion={:?} \
+                     canonical_name_empty={} canonical_anonymous={} canonical_definition={} \
+                     canonical_locations_available={} canonical_main_file={} canonical_system={} \
+                     canonical_has_source={has_source} bucket_count={} \
+                     canonical_equal_record={} bucket_equality={bucket_equality:?} \
+                     all_exact_seen_origins={all_exact_seen_origins:?}",
+                    super::origin(origin),
+                    unsafe { clang_getCursorKind(*cursor) },
+                    unsafe { clang_hashCursor(*cursor) },
+                    raw_source(record_location, clang_getSpellingLocation),
+                    raw_source(record_location, clang_getExpansionLocation),
+                    record_name.is_empty(),
+                    unsafe { clang_Cursor_isAnonymous(*cursor) },
+                    unsafe { clang_isCursorDefinition(*cursor) },
+                    cursor_locations(*cursor).is_some(),
+                    unsafe { clang_Location_isFromMainFile(record_location) },
+                    unsafe { clang_Location_isInSystemHeader(record_location) },
+                    unsafe { clang_getCursorKind(canonical) },
+                    raw_source(location, clang_getSpellingLocation),
+                    raw_source(location, clang_getExpansionLocation),
+                    canonical_name.is_empty(),
+                    unsafe { clang_Cursor_isAnonymous(canonical) },
+                    unsafe { clang_isCursorDefinition(canonical) },
+                    cursor_locations(canonical).is_some(),
+                    unsafe { clang_Location_isFromMainFile(location) },
+                    unsafe { clang_Location_isInSystemHeader(location) },
+                    seen.get(&hash).map_or(0, Vec::len),
+                    unsafe { clang_equalCursors(canonical, *cursor) },
                 ))
             })?)
         } else {

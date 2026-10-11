@@ -285,6 +285,8 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         sal_constant_sizes,
         declaration_guids,
         class_canonical_origins,
+        class_canonical_anchors,
+        observation_only_class_origins,
         pointer_callback_aliases,
         pointer_only_class_layouts,
         embeddable_class_layouts,
@@ -358,6 +360,19 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         bytes.origin(origin);
         bytes.origin(canonical.anchor());
     }
+    bytes.map::<Origin, ClassCanonicalAnchor>(class_canonical_anchors.len());
+    for (origin, anchor) in class_canonical_anchors {
+        bytes.origin(origin);
+        if let Some(parent) = &anchor.parent {
+            bytes.origin(parent);
+        }
+        bytes.string(&anchor.name);
+        bytes.location(&anchor.spelling);
+        bytes.location(&anchor.expansion);
+        bytes.string(&anchor.template_name);
+        bytes.location(&anchor.template_spelling);
+        bytes.location(&anchor.template_expansion);
+    }
     let bytes = receipt.category("layouts");
     bytes.map::<Origin, FactData>(pointer_only_class_layouts.len());
     for (origin, data) in pointer_only_class_layouts {
@@ -366,6 +381,7 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
     }
     let bytes = receipt.category("origin_sets");
     for origins in [
+        observation_only_class_origins,
         pointer_callback_aliases,
         embeddable_class_layouts,
         clang_flag_enums,

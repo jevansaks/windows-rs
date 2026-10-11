@@ -40,13 +40,19 @@ Supported definitions and non-external functions retain typed native signatures 
 `FactData::NonEmittableFunction` without becoming imports. Native indexing recovers each declaration's
 definition status under the existing body-skipping parse; it does not validate body semantics.
 Unsupported signatures remain visible through `Snapshot::unsupported`.
+Traversal does not enter class templates or partial specializations. A class observed only through
+a friend declaration retains exact native identity but does not become an emission root; an ordinary
+declaration of that native class keeps its normal eligibility.
+Sourced canonical specialization anchors retain private identity evidence even when native
+traversal does not visit them. They are not authored declarations, layouts, or emission roots.
 
 Native scalar `const` and `constexpr` declarations retain their source names, scalar types, and
 annotations when Clang can evaluate their initializers. Root selection also applies to these
 constants; mutable and unevaluable declarations are not emitted as constants.
 `Snapshot::value_declarations` exposes the original compiler cursor's physical source evidence for
 native variables and anonymous enums whose constant origins have no metadata fact. Anonymous enums
-remain bags of constants; macros and recovered MIDL constants retain their existing fact evidence.
+remain bags of constants; macros retain their existing fact evidence. Named enums, including
+MIDL-generated names, keep their native types, values, aliases, and scopedness.
 Generated field callbacks reuse a nominal name for the same physical owner and typed nested field
 route across translation units. Each native observation keeps its own origin and full signature;
 distinct routes stay distinct, and incompatible signatures remain emission errors.

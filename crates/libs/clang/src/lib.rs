@@ -1363,6 +1363,21 @@ impl CanonicalRecord {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ClassCanonicalAnchor {
+    kind: CanonicalRecordKind,
+    parent: Option<Origin>,
+    name: String,
+    spelling: Location,
+    expansion: Location,
+    main_file: bool,
+    system: bool,
+    template_name: String,
+    template_spelling: Location,
+    template_expansion: Location,
+    template_partial: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     facts: Vec<Fact>,
@@ -1376,6 +1391,8 @@ pub struct Snapshot {
     sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
     class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
+    class_canonical_anchors: BTreeMap<Origin, ClassCanonicalAnchor>,
+    observation_only_class_origins: BTreeSet<Origin>,
     pointer_callback_aliases: BTreeSet<Origin>,
     pointer_only_class_layouts: BTreeMap<Origin, FactData>,
     embeddable_class_layouts: BTreeSet<Origin>,
@@ -1601,6 +1618,8 @@ impl PartialEq for Snapshot {
             && self.sal_constant_sizes == other.sal_constant_sizes
             && self.declaration_guids == other.declaration_guids
             && self.class_canonical_origins == other.class_canonical_origins
+            && self.class_canonical_anchors == other.class_canonical_anchors
+            && self.observation_only_class_origins == other.observation_only_class_origins
             && self.pointer_callback_aliases == other.pointer_callback_aliases
             && self.pointer_only_class_layouts == other.pointer_only_class_layouts
             && self.embeddable_class_layouts == other.embeddable_class_layouts
@@ -1646,6 +1665,17 @@ impl Snapshot {
                 excluded.origin == *member
                     && matches!(excluded.kind, FactKind::Class | FactKind::Struct)
             });
+            if self.class_canonical_anchors.contains_key(member) {
+                if fact.is_some()
+                    || excluded.is_some()
+                    || canonical != &CanonicalRecord::Source(member.clone())
+                {
+                    return Err(Error(
+                        "invalid private native class canonical anchor".into(),
+                    ));
+                }
+                continue;
+            }
             if fact.is_none() && excluded.is_none() {
                 return Err(Error("missing native class member".into()));
             }
@@ -1656,7 +1686,8 @@ impl Snapshot {
                 || self.partition_exclusions.iter().any(|excluded| {
                     excluded.origin == *anchor
                         && matches!(excluded.kind, FactKind::Class | FactKind::Struct)
-                });
+                })
+                || self.class_canonical_anchors.contains_key(anchor);
             if fact.is_some_and(|fact| !matches!(fact.kind, FactKind::Class | FactKind::Struct))
                 || !canonical_is_class
                 || member.tu != anchor.tu
@@ -1737,8 +1768,8 @@ impl Snapshot {
 
     /// Native scalar variables and anonymous enums backing constants without a [`Fact`].
     ///
-    /// An anonymous enum's constants share its origin. Macro and recovered MIDL constants
-    /// retain their existing fact-backed origins instead of adding duplicate evidence here.
+    /// An anonymous enum's constants share its origin. Macros and named enum variants retain
+    /// their existing fact-backed origins instead of adding duplicate evidence here.
     pub fn value_declarations(&self) -> &[ValueDeclaration] {
         &self.value_declarations
     }
@@ -2759,7 +2790,7 @@ impl Snapshot {
                 conflicts.push(conflict);
             }
             self.root_owners.insert(fact.origin.clone(), owner);
-            if !excluded {
+            if !excluded && !self.observation_only_class_origins.contains(&fact.origin) {
                 fact.root = true;
             }
         }
@@ -2865,6 +2896,32 @@ impl Snapshot {
                         ) {
                             source_tus.insert(candidate_origin.tu.clone());
                             route_targets.insert(candidate_target.clone());
+                        }
+                    }
+                    let routed_names: BTreeSet<_> = source_tus
+                        .iter()
+                        .flat_map(|tu| {
+                            associated_enum_providers
+                                .get(&(tu.clone(), name.clone()))
+                                .into_iter()
+                                .flatten()
+                        })
+                        .filter_map(|origin| {
+                            let provider = facts_by_origin[origin];
+                            let owner = self.root_owners.get(origin)?;
+                            (provider.name == *name && !owner_excludes_fact(owner, provider))
+                                .then(|| owner.remaps.get(name).unwrap_or(name).clone())
+                        })
+                        .collect();
+                    if routed_names.len() > 1 {
+                        return Err(Error(format!(
+                            "associated enum `{name}` has conflicting routed provider remaps"
+                        )));
+                    }
+                    if let Some(remap) = routed_names.first().filter(|remap| *remap != name) {
+                        for target in &route_targets {
+                            associated_enum_remaps
+                                .insert((target.clone(), name.clone()), remap.clone());
                         }
                     }
                     let providers: BTreeSet<_> = source_tus
@@ -5097,9 +5154,10 @@ impl Snapshot {
                     &rooted_interface_iids,
                 )
         };
-        let is_flat_root = |fact| {
-            is_flat_declaration(fact, &facts_by_origin, references, true)
-                || is_identified_native_interface_root(fact)
+        let is_flat_root = |fact: &Fact| {
+            !self.observation_only_class_origins.contains(&fact.origin)
+                && (is_flat_declaration(fact, &facts_by_origin, references, true)
+                    || is_identified_native_interface_root(fact))
         };
         let is_flat_dependency = |fact| {
             is_flat_declaration(fact, &facts_by_origin, references, false)
@@ -12289,6 +12347,7 @@ mod tests {
 
     mod native_class_layouts;
     mod planner_lookups;
+    mod producer_corrections;
 
     fn test_fact(
         local: u32,

@@ -2413,7 +2413,7 @@ fn unnamed_enum_fields_use_their_underlying_type() {
 }
 
 #[test]
-fn midl_anonymous_enum_constants_use_the_following_scalar_alias() {
+fn midl_named_enum_keeps_its_type_beside_a_following_scalar_alias() {
     helpers::ensure_libclang();
 
     let snapshot = extract(
@@ -2428,14 +2428,16 @@ fn midl_anonymous_enum_constants_use_the_following_scalar_alias() {
     .unwrap();
     let rdl = snapshot.emit("MidlEnum").unwrap();
 
-    assert!(!rdl.contains("__MIDL"));
+    assert!(rdl.contains("enum __MIDL_generated_flags"), "{rdl}");
     assert!(rdl.contains("type PUBLIC_FLAGS = u32;"));
-    assert!(rdl.contains("const FLAG_NONE: PUBLIC_FLAGS = 0;"));
-    assert!(rdl.contains("const FLAG_HIGH: PUBLIC_FLAGS = 256;"));
+    assert!(rdl.contains("FLAG_NONE = 0,"), "{rdl}");
+    assert!(rdl.contains("FLAG_HIGH = 256,"), "{rdl}");
+    assert!(!rdl.contains("const FLAG_"), "{rdl}");
+    assert!(snapshot.constants().is_empty());
 }
 
 #[test]
-fn midl_anonymous_enum_without_an_alias_emits_loose_constants() {
+fn midl_named_enum_without_an_alias_keeps_its_native_type() {
     helpers::ensure_libclang();
 
     let snapshot = extract(
@@ -2448,9 +2450,11 @@ fn midl_anonymous_enum_without_an_alias_emits_loose_constants() {
     .unwrap();
     let rdl = snapshot.emit("MidlLooseEnum").unwrap();
 
-    assert!(!rdl.contains("__MIDL"));
-    assert!(rdl.contains("const VALUE_NONE: i32 = 0;"));
-    assert!(rdl.contains("const VALUE_ONE: i32 = 1;"));
+    assert!(rdl.contains("enum __MIDL_generated_values"), "{rdl}");
+    assert!(rdl.contains("VALUE_NONE = 0,"), "{rdl}");
+    assert!(rdl.contains("VALUE_ONE = 1,"), "{rdl}");
+    assert!(!rdl.contains("const VALUE_"), "{rdl}");
+    assert!(snapshot.constants().is_empty());
 }
 
 #[test]
@@ -2473,7 +2477,7 @@ fn referenced_midl_enum_retains_its_generated_abi_type() {
 }
 
 #[test]
-fn midl_anonymous_enum_constants_support_direct_scalar_aliases() {
+fn midl_named_enum_and_direct_scalar_alias_remain_independent() {
     helpers::ensure_libclang();
 
     let snapshot = extract(
@@ -2487,13 +2491,16 @@ fn midl_anonymous_enum_constants_support_direct_scalar_aliases() {
     .unwrap();
     let rdl = snapshot.emit("MidlScalarEnum").unwrap();
 
-    assert!(!rdl.contains("__MIDL"));
+    assert!(rdl.contains("enum __MIDL_generated_flags"), "{rdl}");
     assert!(rdl.contains("type PUBLIC_FLAGS = u32;"));
-    assert!(rdl.contains("const FLAG_HIGH: PUBLIC_FLAGS = 256;"));
+    assert!(rdl.contains("FLAG_NONE = 0,"), "{rdl}");
+    assert!(rdl.contains("FLAG_HIGH = 256,"), "{rdl}");
+    assert!(!rdl.contains("const FLAG_"), "{rdl}");
+    assert!(snapshot.constants().is_empty());
 }
 
 #[test]
-fn midl_private_enum_constants_use_the_matching_public_alias() {
+fn midl_private_enum_keeps_native_values_and_an_independent_public_alias() {
     helpers::ensure_libclang();
 
     let snapshot = extract(
@@ -2509,10 +2516,41 @@ fn midl_private_enum_constants_use_the_matching_public_alias() {
     .unwrap();
     let rdl = snapshot.emit("MidlPrivateEnum").unwrap();
 
-    assert!(!rdl.contains("enum _PUBLIC_FLAGS"));
+    assert!(rdl.contains("enum _PUBLIC_FLAGS"), "{rdl}");
     assert!(rdl.contains("type PUBLIC_FLAGS = u32;"));
-    assert!(rdl.contains("const FLAG_NONE: PUBLIC_FLAGS = 0;"));
-    assert!(rdl.contains("const FLAG_HIGH: PUBLIC_FLAGS = 2147483648;"));
+    let enumeration = snapshot
+        .facts()
+        .iter()
+        .find(|fact| fact.name == "_PUBLIC_FLAGS")
+        .unwrap();
+    assert!(enumeration.root && enumeration.definition);
+    let FactData::Enum {
+        repr,
+        variants,
+        fixed,
+        scoped,
+    } = &enumeration.data
+    else {
+        panic!("{enumeration:?}");
+    };
+    assert!(!fixed && !scoped);
+    assert!(matches!(
+        repr,
+        windows_clang::Scalar::I32 | windows_clang::Scalar::U32
+    ));
+    assert_eq!(variants.len(), 2);
+    assert_eq!(variants[0].name, "FLAG_NONE");
+    assert_eq!(variants[0].value, 0);
+    assert_eq!(variants[1].name, "FLAG_HIGH");
+    assert_eq!(variants[1].value as u32, 0x8000_0000);
+    for variant in variants {
+        assert!(
+            rdl.contains(&format!("{} = {},", variant.name, variant.value)),
+            "{rdl}"
+        );
+    }
+    assert!(!rdl.contains("const FLAG_"), "{rdl}");
+    assert!(snapshot.constants().is_empty());
 }
 
 #[test]

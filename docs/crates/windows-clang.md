@@ -124,7 +124,23 @@ Map values distinguish `CanonicalRecord::Source` from a source-free `CompilerGen
 entity. Compiler-created groups retain their native Class/Struct kind and the first physical
 observation as an identity anchor, not a canonical source declaration or allocation definition.
 Grouping uses exact native cursor identity while the original worker is live. A source-bearing
-canonical cursor without a physical Origin remains an error.
+canonical cursor without an exact Origin remains an error unless its native specialization
+relationship proves a private canonical anchor. Such anchors receive distinct Origins in the same
+traversal allocator after ordinary declarations are observed. Native cursor equality, live-TU,
+source, nondefinition, canonical-self, and template-owner checks precede capture. Their owned
+source/semantic-parent/template evidence is separate from facts, layouts, annotations, UUID roots,
+and the authored location-keyed declaration index. Equal source locations or template owners never
+merge specialization identities. The private collection survives merging, cloning, and equality
+and is charged in the canonical diagnostic category. Missing ordinary or excluded canonical
+evidence remains fatal; this does not add template lowering or enter template implementation bodies.
+Missing-source-binding errors include the actual record and canonical cursor's source, names, kinds,
+and native equality observations without changing the binding rule.
+Friend-only class observations retain their real cursor, physical origin, and semantic parent. A
+private observation-only role prevents header coloring or UUID discovery from making them roots.
+Ordinary declarations remain eligible, including declarations that were not initial extraction
+roots. The role survives owned worker merging and cloning and is charged in the diagnostic origin-set
+category. Derived `Snapshot` debug output includes the private `observation_only_class_origins` field,
+even when empty; this is not a public marker accessor.
 `coclass_aliases` exposes GUID-value alias evidence, including every UUID-marker origin. It does not
 supply an allocation type or exempt required native type uses from validation. Native UUID conflicts
 remain errors.
@@ -134,6 +150,12 @@ cursor equality; missing or conflicting evidence is an extraction error. Synthet
 SAL-count probes do not build this index. Parsing still skips function bodies, so native body
 semantics are not validated. Traversal also skips body subtrees that Clang retains for constexpr
 evaluation, excluding their declarations from both metadata facts and native value-source evidence.
+Traversal also stops at class-template and partial-specialization owners. Ordinary class, nested,
+anonymous, and recursive-pointer declarations remain independent of this template-owner gate.
+Named enums, including generated MIDL names and private tags, retain their native enum facts, roots,
+values, aliases, and scopedness. Opaque MIDL record recovery is separate. Already-owned associated-enum
+providers keep their owner routes; matching annotations follow provider remaps, and conflicting remaps
+remain errors.
 Global constants can still use constexpr helpers in their initializers.
 
 Supported function definitions and non-external declarations retain
@@ -151,7 +173,7 @@ the same source-root selection applies to native integer and floating-point decl
 definition, root, main-file and system-header flags, and parent origin for native scalar variables
 and anonymous enums whose constant origins have no `Fact`. Capture occurs at the original AST
 cursor. Anonymous enum constants share the enum's origin; the enum does not become a metadata type.
-Macro and recovered MIDL constants keep their existing fact-backed evidence. This source collection
+Macros and named enum variants keep their existing fact-backed evidence. This source collection
 does not participate in emission or change native value types and declaration annotations.
 Synthetic callback origins start after the original traversal's allocation domain, including
 native value declarations and cursors that do not produce facts.
@@ -797,13 +819,11 @@ RDL represents them as mutable or const unmanaged pointers. Function and callbac
 references continue to use their existing parameter conversion independently of record storage.
 
 MIDL-generated headers assign `__MIDL...` tags to anonymous IDL declarations and `_NAME` backing
-enum tags to some public scalar typedefs named `NAME`. An unreferenced generated enum is emitted as
-loose constants, matching the IDL API identity. When it is followed by a scalar typedef in the
-source header, those constants use that public alias. The `_NAME` case additionally requires the
-MIDL compiler marker in the same physical header and an exact adjacent `NAME` alias. Generated
-records used only to define an opaque pointer typedef are likewise represented by the public
-pointer alias. A generated declaration referenced directly by another ABI type keeps its generated
-name and layout.
+enum tags to some public scalar typedefs named `NAME`. These native named enums retain their tags,
+underlying types, values, and scopedness even without another type referencing them. An adjacent
+scalar typedef remains independent; it does not rename the enum or change its variants' signedness.
+Generated records used only to define an opaque pointer typedef can be represented by the public
+pointer alias. A generated record referenced directly by another ABI type keeps its name and layout.
 
 Windows `DECLARE_HANDLE` uses a private dummy record to make unrelated handles distinct in C++.
 Header-partition emission may replace that record dependency with `*mut void` only for an exact
