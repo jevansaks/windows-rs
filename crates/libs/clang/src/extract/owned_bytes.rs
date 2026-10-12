@@ -39,6 +39,57 @@ impl Bytes {
         self.string(&value.file);
     }
 
+    fn native_type(&mut self, value: &NativeType) {
+        self.string(&value.spelling);
+        match &value.layer {
+            NativeTypeLayer::Primitive => {}
+            NativeTypeLayer::Record(record) => {
+                self.boxed(record.as_ref());
+                self.native_declaration(&record.declaration);
+                self.vector(&record.fields);
+                for field in &record.fields {
+                    self.native_declaration(&field.declaration);
+                    self.native_type(&field.ty);
+                }
+            }
+            NativeTypeLayer::Enum(enumeration) => {
+                self.boxed(enumeration.as_ref());
+                self.native_declaration(&enumeration.declaration);
+                self.native_type(&enumeration.underlying);
+                self.vector(&enumeration.variants);
+                for variant in &enumeration.variants {
+                    self.native_declaration(&variant.declaration);
+                }
+            }
+            NativeTypeLayer::Indirect(target) | NativeTypeLayer::Array { target, .. } => {
+                self.boxed(target.as_ref());
+                self.native_type(target);
+            }
+            NativeTypeLayer::Function { params, result, .. } => {
+                self.vector(params);
+                for param in params {
+                    self.native_type(param);
+                }
+                self.boxed(result.as_ref());
+                self.native_type(result);
+            }
+        }
+    }
+
+    fn native_declaration(&mut self, value: &NativeDeclaration) {
+        self.string(&value.tu);
+        self.string(&value.name);
+        self.location(&value.spelling);
+        self.location(&value.expansion);
+        self.string(&value.parent.name);
+        for location in [&value.parent.spelling, &value.parent.expansion]
+            .into_iter()
+            .flatten()
+        {
+            self.location(location);
+        }
+    }
+
     fn target(&mut self, value: &AnnotationTarget) {
         self.origin(value.origin());
         if let AnnotationTarget::NestedField { path, .. } = value {
@@ -288,6 +339,7 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         class_canonical_anchors,
         shared_enum_identities,
         native_com_contracts,
+        native_typedef_types,
         unproved_com_records,
         module_free_headers: _,
         observation_only_class_origins,
@@ -411,7 +463,21 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
                 bytes.string(&slot.name);
                 bytes.parameters(&slot.params);
                 bytes.ty(&slot.result);
+                bytes.vector(&slot.native_params);
+                for ty in slot.native_params.iter().flatten() {
+                    bytes.native_type(ty);
+                }
+                if let Some(ty) = &slot.native_result {
+                    bytes.native_type(ty);
+                }
             }
+        }
+    }
+    bytes.map::<Origin, Option<NativeType>>(native_typedef_types.len());
+    for (origin, ty) in native_typedef_types {
+        bytes.origin(origin);
+        if let Some(ty) = ty {
+            bytes.native_type(ty);
         }
     }
     bytes.map::<Origin, FactData>(pointer_only_class_layouts.len());

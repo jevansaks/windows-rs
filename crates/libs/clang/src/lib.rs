@@ -1197,11 +1197,106 @@ pub struct Method {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeType {
+    kind: i32,
+    is_const: bool,
+    is_volatile: bool,
+    is_restrict: bool,
+    size: i64,
+    address_space: u32,
+    spelling: String,
+    layer: NativeTypeLayer,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum NativeTypeLayer {
+    Primitive,
+    Record(Box<NativeRecord>),
+    Enum(Box<NativeEnum>),
+    Indirect(Box<NativeType>),
+    Array {
+        target: Box<NativeType>,
+        len: u64,
+    },
+    Function {
+        convention: i32,
+        variadic: bool,
+        ref_qualifier: i32,
+        params: Vec<NativeType>,
+        result: Box<NativeType>,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeDeclaration {
+    tu: String,
+    kind: i32,
+    name: String,
+    spelling: Location,
+    expansion: Location,
+    anonymous: bool,
+    parent: NativeParent,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeParent {
+    kind: i32,
+    name: String,
+    spelling: Option<Location>,
+    expansion: Option<Location>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeRecord {
+    declaration: NativeDeclaration,
+    align: i64,
+    fields: Vec<NativeField>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeField {
+    declaration: NativeDeclaration,
+    ordinal: usize,
+    offset: i64,
+    align: i64,
+    bit_width: Option<u32>,
+    ty: NativeType,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeEnum {
+    declaration: NativeDeclaration,
+    underlying: NativeType,
+    scoped: bool,
+    variants: Vec<NativeVariant>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeVariant {
+    declaration: NativeDeclaration,
+    signed_value: i64,
+    unsigned_value: u64,
+}
+
+#[derive(Clone, Debug, Eq)]
 struct NativeComMethod {
     name: String,
     convention: i32,
     params: Vec<Parameter>,
     result: TypeRef,
+    native_params: Vec<Option<NativeType>>,
+    native_result: Option<NativeType>,
+    native_exception: Option<i32>,
+}
+
+impl PartialEq for NativeComMethod {
+    fn eq(&self, other: &Self) -> bool {
+        // Compiler evidence does not participate in legacy contract equality.
+        self.name == other.name
+            && self.convention == other.convention
+            && self.params == other.params
+            && self.result == other.result
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1468,6 +1563,7 @@ pub struct Snapshot {
     class_canonical_anchors: BTreeMap<Origin, ClassCanonicalAnchor>,
     shared_enum_identities: BTreeMap<Origin, SharedEnumIdentity>,
     native_com_contracts: BTreeMap<Origin, Arc<NativeComContract>>,
+    native_typedef_types: BTreeMap<Origin, Option<NativeType>>,
     unproved_com_records: BTreeSet<Origin>,
     observation_only_class_origins: BTreeSet<Origin>,
     pointer_callback_aliases: BTreeSet<Origin>,
@@ -4645,8 +4741,14 @@ impl Snapshot {
     }
 
     fn source_annotation_signatures(&self) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
+        Self::relative_annotation_signatures(&self.source_annotations)
+    }
+
+    fn relative_annotation_signatures(
+        annotations: &BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    ) -> BTreeMap<Origin, Rc<RouteAnnotations>> {
         let mut result: BTreeMap<Origin, RouteAnnotations> = BTreeMap::new();
-        for (target, annotations) in &self.source_annotations {
+        for (target, annotations) in annotations {
             let (origin, target) = route_annotation_target(target);
             result
                 .entry(origin.clone())
@@ -5194,6 +5296,8 @@ impl Snapshot {
         let sal_constant_observations =
             SalConstantObservations::new(&self.sal_constant_sizes, &facts_by_origin);
         let source_annotation_signatures = self.source_annotation_signatures();
+        let effective_annotation_signatures =
+            Self::relative_annotation_signatures(&self.annotations);
         let source_fact_name = |fact: &Fact| {
             source_names.map_or_else(
                 || fact.name.clone(),
@@ -5437,6 +5541,8 @@ impl Snapshot {
             facts_by_declaration: &facts_by_declaration,
             source_names,
             excluded_types,
+            source_annotations: &source_annotation_signatures,
+            effective_annotations: &effective_annotation_signatures,
         };
         let com_bindings = com_pointer::Bindings::new(&com_context, &facts_by_origin);
         let extended_reference_enums: BTreeSet<_> = excluded_types
@@ -5585,6 +5691,7 @@ impl Snapshot {
                 if !excluded {
                     let authority = self.authority_candidates(&roots.types, &declarations);
                     match choose_proven_type_root(
+                        &com_context,
                         name,
                         &authority,
                         &facts_index,
@@ -5769,6 +5876,7 @@ impl Snapshot {
                 }
                 let authority = self.authority_candidates(&matches, &declarations);
                 match choose_proven_type_root(
+                    &com_context,
                     &name,
                     &authority,
                     &facts_index,
@@ -6865,6 +6973,7 @@ impl Snapshot {
             for (name, choices) in grouped {
                 let authority = self.authority_candidates(&choices, &declarations);
                 let selected = match choose_proven_type_root(
+                    &com_context,
                     name,
                     &authority,
                     &facts_index,
@@ -9961,6 +10070,7 @@ fn choose_type_root<'a>(
 }
 
 fn choose_proven_type_root<'a>(
+    context: &com_pointer::Context<'_, 'a>,
     name: &str,
     roots: &[&'a Fact],
     facts_index: &HashMap<&str, Vec<&'a Fact>>,
@@ -10017,7 +10127,345 @@ fn choose_proven_type_root<'a>(
             "missing proved shared enum provider for `{name}`"
         )));
     }
+    let definition = roots
+        .iter()
+        .copied()
+        .find(|fact| fact.definition && matches!(fact.data, FactData::Interface { .. }));
+    if let Some(root) = definition {
+        let targets: Option<Vec<_>> = roots
+            .iter()
+            .map(|fact| {
+                if matches!(fact.data, FactData::Interface { .. }) {
+                    Some(*fact)
+                } else {
+                    typedef_declaration(fact, facts_index)
+                }
+            })
+            .collect();
+        if let Some(targets) = targets
+            && targets.iter().any(|fact| fact.origin.tu != root.origin.tu)
+            && targets.iter().all(|fact| {
+                fact.definition
+                    && fact.kind == root.kind
+                    && fact.name == root.name
+                    && fact.spelling == root.spelling
+                    && fact.parent == root.parent
+                    && matches!(fact.data, FactData::Interface { .. })
+            })
+        {
+            let failure = targets
+                .iter()
+                .filter(|fact| fact.origin != root.origin)
+                .find_map(|fact| {
+                    contextual_interface_matches(context, fact, root).err()
+                    .map(|reason| format!(
+                        "contextual interface proof {}:{} {:?} against {}:{} {:?}: {reason}",
+                        fact.spelling.file, fact.spelling.offset, fact.origin,
+                        root.spelling.file, root.spelling.offset, root.origin
+                    ))
+                });
+            let Some(failure) = failure else {
+                return Ok(root);
+            };
+            let legacy = choose_type_root_cached(name, roots, facts_index, shape_cache);
+            let error = legacy.err().unwrap_or_else(|| {
+                let choices = distinct_source_declarations(roots)
+                    .iter()
+                    .map(|fact| {
+                        format!(
+                            "{}:{} {:?}/{} {}",
+                            fact.spelling.file,
+                            fact.spelling.offset,
+                            fact.kind,
+                            fact_data_kind(&fact.data),
+                            if fact.definition {
+                                "definition"
+                            } else {
+                                "declaration"
+                            }
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                Error(format!("ambiguous type root `{name}`: {choices}"))
+            });
+            return Err(Error(format!("{error}\n  {failure}")));
+        }
+    }
     choose_type_root_cached(name, roots, facts_index, shape_cache)
+}
+
+fn contextual_interface_matches(
+    context: &com_pointer::Context<'_, '_>,
+    a: &Fact,
+    b: &Fact,
+) -> Result<(), String> {
+    contextual_interface_matches_seen(context, a, b, &mut BTreeSet::new())
+}
+
+fn contextual_interface_matches_seen(
+    context: &com_pointer::Context<'_, '_>,
+    a: &Fact,
+    b: &Fact,
+    active: &mut BTreeSet<(Origin, Origin)>,
+) -> Result<(), String> {
+    let pair = (a.origin.clone(), b.origin.clone());
+    if !active.insert(pair.clone()) {
+        return Err(format!("cyclic exact interface bases at {pair:?}"));
+    }
+    let result = contextual_interface_payload(context, a, b, active);
+    active.remove(&pair);
+    result
+}
+
+fn contextual_interface_payload(
+    context: &com_pointer::Context<'_, '_>,
+    a: &Fact,
+    b: &Fact,
+    active: &mut BTreeSet<(Origin, Origin)>,
+) -> Result<(), String> {
+    if a.spelling != b.spelling
+        || a.kind != b.kind
+        || a.parent != b.parent
+        || !a.definition
+        || !b.definition
+        || context
+            .source_names
+            .map_or(a.name.as_str(), |names| names.fact_name(a))
+            != context
+                .source_names
+                .map_or(b.name.as_str(), |names| names.fact_name(b))
+        || context
+            .declarations
+            .get(&a.origin.tu, &a.name, &a.spelling)
+            .len()
+            != 1
+        || context
+            .declarations
+            .get(&b.origin.tu, &b.name, &b.spelling)
+            .len()
+            != 1
+    {
+        return Err(
+            "interface physical source, kind, name, parent or exact uniqueness differs".into(),
+        );
+    }
+    context.interface_owners_equal(a, b)?;
+    let snapshot = context.snapshot;
+    if [context.source_annotations, context.effective_annotations]
+        .iter()
+        .any(|map| map.get(&a.origin) != map.get(&b.origin))
+        || snapshot.suppressed_type_origins.contains(&a.origin)
+        || snapshot.suppressed_type_origins.contains(&b.origin)
+        || snapshot.projected_type_names.get(&a.origin)
+            != snapshot.projected_type_names.get(&b.origin)
+        || snapshot.fact_namespace_authorities.get(&a.origin)
+            != snapshot.fact_namespace_authorities.get(&b.origin)
+    {
+        return Err(
+            "interface annotation, suppression, projection or namespace contract differs".into(),
+        );
+    }
+    let (
+        FactData::Interface {
+            base: a_base,
+            guid: a_guid,
+            methods: a_methods,
+        },
+        FactData::Interface {
+            base: b_base,
+            guid: b_guid,
+            methods: b_methods,
+        },
+    ) = (&a.data, &b.data)
+    else {
+        return Err("interface payload missing".into());
+    };
+    if a_guid != b_guid || a_methods.len() != b_methods.len() {
+        return Err("interface GUID or method count differs".into());
+    }
+    match (a_base, b_base) {
+        (None, None) => {}
+        (
+            Some(TypeRef::Named {
+                name: an,
+                declaration: ad,
+            }),
+            Some(TypeRef::Named {
+                name: bn,
+                declaration: bd,
+            }),
+        ) => {
+            let (Some(a), Some(b)) = (
+                context.exact(&a.origin.tu, an, ad),
+                context.exact(&b.origin.tu, bn, bd),
+            ) else {
+                return Err("unresolved exact interface base".into());
+            };
+            contextual_interface_matches_seen(context, a, b, active)
+                .map_err(|reason| format!("base `{an}` -> {reason}"))?;
+        }
+        _ => return Err("unsupported or differing interface base".into()),
+    }
+    let (Some(a_contract), Some(b_contract)) = (
+        snapshot.native_com_contracts.get(&a.origin),
+        snapshot.native_com_contracts.get(&b.origin),
+    ) else {
+        return Err("missing native interface contract".into());
+    };
+    if a_contract.guid != b_contract.guid
+        || a_contract.pointer_width != b_contract.pointer_width
+        || a_contract.bases != b_contract.bases
+        || a_contract.slots.len() != b_contract.slots.len()
+        || a_contract.has_fields != b_contract.has_fields
+    {
+        return Err(
+            "native interface GUID, width, base, slot count or field contract differs".into(),
+        );
+    }
+    for (index, (left, right)) in a_contract.slots.iter().zip(&b_contract.slots).enumerate() {
+        let path = a_methods
+            .iter()
+            .position(|method| method.name == left.name)
+            .map_or_else(
+                || format!("native slot[{index}]({})", left.name),
+                |method| format!("method[{method}]({})", left.name),
+            );
+        if left.name != right.name
+            || left.convention != right.convention
+            || left.params.len() != right.params.len()
+        {
+            return Err(format!(
+                "{path}: ordered name, convention or parameter count differs"
+            ));
+        }
+        let (Some(left_exception), Some(right_exception)) =
+            (left.native_exception, right.native_exception)
+        else {
+            return Err(format!("{path}: missing native exception specification"));
+        };
+        if left_exception != right_exception
+            || !matches!(
+                left_exception,
+                clang_sys::CXCursor_ExceptionSpecificationKind_None
+                    | clang_sys::CXCursor_ExceptionSpecificationKind_BasicNoexcept
+            )
+        {
+            return Err(format!(
+                "{path}: differing or unsupported native exception specification \
+                {left_exception}/{right_exception}"
+            ));
+        }
+        let (Some(left_native), Some(right_native)) = (&left.native_result, &right.native_result)
+        else {
+            return Err(format!("{path}.result: missing canonical native evidence"));
+        };
+        context
+            .canonical_types_equal(
+                &left.result,
+                &a.origin.tu,
+                &right.result,
+                &b.origin.tu,
+                (left_native, right_native),
+            )
+            .map_err(|reason| format!("{path}.result: {reason}"))?;
+        if left.native_params.len() != left.params.len()
+            || right.native_params.len() != right.params.len()
+        {
+            return Err(format!("{path}: native parameter evidence count differs"));
+        }
+        for (parameter, (left_param, right_param)) in
+            left.params.iter().zip(&right.params).enumerate()
+        {
+            if left_param.name != right_param.name
+                || left_param.annotation != right_param.annotation
+            {
+                return Err(format!(
+                    "{path}.params[{parameter}]: name or annotation differs"
+                ));
+            }
+            let (Some(left_native), Some(right_native)) = (
+                &left.native_params[parameter],
+                &right.native_params[parameter],
+            ) else {
+                return Err(format!(
+                    "{path}.params[{parameter}]: missing canonical native evidence"
+                ));
+            };
+            context
+                .canonical_types_equal(
+                    &left_param.ty,
+                    &a.origin.tu,
+                    &right_param.ty,
+                    &b.origin.tu,
+                    (left_native, right_native),
+                )
+                .map_err(|reason| format!("{path}.params[{parameter}]: {reason}"))?;
+        }
+    }
+    for (method_index, (a_method, b_method)) in a_methods.iter().zip(b_methods).enumerate() {
+        let path = format!("method[{method_index}]({})", a_method.name);
+        if a_method.name != b_method.name
+            || a_method.special != b_method.special
+            || a_method.params.len() != b_method.params.len()
+        {
+            return Err(format!(
+                "{path}: method name, attributes or parameter count differs"
+            ));
+        }
+        let a_slots: Vec<_> = a_contract
+            .slots
+            .iter()
+            .filter(|slot| slot.name == a_method.name)
+            .collect();
+        let b_slots: Vec<_> = b_contract
+            .slots
+            .iter()
+            .filter(|slot| slot.name == b_method.name)
+            .collect();
+        let ([a_slot], [b_slot]) = (a_slots.as_slice(), b_slots.as_slice()) else {
+            return Err(format!("{path}: missing or ambiguous native slot"));
+        };
+        if a_slot.convention != b_slot.convention {
+            return Err(format!("{path}: native calling convention differs"));
+        }
+        let (Some(an), Some(bn)) = (&a_slot.native_result, &b_slot.native_result) else {
+            return Err(format!("{path}.result: missing canonical native evidence"));
+        };
+        context
+            .canonical_types_equal(
+                &a_method.result,
+                &a.origin.tu,
+                &b_method.result,
+                &b.origin.tu,
+                (an, bn),
+            )
+            .map_err(|reason| format!("{path}.result: {reason}"))?;
+        if a_slot.native_params.len() != a_method.params.len()
+            || b_slot.native_params.len() != b_method.params.len()
+        {
+            return Err(format!("{path}: native parameter count differs"));
+        }
+        for (index, (ap, bp)) in a_method.params.iter().zip(&b_method.params).enumerate() {
+            let (Some(an), Some(bn)) = (&a_slot.native_params[index], &b_slot.native_params[index])
+            else {
+                return Err(format!(
+                    "{path}.params[{index}]({}): missing canonical native evidence",
+                    ap.name
+                ));
+            };
+            if ap.name != bp.name || ap.annotation != bp.annotation {
+                return Err(format!(
+                    "{path}.params[{index}]({}): parameter name or annotation differs",
+                    ap.name
+                ));
+            }
+            context
+                .canonical_types_equal(&ap.ty, &a.origin.tu, &bp.ty, &b.origin.tu, (an, bn))
+                .map_err(|reason| format!("{path}.params[{index}]({}): {reason}", ap.name))?;
+        }
+    }
+    Ok(())
 }
 
 fn choose_type_root_cached<'a>(

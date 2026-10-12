@@ -269,12 +269,16 @@ fn reciprocal_binding_failure(plan: &HeaderPartitionPlan, name: &str) -> String 
     for fact in &snapshot.facts {
         facts_by_name.entry(&fact.name).or_default().push(fact);
     }
+    let source_annotations = snapshot.source_annotation_signatures();
+    let effective_annotations = Snapshot::relative_annotation_signatures(&snapshot.annotations);
     let context = crate::com_pointer::Context {
         snapshot,
         declarations: &declarations,
         facts_by_declaration: &facts_by_declaration,
         source_names: None,
         excluded_types: None,
+        source_annotations: &source_annotations,
+        effective_annotations: &effective_annotations,
     };
     let bindings = crate::com_pointer::Bindings::new(&context, &facts_by_origin);
     let helper = snapshot

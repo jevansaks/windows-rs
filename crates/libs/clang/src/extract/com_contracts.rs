@@ -99,7 +99,12 @@ impl Capture {
             return None;
         }
         let canonical = unsafe { clang_getCanonicalCursor(cursor) };
-        let guid = cursor_uuid(cursor).or_else(|| cursor_uuid(canonical))?;
+        let guid = match cursor_uuid(cursor).or_else(|| cursor_uuid(canonical)) {
+            Some(guid) => guid,
+            // An absent IID is evidence for an ordinary interface, not a COM provider key.
+            None if is_interface(cursor) => String::new(),
+            None => return None,
+        };
         if cursor_uuid(canonical).is_some_and(|other| other != guid) {
             return None;
         }
@@ -147,6 +152,7 @@ impl Capture {
                 CXCursor_CXXMethod if unsafe { clang_CXXMethod_isVirtual(child) } != 0 => {
                     let function = unsafe { clang_getCursorType(child) };
                     let convention = unsafe { clang_getFunctionTypeCallingConv(function) };
+                    let exception = unsafe { clang_getCursorExceptionSpecificationType(child) };
                     if unsafe { clang_Cursor_isVariadic(child) } != 0
                         || unsafe { clang_CXXMethod_isConst(child) } != 0
                         || unsafe { clang_Type_getCXXRefQualifier(function) } != CXRefQualifier_None
@@ -158,11 +164,21 @@ impl Capture {
                     {
                         return None;
                     }
+                    let native_result =
+                        native_types::capture(unsafe { clang_getCursorResultType(child) });
+                    let native_params = cursor_children(child)
+                        .into_iter()
+                        .filter(|param| unsafe { clang_getCursorKind(*param) == CXCursor_ParmDecl })
+                        .map(|param| native_types::capture(unsafe { clang_getCursorType(param) }))
+                        .collect();
                     let method = NativeComMethod {
                         name: cx_string(unsafe { clang_getCursorSpelling(child) }),
                         convention,
                         params: callable_params(child, macros, false).ok()?,
                         result: type_ref(unsafe { clang_getCursorResultType(child) })?,
+                        native_params,
+                        native_result,
+                        native_exception: (exception >= 0).then_some(exception),
                     };
                     let mut overridden = std::ptr::null_mut();
                     let mut count = 0;

@@ -8,6 +8,7 @@ use std::sync::Arc;
 mod definitions;
 use definitions::Definitions;
 mod com_contracts;
+mod native_types;
 mod owned_bytes;
 mod shared_enums;
 
@@ -229,6 +230,7 @@ fn extract_impl(
         class_canonical_anchors,
         shared_enum_identities,
         native_com_contracts,
+        native_typedef_types,
         unproved_com_records,
         module_free_headers: _,
         observation_only_class_origins,
@@ -456,6 +458,7 @@ fn extract_impl(
         class_canonical_anchors,
         shared_enum_identities,
         native_com_contracts,
+        native_typedef_types,
         unproved_com_records,
         observation_only_class_origins,
         pointer_callback_aliases,
@@ -1506,6 +1509,7 @@ impl TranslationUnit {
             pointer_only_class_layouts: &mut *output.pointer_only_class_layouts,
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
             clang_flag_enums: &mut *output.clang_flag_enums,
+            native_typedef_types: &mut *output.native_typedef_types,
             error: None,
             validate_annotations,
         };
@@ -1641,6 +1645,7 @@ struct Traversal<'a> {
     pointer_only_class_layouts: &'a mut BTreeMap<Origin, FactData>,
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
+    native_typedef_types: &'a mut BTreeMap<Origin, Option<NativeType>>,
     error: Option<Error>,
     validate_annotations: bool,
 }
@@ -1661,6 +1666,7 @@ struct ExtractionState<'a> {
     clang_flag_enums: &'a mut BTreeSet<Origin>,
     shared_enum_identities: &'a mut BTreeMap<Origin, SharedEnumIdentity>,
     native_com_contracts: &'a mut BTreeMap<Origin, Arc<NativeComContract>>,
+    native_typedef_types: &'a mut BTreeMap<Origin, Option<NativeType>>,
     unproved_com_records: &'a mut BTreeSet<Origin>,
     module_free_headers: bool,
 }
@@ -1682,6 +1688,7 @@ struct ExtractionBuffers {
     clang_flag_enums: BTreeSet<Origin>,
     shared_enum_identities: BTreeMap<Origin, SharedEnumIdentity>,
     native_com_contracts: BTreeMap<Origin, Arc<NativeComContract>>,
+    native_typedef_types: BTreeMap<Origin, Option<NativeType>>,
     unproved_com_records: BTreeSet<Origin>,
     module_free_headers: bool,
 }
@@ -1704,6 +1711,7 @@ impl ExtractionBuffers {
             clang_flag_enums: &mut self.clang_flag_enums,
             shared_enum_identities: &mut self.shared_enum_identities,
             native_com_contracts: &mut self.native_com_contracts,
+            native_typedef_types: &mut self.native_typedef_types,
             unproved_com_records: &mut self.unproved_com_records,
             module_free_headers: self.module_free_headers,
         }
@@ -1735,6 +1743,8 @@ impl ExtractionBuffers {
             .append(&mut other.shared_enum_identities);
         self.native_com_contracts
             .append(&mut other.native_com_contracts);
+        self.native_typedef_types
+            .append(&mut other.native_typedef_types);
         self.unproved_com_records
             .append(&mut other.unproved_com_records);
     }
@@ -2205,6 +2215,7 @@ mod owned_tests {
         let mut observation_only = BTreeSet::new();
         let mut shared_enum_identities = BTreeMap::new();
         let mut native_com_contracts = BTreeMap::new();
+        let mut native_typedef_types = BTreeMap::new();
         let mut unproved_com_records = BTreeSet::new();
         let mut input = Input::new(
             "disposed.hpp",
@@ -2236,6 +2247,7 @@ mod owned_tests {
                 clang_flag_enums: &mut flags,
                 shared_enum_identities: &mut shared_enum_identities,
                 native_com_contracts: &mut native_com_contracts,
+                native_typedef_types: &mut native_typedef_types,
                 unproved_com_records: &mut unproved_com_records,
                 module_free_headers: false,
             };
@@ -3052,6 +3064,14 @@ fn extract_child(
                     } else {
                         (unsafe { clang_isCursorDefinition(child) }) != 0
                     };
+                    if fact_kind == FactKind::Typedef {
+                        traversal.native_typedef_types.insert(
+                            origin.clone(),
+                            native_types::capture(unsafe {
+                                clang_getTypedefDeclUnderlyingType(child)
+                            }),
+                        );
+                    }
                     let data = if deferred_struct || fact_kind == FactKind::Macro {
                         FactData::None
                     } else {

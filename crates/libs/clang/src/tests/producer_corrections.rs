@@ -3023,6 +3023,7 @@ mod excluded_enum_raw_context {
             class_canonical_anchors: BTreeMap::new(),
             shared_enum_identities: BTreeMap::new(),
             native_com_contracts: BTreeMap::new(),
+            native_typedef_types: BTreeMap::new(),
             unproved_com_records: BTreeSet::new(),
             observation_only_class_origins: BTreeSet::new(),
             pointer_callback_aliases: BTreeSet::new(),

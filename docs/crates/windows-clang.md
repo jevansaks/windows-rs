@@ -260,6 +260,59 @@ Missing, cyclic, ambiguous, or cross-translation-unit targets do not prove a mat
 conflicting complete definitions remain fatal. Native facts, Origins, alias edges, and header owners
 are unchanged.
 
+Same-physical complete interface payloads can reconcile scalar typedef providers from different
+original translation units. Both exact declaration paths are resolved even when their nominal
+addresses match. Private compiler evidence retains canonical primitive kind, qualifiers, type
+layers, native size, address space, and compiler-returned spelling before metadata type lowering.
+The spelling is a modifier eligibility guard, not a declaration identity or symbol-selection rule.
+Native `int` and `long` remain distinct even when both project to `Scalar::I32`.
+
+Private collection also retains complete plain POD struct/union declarations, ordered native fields,
+anonymous aggregates, constant arrays, bit widths and compiler layout witnesses. Complete enums retain
+their declaration, native underlying kind, scopedness and ordered signed/unsigned values. Declaration
+and member evidence includes the actual TU, physical source and semantic parent. Attributed,
+non-POD, incomplete, recursive and unsupported forms have no evidence. Contextual proof binds a
+supported captured nominal declaration to one complete original-TU fact and its physical source,
+kind and semantic parent. Global TU parents bind to their own observation; namespace parents resolve
+through the existing exact declaration index. Paired records compare ordered native fields alongside
+projected fields; enums compare native underlying kinds, scopedness and ordered variant declarations
+and values. Equal layout or metadata representation alone does not prove identity.
+
+The contextual proof supports primitives, constant arrays, and ordinary 32-bit or 64-bit pointers
+to supported types in the default address space. Ordinary C++ lvalue references descend paired
+native referent layers alongside projected types, using the same exact-TU declaration and provider
+checks. Their native size is the referent size, not pointer width. Outer native kind, qualifiers,
+size, address space and compiler-returned modifier eligibility must agree. Rvalue references,
+function types, nondefault address spaces and unsupported modifiers remain outside this proof.
+Typedef providers must also have matching source-owned and effective annotation signatures,
+projection and namespace routing.
+Annotation targets are normalized relative to each Origin once per planning pass; per-provider
+lookups do not walk the global annotation maps. Source annotations are compared before merged
+effective annotations, so a merged signature cannot hide a source conflict.
+
+Explicit provider owners and exact source-header owners compare namespace and API-specific remap,
+integer/flag projection, and preserved pointer-level contributions. Input, root and partition names
+are not native type identity; the owner must still bind the provider's physical source. One-sided
+ownership, suppression, exclusion, nested provider scope, and mismatched contributions reject the
+proof. Rejections identify the two interface Origins and sources, ordered method, result or parameter
+path, and underlying proof error.
+
+Provider policy keys use the authored name retained before partition remaps and scoped collision
+names. Exact declaration buckets still use the current fact name. Each owner must bind its own
+translation unit through the recorded input identity, or the original input name for an unpartitioned
+input, and the provider's physical source. Different input identities and partitions do not prevent
+matching API-specific contributions.
+
+Base interfaces are paired through exact original-TU declarations and checked recursively for
+physical identity, their own annotation/projection context, and source-bound owner contributions.
+Missing, ambiguous and cyclic bases reject. Every ordered native slot, including inherited slots,
+checks its name, convention, canonical result and parameters. The compiler's exception-specification
+kind is retained privately; only no specification and basic `noexcept` are supported. Computed,
+unresolved and other specifications reject even when both observations report the same kind.
+Legacy COM equality and matching do not use this added field. Root/dependency role differences can
+retain an unowned observation with no owner policy; one-sided API-specific owner contributions are
+unsupported. These checks are not general C++ ABI validation.
+
 Field-bearing native COM structs retain their record fields, size, alignment, and declaration
 identity. Original translation-unit extraction also captures a private pointer contract: native
 IID, public nonvirtual primary base, ordered virtual slots, effective target calling conventions,
