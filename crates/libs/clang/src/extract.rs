@@ -1510,6 +1510,7 @@ impl TranslationUnit {
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
             clang_flag_enums: &mut *output.clang_flag_enums,
             native_typedef_types: &mut *output.native_typedef_types,
+            native_types: native_types::Capture::default(),
             error: None,
             validate_annotations,
         };
@@ -1534,7 +1535,7 @@ impl TranslationUnit {
             traversal.class_canonical_origins,
         )?;
         com_contracts::capture(
-            &traversal,
+            &mut traversal,
             output.native_com_contracts,
             output.unproved_com_records,
         );
@@ -1646,6 +1647,7 @@ struct Traversal<'a> {
     embeddable_class_layouts: &'a mut BTreeSet<Origin>,
     clang_flag_enums: &'a mut BTreeSet<Origin>,
     native_typedef_types: &'a mut BTreeMap<Origin, Option<NativeType>>,
+    native_types: native_types::Capture,
     error: Option<Error>,
     validate_annotations: bool,
 }
@@ -3067,9 +3069,9 @@ fn extract_child(
                     if fact_kind == FactKind::Typedef {
                         traversal.native_typedef_types.insert(
                             origin.clone(),
-                            native_types::capture(unsafe {
-                                clang_getTypedefDeclUnderlyingType(child)
-                            }),
+                            traversal
+                                .native_types
+                                .capture(unsafe { clang_getTypedefDeclUnderlyingType(child) }),
                         );
                     }
                     let data = if deferred_struct || fact_kind == FactKind::Macro {

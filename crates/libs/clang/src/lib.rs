@@ -1197,7 +1197,25 @@ pub struct Method {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct NativeType {
+struct NativeType(Arc<NativeTypeData>);
+
+impl std::ops::Deref for NativeType {
+    type Target = NativeTypeData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+impl std::ops::DerefMut for NativeType {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        Arc::make_mut(&mut self.0)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeTypeData {
     kind: i32,
     is_const: bool,
     is_volatile: bool,

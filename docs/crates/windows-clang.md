@@ -114,6 +114,13 @@ remains live during global annotation selection,
 constant probing, or reachable-record finalization. Original native TU lifetimes are bounded by the
 worker count, while the owned buffers retain all inputs' evidence for global finalization.
 
+Native typedef and method evidence shares immutable type nodes within one original translation unit.
+The capture cache uses canonical compiler type identity and native equality, and is dropped before
+that unit is disposed. Owned nodes retain all declaration and layout witnesses; comparisons remain
+structural across nodes and translation units. Cached subtree heights preserve the 64-level capture
+limit at every use, and failed captures are not cached. Owned-buffer estimates count each shared node
+once; Arc control blocks, allocator overhead and native allocations remain unmeasured.
+
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
 `class_canonical_origins` retains exact native class/struct redeclaration identity within each

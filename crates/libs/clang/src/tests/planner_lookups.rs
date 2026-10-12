@@ -1,6 +1,55 @@
 use super::*;
 
 #[test]
+fn native_evidence_shares_canonical_subgraphs_only_within_tu() {
+    let snapshot = extract(
+        [
+            Input::new(
+                "sharing.hpp",
+                "struct Pod { int value; };\n\
+                typedef Pod First; typedef Pod Second; typedef int Int;\n\
+                struct Base { virtual Pod *Method(Pod *) = 0; };\n\
+                struct Derived : Base { virtual Pod *Other(Pod *) = 0; };\n",
+            ),
+            Input::new("other-sharing.hpp", "typedef int OtherInt;"),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    let origin = |name: &str| {
+        &snapshot
+            .facts
+            .iter()
+            .find(|fact| fact.name == name)
+            .unwrap()
+            .origin
+    };
+    let native = |name: &str| {
+        snapshot.native_typedef_types[origin(name)]
+            .as_ref()
+            .unwrap()
+    };
+    assert!(Arc::ptr_eq(&native("First").0, &native("Second").0));
+    assert_eq!(native("Int"), native("OtherInt"));
+    assert!(!Arc::ptr_eq(&native("Int").0, &native("OtherInt").0));
+    let base = &snapshot.native_com_contracts[origin("Base")];
+    let derived = &snapshot.native_com_contracts[origin("Derived")];
+    let result = base.slots[0].native_result.as_ref().unwrap();
+    assert!(Arc::ptr_eq(
+        &result.0,
+        &derived.slots[0].native_result.as_ref().unwrap().0
+    ));
+    assert!(Arc::ptr_eq(
+        &result.0,
+        &base.slots[0].native_params[0].as_ref().unwrap().0
+    ));
+    let NativeTypeLayer::Indirect(target) = &result.layer else {
+        panic!()
+    };
+    assert!(Arc::ptr_eq(&target.0, &native("First").0));
+}
+
+#[test]
 fn contextual_interface_proof_lvalue_reference_native_identity() {
     let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src")
@@ -560,7 +609,7 @@ fn cross_tu_result_alias_snapshot(provider: &str, result: Option<Scalar>) -> Sna
             },
         ),
     ] {
-        let native = NativeType {
+        let native = NativeType(Arc::new(NativeTypeData {
             kind,
             is_const: false,
             is_volatile: false,
@@ -574,7 +623,7 @@ fn cross_tu_result_alias_snapshot(provider: &str, result: Option<Scalar>) -> Sna
             }
             .to_string(),
             layer: NativeTypeLayer::Primitive,
-        };
+        }));
         if let Some(provider) = snapshot
             .facts
             .iter()

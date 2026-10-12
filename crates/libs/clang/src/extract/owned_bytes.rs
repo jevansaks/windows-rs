@@ -8,6 +8,7 @@ struct Bytes {
     map_entries: usize,
     map_payload_estimate: usize,
     hash_capacity_estimate: usize,
+    native_types: HashSet<*const NativeTypeData>,
 }
 
 impl Bytes {
@@ -40,6 +41,10 @@ impl Bytes {
     }
 
     fn native_type(&mut self, value: &NativeType) {
+        if !self.native_types.insert(Arc::as_ptr(&value.0)) {
+            return;
+        }
+        self.boxed(value.0.as_ref());
         self.string(&value.spelling);
         match &value.layer {
             NativeTypeLayer::Primitive => {}
@@ -652,6 +657,34 @@ pub(super) fn emit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owned_bytes_counts_shared_native_nodes_once() {
+        let native = NativeType(Arc::new(NativeTypeData {
+            kind: CXType_Int,
+            is_const: false,
+            is_volatile: false,
+            is_restrict: false,
+            size: 4,
+            address_space: 0,
+            spelling: "int".into(),
+            layer: NativeTypeLayer::Primitive,
+        }));
+        let mut shared = Bytes::default();
+        shared.native_type(&native);
+        let first = shared.logical;
+        shared.native_type(&native.clone());
+        assert_eq!(shared.logical, first);
+        let distinct = NativeType(Arc::new((*native.0).clone()));
+        assert_eq!(native, distinct);
+        shared.native_type(&distinct);
+        assert_eq!(shared.logical, 2 * first);
+        assert_eq!(shared.capacity, 2 * first);
+        println!(
+            "native payload estimate shared_two={first} distinct_two={}",
+            shared.logical
+        );
+    }
 
     #[test]
     fn owned_bytes_phase_clocks_preserve_available_and_unavailable_measurements() {

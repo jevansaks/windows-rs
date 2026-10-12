@@ -6,15 +6,15 @@ struct Captured {
     methods: Vec<CXCursor>,
 }
 
-#[derive(Default)]
-struct Capture {
+struct Capture<'a> {
     cached: HashMap<u32, Vec<(CXCursor, Option<Captured>)>>,
     active: Vec<CXCursor>,
     pointer_width: i32,
+    native_types: &'a mut native_types::Capture,
 }
 
 pub(super) fn capture(
-    traversal: &Traversal<'_>,
+    traversal: &mut Traversal<'_>,
     output: &mut BTreeMap<Origin, Arc<NativeComContract>>,
     unproved: &mut BTreeSet<Origin>,
 ) {
@@ -32,7 +32,9 @@ pub(super) fn capture(
     };
     let mut capture = Capture {
         pointer_width,
-        ..Capture::default()
+        cached: HashMap::new(),
+        active: Vec::new(),
+        native_types: &mut traversal.native_types,
     };
     for (origin, cursor) in &traversal.pending_classes {
         if let Some(captured) = capture.get(*cursor, traversal.macros) {
@@ -62,7 +64,7 @@ pub(super) fn capture(
     }
 }
 
-impl Capture {
+impl Capture<'_> {
     fn get(&mut self, cursor: CXCursor, macros: &MacroDefinitions) -> Option<Captured> {
         let cursor = cursor_definition(cursor);
         let hash = unsafe { clang_hashCursor(cursor) };
@@ -164,12 +166,16 @@ impl Capture {
                     {
                         return None;
                     }
-                    let native_result =
-                        native_types::capture(unsafe { clang_getCursorResultType(child) });
+                    let native_result = self
+                        .native_types
+                        .capture(unsafe { clang_getCursorResultType(child) });
                     let native_params = cursor_children(child)
                         .into_iter()
                         .filter(|param| unsafe { clang_getCursorKind(*param) == CXCursor_ParmDecl })
-                        .map(|param| native_types::capture(unsafe { clang_getCursorType(param) }))
+                        .map(|param| {
+                            self.native_types
+                                .capture(unsafe { clang_getCursorType(param) })
+                        })
                         .collect();
                     let method = NativeComMethod {
                         name: cx_string(unsafe { clang_getCursorSpelling(child) }),

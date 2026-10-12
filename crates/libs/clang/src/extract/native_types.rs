@@ -1,62 +1,113 @@
 use super::*;
 
-pub(super) fn capture(ty: CXType) -> Option<NativeType> {
-    read(ty, 0)
+#[derive(Default)]
+pub(super) struct Capture {
+    cached: HashMap<usize, Vec<(CXType, NativeType, usize)>>,
 }
 
-fn read(ty: CXType, depth: usize) -> Option<NativeType> {
-    if depth == 64 {
-        return None;
+impl Capture {
+    pub(super) fn capture(&mut self, ty: CXType) -> Option<NativeType> {
+        self.read(ty, 0).map(|(native, _)| native)
     }
-    let ty = unsafe { clang_getCanonicalType(ty) };
-    let layer = match ty.kind {
-        CXType_Void | CXType_Bool | CXType_Char_U | CXType_UChar | CXType_Char16
-        | CXType_Char32 | CXType_UShort | CXType_UInt | CXType_ULong | CXType_ULongLong
-        | CXType_Char_S | CXType_SChar | CXType_WChar | CXType_Short | CXType_Int | CXType_Long
-        | CXType_LongLong | CXType_Float | CXType_Double | CXType_LongDouble => {
-            NativeTypeLayer::Primitive
+
+    fn read(&mut self, ty: CXType, depth: usize) -> Option<(NativeType, usize)> {
+        if depth == 64 {
+            return None;
         }
-        CXType_Pointer | CXType_LValueReference | CXType_RValueReference => {
-            NativeTypeLayer::Indirect(Box::new(read(
-                unsafe { clang_getPointeeType(ty) },
-                depth + 1,
-            )?))
+        let ty = unsafe { clang_getCanonicalType(ty) };
+        // Canonical QualType identity selects a bucket; native equality confirms the key.
+        let key = ty.data[0] as usize;
+        if let Some((_, native, height)) = self
+            .cached
+            .get(&key)
+            .into_iter()
+            .flatten()
+            .find(|(candidate, _, _)| unsafe { clang_equalTypes(*candidate, ty) } != 0)
+        {
+            return (depth + height <= 64).then(|| (native.clone(), *height));
         }
-        CXType_ConstantArray => NativeTypeLayer::Array {
-            target: Box::new(read(unsafe { clang_getArrayElementType(ty) }, depth + 1)?),
-            len: u64::try_from(unsafe { clang_getArraySize(ty) }).ok()?,
-        },
-        CXType_FunctionProto => {
-            let count = unsafe { clang_getNumArgTypes(ty) };
-            let convention = unsafe { clang_getFunctionTypeCallingConv(ty) };
-            if count < 0 || matches!(convention, CXCallingConv_Invalid | CXCallingConv_Unexposed) {
-                return None;
+        let mut height = 1;
+        let layer = match ty.kind {
+            CXType_Void | CXType_Bool | CXType_Char_U | CXType_UChar | CXType_Char16
+            | CXType_Char32 | CXType_UShort | CXType_UInt | CXType_ULong | CXType_ULongLong
+            | CXType_Char_S | CXType_SChar | CXType_WChar | CXType_Short | CXType_Int
+            | CXType_Long | CXType_LongLong | CXType_Float | CXType_Double | CXType_LongDouble => {
+                NativeTypeLayer::Primitive
             }
-            NativeTypeLayer::Function {
-                convention,
-                variadic: unsafe { clang_isFunctionTypeVariadic(ty) } != 0,
-                ref_qualifier: unsafe { clang_Type_getCXXRefQualifier(ty) },
-                params: (0..count)
-                    .map(|index| read(unsafe { clang_getArgType(ty, index as u32) }, depth + 1))
-                    .collect::<Option<_>>()?,
-                result: Box::new(read(unsafe { clang_getResultType(ty) }, depth + 1)?),
+            CXType_Pointer | CXType_LValueReference | CXType_RValueReference => {
+                NativeTypeLayer::Indirect(Box::new(self.child(
+                    unsafe { clang_getPointeeType(ty) },
+                    depth,
+                    &mut height,
+                )?))
             }
-        }
-        CXType_Record => NativeTypeLayer::Record(Box::new(record(ty, depth)?)),
-        CXType_Enum => NativeTypeLayer::Enum(Box::new(enumeration(ty, depth)?)),
-        // Dependent, incomplete and unsupported forms have no native evidence.
-        _ => return None,
-    };
-    Some(NativeType {
-        kind: ty.kind,
-        is_const: unsafe { clang_isConstQualifiedType(ty) } != 0,
-        is_volatile: unsafe { clang_isVolatileQualifiedType(ty) } != 0,
-        is_restrict: unsafe { clang_isRestrictQualifiedType(ty) } != 0,
-        size: unsafe { clang_Type_getSizeOf(ty) },
-        address_space: unsafe { clang_getAddressSpace(ty) },
-        spelling: cx_string(unsafe { clang_getTypeSpelling(ty) }),
-        layer,
-    })
+            CXType_ConstantArray => NativeTypeLayer::Array {
+                target: Box::new(self.child(
+                    unsafe { clang_getArrayElementType(ty) },
+                    depth,
+                    &mut height,
+                )?),
+                len: u64::try_from(unsafe { clang_getArraySize(ty) }).ok()?,
+            },
+            CXType_FunctionProto => {
+                let count = unsafe { clang_getNumArgTypes(ty) };
+                let convention = unsafe { clang_getFunctionTypeCallingConv(ty) };
+                if count < 0
+                    || matches!(convention, CXCallingConv_Invalid | CXCallingConv_Unexposed)
+                {
+                    return None;
+                }
+                NativeTypeLayer::Function {
+                    convention,
+                    variadic: unsafe { clang_isFunctionTypeVariadic(ty) } != 0,
+                    ref_qualifier: unsafe { clang_Type_getCXXRefQualifier(ty) },
+                    params: (0..count)
+                        .map(|index| {
+                            self.child(
+                                unsafe { clang_getArgType(ty, index as u32) },
+                                depth,
+                                &mut height,
+                            )
+                        })
+                        .collect::<Option<_>>()?,
+                    result: Box::new(self.child(
+                        unsafe { clang_getResultType(ty) },
+                        depth,
+                        &mut height,
+                    )?),
+                }
+            }
+            CXType_Record => {
+                NativeTypeLayer::Record(Box::new(record(self, ty, depth, &mut height)?))
+            }
+            CXType_Enum => {
+                NativeTypeLayer::Enum(Box::new(enumeration(self, ty, depth, &mut height)?))
+            }
+            // Dependent, incomplete and unsupported forms have no native evidence.
+            _ => return None,
+        };
+        let native = NativeType(Arc::new(NativeTypeData {
+            kind: ty.kind,
+            is_const: unsafe { clang_isConstQualifiedType(ty) } != 0,
+            is_volatile: unsafe { clang_isVolatileQualifiedType(ty) } != 0,
+            is_restrict: unsafe { clang_isRestrictQualifiedType(ty) } != 0,
+            size: unsafe { clang_Type_getSizeOf(ty) },
+            address_space: unsafe { clang_getAddressSpace(ty) },
+            spelling: cx_string(unsafe { clang_getTypeSpelling(ty) }),
+            layer,
+        }));
+        self.cached
+            .entry(key)
+            .or_default()
+            .push((ty, native.clone(), height));
+        Some((native, height))
+    }
+
+    fn child(&mut self, ty: CXType, depth: usize, height: &mut usize) -> Option<NativeType> {
+        let (native, child_height) = self.read(ty, depth + 1)?;
+        *height = (*height).max(child_height + 1);
+        Some(native)
+    }
 }
 
 fn declaration(cursor: CXCursor) -> Option<NativeDeclaration> {
@@ -92,7 +143,12 @@ fn declaration(cursor: CXCursor) -> Option<NativeDeclaration> {
     })
 }
 
-fn record(ty: CXType, depth: usize) -> Option<NativeRecord> {
+fn record(
+    capture: &mut Capture,
+    ty: CXType,
+    depth: usize,
+    height: &mut usize,
+) -> Option<NativeRecord> {
     let cursor = cursor_definition(unsafe { clang_getTypeDeclaration(ty) });
     let kind = unsafe { clang_getCursorKind(cursor) };
     let align = unsafe { clang_Type_getAlignOf(ty) };
@@ -128,7 +184,7 @@ fn record(ty: CXType, depth: usize) -> Option<NativeRecord> {
                 return None;
             }
             let field_ty = unsafe { clang_getCursorType(child) };
-            let native = read(field_ty, depth + 1)?;
+            let native = capture.child(field_ty, depth, height)?;
             let offset = if anonymous {
                 anonymous_offset(ty, &native, 0)?
             } else {
@@ -192,12 +248,21 @@ fn anonymous_offset(parent: CXType, native: &NativeType, relative: i64) -> Optio
     None
 }
 
-fn enumeration(ty: CXType, depth: usize) -> Option<NativeEnum> {
+fn enumeration(
+    capture: &mut Capture,
+    ty: CXType,
+    depth: usize,
+    height: &mut usize,
+) -> Option<NativeEnum> {
     let cursor = cursor_definition(unsafe { clang_getTypeDeclaration(ty) });
     if unsafe { clang_isCursorDefinition(cursor) } == 0 || unsafe { clang_Type_getSizeOf(ty) } < 0 {
         return None;
     }
-    let underlying = read(unsafe { clang_getEnumDeclIntegerType(cursor) }, depth + 1)?;
+    let underlying = capture.child(
+        unsafe { clang_getEnumDeclIntegerType(cursor) },
+        depth,
+        height,
+    )?;
     if underlying.layer != NativeTypeLayer::Primitive {
         return None;
     }
@@ -227,4 +292,35 @@ fn enumeration(ty: CXType, depth: usize) -> Option<NativeEnum> {
         scoped: unsafe { clang_EnumDecl_isScoped(cursor) } != 0,
         variants,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_evidence_cache_respects_remaining_depth() {
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let input = Input::new("depth.hpp", "typedef int *Pointer;");
+        let tu = TranslationUnit::parse(
+            &index,
+            &input,
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        let cursor = cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) })
+            .into_iter()
+            .find(|cursor| unsafe { clang_getCursorKind(*cursor) } == CXCursor_TypedefDecl)
+            .unwrap();
+        let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+        let mut capture = Capture::default();
+        assert!(capture.read(ty, 63).is_none());
+        let native = capture.capture(ty).unwrap();
+        let (at_limit, height) = capture.read(ty, 62).unwrap();
+        assert_eq!(height, 2);
+        assert!(Arc::ptr_eq(&native.0, &at_limit.0));
+        assert!(capture.read(ty, 63).is_none());
+        assert!(capture.read(ty, 64).is_none());
+    }
 }
