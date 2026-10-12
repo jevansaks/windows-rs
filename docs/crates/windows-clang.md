@@ -121,6 +121,15 @@ structural across nodes and translation units. Cached subtree heights preserve t
 limit at every use, and failed captures are not cached. Owned-buffer estimates count each shared node
 once; Arc control blocks, allocator overhead and native allocations remain unmeasured.
 
+`WINDOWS_CLANG_TIMINGS` (or `WINDOWS_CLANG_TIMING`) enables stderr phase entry, sparse work-count
+progress, and completion or error events. Durations use a monotonic clock. Progress counts visited
+work items, not successful outputs; growing queues have no fixed total. Stored `parse-tu` and
+`extract-tu` summaries are replayed during aggregation, not active native parse notifications.
+Native COM parameter capture reports the actual outer parameter type, first rejection path, and
+compiler/source witnesses for up to eight rejected parameters per original TU. Its summary reports
+the total, detailed, and truncated counts. Unsupported capture remains missing evidence, not a new
+extraction error. No diagnostic cursor or compiler type escapes the TU.
+
 The resulting `Snapshot` owns translation-unit-local facts and constants. `facts`, `constants`,
 `unsupported`, and `dump` expose the extraction result for diagnostics and validation.
 `class_canonical_origins` retains exact native class/struct redeclaration identity within each

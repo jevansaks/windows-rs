@@ -68,6 +68,114 @@ fn elapsed_ms(start: Option<std::time::Instant>) -> f64 {
         .unwrap_or_default()
 }
 
+struct TimingPhase {
+    target: Option<String>,
+    name: &'static str,
+    start: Option<std::time::Instant>,
+    visited: usize,
+}
+
+impl TimingPhase {
+    fn new(target: Option<&str>, name: &'static str) -> Self {
+        let phase = Self {
+            target: target.map(str::to_string),
+            name,
+            start: target.map(|_| std::time::Instant::now()),
+            visited: 0,
+        };
+        phase.event("enter", None);
+        phase
+    }
+
+    fn event(&self, event: &str, total: Option<usize>) {
+        if let Some(target) = &self.target {
+            eprintln!(
+                "windows-clang timing phase={} target={target} event={event} \
+                 visited={} work_total={total:?} elapsed_ms={:.3}",
+                self.name,
+                self.visited,
+                elapsed_ms(self.start),
+            );
+        }
+    }
+
+    fn visit(&mut self, total: Option<usize>) {
+        if self.start.is_some() {
+            self.visited += 1;
+            if self.visited.is_power_of_two() {
+                self.event("progress", total);
+            }
+        }
+    }
+
+    fn next(&mut self, name: &'static str) {
+        self.event("complete", None);
+        self.name = name;
+        self.start = self.target.as_ref().map(|_| std::time::Instant::now());
+        self.visited = 0;
+        self.event("enter", None);
+    }
+
+    fn check<T>(&self, result: Result<T, Error>) -> Result<T, Error> {
+        if let (Some(target), Err(error)) = (&self.target, &result) {
+            eprintln!(
+                "windows-clang timing phase={} target={target} event=fail \
+                 visited={} elapsed_ms={:.3} error={:?}",
+                self.name,
+                self.visited,
+                elapsed_ms(self.start),
+                error.0,
+            );
+        }
+        result
+    }
+
+    fn finish<T>(self, result: Result<T, Error>) -> Result<T, Error> {
+        let result = self.check(result);
+        if result.is_ok() {
+            self.event("complete", None);
+        }
+        result
+    }
+}
+
+#[cfg(test)]
+mod timing_tests {
+    use super::*;
+
+    #[test]
+    fn timing_phase_reports_failure_without_completion() {
+        const CHILD: &str = "WINDOWS_CLANG_PHASE_TEST_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            let result: Result<(), Error> =
+                TimingPhase::new(Some("x86_64-pc-windows-msvc"), "test-failure")
+                    .finish(Err(Error("controlled phase failure".to_string())));
+            assert_eq!(result.unwrap_err().0, "controlled phase failure");
+            return;
+        }
+        let test = concat!(
+            module_path!(),
+            "::timing_phase_reports_failure_without_completion"
+        );
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", test.split_once("::").unwrap().1, "--nocapture"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        let events: Vec<_> = stderr
+            .lines()
+            .filter(|line| line.contains("phase=test-failure"))
+            .collect();
+        assert_eq!(events.len(), 2, "{stderr}");
+        assert!(events[0].contains("event=enter"), "{stderr}");
+        assert!(events[1].contains("event=fail"), "{stderr}");
+        assert!(events[1].contains("controlled phase failure"), "{stderr}");
+        assert!(!stderr.contains("event=complete"), "{stderr}");
+    }
+}
+
 mod com_pointer;
 mod enum_diagnostics;
 mod extract;
@@ -2043,10 +2151,11 @@ impl Snapshot {
         let timing = self.timing_target.is_some();
         let items = self.emit_items(options)?;
         let format_time = timing.then(std::time::Instant::now);
-        let result = write_rdl(
+        let phase = TimingPhase::new(self.timing_target.as_deref(), "rdl-format");
+        let result = phase.finish(write_rdl(
             options.namespace,
             items.values().map(|(_, item)| item.as_str()),
-        )?;
+        ))?;
         if timing {
             eprintln!(
                 "windows-clang timing phase=rdl-format target={} mode=single headers=1 bytes={} elapsed_ms={:.3}",
@@ -2138,8 +2247,11 @@ impl Snapshot {
         policy: &HeaderPartitionPolicy,
         authorities: &NamespaceAuthorities,
     ) -> Result<HeaderPartitionPlan, Error> {
-        self.apply_namespace_authorities(authorities)?;
-        let root_conflicts = self.apply_header_partition_policy(policy)?;
+        let mut phase = TimingPhase::new(self.timing_target.as_deref(), "namespace-authorities");
+        phase.check(self.apply_namespace_authorities(authorities))?;
+        phase.next("header-ownership");
+        let root_conflicts = phase.check(self.apply_header_partition_policy(policy))?;
+        phase.event("complete", None);
         Ok(HeaderPartitionPlan {
             snapshot: self,
             root_conflicts,
@@ -2209,11 +2321,17 @@ impl Snapshot {
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let target = self.timing_target.clone();
+        let mut phase = TimingPhase::new(target.as_deref(), "partition-reconciliation");
         let (snapshot, display_names, source_names) =
             self.into_partitioned_planning_snapshot(options);
-        let plan = snapshot.plan_partitioned(options, &display_names, &source_names)?;
-        let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
-        let routes = snapshot.resolve_partition_routes(candidates)?;
+        phase.next("partition-planning");
+        let plan =
+            phase.check(snapshot.plan_partitioned(options, &display_names, &source_names))?;
+        phase.next("partition-routing");
+        let candidates =
+            phase.check(snapshot.partition_route_candidates(&plan, &source_names, options))?;
+        let routes = phase.check(snapshot.resolve_partition_routes(candidates))?;
+        phase.event("complete", None);
         snapshot.format_partitioned_plan(plan, options, &routes, &display_names, target.as_deref())
     }
 
@@ -2227,9 +2345,12 @@ impl Snapshot {
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
         let timing = target.is_some();
         let format_time = timing.then(std::time::Instant::now);
-        let items = self.format_items(plan, options, Some(routes), Some(display_names))?;
+        let mut phase = TimingPhase::new(target, "rdl-format");
+        let items =
+            phase.check(self.format_items(plan, options, Some(routes), Some(display_names)))?;
         let mut partitions: BTreeMap<RdlPartition, Vec<String>> = BTreeMap::new();
         for (key, (_, item)) in items {
+            phase.visit(None);
             let route = routes.get(&key).unwrap();
             partitions
                 .entry(RdlPartition {
@@ -2240,7 +2361,7 @@ impl Snapshot {
                 .or_default()
                 .push(item);
         }
-        let result: BTreeMap<RdlPartition, String> = partitions
+        let result = partitions
             .into_iter()
             .map(|(partition, items)| {
                 Ok((
@@ -2248,7 +2369,8 @@ impl Snapshot {
                     write_rdl_strict(&partition.namespace, items.iter().map(String::as_str))?,
                 ))
             })
-            .collect::<Result<_, Error>>()?;
+            .collect::<Result<_, Error>>();
+        let result: BTreeMap<RdlPartition, String> = phase.finish(result)?;
         if timing {
             eprintln!(
                 "windows-clang timing phase=rdl-format target={} mode=partitioned partitions={} bytes={} elapsed_ms={:.3}",
@@ -2301,10 +2423,23 @@ impl Snapshot {
 
     fn format_items(
         &self,
+        plan: Plan<'_>,
+        options: &EmitOptions<'_>,
+        routes: Option<&BTreeMap<(String, OutputKind), RootOwner>>,
+        display_names: Option<&BTreeMap<String, String>>,
+    ) -> Result<BTreeMap<(String, OutputKind), (String, String)>, Error> {
+        let mut phase = TimingPhase::new(self.timing_target.as_deref(), "rdl-items");
+        let result = self.format_items_inner(plan, options, routes, display_names, &mut phase);
+        phase.finish(result)
+    }
+
+    fn format_items_inner(
+        &self,
         mut plan: Plan<'_>,
         options: &EmitOptions<'_>,
         routes: Option<&BTreeMap<(String, OutputKind), RootOwner>>,
         display_names: Option<&BTreeMap<String, String>>,
+        phase: &mut TimingPhase,
     ) -> Result<BTreeMap<(String, OutputKind), (String, String)>, Error> {
         let timing = self.timing_target.is_some();
         let target = self.timing_target.as_deref().unwrap_or("default");
@@ -2474,6 +2609,7 @@ impl Snapshot {
                     .map(|planned| (planned, OutputKind::Type)),
             );
         for (planned, kind) in planned {
+            phase.visit(None);
             let fact = planned.fact;
             let output_name = display_names
                 .and_then(|names| names.get(&planned.name))
@@ -2725,6 +2861,7 @@ impl Snapshot {
             }
         }
         for planned in plan.functions {
+            phase.visit(None);
             let function = planned.fact;
             let ambiguity_note = planned
                 .ambiguity
@@ -2835,6 +2972,7 @@ impl Snapshot {
             }
         }
         for planned in plan.constants {
+            phase.visit(None);
             let constant = planned.constant;
             let output_name = display_names
                 .and_then(|names| names.get(&constant.name))
@@ -5285,6 +5423,16 @@ impl Snapshot {
     }
 
     fn plan(&self, options: PlanningOptions<'_>) -> Result<Plan<'_>, Error> {
+        let mut phase = TimingPhase::new(self.timing_target.as_deref(), "plan-indexes");
+        let result = self.plan_inner(options, &mut phase);
+        phase.finish(result)
+    }
+
+    fn plan_inner(
+        &self,
+        options: PlanningOptions<'_>,
+        phase: &mut TimingPhase,
+    ) -> Result<Plan<'_>, Error> {
         let PlanningOptions {
             references,
             excluded_types,
@@ -5563,6 +5711,7 @@ impl Snapshot {
             effective_annotations: &effective_annotation_signatures,
         };
         let com_bindings = com_pointer::Bindings::new(&com_context, &facts_by_origin);
+        phase.next("plan-roots");
         let extended_reference_enums: BTreeSet<_> = excluded_types
             .into_iter()
             .flatten()
@@ -5647,6 +5796,7 @@ impl Snapshot {
 
         let coclass_aliases = self.coclass_aliases()?;
         for (name, roots) in roots {
+            phase.visit(None);
             if !roots.types.is_empty() && !roots.functions.is_empty() {
                 let candidates: Vec<_> = roots
                     .types
@@ -5987,6 +6137,7 @@ impl Snapshot {
         let mut sal_count_diagnostics = BTreeSet::new();
         let mut omissions = BTreeSet::new();
         let (mut facts_by_name, mut retained_pointer_aliases, mut dependency_diagnostics) = loop {
+            phase.next("plan-dependencies");
             type_choices.clear();
             sal_count_diagnostics.clear();
             let mut facts = BTreeSet::new();
@@ -6153,6 +6304,7 @@ impl Snapshot {
             }
 
             while let Some((tu, edge, source)) = queue.pop() {
+                phase.visit(None);
                 let value_type = match edge {
                     TypeEdge::Use(ty, annotations) => Some((ty, annotations, false, false)),
                     TypeEdge::Parameter(param, annotations, size) => Some((
@@ -6988,7 +7140,9 @@ impl Snapshot {
             }
 
             let mut facts_by_name = BTreeMap::new();
+            phase.next("plan-contextual-types");
             for (name, choices) in grouped {
+                phase.visit(None);
                 let authority = self.authority_candidates(&choices, &declarations);
                 let selected = match choose_proven_type_root(
                     &com_context,
@@ -7085,6 +7239,7 @@ impl Snapshot {
                 dependency_diagnostics,
             );
         };
+        phase.next("plan-layout-closure");
         loop {
             let retained_names: BTreeSet<_> = retained_pointer_aliases
                 .iter()
@@ -7168,11 +7323,14 @@ impl Snapshot {
             display_names,
         };
         let validation_time = timing.then(std::time::Instant::now);
+        phase.next("plan-validate-types");
         for fact in facts_by_name.values() {
+            phase.visit(None);
             validate_fact_layouts(fact, &layout, &mut safe_layouts, &mut validated_layouts)?;
             validate_fact_value_abi(fact, &layout)?;
         }
         for fact in &value_roots {
+            phase.visit(None);
             validate_fact_layouts(fact, &layout, &mut safe_layouts, &mut validated_layouts)?;
             validate_fact_value_abi(fact, &layout)?;
         }
@@ -7183,7 +7341,9 @@ impl Snapshot {
             );
         }
         let validation_time = timing.then(std::time::Instant::now);
+        phase.next("plan-validate-functions");
         for function in &functions {
+            phase.visit(Some(functions.len()));
             validate_fact_layouts(
                 function.fact,
                 &layout,
@@ -7199,7 +7359,9 @@ impl Snapshot {
             );
         }
         let validation_time = timing.then(std::time::Instant::now);
+        phase.next("plan-validate-constants");
         for constant in &constants {
+            phase.visit(Some(constants.len()));
             validate_complete_layout(
                 &constant.ty,
                 &constant.root.tu,
@@ -7231,6 +7393,7 @@ impl Snapshot {
         }
 
         let mut local_roots = root_names.clone();
+        phase.next("plan-aliases");
         local_roots.extend(
             facts_by_name
                 .iter()
@@ -7433,6 +7596,7 @@ impl Snapshot {
             }
         }
         let mut internal_type_names = BTreeMap::new();
+        phase.next("plan-interfaces");
         let mut internal_aliases = BTreeSet::new();
         if !self.root_partitions.is_empty() || self.header_partition_policy {
             loop {
@@ -7643,6 +7807,7 @@ impl Snapshot {
         }
         let mut interface_queue: Vec<_> = interface_names.iter().cloned().collect();
         while let Some(key) = interface_queue.pop() {
+            phase.visit(None);
             for alias in interface_aliases.get(&key).into_iter().flatten() {
                 let alias = (key.0.clone(), alias.clone());
                 if interface_names.insert(alias.clone()) {
@@ -7704,6 +7869,7 @@ impl Snapshot {
         }
         let mut pointer_alias_queue: Vec<_> = pointer_interface_aliases.keys().cloned().collect();
         while let Some(target) = pointer_alias_queue.pop() {
+            phase.visit(None);
             let projected = pointer_interface_aliases[&target].clone();
             for alias in pointer_aliases.get(target.as_str()).into_iter().flatten() {
                 if let Some(previous) = pointer_interface_aliases.get(*alias) {
@@ -7724,9 +7890,11 @@ impl Snapshot {
         types.retain(|planned| !pointer_interface_aliases.contains_key(&planned.fact.name));
         let local_types = BTreeMap::new();
         let routed_types = BTreeMap::new();
+        phase.next("plan-constant-projection");
         let mut constants: Vec<_> = constants
             .into_iter()
             .filter_map(|constant| {
+                phase.visit(None);
                 let ty = match &constant.value {
                     Value::Utf8(_) | Value::Utf16(_) => Some("String".to_string()),
                     _ => {
@@ -7752,6 +7920,7 @@ impl Snapshot {
             );
             phase_time = Some(std::time::Instant::now());
         }
+        phase.next("plan-finalize");
         let mut flag_enums: BTreeSet<_> = self
             .facts
             .iter()
@@ -7882,27 +8051,32 @@ impl HeaderPartitionPlan {
             validate_namespace(options.namespace)?;
         }
         let target = self.snapshot.timing_target.clone();
+        let mut phase = TimingPhase::new(target.as_deref(), "partition-reconciliation");
         let (mut snapshot, display_names, source_names) =
             self.snapshot.into_partitioned_planning_snapshot(options);
         snapshot.project_suppressed_declare_handles();
-        let plan = snapshot.plan_partitioned_with_enum_policy(
+        phase.next("partition-planning");
+        let plan = phase.check(snapshot.plan_partitioned_with_enum_policy(
             options,
             &display_names,
             &source_names,
             allow_enum_omissions,
-        )?;
+        ))?;
         let omissions = plan.omissions.clone();
         let ambiguity_summary = plan.function_ambiguity_summary();
-        let candidates = snapshot.partition_route_candidates(&plan, &source_names, options)?;
+        phase.next("partition-routing");
+        let candidates =
+            phase.check(snapshot.partition_route_candidates(&plan, &source_names, options))?;
         let mut conflicts = self.root_conflicts;
         conflicts.extend(snapshot.partition_route_conflicts(&candidates));
         conflicts.sort();
         conflicts.dedup();
         let audit = PartitionAudit { conflicts };
         if !audit.is_clean() {
-            return Err(Error(audit.to_string()));
+            return phase.check(Err(Error(audit.to_string())));
         }
-        let routes = snapshot.resolve_partition_routes(candidates)?;
+        let routes = phase.check(snapshot.resolve_partition_routes(candidates))?;
+        phase.event("complete", None);
         let result = snapshot.format_partitioned_plan(
             plan,
             options,

@@ -165,12 +165,14 @@ fn extract_impl(
         module_free_headers: context.module_free_headers,
         ..Default::default()
     };
+    let mut phase = TimingPhase::new(target.as_deref(), "owned-aggregation");
     let mut included_files = vec![];
     let mut extracted = vec![];
     let mut traversal_cursors = 0;
     let mut traversal_facts = 0;
     let mut traversal_constants = 0;
     for (input, mut result) in inputs.iter().zip(native) {
+        phase.visit(Some(inputs.len()));
         if timing {
             eprintln!(
                 "windows-clang timing phase=parse-tu target={} tu={:?} source_bytes={} elapsed_ms={:.3}",
@@ -239,11 +241,14 @@ fn extract_impl(
         embeddable_class_layouts,
         clang_flag_enums,
     } = output;
+    phase.next("root-macro-materialization");
     for extraction in &mut extracted {
+        phase.visit(Some(inputs.len()));
         for (index, captured) in std::mem::take(&mut extraction.root_macros) {
             facts[index].data = materialize_macro(captured);
         }
     }
+    phase.next("redeclaration-reconciliation");
     let source_annotations = annotations.clone();
     let function_origins: HashSet<_> = facts
         .iter()
@@ -255,7 +260,8 @@ fn extract_impl(
         .filter(|(target, _)| function_origins.contains(annotation_target_origin(target)))
         .map(|(target, annotations)| (target.clone(), annotations.clone()))
         .collect();
-    merge_redeclaration_annotations(&facts, &mut annotations)?;
+    let reconciliation = merge_redeclaration_annotations(&facts, &mut annotations, &mut phase);
+    phase.check(reconciliation)?;
     let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
     decode_selected_macro_definitions(&mut facts, &mut extracted, &annotation_macros);
@@ -271,6 +277,7 @@ fn extract_impl(
         );
     }
     let constant_time = timing.then(std::time::Instant::now);
+    phase.next("constant-probes");
     let mut probe_candidates = 0;
     let mut synthetic_tus = 0;
     let mut retry_tus = 0;
@@ -281,7 +288,8 @@ fn extract_impl(
             .copied()
             .chain(local_arguments.into_iter().flatten().map(String::as_str))
             .collect();
-        let (new_constants, metrics) = evaluate_constants(
+        phase.visit(Some(inputs.len()));
+        let (new_constants, metrics) = phase.check(evaluate_constants(
             &index,
             input,
             &probe_arguments,
@@ -292,7 +300,7 @@ fn extract_impl(
             },
             &associated_constants,
             timing,
-        )?;
+        ))?;
         if let Some(metrics) = metrics {
             probe_candidates += metrics.candidates;
             synthetic_tus += metrics.synthetic_tus;
@@ -326,7 +334,10 @@ fn extract_impl(
         }
         constants.extend(new_constants);
     }
-    validate_associated_constants(&associated_constants, &constants)?;
+    phase.check(validate_associated_constants(
+        &associated_constants,
+        &constants,
+    ))?;
     if timing {
         eprintln!(
             "windows-clang timing phase=constant-probes-total target={} input_tus={} candidates={} synthetic_tus={} retry_tus={} constants={} elapsed_ms={:.3}",
@@ -340,7 +351,8 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
-    decode_reachable_structs(&mut facts, &constants, &mut extracted);
+    phase.next("deferred-records");
+    decode_reachable_structs(&mut facts, &constants, &mut extracted, &mut phase);
     if timing {
         eprintln!(
             "windows-clang timing phase=deferred-records target={} elapsed_ms={:.3}",
@@ -349,6 +361,7 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
+    phase.next("macro-overrides");
     apply_macro_enum_overrides(&mut facts, &mut constants, &associated_constants);
     if timing {
         eprintln!(
@@ -358,6 +371,7 @@ fn extract_impl(
         );
     }
     let phase_time = timing.then(std::time::Instant::now);
+    phase.next("midl-recovery");
     recover_midl_artifacts(&inputs, &mut facts, &constants);
     if timing {
         eprintln!(
@@ -366,6 +380,7 @@ fn extract_impl(
             elapsed_ms(phase_time)
         );
     }
+    phase.next("extraction-finalize");
     let next_local = extracted
         .iter()
         .zip(&inputs)
@@ -376,10 +391,10 @@ fn extract_impl(
     facts.sort();
     for pair in facts.windows(2) {
         if pair[0].origin == pair[1].origin {
-            return Err(Error(format!(
+            return phase.check(Err(Error(format!(
                 "duplicate fact origin `{}`",
                 origin(&pair[0].origin)
-            )));
+            ))));
         }
     }
     constants.sort();
@@ -387,10 +402,10 @@ fn extract_impl(
     let mut origins: HashSet<_> = facts.iter().map(|fact| &fact.origin).collect();
     for declaration in &value_declarations {
         if !origins.insert(&declaration.origin) {
-            return Err(Error(format!(
+            return phase.check(Err(Error(format!(
                 "duplicate native value origin `{}`",
                 origin(&declaration.origin)
-            )));
+            ))));
         }
     }
     if timing {
@@ -411,7 +426,9 @@ fn extract_impl(
         );
     }
     let mut root_owners = BTreeMap::new();
+    phase.next("extraction-ownership");
     for fact in &facts {
+        phase.visit(Some(facts.len()));
         let mut matches: Vec<_> = owners
             .iter()
             .filter(|((tu, root), _)| {
@@ -436,13 +453,14 @@ fn extract_impl(
             continue;
         };
         if let Some(other) = matches.find(|other| *other != owner) {
-            return Err(Error(format!(
+            return phase.check(Err(Error(format!(
                 "source `{}` in translation unit `{}` matches multiple tagged roots: {}:{} and {}:{}",
                 matched_file, fact.origin.tu, owner.input, owner.root, other.input, other.root,
-            )));
+            ))));
         }
         root_owners.insert(fact.origin.clone(), owner.clone());
     }
+    phase.event("complete", None);
     Ok(Snapshot {
         facts,
         constants,
@@ -3790,6 +3808,7 @@ fn decode_reachable_structs(
     facts: &mut [Fact],
     constants: &[Constant],
     extracted: &mut [Extracted],
+    phase: &mut TimingPhase,
 ) {
     let mut reachable: HashSet<String> = facts
         .iter()
@@ -3813,6 +3832,7 @@ fn decode_reachable_structs(
     }
     let mut queue: Vec<_> = reachable.iter().cloned().collect();
     while let Some(name) = queue.pop() {
+        phase.visit(None);
         let Some(candidates) = pending.remove(&name) else {
             continue;
         };
@@ -6951,6 +6971,7 @@ fn insert_annotations(
 fn merge_redeclaration_annotations(
     facts: &[Fact],
     annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    phase: &mut TimingPhase,
 ) -> Result<(), Error> {
     let facts_by_origin: HashMap<_, _> = facts.iter().map(|fact| (&fact.origin, fact)).collect();
     let annotated_keys: BTreeSet<_> = annotations
@@ -6961,15 +6982,18 @@ fn merge_redeclaration_annotations(
         .collect();
     let mut candidates: BTreeMap<(FactKind, &str), Vec<&Fact>> = BTreeMap::new();
     for fact in facts {
+        phase.visit(Some(facts.len()));
         let key = (fact.kind, fact.name.as_str());
         if annotated_keys.contains(&key) {
             candidates.entry(key).or_default().push(fact);
         }
     }
 
+    phase.next("redeclaration-groups");
     for ((_, name), candidates) in candidates {
         let mut groups: Vec<Vec<&Fact>> = vec![];
         for candidate in candidates {
+            phase.visit(None);
             if let Some(group) = groups.iter_mut().find(|group| {
                 group.iter().all(|fact| {
                     annotation_declarations_compatible(fact, candidate, &facts_by_origin)

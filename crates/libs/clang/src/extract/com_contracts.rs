@@ -11,6 +11,10 @@ struct Capture<'a> {
     active: Vec<CXCursor>,
     pointer_width: i32,
     native_types: &'a mut native_types::Capture,
+    origins: &'a HashMap<u32, Vec<(CXCursor, Origin)>>,
+    target: Option<String>,
+    rejected_parameters: usize,
+    reported_parameters: usize,
 }
 
 pub(super) fn capture(
@@ -23,6 +27,10 @@ pub(super) fn capture(
     };
     let target =
         unsafe { clang_getTranslationUnitTargetInfo(clang_Cursor_getTranslationUnit(*cursor)) };
+    let timing = timings_enabled();
+    let target_name = (timing && !target.is_null())
+        .then(|| cx_string(unsafe { clang_TargetInfo_getTriple(target) }));
+    let mut phase = TimingPhase::new(target_name.as_deref(), "native-com-capture");
     let pointer_width = if target.is_null() {
         0
     } else {
@@ -35,8 +43,13 @@ pub(super) fn capture(
         cached: HashMap::new(),
         active: Vec::new(),
         native_types: &mut traversal.native_types,
+        origins: &traversal.seen,
+        target: target_name,
+        rejected_parameters: 0,
+        reported_parameters: 0,
     };
     for (origin, cursor) in &traversal.pending_classes {
+        phase.visit(Some(traversal.pending_classes.len()));
         if let Some(captured) = capture.get(*cursor, traversal.macros) {
             output.insert(origin.clone(), captured.contract);
         } else {
@@ -61,6 +74,18 @@ pub(super) fn capture(
                 unproved.insert(origin.clone());
             }
         }
+    }
+    phase.event("complete", None);
+    if let Some(target) = &capture.target {
+        eprintln!(
+            "windows-clang timing phase=native-parameter-capture target={target} \
+             tu={:?} event=rejection-summary rejected_parameters={} detailed_parameters={} \
+             truncated_parameters={} diagnostic_limit=8",
+            traversal.tu,
+            capture.rejected_parameters,
+            capture.reported_parameters,
+            capture.rejected_parameters - capture.reported_parameters,
+        );
     }
 }
 
@@ -169,12 +194,26 @@ impl Capture<'_> {
                     let native_result = self
                         .native_types
                         .capture(unsafe { clang_getCursorResultType(child) });
+                    let mut rejections = Vec::new();
                     let native_params = cursor_children(child)
                         .into_iter()
                         .filter(|param| unsafe { clang_getCursorKind(*param) == CXCursor_ParmDecl })
-                        .map(|param| {
-                            self.native_types
-                                .capture(unsafe { clang_getCursorType(param) })
+                        .enumerate()
+                        .map(|(parameter, param)| {
+                            let ty = unsafe { clang_getCursorType(param) };
+                            let (native, rejection) =
+                                if self.target.is_some() && self.rejected_parameters < 8 {
+                                    self.native_types.capture_diagnostic(ty)
+                                } else {
+                                    (self.native_types.capture(ty), None)
+                                };
+                            if self.target.is_some() && native.is_none() {
+                                self.rejected_parameters += 1;
+                                if let Some(reason) = rejection {
+                                    rejections.push((parameter, param, reason));
+                                }
+                            }
+                            native
                         })
                         .collect();
                     let method = NativeComMethod {
@@ -195,10 +234,12 @@ impl Capture<'_> {
                         unsafe { std::slice::from_raw_parts(overridden, count as usize) }.to_vec()
                     };
                     unsafe { clang_disposeOverriddenCursors(overridden) };
-                    match targets.as_slice() {
+                    let slot = match targets.as_slice() {
                         [] => {
+                            let index = slots.len();
                             inherited.methods.push(child);
                             slots.push(method);
+                            index
                         }
                         [target] => {
                             let canonical = unsafe { clang_getCanonicalCursor(*target) };
@@ -227,8 +268,37 @@ impl Capture<'_> {
 
                             inherited.methods[*index] = child;
                             slots[*index] = method;
+                            *index
                         }
                         _ => return None,
+                    };
+                    for (parameter, param, reason) in rejections {
+                        let parameter_type = unsafe { clang_getCursorType(param) };
+                        let parameter_canonical = unsafe { clang_getCanonicalType(parameter_type) };
+                        let origin = self.origins
+                            .get(&unsafe { clang_hashCursor(cursor) })
+                            .into_iter()
+                            .flatten()
+                            .find(|(candidate, _)| unsafe { clang_equalCursors(*candidate, cursor) } != 0)
+                            .map(|(_, origin)| origin);
+                        eprintln!(
+                            "windows-clang timing phase=native-parameter-capture target={} \
+                             event=rejected origin={origin:?} interface={:?} interface_source={:?} \
+                             slot={slot} method={:?} parameter={parameter} parameter_source={:?} \
+                             parameter_type_spelling={:?} parameter_canonical_kind={} \
+                             parameter_const={} parameter_volatile={} parameter_restrict={} {reason}",
+                            self.target.as_deref().unwrap(),
+                            cx_string(unsafe { clang_getCursorSpelling(cursor) }),
+                            cursor_locations(cursor),
+                            slots[slot].name,
+                            cursor_locations(param),
+                            cx_string(unsafe { clang_getTypeSpelling(parameter_type) }),
+                            parameter_canonical.kind,
+                            unsafe { clang_isConstQualifiedType(parameter_canonical) },
+                            unsafe { clang_isVolatileQualifiedType(parameter_canonical) },
+                            unsafe { clang_isRestrictQualifiedType(parameter_canonical) },
+                        );
+                        self.reported_parameters += 1;
                     }
                 }
                 _ => {}
@@ -269,5 +339,144 @@ fn same_signature(left: CXCursor, right: CXCursor) -> bool {
                     clang_getCanonicalType(clang_getArgType(right_ty, index as u32)),
                 ) != 0
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_com_parameter_rejection_diagnostics_preserve_evidence() {
+        const CHILD: &str = "WINDOWS_CLANG_COM_CAPTURE_TEST_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            helpers::ensure_libclang();
+            let input = Input::new(
+                "capture-diagnostics.hpp",
+                r#"
+                struct __declspec(uuid("46aeb9ad-3d5e-497b-8ccd-0479af1ec3cc")) RejectedValue {
+                    int payload;
+                };
+                typedef const volatile int *const volatile __restrict QualifiedPointer;
+                typedef const volatile RejectedValue *const volatile __restrict RejectedPointer;
+                struct CaptureBase {
+                    virtual void __stdcall Keep(int prefix) = 0;
+                };
+                struct CaptureProbe : CaptureBase {
+                    virtual void __stdcall Keep(int prefix) override = 0;
+                    virtual void __stdcall Reject(QualifiedPointer keep, RejectedPointer value) = 0;
+                };
+                "#,
+            );
+            let snapshot = extract(
+                [input],
+                &["-x", "c++", "-std=c++20", "--target=x86_64-pc-windows-msvc"],
+            )
+            .unwrap();
+            let fact = snapshot
+                .facts
+                .iter()
+                .find(|fact| fact.name == "CaptureProbe")
+                .unwrap();
+            let contract = &snapshot.native_com_contracts[&fact.origin];
+            assert_eq!(contract.slots.len(), 2);
+            assert_eq!(contract.slots[0].name, "Keep");
+            assert_eq!(contract.slots[1].name, "Reject");
+            let params = &contract.slots[1].native_params;
+            assert_eq!(params.len(), 2);
+            assert!(params[1].is_none());
+            let native = params[0].as_ref().unwrap();
+            assert_eq!(native.kind, CXType_Pointer);
+            assert!(native.is_const && native.is_volatile && native.is_restrict);
+            println!("\nobserved-origin={:?}", fact.origin);
+            println!("observed-source={:?}", fact.spelling);
+            println!("observed-contract={contract:?}");
+            return;
+        }
+        let test = concat!(
+            module_path!(),
+            "::native_com_parameter_rejection_diagnostics_preserve_evidence"
+        );
+        let mut baseline = None;
+        for enabled in [false, true] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    test.split_once("::").unwrap().1,
+                    "--test-threads=1",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .env_remove("WINDOWS_CLANG_TIMINGS")
+                .env_remove("WINDOWS_CLANG_TIMING");
+            if enabled {
+                child.env("WINDOWS_CLANG_TIMINGS", "1");
+            }
+            let output = child.output().unwrap();
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(output.status.success(), "{stdout}\n{stderr}");
+            assert!(
+                stdout.contains("1 passed; 0 failed; 0 ignored;"),
+                "{stdout}"
+            );
+            let observations: Vec<_> = stdout
+                .lines()
+                .filter(|line| line.starts_with("observed-"))
+                .map(str::to_string)
+                .collect();
+            assert_eq!(observations.len(), 3, "{stdout}");
+            if let Some(baseline) = &baseline {
+                assert_eq!(&observations, baseline);
+            } else {
+                baseline = Some(observations.clone());
+            }
+            if !enabled {
+                assert!(!stderr.contains("windows-clang timing "), "{stderr}");
+                continue;
+            }
+            let records: Vec<_> = stderr
+                .lines()
+                .filter(|line| {
+                    line.contains("phase=native-parameter-capture")
+                        && line.contains("event=rejected ")
+                })
+                .collect();
+            assert_eq!(records.len(), 1, "{stderr}");
+            let record = records[0];
+            assert!(
+                record.contains(observations[0].strip_prefix("observed-origin=").unwrap()),
+                "{record}"
+            );
+            assert!(
+                record.contains(observations[1].strip_prefix("observed-source=").unwrap()),
+                "{record}"
+            );
+            for field in [
+                "interface=\"CaptureProbe\"",
+                "slot=1 method=\"Reject\" parameter=1",
+                "parameter_source=Some(",
+                "parameter_type_spelling=\"RejectedPointer\"",
+                "parameter_const=1 parameter_volatile=1 parameter_restrict=1",
+                "reason=record-attribute",
+                "path=[\"indirect\"] depth=1",
+                "const=1 volatile=1 restrict=0",
+                "witness=Some(",
+                "capture-diagnostics.hpp",
+            ] {
+                assert!(record.contains(field), "{field}: {record}");
+            }
+            assert!(
+                record.contains(&format!("parameter_canonical_kind={CXType_Pointer}")),
+                "{record}"
+            );
+            assert!(
+                record.contains(&format!(" canonical_kind={CXType_Record} ")),
+                "{record}"
+            );
+            assert!(stderr.contains("rejected_parameters=1 detailed_parameters=1 truncated_parameters=0 diagnostic_limit=8"), "{stderr}");
+            eprintln!("{record}");
+        }
     }
 }

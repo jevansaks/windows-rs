@@ -3,6 +3,35 @@ use super::*;
 #[derive(Default)]
 pub(super) struct Capture {
     cached: HashMap<usize, Vec<(CXType, NativeType, usize)>>,
+    trace: Option<RejectionTrace>,
+}
+
+#[derive(Default)]
+struct RejectionTrace {
+    path: Vec<Step>,
+    first: Option<String>,
+}
+
+enum Step {
+    Indirect,
+    ArrayElement,
+    FunctionParameter(u32),
+    FunctionResult,
+    RecordField(usize),
+    EnumUnderlying,
+}
+
+impl Display for Step {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Indirect => formatter.write_str("indirect"),
+            Self::ArrayElement => formatter.write_str("array-element"),
+            Self::FunctionParameter(index) => write!(formatter, "function-parameter[{index}]"),
+            Self::FunctionResult => formatter.write_str("function-result"),
+            Self::RecordField(index) => write!(formatter, "field[{index}]"),
+            Self::EnumUnderlying => formatter.write_str("enum-underlying"),
+        }
+    }
 }
 
 impl Capture {
@@ -10,9 +39,63 @@ impl Capture {
         self.read(ty, 0).map(|(native, _)| native)
     }
 
+    pub(super) fn capture_diagnostic(
+        &mut self,
+        ty: CXType,
+    ) -> (Option<NativeType>, Option<String>) {
+        self.trace = Some(RejectionTrace::default());
+        let native = self.capture(ty);
+        let rejection = self.trace.take().and_then(|trace| trace.first);
+        (native, rejection)
+    }
+
+    fn reject<T>(
+        &mut self,
+        ty: CXType,
+        depth: usize,
+        reason: &'static str,
+        witness: Option<CXCursor>,
+    ) -> Option<T> {
+        if let Some(trace) = &mut self.trace
+            && trace.first.is_none()
+        {
+            let canonical = unsafe { clang_getCanonicalType(ty) };
+            let witness = witness.map(|cursor| {
+                (
+                    unsafe { clang_getCursorKind(cursor) },
+                    cx_string(unsafe { clang_getCursorSpelling(cursor) }),
+                    unsafe { clang_isCursorDefinition(cursor) },
+                    unsafe { clang_getCXXAccessSpecifier(cursor) },
+                    cursor_locations(cursor),
+                    cursor_locations(unsafe { clang_getCursorSemanticParent(cursor) }),
+                )
+            });
+            trace.first = Some(format!(
+                "reason={reason} path={:?} depth={depth} canonical_kind={} \
+                 spelling={:?} const={} volatile={} restrict={} size={} align={} \
+                 address_space={} pod={} witness={witness:?}",
+                trace
+                    .path
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+                canonical.kind,
+                cx_string(unsafe { clang_getTypeSpelling(canonical) }),
+                unsafe { clang_isConstQualifiedType(canonical) },
+                unsafe { clang_isVolatileQualifiedType(canonical) },
+                unsafe { clang_isRestrictQualifiedType(canonical) },
+                unsafe { clang_Type_getSizeOf(canonical) },
+                unsafe { clang_Type_getAlignOf(canonical) },
+                unsafe { clang_getAddressSpace(canonical) },
+                unsafe { clang_isPODType(canonical) },
+            ));
+        }
+        None
+    }
+
     fn read(&mut self, ty: CXType, depth: usize) -> Option<(NativeType, usize)> {
         if depth == 64 {
-            return None;
+            return self.reject(ty, depth, "capture-depth-limit", None);
         }
         let ty = unsafe { clang_getCanonicalType(ty) };
         // Canonical QualType identity selects a bucket; native equality confirms the key.
@@ -24,7 +107,10 @@ impl Capture {
             .flatten()
             .find(|(candidate, _, _)| unsafe { clang_equalTypes(*candidate, ty) } != 0)
         {
-            return (depth + height <= 64).then(|| (native.clone(), *height));
+            if depth + height <= 64 {
+                return Some((native.clone(), *height));
+            }
+            return self.reject(ty, depth, "cached-subtree-depth-limit", None);
         }
         let mut height = 1;
         let layer = match ty.kind {
@@ -39,6 +125,7 @@ impl Capture {
                     unsafe { clang_getPointeeType(ty) },
                     depth,
                     &mut height,
+                    Step::Indirect,
                 )?))
             }
             CXType_ConstantArray => NativeTypeLayer::Array {
@@ -46,8 +133,11 @@ impl Capture {
                     unsafe { clang_getArrayElementType(ty) },
                     depth,
                     &mut height,
+                    Step::ArrayElement,
                 )?),
-                len: u64::try_from(unsafe { clang_getArraySize(ty) }).ok()?,
+                len: u64::try_from(unsafe { clang_getArraySize(ty) })
+                    .ok()
+                    .or_else(|| self.reject(ty, depth, "array-size", None))?,
             },
             CXType_FunctionProto => {
                 let count = unsafe { clang_getNumArgTypes(ty) };
@@ -55,7 +145,7 @@ impl Capture {
                 if count < 0
                     || matches!(convention, CXCallingConv_Invalid | CXCallingConv_Unexposed)
                 {
-                    return None;
+                    return self.reject(ty, depth, "function-arguments-or-convention", None);
                 }
                 NativeTypeLayer::Function {
                     convention,
@@ -67,6 +157,7 @@ impl Capture {
                                 unsafe { clang_getArgType(ty, index as u32) },
                                 depth,
                                 &mut height,
+                                Step::FunctionParameter(index as u32),
                             )
                         })
                         .collect::<Option<_>>()?,
@@ -74,6 +165,7 @@ impl Capture {
                         unsafe { clang_getResultType(ty) },
                         depth,
                         &mut height,
+                        Step::FunctionResult,
                     )?),
                 }
             }
@@ -84,7 +176,7 @@ impl Capture {
                 NativeTypeLayer::Enum(Box::new(enumeration(self, ty, depth, &mut height)?))
             }
             // Dependent, incomplete and unsupported forms have no native evidence.
-            _ => return None,
+            _ => return self.reject(ty, depth, "unsupported-canonical-kind", None),
         };
         let native = NativeType(Arc::new(NativeTypeData {
             kind: ty.kind,
@@ -103,8 +195,21 @@ impl Capture {
         Some((native, height))
     }
 
-    fn child(&mut self, ty: CXType, depth: usize, height: &mut usize) -> Option<NativeType> {
-        let (native, child_height) = self.read(ty, depth + 1)?;
+    fn child(
+        &mut self,
+        ty: CXType,
+        depth: usize,
+        height: &mut usize,
+        step: Step,
+    ) -> Option<NativeType> {
+        if let Some(trace) = &mut self.trace {
+            trace.path.push(step);
+        }
+        let result = self.read(ty, depth + 1);
+        if let Some(trace) = &mut self.trace {
+            trace.path.pop();
+        }
+        let (native, child_height) = result?;
         *height = (*height).max(child_height + 1);
         Some(native)
     }
@@ -158,22 +263,27 @@ fn record(
         || unsafe { clang_Type_getSizeOf(ty) } < 0
         || align <= 0
     {
-        return None;
+        return capture.reject(
+            ty,
+            depth,
+            "record-definition-kind-pod-or-layout",
+            Some(cursor),
+        );
     }
     let mut fields = Vec::new();
     for child in cursor_children(cursor) {
         let kind = unsafe { clang_getCursorKind(child) };
         if unsafe { clang_isAttribute(kind) } != 0 {
-            return None;
+            return capture.reject(ty, depth, "record-attribute", Some(child));
         }
         let anonymous = matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
             && unsafe { clang_Cursor_isAnonymousRecordDecl(child) } != 0;
         if kind == CXCursor_FieldDecl || anonymous {
-            if cursor_children(child)
+            if let Some(attribute) = cursor_children(child)
                 .iter()
-                .any(|child| unsafe { clang_isAttribute(clang_getCursorKind(*child)) } != 0)
+                .find(|child| unsafe { clang_isAttribute(clang_getCursorKind(**child)) } != 0)
             {
-                return None;
+                return capture.reject(ty, depth, "field-attribute", Some(*attribute));
             }
             if kind == CXCursor_FieldDecl
                 && !matches!(
@@ -181,26 +291,33 @@ fn record(
                     CX_CXXInvalidAccessSpecifier | CX_CXXPublic
                 )
             {
-                return None;
+                return capture.reject(ty, depth, "field-access", Some(child));
             }
             let field_ty = unsafe { clang_getCursorType(child) };
-            let native = capture.child(field_ty, depth, height)?;
+            let native = capture.child(field_ty, depth, height, Step::RecordField(fields.len()))?;
             let offset = if anonymous {
-                anonymous_offset(ty, &native, 0)?
+                anonymous_offset(ty, &native, 0)
+                    .or_else(|| capture.reject(ty, depth, "anonymous-offset", Some(child)))?
             } else {
                 unsafe { clang_Cursor_getOffsetOfField(child) }
             };
             let align = unsafe { clang_Type_getAlignOf(field_ty) };
             if offset < 0 || align <= 0 || native.size < 0 {
-                return None;
+                return capture.reject(field_ty, depth, "field-offset-align-or-size", Some(child));
             }
             let bit_width = if unsafe { clang_Cursor_isBitField(child) } != 0 {
-                Some(u32::try_from(unsafe { clang_getFieldDeclBitWidth(child) }).ok()?)
+                Some(
+                    u32::try_from(unsafe { clang_getFieldDeclBitWidth(child) })
+                        .ok()
+                        .or_else(|| capture.reject(field_ty, depth, "bit-width", Some(child)))?,
+                )
             } else {
                 None
             };
             fields.push(NativeField {
-                declaration: declaration(child)?,
+                declaration: declaration(child).or_else(|| {
+                    capture.reject(field_ty, depth, "field-source-or-parent", Some(child))
+                })?,
                 ordinal: fields.len(),
                 offset,
                 align,
@@ -216,11 +333,12 @@ fn record(
                 | CXCursor_TypeAliasDecl
                 | CXCursor_CXXAccessSpecifier
         ) {
-            return None;
+            return capture.reject(ty, depth, "unsupported-record-child", Some(child));
         }
     }
     Some(NativeRecord {
-        declaration: declaration(cursor)?,
+        declaration: declaration(cursor)
+            .or_else(|| capture.reject(ty, depth, "record-source-or-parent", Some(cursor)))?,
         align,
         fields,
     })
@@ -256,38 +374,42 @@ fn enumeration(
 ) -> Option<NativeEnum> {
     let cursor = cursor_definition(unsafe { clang_getTypeDeclaration(ty) });
     if unsafe { clang_isCursorDefinition(cursor) } == 0 || unsafe { clang_Type_getSizeOf(ty) } < 0 {
-        return None;
+        return capture.reject(ty, depth, "enum-definition-or-size", Some(cursor));
     }
     let underlying = capture.child(
         unsafe { clang_getEnumDeclIntegerType(cursor) },
         depth,
         height,
+        Step::EnumUnderlying,
     )?;
     if underlying.layer != NativeTypeLayer::Primitive {
-        return None;
+        return capture.reject(ty, depth, "nonprimitive-enum-underlying", Some(cursor));
     }
     let mut variants = Vec::new();
     for child in cursor_children(cursor) {
         match unsafe { clang_getCursorKind(child) } {
             CXCursor_EnumConstantDecl => {
-                if cursor_children(child)
+                if let Some(attribute) = cursor_children(child)
                     .iter()
-                    .any(|child| unsafe { clang_isAttribute(clang_getCursorKind(*child)) } != 0)
+                    .find(|child| unsafe { clang_isAttribute(clang_getCursorKind(**child)) } != 0)
                 {
-                    return None;
+                    return capture.reject(ty, depth, "enum-variant-attribute", Some(*attribute));
                 }
                 variants.push(NativeVariant {
-                    declaration: declaration(child)?,
+                    declaration: declaration(child).or_else(|| {
+                        capture.reject(ty, depth, "enum-variant-source-or-parent", Some(child))
+                    })?,
                     signed_value: unsafe { clang_getEnumConstantDeclValue(child) },
                     unsigned_value: unsafe { clang_getEnumConstantDeclUnsignedValue(child) },
                 });
             }
             CXCursor_TypeRef => {}
-            _ => return None,
+            _ => return capture.reject(ty, depth, "unsupported-enum-child", Some(child)),
         }
     }
     Some(NativeEnum {
-        declaration: declaration(cursor)?,
+        declaration: declaration(cursor)
+            .or_else(|| capture.reject(ty, depth, "enum-source-or-parent", Some(cursor)))?,
         underlying,
         scoped: unsafe { clang_EnumDecl_isScoped(cursor) } != 0,
         variants,
@@ -297,6 +419,73 @@ fn enumeration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_evidence_diagnostics_preserve_capture_and_rejection() {
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let input = Input::new(
+            "diagnostic.hpp",
+            r#"
+            struct Incomplete;
+            struct __declspec(uuid("eb4ee56d-e9e2-4ead-9341-0603c96e843c")) Attributed { int value; };
+            typedef const volatile int *const volatile QualifiedPointer;
+            typedef const volatile Incomplete *const volatile IncompletePointer;
+            typedef Attributed *AttributedPointer;
+            "#,
+        );
+        let tu = TranslationUnit::parse(
+            &index,
+            &input,
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        let aliases: BTreeMap<_, _> =
+            cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) })
+                .into_iter()
+                .filter(|cursor| unsafe { clang_getCursorKind(*cursor) } == CXCursor_TypedefDecl)
+                .map(|cursor| {
+                    (
+                        cx_string(unsafe { clang_getCursorSpelling(cursor) }),
+                        unsafe { clang_getTypedefDeclUnderlyingType(cursor) },
+                    )
+                })
+                .collect();
+        let mut normal = Capture::default();
+        let mut diagnostic = Capture::default();
+        for (name, ty) in &aliases {
+            let expected = normal.capture(*ty);
+            let (actual, reason) = diagnostic.capture_diagnostic(*ty);
+            assert_eq!(actual, expected, "{name}");
+            if name == "QualifiedPointer" {
+                let native = actual.unwrap();
+                assert!(native.is_const && native.is_volatile);
+                assert!(reason.is_none());
+            } else {
+                assert!(actual.is_none(), "{name}");
+                let reason = reason.unwrap();
+                assert!(reason.contains("path=[\"indirect\"]"), "{reason}");
+                assert!(reason.contains("diagnostic.hpp"), "{reason}");
+                let expected = if name == "IncompletePointer" {
+                    "reason=record-definition-kind-pod-or-layout"
+                } else {
+                    "reason=record-attribute"
+                };
+                assert!(reason.contains(expected), "{reason}");
+            }
+        }
+        let ty = aliases["QualifiedPointer"];
+        diagnostic.trace = Some(RejectionTrace::default());
+        assert!(diagnostic.read(ty, 63).is_none());
+        assert!(normal.read(ty, 63).is_none());
+        let reason = diagnostic.trace.take().unwrap().first.unwrap();
+        assert!(
+            reason.contains("reason=cached-subtree-depth-limit"),
+            "{reason}"
+        );
+        assert!(reason.contains("depth=63"), "{reason}");
+        assert!(diagnostic.capture(ty).is_some());
+    }
 
     #[test]
     fn native_evidence_cache_respects_remaining_depth() {

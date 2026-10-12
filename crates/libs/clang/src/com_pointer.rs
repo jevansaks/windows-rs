@@ -1239,8 +1239,10 @@ impl<'facts> Bindings<'facts> {
                 providers: BTreeMap::new(),
             };
         }
+        let mut phase = TimingPhase::new(snapshot.timing_target.as_deref(), "native-providers");
         let mut eligible: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
         for (origin, contract) in &snapshot.native_com_contracts {
+            phase.visit(Some(snapshot.native_com_contracts.len()));
             let Some(fact) = facts.get(origin) else {
                 continue;
             };
@@ -1275,7 +1277,9 @@ impl<'facts> Bindings<'facts> {
                 providers.insert(origin.clone(), Err(Failure::Unproved));
             }
         }
+        phase.next("native-provider-comparison");
         for (origin, contract) in &snapshot.native_com_contracts {
+            phase.visit(Some(snapshot.native_com_contracts.len()));
             let Some(fact) = facts.get(origin) else {
                 continue;
             };
@@ -1323,6 +1327,7 @@ impl<'facts> Bindings<'facts> {
             };
             providers.insert(origin.clone(), result);
         }
+        phase.event("complete", None);
         Self { providers }
     }
 
