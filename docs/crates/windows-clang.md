@@ -267,6 +267,13 @@ and parameter and result types. Header planning can bind an unowned struct depen
 owned interface only when those contracts agree. Referenced data-record and enum types are checked
 in each original translation unit; equal names or type-reference locations do not prove equal
 layouts. Parameter names and metadata annotations come from the owned provider, not the helper.
+Named records and anonymous inline records share recursive layout checks, including unions, packing,
+explicit alignment, and each field's offset, size, alignment, bit width, and original-unit type.
+Contract mismatch errors identify the candidate and provider Origins, physical sources, owners, and
+first failing slot, parameter or result, alias, and nested field path.
+Alias-cycle guards cover uninterrupted alias, pointer, reference, array, and inline-record expansion.
+Exact named record and interface bodies use separate declaration-pair guards, so reciprocal COM
+pointer contracts can be compared without treating a repeated finite alias as a typedef cycle.
 Pointer and COM out-pointer uses can use the interface. By-value, reference, object-array, and
 count-annotated object-buffer uses require the native record layout and remain errors, including
 when another use of the same type is a valid pointer. Arrays of COM pointers remain pointer uses.

@@ -8,6 +8,46 @@ pub(super) struct Context<'a, 'facts> {
     pub excluded_types: Option<&'a BTreeSet<String>>,
 }
 
+struct TypeExpansion<'a> {
+    structural_pairs: &'a mut BTreeSet<(Origin, Origin)>,
+    left_aliases: BTreeSet<Origin>,
+    right_aliases: BTreeSet<Origin>,
+}
+
+impl<'a> TypeExpansion<'a> {
+    fn new(structural_pairs: &'a mut BTreeSet<(Origin, Origin)>) -> Self {
+        Self {
+            structural_pairs,
+            left_aliases: BTreeSet::new(),
+            right_aliases: BTreeSet::new(),
+        }
+    }
+}
+
+struct RecordLayout<'a> {
+    base: Option<&'a TypeRef>,
+    fields: &'a [Field],
+    size: i64,
+    align: i64,
+    packing: Option<i64>,
+    alignment: Option<i64>,
+    union: bool,
+}
+
+impl<'a> From<&'a InlineRecord> for RecordLayout<'a> {
+    fn from(record: &'a InlineRecord) -> Self {
+        Self {
+            base: record.base.as_ref(),
+            fields: &record.fields,
+            size: record.size,
+            align: record.align,
+            packing: record.packing,
+            alignment: record.alignment,
+            union: record.union,
+        }
+    }
+}
+
 impl<'facts> Context<'_, 'facts> {
     fn exact(&self, tu: &str, name: &str, location: &Location) -> Option<&'facts Fact> {
         let fact = *self
@@ -33,29 +73,54 @@ impl<'facts> Context<'_, 'facts> {
         left: &Fact,
         right: &Fact,
         seen: &mut BTreeSet<(Origin, Origin)>,
-    ) -> bool {
+    ) -> Result<(), String> {
         let (Some(a), Some(b)) = (
             self.snapshot.native_com_contracts.get(&left.origin),
             self.snapshot.native_com_contracts.get(&right.origin),
         ) else {
-            return false;
+            return Err(format!(
+                "missing native contract for {:?} or {:?}",
+                left.origin, right.origin
+            ));
         };
         if a.guid != b.guid
             || a.pointer_width != b.pointer_width
             || a.bases != b.bases
             || a.slots.len() != b.slots.len()
         {
-            return false;
+            return Err(format!(
+                "contract header: IID {:?}/{:?}, pointer width {}/{}, bases {:?}/{:?}, slots {}/{}",
+                a.guid,
+                b.guid,
+                a.pointer_width,
+                b.pointer_width,
+                a.bases,
+                b.bases,
+                a.slots.len(),
+                b.slots.len()
+            ));
         }
         let pair = (left.origin.clone(), right.origin.clone());
         if !seen.insert(pair.clone()) {
-            return true;
+            return Ok(());
         }
-        let result = a.slots.iter().zip(&b.slots).all(|(a, b)| {
-            a.name == b.name
-                && a.convention == b.convention
-                && a.params.len() == b.params.len()
-                && self.types_equal(
+        let result = (|| {
+            for (index, (a, b)) in a.slots.iter().zip(&b.slots).enumerate() {
+                if a.name != b.name
+                    || a.convention != b.convention
+                    || a.params.len() != b.params.len()
+                {
+                    return Err(format!(
+                        "slot {index}: name {:?}/{:?}, native convention {}/{}, parameters {}/{}",
+                        a.name,
+                        b.name,
+                        a.convention,
+                        b.convention,
+                        a.params.len(),
+                        b.params.len()
+                    ));
+                }
+                self.types_equal(
                     &a.result,
                     &left.origin.tu,
                     &b.result,
@@ -63,14 +128,19 @@ impl<'facts> Context<'_, 'facts> {
                     false,
                     seen,
                 )
-                && a.params.iter().zip(&b.params).all(|(a, b)| {
-                    if a.annotation.size.is_some() || b.annotation.size.is_some() {
+                .map_err(|reason| format!("slot {index} `{}` -> result -> {reason}", a.name))?;
+                for (parameter, (a_param, b_param)) in a.params.iter().zip(&b.params).enumerate() {
+                    let matched = if a_param.annotation.size.is_some()
+                        || b_param.annotation.size.is_some()
+                    {
                         if let (Some((a_mut, a_target)), Some((b_mut, b_target))) = (
-                            self.pointer_target(&a.ty, &left.origin.tu),
-                            self.pointer_target(&b.ty, &right.origin.tu),
+                            self.pointer_target(&a_param.ty, &left.origin.tu),
+                            self.pointer_target(&b_param.ty, &right.origin.tu),
                         ) {
-                            a_mut == b_mut
-                                && self.types_equal(
+                            if a_mut != b_mut {
+                                Err("counted pointer mutability differs".to_string())
+                            } else {
+                                self.types_equal(
                                     a_target,
                                     &left.origin.tu,
                                     b_target,
@@ -78,21 +148,30 @@ impl<'facts> Context<'_, 'facts> {
                                     false,
                                     seen,
                                 )
+                            }
                         } else {
-                            false
+                            Err("counted parameter has no exact native pointer target".to_string())
                         }
                     } else {
                         self.types_equal(
-                            &a.ty,
+                            &a_param.ty,
                             &left.origin.tu,
-                            &b.ty,
+                            &b_param.ty,
                             &right.origin.tu,
                             false,
                             seen,
                         )
-                    }
-                })
-        });
+                    };
+                    matched.map_err(|reason| {
+                        format!(
+                            "slot {index} `{}` -> parameter {parameter} -> {reason}",
+                            a.name
+                        )
+                    })?;
+                }
+            }
+            Ok(())
+        })();
         seen.remove(&pair);
         result
     }
@@ -118,6 +197,79 @@ impl<'facts> Context<'_, 'facts> {
         }
     }
 
+    fn records_equal(
+        &self,
+        a: RecordLayout<'_>,
+        a_tu: &str,
+        b: RecordLayout<'_>,
+        b_tu: &str,
+        origins: Option<(&Origin, &Origin)>,
+        expansion: &mut TypeExpansion<'_>,
+    ) -> Result<(), String> {
+        if (a.size, a.align, a.packing, a.alignment, a.union)
+            != (b.size, b.align, b.packing, b.alignment, b.union)
+            || a.fields.len() != b.fields.len()
+        {
+            return Err(format!(
+                "record layout: size {}/{}, alignment {}/{}, packing {:?}/{:?}, \
+                 explicit alignment {:?}/{:?}, union {}/{}, fields {}/{}",
+                a.size,
+                b.size,
+                a.align,
+                b.align,
+                a.packing,
+                b.packing,
+                a.alignment,
+                b.alignment,
+                a.union,
+                b.union,
+                a.fields.len(),
+                b.fields.len()
+            ));
+        }
+        let pair = origins.map(|(a, b)| (a.clone(), b.clone()));
+        if pair
+            .as_ref()
+            .is_some_and(|pair| !expansion.structural_pairs.insert(pair.clone()))
+        {
+            return Ok(());
+        }
+        let result = (|| {
+            match (a.base, b.base) {
+                (Some(a_base), Some(b_base)) => self
+                    .types_equal_expanded(a_base, a_tu, b_base, b_tu, false, expansion)
+                    .map_err(|reason| format!("record base -> {reason}"))?,
+                (None, None) => {}
+                _ => return Err("record base presence differs".to_string()),
+            }
+            for (index, (a, b)) in a.fields.iter().zip(b.fields).enumerate() {
+                if (a.offset, a.size, a.align, a.bit_width)
+                    != (b.offset, b.size, b.align, b.bit_width)
+                {
+                    return Err(format!(
+                        "field {index}: offset {}/{}, size {}/{}, alignment {}/{}, \
+                         bit width {:?}/{:?}",
+                        a.offset,
+                        b.offset,
+                        a.size,
+                        b.size,
+                        a.align,
+                        b.align,
+                        a.bit_width,
+                        b.bit_width
+                    ));
+                }
+                self.types_equal_expanded(&a.ty, a_tu, &b.ty, b_tu, false, expansion)
+                    .map_err(|reason| format!("field {index} -> {reason}"))?;
+            }
+            Ok(())
+        })();
+        if let Some(pair) = pair {
+            expansion.structural_pairs.remove(&pair);
+        }
+        result
+    }
+
     fn types_equal(
         &self,
         a: &TypeRef,
@@ -126,33 +278,51 @@ impl<'facts> Context<'_, 'facts> {
         b_tu: &str,
         pointer: bool,
         seen: &mut BTreeSet<(Origin, Origin)>,
-    ) -> bool {
+    ) -> Result<(), String> {
+        self.types_equal_expanded(a, a_tu, b, b_tu, pointer, &mut TypeExpansion::new(seen))
+    }
+
+    fn types_equal_expanded(
+        &self,
+        a: &TypeRef,
+        a_tu: &str,
+        b: &TypeRef,
+        b_tu: &str,
+        pointer: bool,
+        expansion: &mut TypeExpansion<'_>,
+    ) -> Result<(), String> {
         if let TypeRef::Named { name, declaration } = a {
             let Some(fact) = self.exact(a_tu, name, declaration) else {
-                return false;
+                return Err(format!(
+                    "unresolved exact declaration `{name}` at {}:{} in `{a_tu}`",
+                    declaration.file, declaration.offset
+                ));
             };
             if let FactData::Typedef { target } = &fact.data {
-                let pair = (fact.origin.clone(), fact.origin.clone());
-                if !seen.insert(pair.clone()) {
-                    return false;
+                if !expansion.left_aliases.insert(fact.origin.clone()) {
+                    return Err(format!("typedef cycle at {:?}", fact.origin));
                 }
-                let result = self.types_equal(target, a_tu, b, b_tu, pointer, seen);
-                seen.remove(&pair);
-                return result;
+                let result = self.types_equal_expanded(target, a_tu, b, b_tu, pointer, expansion);
+                expansion.left_aliases.remove(&fact.origin);
+                return result
+                    .map_err(|reason| format!("alias `{name}` {:?} -> {reason}", fact.origin));
             }
         }
         if let TypeRef::Named { name, declaration } = b {
             let Some(fact) = self.exact(b_tu, name, declaration) else {
-                return false;
+                return Err(format!(
+                    "unresolved exact declaration `{name}` at {}:{} in `{b_tu}`",
+                    declaration.file, declaration.offset
+                ));
             };
             if let FactData::Typedef { target } = &fact.data {
-                let pair = (fact.origin.clone(), fact.origin.clone());
-                if !seen.insert(pair.clone()) {
-                    return false;
+                if !expansion.right_aliases.insert(fact.origin.clone()) {
+                    return Err(format!("typedef cycle at {:?}", fact.origin));
                 }
-                let result = self.types_equal(a, a_tu, target, b_tu, pointer, seen);
-                seen.remove(&pair);
-                return result;
+                let result = self.types_equal_expanded(a, a_tu, target, b_tu, pointer, expansion);
+                expansion.right_aliases.remove(&fact.origin);
+                return result
+                    .map_err(|reason| format!("alias `{name}` {:?} -> {reason}", fact.origin));
             }
         }
         match (a, b) {
@@ -165,7 +335,9 @@ impl<'facts> Context<'_, 'facts> {
                     mutable: b_mut,
                     target: b,
                 },
-            ) => a_mut == b_mut && self.types_equal(a, a_tu, b, b_tu, true, seen),
+            ) if a_mut == b_mut => self
+                .types_equal_expanded(a, a_tu, b, b_tu, true, expansion)
+                .map_err(|reason| format!("pointer target -> {reason}")),
             (
                 TypeRef::Reference {
                     mutable: a_mut,
@@ -175,7 +347,9 @@ impl<'facts> Context<'_, 'facts> {
                     mutable: b_mut,
                     target: b,
                 },
-            ) => a_mut == b_mut && self.types_equal(a, a_tu, b, b_tu, false, seen),
+            ) if a_mut == b_mut => self
+                .types_equal_expanded(a, a_tu, b, b_tu, false, expansion)
+                .map_err(|reason| format!("reference layout -> {reason}")),
             (
                 TypeRef::Array {
                     target: a,
@@ -185,7 +359,19 @@ impl<'facts> Context<'_, 'facts> {
                     target: b,
                     len: b_len,
                 },
-            ) => a_len == b_len && self.types_equal(a, a_tu, b, b_tu, false, seen),
+            ) if a_len == b_len => self
+                .types_equal_expanded(a, a_tu, b, b_tu, false, expansion)
+                .map_err(|reason| format!("array layout -> {reason}")),
+            (TypeRef::InlineRecord(a), TypeRef::InlineRecord(b)) => self
+                .records_equal(
+                    a.as_ref().into(),
+                    a_tu,
+                    b.as_ref().into(),
+                    b_tu,
+                    None,
+                    expansion,
+                )
+                .map_err(|reason| format!("inline record -> {reason}")),
             (
                 TypeRef::Named {
                     name: a_name,
@@ -200,13 +386,21 @@ impl<'facts> Context<'_, 'facts> {
                     self.exact(a_tu, a_name, a_location),
                     self.exact(b_tu, b_name, b_location),
                 ) else {
-                    return false;
+                    return Err(format!(
+                        "unresolved exact declarations `{a_name}` at {}:{} in `{a_tu}` or \
+                         `{b_name}` at {}:{} in `{b_tu}`",
+                        a_location.file, a_location.offset, b_location.file, b_location.offset
+                    ));
                 };
                 if pointer
                     && self.snapshot.native_com_contracts.contains_key(&a.origin)
                     && self.snapshot.native_com_contracts.contains_key(&b.origin)
                 {
-                    return self.contracts_equal(a, b, seen);
+                    return self
+                        .contracts_equal(a, b, expansion.structural_pairs)
+                        .map_err(|reason| {
+                            format!("COM pointees {:?}/{:?} -> {reason}", a.origin, b.origin)
+                        });
                 }
                 match (&a.data, &b.data) {
                     (
@@ -228,44 +422,51 @@ impl<'facts> Context<'_, 'facts> {
                             alignment: b_alignment,
                             union: b_union,
                         },
-                    ) => {
-                        if (a_size, a_align, a_pack, a_alignment, a_union)
-                            != (b_size, b_align, b_pack, b_alignment, b_union)
-                            || a_fields.len() != b_fields.len()
-                        {
-                            return false;
-                        }
-                        let pair = (a.origin.clone(), b.origin.clone());
-                        if !seen.insert(pair.clone()) {
-                            return true;
-                        }
-                        let base_equal = match (a_base, b_base) {
-                            (Some(a_base), Some(b_base)) => {
-                                self.types_equal(a_base, a_tu, b_base, b_tu, false, seen)
-                            }
-                            (None, None) => true,
-                            _ => false,
-                        };
-                        let result = base_equal
-                            && a_fields.iter().zip(b_fields).all(|(a, b)| {
-                                (a.offset, a.size, a.align, a.bit_width)
-                                    == (b.offset, b.size, b.align, b.bit_width)
-                                    && self.types_equal(&a.ty, a_tu, &b.ty, b_tu, false, seen)
-                            });
-                        seen.remove(&pair);
-                        result
-                    }
-                    (FactData::Enum { .. }, FactData::Enum { .. }) => a.data == b.data,
+                    ) => self
+                        .records_equal(
+                            RecordLayout {
+                                base: a_base.as_ref(),
+                                fields: a_fields,
+                                size: *a_size,
+                                align: *a_align,
+                                packing: *a_pack,
+                                alignment: *a_alignment,
+                                union: *a_union,
+                            },
+                            a_tu,
+                            RecordLayout {
+                                base: b_base.as_ref(),
+                                fields: b_fields,
+                                size: *b_size,
+                                align: *b_align,
+                                packing: *b_pack,
+                                alignment: *b_alignment,
+                                union: *b_union,
+                            },
+                            b_tu,
+                            Some((&a.origin, &b.origin)),
+                            &mut TypeExpansion::new(expansion.structural_pairs),
+                        )
+                        .map_err(|reason| {
+                            format!("record {:?}/{:?} -> {reason}", a.origin, b.origin)
+                        }),
+                    (FactData::Enum { .. }, FactData::Enum { .. }) if a.data == b.data => Ok(()),
                     (FactData::Interface { .. }, FactData::Interface { .. }) => {
-                        self.contracts_equal(a, b, seen)
+                        self.contracts_equal(a, b, expansion.structural_pairs)
                     }
-                    _ => false,
+                    _ => Err(format!(
+                        "native declaration kinds at {:?}/{:?}: {}/{}",
+                        a.origin,
+                        b.origin,
+                        fact_data_kind(&a.data),
+                        fact_data_kind(&b.data)
+                    )),
                 }
             }
             (TypeRef::Void, TypeRef::Void)
             | (TypeRef::String, TypeRef::String)
-            | (TypeRef::Object, TypeRef::Object) => true,
-            (TypeRef::Scalar(a), TypeRef::Scalar(b)) => a == b,
+            | (TypeRef::Object, TypeRef::Object) => Ok(()),
+            (TypeRef::Scalar(a), TypeRef::Scalar(b)) if a == b => Ok(()),
             (
                 TypeRef::OpaquePointer {
                     mutable: a_mut,
@@ -275,25 +476,30 @@ impl<'facts> Context<'_, 'facts> {
                     mutable: b_mut,
                     tag: b,
                 },
-            ) => a_mut == b_mut && a == b,
-            _ => false,
+            ) if a_mut == b_mut && a == b => Ok(()),
+            _ => Err(format!("unsupported or differing native types {a:?}/{b:?}")),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(super) enum Failure {
     Missing,
-    Conflicting,
+    Conflicting(Arc<str>),
     Ambiguous,
     Unproved,
 }
 
 impl Failure {
-    pub fn message(self, name: &str) -> String {
+    pub fn message(&self, name: &str) -> String {
         let reason = match self {
             Self::Missing => "has no eligible owned interface",
-            Self::Conflicting => "has conflicting native COM pointer contracts",
+            Self::Conflicting(reason) => {
+                return format!(
+                    "native COM record `{name}` has conflicting native COM pointer contracts: \
+                     {reason}"
+                );
+            }
             Self::Ambiguous => "has ambiguous eligible COM interface providers",
             Self::Unproved => "has no proved native COM pointer contract",
         };
@@ -372,10 +578,22 @@ impl<'facts> Bindings<'facts> {
                             || !same_owner_policy(&snapshot.root_owners[&candidate.origin], owner)
                     }) {
                         Err(Failure::Ambiguous)
-                    } else if candidates.iter().any(|candidate| {
-                        !context.contracts_equal(fact, candidate, &mut BTreeSet::new())
-                    }) {
-                        Err(Failure::Conflicting)
+                    } else if let Some((candidate, reason)) =
+                        candidates.iter().find_map(|candidate| {
+                            context
+                                .contracts_equal(fact, candidate, &mut BTreeSet::new())
+                                .err()
+                                .map(|reason| (*candidate, reason))
+                        })
+                    {
+                        Err(Failure::Conflicting(format!(
+                            "candidate {:?} at {}:{} owner {:?}; provider {:?} at {}:{} owner {:?}; \
+                             first mismatch: {reason}",
+                            fact.origin, fact.spelling.file, fact.spelling.offset,
+                            snapshot.root_owners.get(&fact.origin),
+                            candidate.origin, candidate.spelling.file, candidate.spelling.offset,
+                            snapshot.root_owners.get(&candidate.origin)
+                        ).into()))
                     } else {
                         Ok(preferred_fact(candidates))
                     }
@@ -392,7 +610,7 @@ impl<'facts> Bindings<'facts> {
         index: &HashMap<&str, Vec<&'facts Fact>>,
     ) -> Option<Result<&'facts Fact, Failure>> {
         let target = typedef_tag_declaration(fact, index).unwrap_or(fact);
-        self.providers.get(&target.origin).copied()
+        self.providers.get(&target.origin).cloned()
     }
 
     pub fn validate_use(
@@ -461,7 +679,9 @@ impl<'facts> Bindings<'facts> {
                             declaration.file, declaration.offset,
                         )));
                     }
-                    provider.map_err(|failure| Error(failure.message(name)))?;
+                    provider
+                        .as_ref()
+                        .map_err(|failure| Error(failure.message(name)))?;
                 }
                 if !seen.insert(fact.origin.clone()) {
                     return Ok(());

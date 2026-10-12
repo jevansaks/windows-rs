@@ -6528,8 +6528,10 @@ impl Snapshot {
                 };
                 let mut fact = selected;
                 let com_provider = com_bindings.provider_for(fact, &facts_index);
-                if let Some(provider) = com_provider {
-                    let provider = provider.map_err(|failure| Error(failure.message(name)))?;
+                if let Some(provider) = &com_provider {
+                    let provider = *provider
+                        .as_ref()
+                        .map_err(|failure| Error(failure.message(name)))?;
                     if provider.name == fact.name {
                         fact = provider;
                         if matches!(edge, TypeEdge::Pointee(..)) {
