@@ -139,6 +139,7 @@ fn sal_count_observations_inspect_only_the_selected_source_bucket() {
                 }),
             );
         }
+
         let facts = snapshot
             .facts
             .iter()
@@ -168,6 +169,341 @@ fn sal_count_observations_inspect_only_the_selected_source_bucket() {
             observations.inspected.get(),
             start.elapsed().as_secs_f64() * 1000.0,
         );
+    }
+}
+
+fn diagnostic_interface(tu: &str, local: u32) -> Fact {
+    test_fact_in_tu(
+        tu,
+        local,
+        None,
+        FactKind::Struct,
+        "Example",
+        Location {
+            file: "common.hpp".to_string(),
+            offset: 100,
+        },
+        FactData::Interface {
+            guid: Some("00000000-0000-0000-c000-000000000046".to_string()),
+            base: None,
+            methods: vec![Method {
+                name: "Update".to_string(),
+                params: vec![Parameter {
+                    name: "value".to_string(),
+                    ty: TypeRef::Scalar(Scalar::I32),
+                    annotation: ParamAnnotation::default(),
+                }],
+                result: TypeRef::Void,
+                special: false,
+            }],
+        },
+    )
+}
+
+#[test]
+fn root_failure_diagnostics_preserve_non_type_error_contracts() {
+    let snapshot = snapshot(vec![diagnostic_interface("owner", 1)]);
+    let candidates = [&snapshot.facts[0]];
+    for category in [
+        "collision",
+        "value",
+        "constant",
+        "function",
+        "selected function",
+    ] {
+        let error = root_selection_error(
+            &snapshot,
+            "Example",
+            category,
+            Error("legacy failure".to_string()),
+            &candidates,
+            &[],
+        );
+        assert_eq!(error.error.to_string(), "legacy failure");
+        assert_eq!(
+            aggregate_root_selection_errors(vec![error]).to_string(),
+            "legacy failure"
+        );
+    }
+    let errors = ["first function failure", "second function failure"]
+        .map(|message| {
+            root_selection_error(
+                &snapshot,
+                "Example",
+                "function",
+                Error(message.to_string()),
+                &candidates,
+                &[],
+            )
+        })
+        .into_iter()
+        .collect();
+    assert_eq!(
+        aggregate_root_selection_errors(errors).to_string(),
+        "ambiguous function roots (2):\n  first function failure\n  second function failure"
+    );
+}
+
+#[test]
+fn root_failure_diagnostics_single_initial_retains_uncoalesced_context() {
+    let first = diagnostic_interface("owner", 1);
+    let duplicate = diagnostic_interface("observed", 1);
+    let mut missing = alias(2, "Example", "alias.hpp", 2, named(&first));
+    missing.origin.tu = "consumer".to_string();
+    let mut snapshot = snapshot(vec![first, duplicate, missing]);
+    snapshot.root_owners.insert(
+        snapshot.facts[0].origin.clone(),
+        authority_root_owner("owner", "Test", "common.hpp"),
+    );
+    let error = snapshot
+        .plan_partitioned(
+            &EmitOptions::new("Test", &BTreeMap::new()),
+            &BTreeMap::new(),
+            &PlanningSourceNames::new(&snapshot),
+        )
+        .err()
+        .unwrap()
+        .to_string();
+    for expected in [
+        "phase=initial",
+        "pre-coalescence",
+        "tu: \"owner\"",
+        "tu: \"observed\"",
+        "tu: \"consumer\"",
+        "owner=Some",
+        "parent=None",
+        "suppressed=false",
+        "alias hop",
+        "common.hpp:100",
+        "missing exact bucket",
+    ] {
+        assert!(error.contains(expected), "{expected}: {error}");
+    }
+}
+
+#[test]
+fn root_failure_diagnostics_late_group_retains_terminal_parameter_path() {
+    let owner = diagnostic_interface("owner", 1);
+    let mut foreign = diagnostic_interface("consumer", 1);
+    foreign.root = false;
+    let FactData::Interface { methods, .. } = &mut foreign.data else {
+        unreachable!()
+    };
+    methods[0].params[0].ty = TypeRef::Scalar(Scalar::F32);
+    let mut bridge = alias(2, "Example", "alias.hpp", 2, named(&foreign));
+    bridge.origin.tu = "consumer".to_string();
+    bridge.root = false;
+    let mut selected = function("consumer", 3, "Use", "use.hpp", "value", true);
+    let FactData::Function { params, .. } = &mut selected.data else {
+        unreachable!()
+    };
+    params[0].ty = TypeRef::Pointer {
+        mutable: true,
+        target: Box::new(named(&bridge)),
+    };
+    let snapshot = snapshot(vec![owner, foreign, bridge, selected]);
+    let error = snapshot
+        .plan_partitioned(
+            &EmitOptions::new("Test", &BTreeMap::new()),
+            &BTreeMap::new(),
+            &PlanningSourceNames::new(&snapshot),
+        )
+        .err()
+        .unwrap()
+        .to_string();
+    for expected in [
+        "phase=post-closure",
+        "tu: \"owner\"",
+        "tu: \"consumer\"",
+        "exact bucket",
+        "terminal",
+        "data.methods[0](Update).params[0](value).ty",
+        "representation/source mismatch (not ABI proof)",
+        "F32",
+        "I32",
+    ] {
+        assert!(error.contains(expected), "{expected}: {error}");
+    }
+}
+
+#[test]
+fn root_failure_diagnostics_alias_failures_reuse_exact_resolver() {
+    let terminal = diagnostic_interface("tu", 1);
+    let mut bridge = alias(2, "Example", "alias.hpp", 2, named(&terminal));
+    bridge.root = false;
+    for case in ["missing", "cycle", "conflict", "non-tag"] {
+        let mut facts = vec![terminal.clone(), bridge.clone()];
+        match case {
+            "missing" => {
+                facts.remove(0);
+            }
+            "cycle" => {
+                facts[1].data = FactData::Typedef {
+                    target: named(&facts[1]),
+                };
+            }
+            "conflict" => {
+                let mut conflict = terminal.clone();
+                conflict.origin.local = 4;
+                let FactData::Interface { methods, .. } = &mut conflict.data else {
+                    unreachable!()
+                };
+                methods[0].result = TypeRef::Scalar(Scalar::I32);
+                facts.push(conflict);
+            }
+            "non-tag" => {
+                facts[0].kind = FactKind::Typedef;
+                facts[0].data = FactData::Typedef {
+                    target: TypeRef::Scalar(Scalar::I32),
+                };
+            }
+            _ => unreachable!(),
+        }
+        let index = facts
+            .iter()
+            .fold(HashMap::<&str, Vec<&Fact>>::new(), |mut index, fact| {
+                index.entry(&fact.name).or_default().push(fact);
+                index
+            });
+        let alias = facts.iter().find(|fact| fact.origin.local == 2).unwrap();
+        let ordinary = typedef_declaration(alias, &index).map(|fact| &fact.origin);
+        let snapshot = snapshot(facts.clone());
+        let mut trace = String::new();
+        let observed =
+            typedef_declaration_with_diagnostics(alias, &index, Some((&snapshot, &mut trace)))
+                .map(|fact| &fact.origin);
+        assert_eq!(ordinary, observed);
+        let selected = vec![alias];
+        for phase in ["associated", "constant-collision"] {
+            let error = aggregate_root_selection_errors(vec![type_root_selection_error(
+                &snapshot,
+                "Example",
+                phase,
+                Error("ambiguous type root `Example`".to_string()),
+                &selected,
+                &selected,
+                &index,
+            )])
+            .to_string();
+            assert!(error.contains(&format!("phase={phase}")), "{error}");
+            let expected = match case {
+                "missing" => "missing exact bucket",
+                "cycle" => "cycle at",
+                "conflict" => "conflicting bucket",
+                "non-tag" => "non-tag terminal",
+                _ => unreachable!(),
+            };
+            assert!(error.contains(expected), "{error}");
+            if case == "conflict" {
+                assert!(error.contains("data.methods[0](Update).result"), "{error}");
+                assert!(error.contains("local: 4"), "{error}");
+            }
+        }
+    }
+}
+
+#[test]
+fn root_failure_diagnostics_unselected_target_retains_full_context() {
+    let provider = diagnostic_interface("provider", 1);
+    let mut target = diagnostic_interface("consumer", 9);
+    target.root = false;
+    target.parent = Some(Origin {
+        tu: "consumer".to_string(),
+        local: 99,
+    });
+    let FactData::Interface { methods, .. } = &mut target.data else {
+        unreachable!()
+    };
+    methods[0].params[0].ty = TypeRef::Scalar(Scalar::F32);
+    let mut bridge = alias(2, "Example", "alias.hpp", 2, named(&target));
+    bridge.origin.tu = "consumer".to_string();
+    let target_origin = target.origin.clone();
+    let mut snapshot = snapshot(vec![provider, target, bridge]);
+    snapshot.root_owners.insert(
+        target_origin.clone(),
+        authority_root_owner("TargetOwner", "Target.Namespace", "common.hpp"),
+    );
+    snapshot.root_partitions.insert(
+        ("consumer".to_string(), "common.hpp".to_string()),
+        authority_root_owner("SourceOwner", "Source.Namespace", "common.hpp"),
+    );
+    snapshot
+        .fact_namespace_authorities
+        .insert(target_origin.clone(), "Terminal.Authority".to_string());
+    snapshot
+        .suppressed_type_origins
+        .insert(target_origin.clone());
+    let selected = [&snapshot.facts[0], &snapshot.facts[2]];
+    assert!(selected.iter().all(|fact| fact.origin != target_origin));
+    let index =
+        snapshot
+            .facts
+            .iter()
+            .fold(HashMap::<&str, Vec<&Fact>>::new(), |mut index, fact| {
+                index.entry(&fact.name).or_default().push(fact);
+                index
+            });
+    let failure = choose_type_root("Example", &selected, &index)
+        .err()
+        .unwrap();
+    let error = aggregate_root_selection_errors(vec![type_root_selection_error(
+        &snapshot,
+        "Example",
+        "post-closure",
+        failure,
+        &selected,
+        &selected,
+        &index,
+    )])
+    .to_string();
+    for marker in ["exact bucket", "    terminal"] {
+        let row = error.lines().find(|row| row.contains(marker)).unwrap();
+        for expected in [
+            "tu: \"consumer\", local: 9",
+            "spelling=common.hpp:100",
+            "expansion=common.hpp:100",
+            "parent=Some(Origin { tu: \"consumer\", local: 99 })",
+            "root=false",
+            "suppressed=true",
+            "namespace=Some(\"Terminal.Authority\")",
+            "owner=Some(RootOwner { input: \"TargetOwner\"",
+            "source_owner=Some(RootOwner { input: \"SourceOwner\"",
+        ] {
+            assert!(row.contains(expected), "{marker} missing {expected}: {row}");
+        }
+    }
+}
+
+#[test]
+fn root_failure_diagnostics_preserve_success_and_all_interface_paths() {
+    let terminal = diagnostic_interface("tu", 1);
+    let bridge = alias(2, "Example", "alias.hpp", 2, named(&terminal));
+    let facts = [terminal.clone(), bridge];
+    let index = HashMap::from([("Example", facts.iter().collect::<Vec<_>>())]);
+    let roots = facts.iter().collect::<Vec<_>>();
+    assert_eq!(
+        choose_type_root("Example", &roots, &index).unwrap().origin,
+        terminal.origin
+    );
+    for path in ["base", "result", "parameter"] {
+        let mut changed = terminal.clone();
+        let FactData::Interface { base, methods, .. } = &mut changed.data else {
+            unreachable!()
+        };
+        match path {
+            "base" => *base = Some(TypeRef::Object),
+            "result" => methods[0].result = TypeRef::Scalar(Scalar::I32),
+            "parameter" => methods[0].params[0].annotation.optional = true,
+            _ => unreachable!(),
+        }
+        let mismatch = source_declaration_mismatch(&terminal, &changed);
+        let expected = match path {
+            "base" => "data.base",
+            "result" => "data.methods[0](Update).result",
+            "parameter" => "data.methods[0](Update).params[0](value).annotation",
+            _ => unreachable!(),
+        };
+        assert!(mismatch.contains(expected), "{mismatch}");
     }
 }
 

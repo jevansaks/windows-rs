@@ -1,6 +1,136 @@
 use super::*;
 
 #[test]
+fn repeated_interface_tag_aliases_preserve_native_definition() {
+    helpers::ensure_libclang();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("repeated_interface");
+    let headers = ["base.hpp", "animation.hpp", "composition.hpp"]
+        .map(|name| root.join(name).to_str().unwrap().to_string());
+    for target in [
+        "i686-pc-windows-msvc",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+    ] {
+        let arguments = ["-x", "c++", "-std=c++20", &format!("--target={target}")];
+        let mut baseline = None;
+        for reversed in [false, true] {
+            let provider = Input::new(
+                root.join("provider.hpp").to_str().unwrap(),
+                "#include \"composition.hpp\"\n#include \"animation.hpp\"\n",
+            )
+            .with_roots(headers.iter().map(String::as_str))
+            .partitioned("provider.hpp");
+            let client = Input::new(
+                root.join("client.hpp").to_str().unwrap(),
+                "#include \"animation.hpp\"\nextern \"C\" void UseAnimation(NativeAnimation* value);\n",
+            )
+            .with_roots(
+                headers
+                    .iter()
+                    .map(String::as_str)
+                    .chain([root.join("client.hpp").to_str().unwrap()]),
+            )
+            .partitioned("client.hpp");
+            let mut policy = HeaderPartitionPolicy::new();
+            for input in [&provider, &client] {
+                for header in &headers {
+                    policy.add_traversed_header_for_input(
+                        &input.input.name,
+                        header,
+                        RootPartition::new("Animation", "Test.Animation"),
+                    );
+                }
+            }
+            policy.add_traversed_header_for_input(
+                &client.input.name,
+                &client.input.name,
+                RootPartition::new("Api", "Test.Api"),
+            );
+            let mut inputs = vec![provider, client];
+            if reversed {
+                inputs.reverse();
+            }
+            let snapshot =
+                extract_partitioned_with_options(inputs, &arguments, &ExtractionOptions::new())
+                    .unwrap();
+            let mut index = HashMap::<&str, Vec<&Fact>>::new();
+            for fact in &snapshot.facts {
+                index.entry(&fact.name).or_default().push(fact);
+            }
+            let aliases = snapshot
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.name == "NativeAnimation" && matches!(fact.data, FactData::Typedef { .. })
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(aliases.len(), 3, "{target}/{reversed}: {aliases:?}");
+            for alias in aliases {
+                let resolved = typedef_tag_declaration(alias, &index);
+                eprintln!(
+                    "repeated_alias target={target} reversed={reversed} origin={:?} source={:?} \
+                     native_target={:?} resolved={:?}",
+                    alias.origin,
+                    alias.spelling,
+                    alias.data,
+                    resolved.map(|fact| (&fact.origin, &fact.spelling, fact.kind)),
+                );
+                let definition = resolved.unwrap();
+                assert!(definition.definition);
+                assert_eq!(definition.kind, FactKind::Struct);
+                assert!(definition.spelling.file.ends_with("animation.hpp"));
+                assert!(matches!(
+                    &definition.data,
+                    FactData::Interface { guid: Some(guid), methods, .. }
+                        if guid == "6b44d453-343e-4246-826d-208c460655c5" && methods.len() == 6
+                ));
+            }
+            let plan = snapshot
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .unwrap();
+            let references = BTreeMap::new();
+            let mut options = EmitOptions::new("Test.Common", &references);
+            options.library = Some("native.dll");
+            let strict = plan.clone().emit_with_options(&options).unwrap();
+            let report = plan.emit_with_enum_diagnostics(&options).unwrap();
+            assert_eq!(strict, report.partitions);
+            assert!(report.omissions.is_empty());
+            let output = strict.values().cloned().collect::<String>();
+            assert_eq!(output.matches("interface NativeAnimation").count(), 1);
+            let winmd = std::env::temp_dir().join(format!(
+                "windows-clang-repeated-interface-{}-{target}-{reversed}.winmd",
+                std::process::id(),
+            ));
+            windows_rdl::reader()
+                .input_texts(strict.values())
+                .reference_default()
+                .output(&winmd)
+                .write()
+                .unwrap();
+            let metadata = windows_metadata::reader::Index::read(&winmd).unwrap();
+            assert_eq!(
+                metadata
+                    .expect("Test.Animation", "NativeAnimation")
+                    .methods()
+                    .count(),
+                6,
+            );
+            metadata.expect("Test.Api", "Apis");
+            std::fs::remove_file(&winmd).unwrap();
+            if let Some(baseline) = &baseline {
+                assert_eq!(&strict, baseline);
+            } else {
+                baseline = Some(strict);
+            }
+        }
+    }
+}
+
+#[test]
 fn canonical_tag_aliases_preserve_native_definition() {
     helpers::ensure_libclang();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

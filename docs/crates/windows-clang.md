@@ -328,6 +328,18 @@ identity. Compatible shared enums emit the complete surface with no omissions. E
 `emit_with_options` and other default APIs remain strict. Compiler/extraction errors, invalid
 configuration, non-enum selection failures, and structural validation errors remain fatal.
 
+Type-root failures report the selection phase and the selected and authoritative observations before
+source coalescence, including original TUs, Origins, physical locations, parents, owners, and
+suppression state. Failed named aliases report their exact per-TU buckets and terminal or resolution
+failure, including each observed target's context even when it is outside the selected or authoritative
+set. During alias reconciliation and conflicting exact alias buckets, complete interface payload
+differences identify the first base, method result, or parameter path. Direct multi-definition
+comparison does not have these payload-path diagnostics. These are representation/source diagnostics,
+not ABI proof; selection and equality rules are unchanged. Alias tracing runs only while formatting a
+failed selection.
+Single unrelated root errors and function-only error inventories retain their existing error text.
+Mixed inventories retain category/name headings and candidate provenance.
+
 An `associated_enum` annotation on a selected root adds the matching enum provider from its
 annotation-compatible redeclarations to dependency closure. Those redeclarations may come from
 other extraction inputs in the aggregate snapshot. A provider that has no traversed-header owner

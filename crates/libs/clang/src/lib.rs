@@ -5623,13 +5623,14 @@ impl Snapshot {
                             {
                                 enum_root_failures.push(failure);
                             } else {
-                                root_errors.push(root_selection_error(
+                                root_errors.push(type_root_selection_error(
                                     self,
                                     name,
-                                    "type",
+                                    "initial",
                                     error,
+                                    &roots.types,
                                     &authority,
-                                    &[],
+                                    &facts_index,
                                 ));
                             }
                         }
@@ -5792,13 +5793,14 @@ impl Snapshot {
                         {
                             enum_root_failures.push(failure);
                         } else {
-                            root_errors.push(root_selection_error(
+                            root_errors.push(type_root_selection_error(
                                 self,
                                 &name,
-                                "associated enum",
+                                "associated",
                                 error,
+                                &matches,
                                 &authority,
-                                &[],
+                                &facts_index,
                             ));
                         }
                     }
@@ -6837,7 +6839,18 @@ impl Snapshot {
                         choices,
                         &facts_index,
                         &mut shape_cache,
-                    )?;
+                    )
+                    .map_err(|error| {
+                        aggregate_root_selection_errors(vec![type_root_selection_error(
+                            self,
+                            &constant.name,
+                            "constant-collision",
+                            error,
+                            choices,
+                            choices,
+                            &facts_index,
+                        )])
+                    })?;
                     if root_names.insert(constant.name.clone()) {
                         type_roots.push(root);
                         added = true;
@@ -6878,7 +6891,17 @@ impl Snapshot {
                             );
                             continue;
                         }
-                        return Err(error);
+                        return Err(aggregate_root_selection_errors(vec![
+                            type_root_selection_error(
+                                self,
+                                name,
+                                "post-closure",
+                                error,
+                                &choices,
+                                &authority,
+                                &facts_index,
+                            ),
+                        ]));
                     }
                 };
                 facts_by_name.insert(name, selected);
@@ -9695,12 +9718,23 @@ fn typedef_declaration<'a>(
     fact: &'a Fact,
     facts_index: &HashMap<&str, Vec<&'a Fact>>,
 ) -> Option<&'a Fact> {
+    typedef_declaration_with_diagnostics(fact, facts_index, None)
+}
+
+fn typedef_declaration_with_diagnostics<'a>(
+    fact: &'a Fact,
+    facts_index: &HashMap<&str, Vec<&'a Fact>>,
+    mut diagnostics: Option<(&Snapshot, &mut String)>,
+) -> Option<&'a Fact> {
     if !matches!(
         fact.data,
         FactData::Typedef {
             target: TypeRef::Named { .. }
         }
     ) {
+        if let Some((_, output)) = &mut diagnostics {
+            writeln!(output, "    non-named alias: {:?}", fact.data).unwrap();
+        }
         return None;
     }
     let mut current = fact;
@@ -9710,20 +9744,75 @@ fn typedef_declaration<'a>(
     } = &current.data
     {
         if !seen.insert(&current.origin) {
+            if let Some((_, output)) = &mut diagnostics {
+                writeln!(output, "    cycle at {:?}", current.origin).unwrap();
+            }
             return None;
         }
-        let mut targets = facts_index
-            .get(name.as_str())?
-            .iter()
+        if let Some((_, output)) = &mut diagnostics {
+            writeln!(
+                output,
+                "    alias hop {:?} -> `{name}` at {}:{} in TU {:?}",
+                current.origin, declaration.file, declaration.offset, current.origin.tu
+            )
+            .unwrap();
+        }
+        let targets = facts_index
+            .get(name.as_str())
+            .into_iter()
+            .flatten()
             .copied()
             .filter(|target| {
                 target.origin.tu == current.origin.tu && target.spelling == *declaration
             });
-        let target = targets.next()?;
-        if targets.any(|candidate| !same_source_declaration(target, candidate)) {
+        let mut first = None;
+        let mut conflicting = false;
+        for candidate in targets {
+            if let Some((snapshot, output)) = &mut diagnostics {
+                writeln!(
+                    output,
+                    "      exact bucket {}",
+                    root_candidate_context(snapshot, candidate)
+                )
+                .unwrap();
+            }
+            let Some(target) = first else {
+                first = Some(candidate);
+                continue;
+            };
+            if !same_source_declaration(target, candidate) {
+                if let Some((_, output)) = &mut diagnostics {
+                    writeln!(
+                        output,
+                        "      conflicting bucket: {}",
+                        source_declaration_mismatch(target, candidate)
+                    )
+                    .unwrap();
+                    conflicting = true;
+                } else {
+                    return None;
+                }
+            }
+        }
+        if conflicting {
             return None;
         }
+        let Some(target) = first else {
+            if let Some((_, output)) = &mut diagnostics {
+                writeln!(output, "      missing exact bucket").unwrap();
+            }
+            return None;
+        };
         current = target;
+    }
+    if let Some((snapshot, output)) = &mut diagnostics {
+        writeln!(
+            output,
+            "    terminal {} GUID={:?}",
+            root_candidate_context(snapshot, current),
+            fact_uuid(current)
+        )
+        .unwrap();
     }
     Some(current)
 }
@@ -10728,6 +10817,33 @@ struct RootSelectionError {
     candidates: BTreeSet<String>,
 }
 
+fn root_candidate_context(snapshot: &Snapshot, fact: &Fact) -> String {
+    format!(
+        "{} {:?} {:?}/{} spelling={}:{} expansion={}:{} parent={:?} definition={} root={} \
+         suppressed={} namespace={:?} owner={:?} source_owner={:?}",
+        origin(&fact.origin),
+        fact.origin,
+        fact.kind,
+        fact_data_kind(&fact.data),
+        fact.spelling.file,
+        fact.spelling.offset,
+        fact.expansion.file,
+        fact.expansion.offset,
+        fact.parent,
+        fact.definition,
+        fact.root,
+        snapshot.suppressed_type_origins.contains(&fact.origin),
+        snapshot
+            .fact_namespace_authorities
+            .get(&fact.origin)
+            .or_else(|| snapshot.namespace_authorities.get(&fact.name)),
+        snapshot.root_owners.get(&fact.origin),
+        snapshot
+            .root_partitions
+            .get(&(fact.origin.tu.clone(), fact.spelling.file.clone())),
+    )
+}
+
 fn root_selection_error(
     snapshot: &Snapshot,
     name: &str,
@@ -10736,24 +10852,24 @@ fn root_selection_error(
     facts: &[&Fact],
     constants: &[&Constant],
 ) -> RootSelectionError {
-    let candidates = facts.iter().map(|fact| {
-        format!(
-            "{} {:?}/{} spelling={}:{} expansion={}:{} parent={:?} definition={} root={} namespace={:?} owner={:?}",
-            origin(&fact.origin), fact.kind, fact_data_kind(&fact.data),
-            fact.spelling.file, fact.spelling.offset, fact.expansion.file, fact.expansion.offset,
-            fact.parent, fact.definition, fact.root,
-            snapshot.fact_namespace_authorities.get(&fact.origin)
-                .or_else(|| snapshot.namespace_authorities.get(&fact.name)),
-            snapshot.root_owners.get(&fact.origin),
-        )
-    }).chain(constants.iter().map(|constant| {
-        format!(
-            "{} definition={} spelling={}:{} type={:?} value={:?} owner={:?}",
-            origin(&constant.root), origin(&constant.definition),
-            constant.spelling.file, constant.spelling.offset, constant.ty, constant.value,
-            snapshot.constant_root_owners.get(&(constant.root.clone(), constant.name.clone())),
-        )
-    })).collect();
+    let candidates = facts
+        .iter()
+        .map(|fact| root_candidate_context(snapshot, fact))
+        .chain(constants.iter().map(|constant| {
+            format!(
+                "{} definition={} spelling={}:{} type={:?} value={:?} owner={:?}",
+                origin(&constant.root),
+                origin(&constant.definition),
+                constant.spelling.file,
+                constant.spelling.offset,
+                constant.ty,
+                constant.value,
+                snapshot
+                    .constant_root_owners
+                    .get(&(constant.root.clone(), constant.name.clone())),
+            )
+        }))
+        .collect();
     RootSelectionError {
         name: name.to_string(),
         category,
@@ -10762,9 +10878,162 @@ fn root_selection_error(
     }
 }
 
+fn type_root_selection_error(
+    snapshot: &Snapshot,
+    name: &str,
+    phase: &'static str,
+    error: Error,
+    selected: &[&Fact],
+    authority: &[&Fact],
+    facts_index: &HashMap<&str, Vec<&Fact>>,
+) -> RootSelectionError {
+    let mut result = root_selection_error(snapshot, name, "type", error, selected, &[]);
+    writeln!(result.error.0, "\n  selection phase={phase}").unwrap();
+    if phase == "associated" {
+        result.category = "associated enum";
+    }
+    writeln!(result.error.0, "  authoritative (pre-coalescence):").unwrap();
+    for fact in authority {
+        writeln!(
+            result.error.0,
+            "    {}",
+            root_candidate_context(snapshot, fact)
+        )
+        .unwrap();
+    }
+    let definitions: Vec<_> = distinct_source_declarations(authority)
+        .into_iter()
+        .filter(|fact| fact.definition && is_tag_declaration(fact))
+        .collect();
+    for fact in selected {
+        if !matches!(fact.data, FactData::Typedef { .. }) {
+            continue;
+        }
+        writeln!(
+            result.error.0,
+            "\n  alias {:?} authoritative={}",
+            fact.origin,
+            authority
+                .iter()
+                .any(|candidate| candidate.origin == fact.origin)
+        )
+        .unwrap();
+        let Some(target) = typedef_declaration_with_diagnostics(
+            fact,
+            facts_index,
+            Some((snapshot, &mut result.error.0)),
+        ) else {
+            continue;
+        };
+        if !(is_tag_declaration(target)
+            || matches!(target.data, FactData::Class { .. }) && !target.definition)
+        {
+            writeln!(result.error.0, "    non-tag terminal").unwrap();
+            continue;
+        }
+        for definition in &definitions {
+            writeln!(
+                result.error.0,
+                "    reconciliation against {:?}: GUID candidate={:?} root={:?} kind match={} \
+                 parent match={} incomplete-compatible={} full-source match={}",
+                definition.origin,
+                fact_uuid(target),
+                fact_uuid(definition),
+                target.kind == definition.kind,
+                target.parent == definition.parent,
+                incomplete_declaration_matches_definition(target, definition),
+                same_source_declaration(target, definition)
+            )
+            .unwrap();
+            if target.definition && !same_source_declaration(target, definition) {
+                writeln!(
+                    result.error.0,
+                    "      representation/source mismatch (not ABI proof): {}",
+                    source_declaration_mismatch(target, definition)
+                )
+                .unwrap();
+            }
+        }
+    }
+    result
+}
+
+fn source_declaration_mismatch(left: &Fact, right: &Fact) -> String {
+    macro_rules! compare {
+        ($path:expr, $left:expr, $right:expr) => {
+            if $left != $right {
+                return format!("{}: left {:?}, right {:?}", $path, $left, $right);
+            }
+        };
+    }
+    compare!("kind", left.kind, right.kind);
+    compare!("name", left.name, right.name);
+    compare!("spelling", left.spelling, right.spelling);
+    compare!("definition", left.definition, right.definition);
+    if let (
+        FactData::Interface {
+            guid: left_guid,
+            base: left_base,
+            methods: left_methods,
+        },
+        FactData::Interface {
+            guid: right_guid,
+            base: right_base,
+            methods: right_methods,
+        },
+    ) = (&left.data, &right.data)
+    {
+        compare!("data.guid", left_guid, right_guid);
+        compare!("data.base", left_base, right_base);
+        compare!("data.methods.len", left_methods.len(), right_methods.len());
+        for (slot, (left, right)) in left_methods.iter().zip(right_methods).enumerate() {
+            let path = format!("data.methods[{slot}]({})", left.name);
+            compare!(format!("{path}.name"), left.name, right.name);
+            compare!(format!("{path}.result"), left.result, right.result);
+            compare!(format!("{path}.special"), left.special, right.special);
+            compare!(
+                format!("{path}.params.len"),
+                left.params.len(),
+                right.params.len()
+            );
+            for (index, (left, right)) in left.params.iter().zip(&right.params).enumerate() {
+                let path = format!("{path}.params[{index}]({})", left.name);
+                compare!(format!("{path}.name"), left.name, right.name);
+                compare!(format!("{path}.ty"), left.ty, right.ty);
+                compare!(
+                    format!("{path}.annotation"),
+                    left.annotation,
+                    right.annotation
+                );
+            }
+        }
+    }
+    format!("data: left {:?}, right {:?}", left.data, right.data)
+}
+
+fn root_selection_diagnostic(error: RootSelectionError) -> Error {
+    if error.candidates.is_empty() {
+        return error.error;
+    }
+    let candidates = error
+        .candidates
+        .into_iter()
+        .collect::<Vec<_>>()
+        .join("\n    ");
+    Error(format!(
+        "{}\n  category={} name=`{}`\n  selected (pre-coalescence):\n    {candidates}",
+        error.error, error.category, error.name
+    ))
+}
+
 fn aggregate_root_selection_errors(mut errors: Vec<RootSelectionError>) -> Error {
     if errors.len() == 1 {
-        return errors.pop().unwrap().error;
+        let error = errors.pop().unwrap();
+        return if matches!(error.category, "type" | "associated enum") {
+            root_selection_diagnostic(error)
+        } else {
+            error.error
+        };
     }
     if errors.iter().all(|error| error.category == "function") {
         return aggregate_function_root_errors(
@@ -10782,19 +11051,8 @@ fn aggregate_root_selection_errors(mut errors: Vec<RootSelectionError>) -> Error
     let messages = errors
         .into_iter()
         .map(|error| {
-            let candidates = if error.candidates.is_empty() {
-                "no observed candidates".to_string()
-            } else {
-                error
-                    .candidates
-                    .into_iter()
-                    .collect::<Vec<_>>()
-                    .join("\n    ")
-            };
-            format!(
-                "  {} `{}`: {}\n    {candidates}",
-                error.category, error.name, error.error
-            )
+            let heading = format!("  {} `{}`:", error.category, error.name);
+            format!("{heading} {}", root_selection_diagnostic(error))
         })
         .collect::<Vec<_>>()
         .join("\n");
