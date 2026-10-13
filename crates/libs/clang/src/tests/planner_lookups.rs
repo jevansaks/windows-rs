@@ -556,6 +556,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         constant_root_owners: BTreeMap::new(),
         root_partitions: BTreeMap::new(),
         header_authorities: BTreeMap::new(),
+        partition_authorities: BTreeMap::new(),
         partition_inputs: BTreeMap::new(),
         input_order: BTreeMap::new(),
         partition_exclusions: Vec::new(),

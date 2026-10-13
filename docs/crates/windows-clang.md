@@ -346,6 +346,50 @@ definition. COM pointer routing uses this header/declaration relation, not globa
 counted pointers, references, and by-value object-layout uses cannot borrow an interface
 representation. Captured alternatives remain available for definition-conflict reporting.
 
+Ranked plans observe record definitions only after selected closure and representation validation
+succeed. `HeaderPartitionReport::definition_evidence` reports `Different` or `Unknown` for each
+selected defining record and alternative original input. Equal observations produce no row.
+Alternative definitions never affect admission, exclusions, ownership, or blocking audit conflicts.
+The selected type body, namespace, and annotations are retained.
+`Different` rows have ordered causal keys such as `field[0:value].type`. Their stored `message` is
+also emitted before the type with the prefix `// windows-clang: `. `Unknown` is report-only.
+
+`definition_evidence_coverage` marks unranked plans as `NotCompared`. Ranked plans declare
+`RecordsAndReferentConst` coverage and count selected defining records, alternative definition
+contexts, and declaration-only contexts, grouped by semantic identity and original input. Repeated
+forwards count once only when that context has no definition. Forward-only alternatives have no body
+evidence row.
+An emitted opaque forward declaration is not a compared definition. An empty evidence list does
+not establish complete cross-context or native equivalence.
+
+Record observations compare base identity, size, alignment, packing, union status, and ordered
+fields with names, offsets, sizes, alignments, bit widths, and normalized types. Named non-alias
+referents compare by captured semantic authority identity, not by recursively proving their bodies.
+Each emitted record owns its body difference. Inline records and function-pointer shapes recurse.
+Aliases resolve through declarations in their own original input; canonical alias top-level const
+affects only its immediately enclosing pointer or reference. Missing declarations, semantic
+identities, native alias evidence, unsupported shapes, or incoherent same-context defining
+observations yield `Unknown`, without borrowing another input or choosing a lexical winner.
+Selected provenance uses the physical header's authority owner and its original registered rank.
+Alternative provenance uses that header's traversing owners for the observing original input, not
+other registrations that share its input. A unique owner has `Some` partition and rank; missing or
+ambiguous provenance has `None` and an `Unknown` provenance path. Candidate partitions and ranks
+remain available in immutable-rank order. Body differences still produce a `Different` row and
+matching RDL note alongside unknown provenance, naming the alternative input and candidate owners.
+Known differences remain in `Different` rows alongside unknown paths; an unknown subtree does not
+produce guessed differences in its descendants. A comparison with only unknown paths has no RDL
+comment.
+
+Direct field callbacks can fail selected-root validation when their generated callback declaration
+lacks captured semantic-parent evidence. Observation does not make them roots or bypass that guard.
+Authored callback typedef fields can pass the selected path. Raw direct function-pointer comparison
+is tested on extracted record evidence separately from this emission boundary.
+
+This coverage excludes COM-interface bodies, enum bodies, standalone aliases, functions, constants,
+SAL-only differences, shared-enum equivalence, volatile, and restrict. Const comparison is limited to
+represented pointer/reference referent mutability plus canonical alias top-level const at that
+boundary. It does not compare every native qualifier or ABI property.
+
 The extraction roots must cover every traversed header whose functions, GUIDs, macros, or deferred
 record bodies are needed. They control extraction coverage only for this API; the
 `HeaderPartitionPolicy` supplies logical root ownership after extraction. Included headers that

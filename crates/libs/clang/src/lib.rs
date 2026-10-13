@@ -177,6 +177,8 @@ mod timing_tests {
 }
 
 mod com_pointer;
+mod definition_evidence;
+pub use definition_evidence::*;
 mod enum_diagnostics;
 mod extract;
 use enum_diagnostics::*;
@@ -374,6 +376,8 @@ pub struct MetadataOmission {
 pub struct HeaderPartitionReport {
     pub partitions: BTreeMap<RdlPartition, String>,
     pub omissions: Vec<MetadataOmission>,
+    pub definition_evidence: Vec<DefinitionEvidence>,
+    pub definition_evidence_coverage: DefinitionEvidenceCoverage,
 }
 
 impl HeaderPartitionReport {
@@ -2696,6 +2700,7 @@ pub struct Snapshot {
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
     header_authorities: BTreeMap<String, HeaderAuthority>,
+    partition_authorities: BTreeMap<String, PartitionAuthority>,
     partition_inputs: BTreeMap<String, String>,
     input_order: BTreeMap<String, usize>,
     partition_exclusions: Vec<ExcludedPartitionDeclaration>,
@@ -2929,6 +2934,7 @@ impl PartialEq for Snapshot {
             && self.constant_root_owners == other.constant_root_owners
             && self.root_partitions == other.root_partitions
             && self.header_authorities == other.header_authorities
+            && self.partition_authorities == other.partition_authorities
             && self.partition_inputs == other.partition_inputs
             && self.partition_exclusions == other.partition_exclusions
             && self.forced_flags == other.forced_flags
@@ -3627,7 +3633,7 @@ impl Snapshot {
                 (&plan.type_choices, plan.sal_constant_sizes),
                 namespace,
             );
-            let item = match &fact.data {
+            let mut item = match &fact.data {
                 FactData::Callback {
                     convention,
                     params,
@@ -3851,6 +3857,11 @@ impl Snapshot {
                     )));
                 }
             };
+            if kind == OutputKind::Type
+                && let Some(notes) = plan.definition_notes.get(&fact.origin)
+            {
+                item.insert_str(0, notes);
+            }
             if items
                 .insert(
                     (planned.name.clone(), kind),
@@ -4052,6 +4063,8 @@ impl Snapshot {
         self.constant_root_owners.clear();
         self.root_partitions.clear();
         self.header_authorities.clear();
+        self.partition_authorities
+            .clone_from(&policy.partition_authorities);
         self.partition_inputs.clear();
         self.partition_exclusions.clear();
         self.forced_flags.clear();
@@ -9169,7 +9182,15 @@ impl Snapshot {
                 elapsed_ms(phase_time)
             );
         }
+        let DefinitionObservations {
+            rows: definition_evidence,
+            coverage: definition_evidence_coverage,
+            notes: definition_notes,
+        } = observe(self, &com_bindings, &types);
         Ok(Plan {
+            definition_evidence,
+            definition_evidence_coverage,
+            definition_notes,
             omissions: omissions.into_iter().collect(),
             types,
             values,
@@ -9259,6 +9280,8 @@ impl HeaderPartitionPlan {
             allow_enum_omissions,
         ))?;
         let omissions = plan.omissions.clone();
+        let definition_evidence = plan.definition_evidence.clone();
+        let definition_evidence_coverage = plan.definition_evidence_coverage.clone();
         let ambiguity_summary = plan.function_ambiguity_summary();
         phase.next("partition-routing");
         let candidates =
@@ -9289,6 +9312,8 @@ impl HeaderPartitionPlan {
         Ok(HeaderPartitionReport {
             partitions: result,
             omissions,
+            definition_evidence,
+            definition_evidence_coverage,
         })
     }
 }
@@ -9394,6 +9419,9 @@ enum OutputKind {
 }
 
 struct Plan<'a> {
+    definition_evidence: Vec<DefinitionEvidence>,
+    definition_evidence_coverage: DefinitionEvidenceCoverage,
+    definition_notes: HashMap<Origin, String>,
     omissions: Vec<MetadataOmission>,
     types: Vec<PlannedFact<'a>>,
     values: Vec<PlannedFact<'a>>,

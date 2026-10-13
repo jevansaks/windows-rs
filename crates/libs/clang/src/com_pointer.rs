@@ -1632,12 +1632,12 @@ struct UseDemand {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct AuthorityTypeIdentity {
-    header: String,
-    input: String,
-    scope: Vec<(SemanticTypeRole, String)>,
-    name: String,
-    role: SemanticTypeRole,
+pub(super) struct AuthorityTypeIdentity {
+    pub header: String,
+    pub input: String,
+    pub scope: Vec<(SemanticTypeRole, String)>,
+    pub name: String,
+    pub role: SemanticTypeRole,
 }
 
 impl AuthorityTypeIdentity {
@@ -1702,7 +1702,7 @@ impl AuthorityTypeIdentity {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-enum SemanticTypeRole {
+pub(super) enum SemanticTypeRole {
     Namespace,
     Record,
     Union,
@@ -1710,10 +1710,10 @@ enum SemanticTypeRole {
     Alias,
 }
 
-struct AuthorityTypes<'facts> {
-    identities: HashMap<Origin, Result<AuthorityTypeIdentity, String>>,
+pub(super) struct AuthorityTypes<'facts> {
+    pub identities: HashMap<Origin, Result<AuthorityTypeIdentity, String>>,
     declarations: HashMap<AuthorityTypeIdentity, Vec<&'facts Fact>>,
-    facts_index: HashMap<&'facts str, Vec<&'facts Fact>>,
+    pub facts_index: HashMap<&'facts str, Vec<&'facts Fact>>,
 }
 
 impl<'facts> AuthorityTypes<'facts> {
@@ -1838,6 +1838,10 @@ fn semantic_type_role(kind: FactKind) -> Option<SemanticTypeRole> {
 }
 
 impl<'facts> Bindings<'facts> {
+    pub fn definition_authorities(&self) -> Option<&AuthorityTypes<'facts>> {
+        self.authority_types.as_ref()
+    }
+
     pub fn new(context: &Context<'_, 'facts>, facts: &HashMap<&Origin, &'facts Fact>) -> Self {
         let snapshot = context.snapshot;
         if !snapshot.header_partition_policy {

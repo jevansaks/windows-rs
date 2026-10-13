@@ -87,6 +87,15 @@ overrides replace the default candidates for selected declarations, including in
 compile variants. Call the consuming `emit_with_options` for normal generation; it audits
 internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report without
 emission because auditing before emission repeats planning and clones the snapshot.
+Ranked plans also observe emitted record definitions after successful selected-type validation.
+`emit_with_enum_diagnostics` returns `HeaderPartitionReport::definition_evidence` and an explicit
+records/referent-const coverage marker. Genuine differences appear both as structured keys and
+matching RDL comments; missing or unsupported evidence is report-only `Unknown`. Observations do
+not gate authoritative definitions. COM and enum bodies, standalone aliases, functions, constants,
+SAL-only differences, volatile, and restrict are outside this comparison domain.
+Coverage counts alternative contexts, not redeclarations. Provenance follows the physical header's
+traversing owners and immutable ranks. Ambiguous provenance retains its candidates and is `Unknown`
+without discarding independent body differences.
 `RootPartition::with_preserved_auto_function_pointer_level` restores the implicit pointer level for
 uses of a bare function typedef. A pointer typedef promoted to a delegate already contains that
 source pointer, so its uses keep only their authored outer pointer depth.

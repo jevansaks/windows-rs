@@ -16,6 +16,36 @@ fn ranked_plan(target: &str, case: &str, reversed: bool) -> HeaderPartitionPlan 
     let header = header.to_str().unwrap();
     let other = directory.join("header-authority-other.hpp");
     let other = other.to_str().unwrap();
+    let evidence_prefix = if case.starts_with("evidence-") {
+        format!(
+            "#define AUTHORITY_EVIDENCE\n{}{}",
+            match case {
+                "evidence-scalar" => "#define AUTHORITY_EVIDENCE_SCALAR\n",
+                "evidence-forward" => "#define AUTHORITY_EVIDENCE_FORWARD\n",
+                "evidence-nominal" => "#define AUTHORITY_EVIDENCE_NOMINAL\n",
+                "evidence-inline" => "#define AUTHORITY_EVIDENCE_INLINE\n",
+                "evidence-direct-callback" => {
+                    "#define AUTHORITY_EVIDENCE_INLINE\n#define AUTHORITY_EVIDENCE_DIRECT_CALLBACK\n"
+                }
+                "evidence-direct-callback-different" => {
+                    "#define AUTHORITY_EVIDENCE_INLINE\n#define AUTHORITY_EVIDENCE_DIRECT_CALLBACK\n\
+                     #define AUTHORITY_EVIDENCE_CALLBACK_DIFFERENT\n"
+                }
+                "evidence-unknown" => "#define AUTHORITY_EVIDENCE_ALIAS_ALTERNATIVE\n",
+                _ => "",
+            },
+            match case {
+                "evidence-reference" => "#define AUTHORITY_EVIDENCE_REFERENCES\n",
+                "evidence-reference-negative" => {
+                    "#define AUTHORITY_EVIDENCE_REFERENCES\n#define AUTHORITY_EVIDENCE_NEGATIVE\n"
+                }
+                "evidence-pointer-negative" => "#define AUTHORITY_EVIDENCE_NEGATIVE\n",
+                _ => "",
+            }
+        )
+    } else {
+        String::new()
+    };
     let home_prefix = match case {
         "absent-definition" => "#define AUTHORITY_ABSENT\n",
         "forward-definition" => "#define AUTHORITY_FORWARD\n",
@@ -58,15 +88,15 @@ fn ranked_plan(target: &str, case: &str, reversed: bool) -> HeaderPartitionPlan 
     };
     let home = Input::new(
         "ranked-type-home.cpp",
-        format!("{home_prefix}{offsets}#include {header:?}\n"),
+        format!("{evidence_prefix}{home_prefix}{offsets}#include {header:?}\n"),
     )
     .with_roots([header])
     .partitioned("Home");
     let client = Input::new(
         "ranked-type-client.cpp",
         format!(
-            "{}{offsets}{alternative}#define AUTHORITY_ALTERNATIVE\n\
-             #define AUTHORITY_VALUE unsigned long long\n#include {header:?}\n\
+            "{evidence_prefix}{}{offsets}{alternative}#define AUTHORITY_ALTERNATIVE\n\
+             #define AUTHORITY_VALUE {}\n#include {header:?}\n\
              {use_source}{}",
             if case.starts_with("opaque-") {
                 "#define AUTHORITY_OPAQUE\n"
@@ -75,7 +105,14 @@ fn ranked_plan(target: &str, case: &str, reversed: bool) -> HeaderPartitionPlan 
             } else {
                 ""
             },
-            if case == "offsets" {
+            if case.starts_with("evidence-") {
+                "long"
+            } else {
+                "unsigned long long"
+            },
+            if case.starts_with("evidence-") {
+                "extern \"C\" void UseEvidence(EvidenceRecord* value);\n"
+            } else if case == "offsets" {
                 "extern \"C\" void UseOffset(AuthorityOffset* value);\n"
             } else {
                 ""
@@ -649,6 +686,733 @@ fn ranked_native_semantic_parent_evidence_is_required_in_its_original_tu() {
                 !error.contains("RequiredAuthorityDefinitionAbsent"),
                 "{error}"
             );
+        }
+    }
+}
+
+fn report(plan: HeaderPartitionPlan) -> Result<HeaderPartitionReport, Error> {
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Test", &references);
+    options.library = Some("authority.dll");
+    plan.emit_with_enum_diagnostics(&options)
+}
+
+fn evidence<'a>(report: &'a HeaderPartitionReport, name: &str) -> &'a DefinitionEvidence {
+    report
+        .definition_evidence
+        .iter()
+        .find(|row| row.identity.name == name)
+        .unwrap()
+}
+
+fn without_evidence_comments(text: &str) -> String {
+    text.lines()
+        .filter(|line| {
+            !line
+                .trim_start()
+                .starts_with("// windows-clang: record definition ")
+        })
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
+
+fn output_without_notes(plan: HeaderPartitionPlan) -> BTreeMap<RdlPartition, String> {
+    let references = BTreeMap::new();
+    let mut options = EmitOptions::new("Test", &references);
+    options.library = Some("authority.dll");
+    let (mut snapshot, display_names, source_names) =
+        plan.snapshot.into_partitioned_planning_snapshot(&options);
+    snapshot.project_suppressed_declare_handles();
+    let mut plan = snapshot
+        .plan_partitioned(&options, &display_names, &source_names)
+        .unwrap();
+    let candidates = snapshot
+        .partition_route_candidates(&plan, &source_names, &options)
+        .unwrap();
+    let routes = snapshot.resolve_partition_routes(candidates).unwrap();
+    plan.definition_notes.clear();
+    snapshot
+        .format_partitioned_plan(plan, &options, &routes, &display_names, None)
+        .unwrap()
+}
+
+fn assert_record_metadata(
+    report: &HeaderPartitionReport,
+    target: &str,
+    case: &str,
+    reversed: bool,
+) {
+    let path = std::env::temp_dir().join(format!(
+        "record-evidence-{}-{target}-{case}-{reversed}.winmd",
+        std::process::id()
+    ));
+    windows_rdl::reader()
+        .input_texts(report.partitions.values())
+        .reference_default()
+        .output(&path)
+        .write()
+        .unwrap();
+    let index = windows_metadata::reader::Index::read(&path).unwrap();
+    assert!(index.contains("Test.Home", "EvidenceRecord"));
+    std::fs::remove_file(path).unwrap();
+}
+
+fn assert_selected_alias_record(plan: &HeaderPartitionPlan, target: &str, references: bool) {
+    let selected = fact(plan, "ranked-type-home.cpp", "EvidenceRecord");
+    let FactData::Record {
+        base,
+        fields,
+        size,
+        align,
+        packing,
+        alignment,
+        union,
+    } = &selected.data
+    else {
+        panic!("{selected:?}")
+    };
+    let pointer_size = if target.starts_with("i686") { 4 } else { 8 };
+    let count = if references { 5 } else { 3 };
+    assert!(base.is_none());
+    assert_eq!(fields.len(), count);
+    assert_eq!(*size, pointer_size * count as i64);
+    assert_eq!(*align, pointer_size);
+    assert_eq!(*packing, None);
+    assert_eq!(*alignment, None);
+    assert!(!union);
+    for (index, field) in fields.iter().enumerate() {
+        assert_eq!(field.offset, index as i64 * pointer_size * 8);
+        assert_eq!(field.size, pointer_size);
+        assert_eq!(field.align, pointer_size);
+        assert_eq!(field.bit_width, None);
+        let target = match &field.ty {
+            TypeRef::Pointer { target, .. } if index < 3 => target,
+            TypeRef::Reference { target, .. } if index >= 3 => target,
+            _ => panic!("{field:?}"),
+        };
+        let TypeRef::Named { name, .. } = target.as_ref() else {
+            panic!("{field:?}")
+        };
+        assert_eq!(
+            name,
+            [
+                "EvidenceA",
+                "EvidenceCA",
+                "EvidenceCP",
+                "EvidenceCA",
+                "EvidenceCP"
+            ][index]
+        );
+    }
+}
+
+#[test]
+fn ranked_record_difference_reports_causal_key_without_changing_selected_body() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        let mut baseline = None;
+        for reversed in [false, true] {
+            let plan = ranked_plan(target, "evidence-scalar", reversed);
+            assert_eq!(
+                fact(&plan, "ranked-type-home.cpp", "EvidenceRecord").data,
+                FactData::Record {
+                    base: None,
+                    fields: vec![Field {
+                        name: "value".to_string(),
+                        ty: TypeRef::Scalar(Scalar::I32),
+                        offset: 0,
+                        align: 4,
+                        size: 4,
+                        bit_width: None,
+                    }],
+                    size: 4,
+                    align: 4,
+                    packing: None,
+                    alignment: None,
+                    union: false,
+                }
+            );
+            let references = BTreeMap::new();
+            let mut options = EmitOptions::new("Test", &references);
+            options.library = Some("authority.dll");
+            assert!(!plan.audit(&options).unwrap().has_blocking_conflicts());
+            let legacy = output_without_notes(plan.clone());
+            let report = report(plan).unwrap();
+            assert!(report.omissions.is_empty());
+            assert_eq!(report.definition_evidence.len(), 1);
+            let row = evidence(&report, "EvidenceRecord");
+            assert_eq!(row.selected.rank, Some(0));
+            assert_eq!(row.selected.partition.as_deref(), Some("Home"));
+            assert_eq!(row.selected.input, "ranked-type-home.cpp");
+            assert_eq!(row.alternative.rank, Some(1));
+            assert_eq!(row.alternative.partition.as_deref(), Some("Api"));
+            assert_eq!(row.alternative.input, "ranked-type-client.cpp");
+            assert_eq!(row.identity.role, DefinitionTypeRole::Record);
+            let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+                panic!("{row:?}")
+            };
+            assert!(unknown.is_empty(), "{unknown:?}");
+            assert!(
+                keys.iter().any(|key| key.path == "field[0:value].type"
+                    && key.selected == "scalar:I32"
+                    && key.alternative == "scalar:U64"),
+                "{keys:?}"
+            );
+            let text = report.partitions.values().cloned().collect::<String>();
+            assert_eq!(
+                text.matches(&format!("// windows-clang: {}\n", row.message))
+                    .count(),
+                1
+            );
+            assert!(text.contains("value: i32"), "{text}");
+            for (partition, text) in &report.partitions {
+                assert_eq!(without_evidence_comments(text), legacy[partition]);
+            }
+            assert_record_metadata(&report, target, "scalar", reversed);
+            if let Some(baseline) = &baseline {
+                assert_eq!(&report, baseline);
+            } else {
+                baseline = Some(report);
+            }
+        }
+    }
+}
+
+#[test]
+fn ranked_record_alias_const_is_normalized_only_at_its_own_indirection_level() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        for case in ["evidence-pointer", "evidence-reference"] {
+            let mut baseline = None;
+            for reversed in [false, true] {
+                let plan = ranked_plan(target, case, reversed);
+                assert_selected_alias_record(&plan, target, case == "evidence-reference");
+                let report = report(plan).unwrap();
+                assert!(
+                    report.definition_evidence.is_empty(),
+                    "{target} {case}: {report:?}"
+                );
+                let text = report.partitions.values().cloned().collect::<String>();
+                assert!(
+                    !text.contains("// windows-clang: record definition "),
+                    "{text}"
+                );
+                assert!(text.contains("struct EvidenceRecord"), "{text}");
+                assert_record_metadata(&report, target, case, reversed);
+                if case == "evidence-reference" {
+                    assert!(text.contains("qualified_ref:"), "{text}");
+                    assert!(text.contains("pointer_const_ref:"), "{text}");
+                }
+                if let Some(baseline) = &baseline {
+                    assert_eq!(&report, baseline);
+                } else {
+                    baseline = Some(report);
+                }
+            }
+        }
+        for case in ["evidence-pointer-negative", "evidence-reference-negative"] {
+            let report = report(ranked_plan(target, case, false)).unwrap();
+            let row = evidence(&report, "EvidenceRecord");
+            let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+                panic!("{row:?}")
+            };
+            assert!(unknown.is_empty(), "{unknown:?}");
+            assert!(
+                keys.iter()
+                    .any(|key| key.path == "field[2:pointer_const].type.mutable"
+                        && key.selected == "false"
+                        && key.alternative == "true"),
+                "{keys:?}"
+            );
+            assert!(
+                keys.iter().any(
+                    |key| key.path == "field[2:pointer_const].type.target.mutable"
+                        && key.selected == "true"
+                        && key.alternative == "false"
+                ),
+                "{keys:?}"
+            );
+            if case == "evidence-reference-negative" {
+                assert!(
+                    keys.iter()
+                        .any(|key| key.path == "field[4:pointer_const_ref].type.mutable"
+                            && key.selected == "false"
+                            && key.alternative == "true"),
+                    "{keys:?}"
+                );
+                assert!(
+                    keys.iter().any(|key| key.path
+                        == "field[4:pointer_const_ref].type.target.mutable"
+                        && key.selected == "true"
+                        && key.alternative == "false"),
+                    "{keys:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn ranked_record_missing_alternative_alias_evidence_is_unknown_not_borrowed() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        for remove_fact in [false, true] {
+            let mut plan = ranked_plan(target, "evidence-unknown", false);
+            let alias = fact(&plan, "ranked-type-client.cpp", "EvidenceCA")
+                .origin
+                .clone();
+            if remove_fact {
+                plan.snapshot.facts.retain(|fact| fact.origin != alias);
+            } else {
+                *plan.snapshot.native_typedef_types.get_mut(&alias).unwrap() = None;
+            }
+            let report = report(plan).unwrap();
+            assert_eq!(report.definition_evidence.len(), 1, "{report:?}");
+            let row = evidence(&report, "EvidenceRecord");
+            let DefinitionComparison::Unknown(keys) = &row.outcome else {
+                panic!("{row:?}")
+            };
+            assert!(
+                keys.iter()
+                    .any(|key| key.path == "field[1:qualified].type.target"
+                        && key.reason.contains(if remove_fact {
+                            "own-TU declaration"
+                        } else {
+                            "own-TU canonical alias const evidence"
+                        })),
+                "{keys:?}"
+            );
+            let text = report.partitions.values().cloned().collect::<String>();
+            assert!(
+                !text.contains("// windows-clang: record definition "),
+                "{text}"
+            );
+            assert!(text.contains("struct EvidenceRecord"), "{text}");
+        }
+    }
+}
+
+#[test]
+fn ranked_record_forward_only_alternative_is_accounted_without_body_evidence() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        let mut baseline = None;
+        for reversed in [false, true] {
+            let report = report(ranked_plan(target, "evidence-forward", reversed)).unwrap();
+            assert!(report.definition_evidence.is_empty(), "{report:?}");
+            let DefinitionEvidenceCoverage::RecordsAndReferentConst {
+                selected_records,
+                declaration_only_observations,
+                ..
+            } = report.definition_evidence_coverage
+            else {
+                panic!("{report:?}")
+            };
+            assert!(selected_records >= 1);
+            assert_eq!(declaration_only_observations, 1);
+            let text = report.partitions.values().cloned().collect::<String>();
+            assert!(text.contains("struct EvidenceRecord"), "{text}");
+            assert!(
+                !text.contains("// windows-clang: record definition "),
+                "{text}"
+            );
+            if let Some(baseline) = &baseline {
+                assert_eq!(&report, baseline);
+            } else {
+                baseline = Some(report);
+            }
+        }
+    }
+}
+
+#[test]
+fn ranked_record_nominal_referents_report_their_own_body_only() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        let report = report(ranked_plan(target, "evidence-nominal", false)).unwrap();
+        assert_eq!(report.definition_evidence.len(), 1, "{report:?}");
+        let row = evidence(&report, "EvidenceNominal");
+        let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+            panic!("{row:?}")
+        };
+        assert!(unknown.is_empty(), "{unknown:?}");
+        assert!(keys.iter().any(|key| key.path == "field[0:payload].type"));
+    }
+}
+
+#[test]
+fn ranked_record_inline_and_function_pointer_shapes_are_observed_in_context() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        let report = report(ranked_plan(target, "evidence-inline", false)).unwrap();
+        let row = evidence(&report, "EvidenceRecord");
+        let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+            panic!("{row:?}")
+        };
+        assert!(unknown.is_empty(), "{unknown:?}");
+        assert!(
+            keys.iter()
+                .any(|key| key.path == "field[0:value].type.field[0:nested].type"
+                    && key.selected == "scalar:I32"
+                    && key.alternative == "scalar:U32"),
+            "{keys:?}"
+        );
+        assert!(
+            !keys.iter().any(|key| key.path.contains("callback")),
+            "{keys:?}"
+        );
+    }
+}
+
+#[test]
+fn ranked_record_direct_callback_guard_precedes_observation_and_raw_shape_is_compared() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        for different in [false, true] {
+            let plan = ranked_plan(
+                target,
+                if different {
+                    "evidence-direct-callback-different"
+                } else {
+                    "evidence-direct-callback"
+                },
+                false,
+            );
+            let selected = fact(&plan, "ranked-type-home.cpp", "EvidenceRecord");
+            let FactData::Record { fields, .. } = &selected.data else {
+                panic!("{selected:?}")
+            };
+            let TypeRef::Named { name, .. } = &fields[1].ty else {
+                panic!("{fields:?}")
+            };
+            assert_eq!(name, "EvidenceRecord_callback");
+            let callback = fact(&plan, "ranked-type-home.cpp", name);
+            assert!(callback.root);
+            assert!(matches!(callback.data, FactData::Callback { .. }));
+            assert!(
+                !plan
+                    .snapshot
+                    .semantic_parents
+                    .contains_key(&callback.origin)
+            );
+            let snapshot = plan.snapshot.clone();
+            OBSERVATION_CALLS.set(0);
+            let error = report(plan).unwrap_err().to_string();
+            assert!(error.contains("EvidenceRecord_callback"), "{error}");
+            assert!(
+                error.contains("no captured native semantic-parent relation"),
+                "{error}"
+            );
+            assert!(error.contains("selection phase=initial"), "{error}");
+            assert_eq!(
+                OBSERVATION_CALLS.get(),
+                0,
+                "observation entered before selection failure"
+            );
+            let comparison = compare_extracted_callbacks(
+                &snapshot,
+                "EvidenceRecord_callback",
+                "ranked-type-home.cpp",
+                "ranked-type-client.cpp",
+            );
+            if different {
+                let Some(DefinitionComparison::Different { keys, unknown }) = comparison else {
+                    panic!("{comparison:?}")
+                };
+                assert!(unknown.is_empty(), "{unknown:?}");
+                assert_eq!(keys.len(), 1, "{keys:?}");
+                assert_eq!(keys[0].path, "param[0]");
+                assert_eq!(keys[0].selected, "scalar:I32");
+                assert_eq!(keys[0].alternative, "scalar:U32");
+            } else {
+                assert_eq!(comparison, None);
+            }
+        }
+    }
+}
+
+fn observer_plan(
+    target: &str,
+    case: &str,
+    reversed: bool,
+    unused: Option<(&str, bool)>,
+) -> HeaderPartitionPlan {
+    let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("header-authority-observer.hpp");
+    let header = header.to_str().unwrap();
+    let home = Input::new("observer-home.cpp", format!("#include {header:?}\n"))
+        .with_roots([header])
+        .partitioned("Home");
+    let flags = match case {
+        "forward-defined" => "#define AUTHORITY_OBSERVER_FORWARD_DEFINED\n",
+        "forward-only" => "#define AUTHORITY_OBSERVER_FORWARD_ONLY\n",
+        "ambiguous-equal" | "missing-equal" => "#define AUTHORITY_OBSERVER_EQUAL\n",
+        _ => "",
+    };
+    let client = Input::new(
+                "observer-client.cpp",
+                format!(
+                    "#define AUTHORITY_OBSERVER_CLIENT\n\
+                     {flags}#include {header:?}\nextern \"C\" void UseObserver(ObserverRecord* value);\n"
+                ),
+            )
+            .with_roots([header, "observer-client.cpp"])
+            .partitioned("Api");
+    let mut policy = HeaderPartitionPolicy::new()
+        .with_partition_authority("Home", 0, "observer-home.cpp")
+        .with_partition_authority("Api", 1, "observer-client.cpp")
+        .with_traversed_header(header, RootPartition::new("Home", "Test.Home"))
+        .with_traversed_header("observer-client.cpp", RootPartition::new("Api", "Test.Api"));
+    if let Some((partition, home_input)) = unused {
+        policy.set_partition_authority(
+            partition,
+            2,
+            if home_input {
+                "observer-home.cpp"
+            } else {
+                "observer-client.cpp"
+            },
+        );
+    }
+    if !matches!(case, "missing" | "missing-equal") {
+        policy.add_traversed_header(header, RootPartition::new("Api", "Test.Alternative"));
+    }
+    if matches!(case, "ambiguous" | "ambiguous-equal") {
+        policy.set_partition_authority("AOtherApi", 2, "observer-client.cpp");
+        policy.add_traversed_header(header, RootPartition::new("AOtherApi", "Test.Other"));
+    }
+    let mut inputs = vec![home, client];
+    if reversed {
+        inputs.reverse();
+    }
+    let target = format!("--target={target}");
+    extract_partitioned(
+        inputs,
+        &["-x", "c++", "-std=c++17", &target, "--no-default-config"],
+    )
+    .unwrap()
+    .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+    .unwrap()
+}
+
+fn assert_observer_selected_body(plan: &HeaderPartitionPlan) {
+    assert_eq!(
+        fact(plan, "observer-home.cpp", "ObserverRecord").data,
+        FactData::Record {
+            base: None,
+            fields: vec![Field {
+                name: "value".to_string(),
+                ty: TypeRef::Scalar(Scalar::I32),
+                offset: 0,
+                align: 4,
+                size: 4,
+                bit_width: None,
+            }],
+            size: 4,
+            align: 4,
+            packing: None,
+            alignment: None,
+            union: false,
+        }
+    );
+}
+
+#[test]
+fn ranked_record_unused_shared_input_registration_cannot_replace_provenance() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        let baseline = report(observer_plan(target, "defined", false, None)).unwrap();
+        for partition in ["AUnused", "ZUnused"] {
+            for home_input in [false, true] {
+                for reversed in [false, true] {
+                    let plan =
+                        observer_plan(target, "defined", reversed, Some((partition, home_input)));
+                    assert_observer_selected_body(&plan);
+                    let legacy = output_without_notes(plan.clone());
+                    let report = report(plan).unwrap();
+                    assert_eq!(report.definition_evidence.len(), 1, "{report:?}");
+                    let row = evidence(&report, "ObserverRecord");
+                    assert_eq!(row.selected.partition.as_deref(), Some("Home"));
+                    assert_eq!(row.selected.rank, Some(0));
+                    assert_eq!(row.selected.input, "observer-home.cpp");
+                    assert_eq!(row.alternative.partition.as_deref(), Some("Api"));
+                    assert_eq!(row.alternative.rank, Some(1));
+                    assert_eq!(row.alternative.input, "observer-client.cpp");
+                    let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+                        panic!("{row:?}")
+                    };
+                    assert!(unknown.is_empty());
+                    assert!(keys.iter().any(|key| key.path == "field[0:value].type"
+                        && key.selected == "scalar:I32"
+                        && key.alternative == "scalar:U64"));
+                    let text = report.partitions.values().cloned().collect::<String>();
+                    assert_eq!(
+                        text.matches(&format!("// windows-clang: {}\n", row.message))
+                            .count(),
+                        1
+                    );
+                    assert!(!row.message.contains("rank=2"));
+                    assert!(text.contains("value: i32"), "{text}");
+                    for (partition, text) in &report.partitions {
+                        assert_eq!(without_evidence_comments(text), legacy[partition]);
+                    }
+                    assert_eq!(report, baseline);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ranked_record_forward_redeclarations_count_contexts_not_facts() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        for case in ["forward-defined", "forward-only"] {
+            let mut baseline = None;
+            for reversed in [false, true] {
+                let plan = observer_plan(target, case, reversed, None);
+                assert_observer_selected_body(&plan);
+                let declarations: Vec<_> = plan
+                    .snapshot
+                    .facts
+                    .iter()
+                    .filter(|fact| {
+                        fact.origin.tu == "observer-client.cpp" && fact.name == "ObserverRecord"
+                    })
+                    .collect();
+                assert_eq!(
+                    declarations.iter().filter(|fact| !fact.definition).count(),
+                    2
+                );
+                assert_eq!(
+                    declarations.iter().filter(|fact| fact.definition).count(),
+                    usize::from(case == "forward-defined")
+                );
+                let report = report(plan).unwrap();
+                let DefinitionEvidenceCoverage::RecordsAndReferentConst {
+                    alternative_definitions,
+                    declaration_only_observations,
+                    ..
+                } = report.definition_evidence_coverage
+                else {
+                    panic!("{report:?}")
+                };
+                assert_eq!(
+                    alternative_definitions,
+                    usize::from(case == "forward-defined")
+                );
+                assert_eq!(
+                    declaration_only_observations,
+                    usize::from(case == "forward-only")
+                );
+                assert_eq!(
+                    report.definition_evidence.len(),
+                    usize::from(case == "forward-defined")
+                );
+                let text = report.partitions.values().cloned().collect::<String>();
+                assert!(text.contains("value: i32"), "{text}");
+                assert_eq!(
+                    text.matches("// windows-clang: record definition ").count(),
+                    usize::from(case == "forward-defined")
+                );
+                if let Some(baseline) = &baseline {
+                    assert_eq!(&report, baseline);
+                } else {
+                    baseline = Some(report);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ranked_record_ambiguous_provenance_retains_candidates_and_independent_body_evidence() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        for case in ["ambiguous", "ambiguous-equal", "missing", "missing-equal"] {
+            let mut baseline = None;
+            for reversed in [false, true] {
+                let plan = observer_plan(target, case, reversed, None);
+                assert_observer_selected_body(&plan);
+                let legacy = output_without_notes(plan.clone());
+                let report = report(plan).unwrap();
+                assert_eq!(report.definition_evidence.len(), 1, "{report:?}");
+                let row = evidence(&report, "ObserverRecord");
+                assert_eq!(row.selected.partition.as_deref(), Some("Home"));
+                assert_eq!(row.selected.rank, Some(0));
+                assert_eq!(
+                    row.selected.candidate_partitions,
+                    vec![("Home".to_string(), 0)]
+                );
+                assert_eq!(row.alternative.partition, None);
+                assert_eq!(row.alternative.rank, None);
+                assert_eq!(row.alternative.input, "observer-client.cpp");
+                let ambiguous = case.starts_with("ambiguous");
+                assert_eq!(
+                    row.alternative.candidate_partitions,
+                    if ambiguous {
+                        vec![("Api".to_string(), 1), ("AOtherApi".to_string(), 2)]
+                    } else {
+                        Vec::new()
+                    }
+                );
+                let different = !case.ends_with("equal");
+                let unknown = if different {
+                    let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+                        panic!("{row:?}")
+                    };
+                    assert!(keys.iter().any(|key| key.path == "field[0:value].type"
+                        && key.selected == "scalar:I32"
+                        && key.alternative == "scalar:U64"));
+                    unknown
+                } else {
+                    let DefinitionComparison::Unknown(unknown) = &row.outcome else {
+                        panic!("{row:?}")
+                    };
+                    unknown
+                };
+                assert_eq!(unknown.len(), 1, "{unknown:?}");
+                assert_eq!(unknown[0].path, "alternative.provenance");
+                assert!(unknown[0].reason.contains(if ambiguous {
+                    "ambiguous traversing owners"
+                } else {
+                    "no traversing owner"
+                }));
+                assert!(
+                    row.message
+                        .contains("alternative=\"observer-client.cpp\" rank=Unknown")
+                );
+                assert!(row.message.contains(&format!(
+                    "alternative-owners={:?}",
+                    row.alternative.candidate_partitions
+                )));
+                let text = report.partitions.values().cloned().collect::<String>();
+                assert!(text.contains("value: i32"), "{text}");
+                assert_eq!(
+                    text.matches(&format!("// windows-clang: {}\n", row.message))
+                        .count(),
+                    usize::from(different)
+                );
+                for (partition, text) in &report.partitions {
+                    assert_eq!(without_evidence_comments(text), legacy[partition]);
+                }
+                assert!(matches!(
+                    report.definition_evidence_coverage,
+                    DefinitionEvidenceCoverage::RecordsAndReferentConst {
+                        alternative_definitions: 1,
+                        declaration_only_observations: 0,
+                        ..
+                    }
+                ));
+                if let Some(baseline) = &baseline {
+                    assert_eq!(&report, baseline);
+                } else {
+                    baseline = Some(report);
+                }
+            }
         }
     }
 }

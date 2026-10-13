@@ -489,6 +489,7 @@ fn extract_impl(
         constant_root_owners: BTreeMap::new(),
         root_partitions: owners,
         header_authorities: BTreeMap::new(),
+        partition_authorities: BTreeMap::new(),
         partition_inputs,
         input_order,
         partition_exclusions: vec![],

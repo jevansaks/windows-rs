@@ -3041,6 +3041,7 @@ mod excluded_enum_raw_context {
             constant_root_owners: BTreeMap::new(),
             root_partitions: BTreeMap::new(),
             header_authorities: BTreeMap::new(),
+            partition_authorities: BTreeMap::new(),
             partition_inputs: BTreeMap::new(),
             input_order: BTreeMap::new(),
             partition_exclusions: Vec::new(),

@@ -60,3 +60,80 @@ struct ScopeOther { struct ScopeInner { int value; }; };
 struct ScopeOuter { struct ScopeInner { int value; }; };
 #endif
 #endif
+
+#if defined(AUTHORITY_EVIDENCE)
+typedef int EvidenceT;
+typedef EvidenceT EvidenceA;
+typedef const EvidenceT EvidenceCA;
+typedef EvidenceT* const EvidenceCP;
+#if defined(AUTHORITY_EVIDENCE_INLINE)
+typedef int (__stdcall *EvidenceCallback)(int);
+#endif
+
+struct EvidenceNominal {
+#if defined(AUTHORITY_ALTERNATIVE) && defined(AUTHORITY_EVIDENCE_NOMINAL)
+    unsigned long long payload;
+#else
+    int payload;
+#endif
+};
+
+#if defined(AUTHORITY_ALTERNATIVE) && defined(AUTHORITY_EVIDENCE_FORWARD)
+struct EvidenceRecord;
+#else
+struct EvidenceRecord {
+#if defined(AUTHORITY_EVIDENCE_SCALAR)
+#if defined(AUTHORITY_ALTERNATIVE)
+    unsigned long long value;
+#else
+    int value;
+#endif
+#elif defined(AUTHORITY_EVIDENCE_NOMINAL)
+    EvidenceNominal* value;
+#elif defined(AUTHORITY_EVIDENCE_INLINE)
+    struct {
+#if defined(AUTHORITY_ALTERNATIVE)
+        unsigned int nested;
+#else
+        int nested;
+#endif
+    } value;
+#if defined(AUTHORITY_EVIDENCE_DIRECT_CALLBACK)
+#if defined(AUTHORITY_ALTERNATIVE) && defined(AUTHORITY_EVIDENCE_CALLBACK_DIFFERENT)
+    int (__stdcall *callback)(unsigned int);
+#else
+    int (__stdcall *callback)(int);
+#endif
+#else
+    EvidenceCallback callback;
+#endif
+#else
+#if defined(AUTHORITY_ALTERNATIVE) && !defined(AUTHORITY_EVIDENCE_ALIAS_ALTERNATIVE)
+    EvidenceT* plain;
+    const EvidenceT* qualified;
+#if defined(AUTHORITY_EVIDENCE_NEGATIVE)
+    const EvidenceT** pointer_const;
+#else
+    EvidenceT* const* pointer_const;
+#endif
+#if defined(AUTHORITY_EVIDENCE_REFERENCES)
+    const EvidenceT& qualified_ref;
+#if defined(AUTHORITY_EVIDENCE_NEGATIVE)
+    const EvidenceT*& pointer_const_ref;
+#else
+    EvidenceT* const& pointer_const_ref;
+#endif
+#endif
+#else
+    EvidenceA* plain;
+    EvidenceCA* qualified;
+    EvidenceCP* pointer_const;
+#if defined(AUTHORITY_EVIDENCE_REFERENCES)
+    EvidenceCA& qualified_ref;
+    EvidenceCP& pointer_const_ref;
+#endif
+#endif
+#endif
+};
+#endif
+#endif
