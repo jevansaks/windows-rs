@@ -2680,6 +2680,7 @@ pub struct Snapshot {
     function_annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
+    semantic_parents: BTreeMap<Origin, Option<Origin>>,
     class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
     class_canonical_anchors: BTreeMap<Origin, ClassCanonicalAnchor>,
     shared_enum_identities: BTreeMap<Origin, SharedEnumIdentity>,
@@ -2913,6 +2914,7 @@ impl PartialEq for Snapshot {
             && self.function_annotations == other.function_annotations
             && self.sal_constant_sizes == other.sal_constant_sizes
             && self.declaration_guids == other.declaration_guids
+            && self.semantic_parents == other.semantic_parents
             && self.class_canonical_origins == other.class_canonical_origins
             && self.class_canonical_anchors == other.class_canonical_anchors
             && self.shared_enum_identities == other.shared_enum_identities
@@ -7475,15 +7477,38 @@ impl Snapshot {
                     TypeEdge::Pointee(ty, _) => Some((ty, &[][..], false, true)),
                     _ => None,
                 };
-                if let Some((ty, annotations, counted, pointer)) = value_type {
-                    com_bindings.validate_use(
+                if let Some((ty, annotations, counted, pointer)) = value_type
+                    && let Err(error) = com_bindings.validate_use(
                         ty,
                         tu,
                         annotations,
                         counted,
                         pointer,
                         &com_context,
-                    )?;
+                    )
+                {
+                    let mut reference = ty;
+                    while let TypeRef::Pointer { target, .. }
+                    | TypeRef::Reference { target, .. }
+                    | TypeRef::Array { target, .. } = reference
+                    {
+                        reference = target;
+                    }
+                    if self.ranked_header_partition_policy
+                        && let TypeRef::Named { name, declaration } = reference
+                    {
+                        dependency_diagnostics.block(
+                            DependencyReference {
+                                name,
+                                tu,
+                                declaration: Some(declaration),
+                            },
+                            error.to_string(),
+                            source,
+                        );
+                        continue;
+                    }
+                    return Err(error);
                 }
                 let (ty, parent_mutability) = match edge {
                     TypeEdge::Type(ty) => (ty, None),
@@ -7963,7 +7988,21 @@ impl Snapshot {
                     }
                 };
                 let mut fact = selected;
-                let com_provider = com_bindings.provider_for(fact, &facts_index);
+                if self.ranked_header_partition_policy {
+                    fact = match com_bindings.authoritative_type(
+                        &com_context,
+                        fact,
+                        &facts_index,
+                        &mut shape_cache,
+                    ) {
+                        Ok(fact) => fact,
+                        Err(error) => {
+                            dependency_diagnostics.block(reference, error.to_string(), source);
+                            continue;
+                        }
+                    };
+                }
+                let com_provider = com_bindings.provider_for(selected, &facts_index);
                 if let Some(provider) = &com_provider {
                     let provider = *provider
                         .as_ref()
@@ -7985,7 +8024,8 @@ impl Snapshot {
                                     .get(&target.origin)
                                     .is_some_and(|contract| contract.has_fields))
                     });
-                if !self.root_owners.contains_key(&fact.origin)
+                if !self.ranked_header_partition_policy
+                    && !self.root_owners.contains_key(&fact.origin)
                     && com_provider.is_none()
                     && !complete_com_record
                     && let Some(guid) = declaration_uuid(self, &declarations, name, tu, declaration)
@@ -11439,6 +11479,30 @@ fn choose_proven_type_root<'a>(
     source_names: Option<&PlanningSourceNames>,
     com_bindings: &com_pointer::Bindings<'a>,
 ) -> Result<&'a Fact, Error> {
+    if context.snapshot.ranked_header_partition_policy
+        && roots
+            .iter()
+            .any(|fact| fact_header_authority(&context.snapshot.header_authorities, fact).is_some())
+    {
+        let mut selected = Vec::with_capacity(roots.len());
+        for fact in roots {
+            let authority =
+                com_bindings.authoritative_type(context, fact, facts_index, shape_cache)?;
+            if !selected
+                .iter()
+                .any(|previous: &&Fact| previous.origin == authority.origin)
+            {
+                selected.push(authority);
+            }
+        }
+        let selected = choose_type_root_cached(name, &selected, facts_index, shape_cache)?;
+        if matches!(selected.data, FactData::Interface { .. }) {
+            context
+                .validate_selected_interface(selected)
+                .map_err(Error)?;
+        }
+        return Ok(selected);
+    }
     if roots
         .iter()
         .any(|fact| com_bindings.provider_for(fact, facts_index).is_some())
@@ -15574,6 +15638,7 @@ mod tests {
     mod native_class_layouts;
     mod planner_lookups;
     mod producer_corrections;
+    mod ranked_types;
 
     fn test_fact(
         local: u32,

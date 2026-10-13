@@ -323,6 +323,23 @@ before spelling ownership as root selection does. A macro's definition header do
 traversed expansion header. Only registered/ranked plans omit unowned constant observations;
 unranked header plans retain their existing constant selection.
 
+Ranked type closure binds each use to its exact captured declaration in the referencing input, then
+selects the matching authored C++ scope, name, and declaration role in the physical header's home.
+Scope uses captured native semantic-parent Origins, not the traversal parent in `Fact::parent`.
+Nested and out-of-line declarations bind to the same authored scope within their original inputs;
+missing or cross-TU parent evidence does not fall back to a matching leaf name.
+Declarations in different conditional branches need not have equal source offsets. Aliases resolve
+through the selected input's own declaration graph. An absent or forward-only required home
+definition reports `RequiredAuthorityDefinitionAbsent`; an alternative cannot supply its body.
+A complete home definition takes precedence over its forward declarations. Only an identity without
+a complete definition can emit an exact-home plain opaque record for pointer or reference uses.
+Value and array-element demands still require its home body, even if an alternative has a layout.
+Selected interface slots retain their native callable, method-owner, parameter-owner, and
+aggregate-value checks. Alternative interface signatures and layouts do not gate the selected
+definition. COM pointer routing uses this header/declaration relation, not global IID uniqueness;
+counted pointers, references, and by-value object-layout uses cannot borrow an interface
+representation. Captured alternatives remain available for definition-conflict reporting.
+
 The extraction roots must cover every traversed header whose functions, GUIDs, macros, or deferred
 record bodies are needed. They control extraction coverage only for this API; the
 `HeaderPartitionPolicy` supplies logical root ownership after extraction. Included headers that
@@ -335,15 +352,15 @@ traversed-header declaration has an explicit owner and its link name is selected
 `EmitOptions::functions`. This scoped selection does not promote other namespaced declarations or
 change non-header emission.
 
-Tag root selection follows named typedef chains through exact name, physical declaration, and
-translation-unit matches. A chain ending at the selected native definition does not compete with
+Unranked tag root selection follows named typedef chains through exact name, physical declaration,
+and translation-unit matches. A chain ending at the selected native definition does not compete with
 that definition. Incomplete interface targets retain the existing UUID and declaration-kind checks.
 Missing, cyclic, ambiguous, or cross-translation-unit targets do not prove a matching declaration;
 conflicting complete definitions remain fatal. Native facts, Origins, alias edges, and header owners
 are unchanged.
 
-Same-physical complete interface payloads can reconcile scalar typedef providers from different
-original translation units. Both exact declaration paths are resolved even when their nominal
+Unranked same-physical complete interface payloads can reconcile scalar typedef providers from
+different original translation units. Both exact declaration paths are resolved even when their nominal
 addresses match. Private compiler evidence retains canonical primitive kind, qualifiers, type
 layers, native size, address space, and compiler-returned spelling before metadata type lowering.
 The spelling is a modifier eligibility guard, not a declaration identity or symbol-selection rule.

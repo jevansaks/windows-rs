@@ -344,6 +344,7 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
         annotations,
         sal_constant_sizes,
         declaration_guids,
+        semantic_parents,
         class_canonical_origins,
         class_canonical_anchors,
         shared_enum_identities,
@@ -418,6 +419,14 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
     for (origin, guid) in declaration_guids {
         bytes.origin(origin);
         bytes.string(guid);
+    }
+    let bytes = receipt.category("semantic-parents");
+    bytes.map::<Origin, Option<Origin>>(semantic_parents.len());
+    for (origin, parent) in semantic_parents {
+        bytes.origin(origin);
+        if let Some(parent) = parent {
+            bytes.origin(parent);
+        }
     }
     let bytes = receipt.category("canonical");
     bytes.map::<Origin, CanonicalRecord>(class_canonical_origins.len());

@@ -299,6 +299,68 @@ impl<'facts> Context<'_, 'facts> {
         Ok(owner)
     }
 
+    pub(super) fn validate_selected_interface(&self, fact: &'facts Fact) -> Result<(), String> {
+        let contract = self
+            .snapshot
+            .native_com_contracts
+            .get(&fact.origin)
+            .ok_or_else(|| format!("selected interface `{}` has no native contract", fact.name))?;
+        if !fact.definition
+            || !matches!(fact.data, FactData::Interface { .. })
+            || contract.has_fields
+        {
+            return Err(format!(
+                "selected interface `{}` has no complete interface representation",
+                fact.name
+            ));
+        }
+        for (index, slot) in contract.slots.iter().enumerate() {
+            if slot.native_result.is_none()
+                || slot.native_params.len() != slot.params.len()
+                || slot.native_params.iter().any(Option::is_none)
+                || !matches!(
+                    slot.native_exception,
+                    Some(
+                        clang_sys::CXCursor_ExceptionSpecificationKind_None
+                            | clang_sys::CXCursor_ExceptionSpecificationKind_BasicNoexcept
+                    )
+                )
+            {
+                return Err(format!(
+                    "selected interface `{}` slot[{index}] has unproved callable evidence: \
+                     result_present={}, native_params={}/{}, exception={:?}",
+                    fact.name,
+                    slot.native_result.is_some(),
+                    slot.native_params
+                        .iter()
+                        .filter(|param| param.is_some())
+                        .count(),
+                    slot.params.len(),
+                    slot.native_exception,
+                ));
+            }
+            for native in slot
+                .native_result
+                .iter()
+                .chain(slot.native_params.iter().flatten())
+            {
+                if matches!(&native.layer, NativeTypeLayer::Record(record) if !record.aggregate_abi_proved)
+                    || matches!(native.layer, NativeTypeLayer::Interface(_))
+                {
+                    return Err(format!(
+                        "selected interface `{}` slot[{index}] has unproved aggregate-value ABI",
+                        fact.name
+                    ));
+                }
+            }
+            self.interface_callable_owner(fact, slot)
+                .map_err(|reason| {
+                    format!("selected interface `{}` slot[{index}]: {reason}", fact.name)
+                })?;
+        }
+        Ok(())
+    }
+
     fn interface_callables_equal(&self, a: &'facts Fact, b: &'facts Fact) -> Result<(), String> {
         let (Some(left), Some(right)) = (
             self.snapshot.native_com_contracts.get(&a.origin),
@@ -1536,6 +1598,7 @@ pub(super) enum Failure {
     Conflicting(Arc<str>),
     Ambiguous,
     Unproved,
+    Authority(Arc<str>),
 }
 
 impl Failure {
@@ -1550,6 +1613,7 @@ impl Failure {
             }
             Self::Ambiguous => "has ambiguous eligible COM interface providers",
             Self::Unproved => "has no proved native COM pointer contract",
+            Self::Authority(reason) => return reason.to_string(),
         };
         format!("native COM record `{name}` {reason}")
     }
@@ -1557,6 +1621,220 @@ impl Failure {
 
 pub(super) struct Bindings<'facts> {
     providers: BTreeMap<Origin, Result<&'facts Fact, Failure>>,
+    authority_types: Option<AuthorityTypes<'facts>>,
+}
+
+#[derive(Clone, Copy)]
+struct UseDemand {
+    counted: bool,
+    pointer: bool,
+    layout: bool,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct AuthorityTypeIdentity {
+    header: String,
+    input: String,
+    scope: Vec<(SemanticTypeRole, String)>,
+    name: String,
+    role: SemanticTypeRole,
+}
+
+impl AuthorityTypeIdentity {
+    fn new(
+        context: &Context<'_, '_>,
+        facts: &HashMap<&Origin, &Fact>,
+        fact: &Fact,
+        authority: &HeaderAuthority,
+    ) -> Result<Self, String> {
+        let snapshot = context.snapshot;
+        let name = |fact: &Fact| {
+            context
+                .source_names
+                .map_or(fact.name.as_str(), |names| names.fact_name(fact))
+                .to_string()
+        };
+        let parent = |origin: &Origin| {
+            snapshot.semantic_parents.get(origin).ok_or_else(|| {
+                format!(
+                    "required type `{}` has no captured native semantic-parent relation for {}",
+                    name(fact),
+                    super::origin(origin)
+                )
+            })
+        };
+        let mut scope = Vec::new();
+        let mut current = parent(&fact.origin)?.as_ref();
+        let mut seen = HashSet::new();
+        while let Some(origin) = current {
+            if origin.tu != fact.origin.tu || !seen.insert(origin) {
+                return Err(format!(
+                    "required type `{}` has a cyclic or cross-TU native semantic scope",
+                    name(fact)
+                ));
+            }
+            let ancestor = facts.get(origin).ok_or_else(|| {
+                format!(
+                    "required type `{}` has no captured native semantic parent fact for {}",
+                    name(fact),
+                    super::origin(origin)
+                )
+            })?;
+            let role = semantic_type_role(ancestor.kind).ok_or_else(|| {
+                format!(
+                    "required type `{}` has an unsupported native semantic parent {:?}",
+                    name(fact),
+                    ancestor.kind
+                )
+            })?;
+            scope.push((role, name(ancestor)));
+            current = parent(origin)?.as_ref();
+        }
+        scope.reverse();
+        Ok(Self {
+            header: normalize_name(&authority.owner.root),
+            input: authority.owner.input.clone(),
+            scope,
+            name: name(fact),
+            role: semantic_type_role(fact.kind).unwrap(),
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum SemanticTypeRole {
+    Namespace,
+    Record,
+    Union,
+    Enum,
+    Alias,
+}
+
+struct AuthorityTypes<'facts> {
+    identities: HashMap<Origin, Result<AuthorityTypeIdentity, String>>,
+    declarations: HashMap<AuthorityTypeIdentity, Vec<&'facts Fact>>,
+    facts_index: HashMap<&'facts str, Vec<&'facts Fact>>,
+}
+
+impl<'facts> AuthorityTypes<'facts> {
+    fn new(context: &Context<'_, 'facts>, facts: &HashMap<&Origin, &'facts Fact>) -> Self {
+        let snapshot = context.snapshot;
+        let mut identities = HashMap::new();
+        let mut declarations: HashMap<_, Vec<_>> = HashMap::new();
+        let mut facts_index: HashMap<_, Vec<_>> = HashMap::new();
+        for fact in facts
+            .values()
+            .copied()
+            .filter(|fact| is_type_declaration_fact(fact))
+        {
+            facts_index
+                .entry(fact.name.as_str())
+                .or_default()
+                .push(fact);
+            let Some(authority) = fact_header_authority(&snapshot.header_authorities, fact) else {
+                continue;
+            };
+            let identity = AuthorityTypeIdentity::new(context, facts, fact, authority);
+            if let Ok(identity) = &identity
+                && fact.origin.tu == authority.owner.input
+            {
+                declarations.entry(identity.clone()).or_default().push(fact);
+            }
+            identities.insert(fact.origin.clone(), identity);
+        }
+        Self {
+            identities,
+            declarations,
+            facts_index,
+        }
+    }
+
+    fn select(
+        &self,
+        context: &Context<'_, 'facts>,
+        fact: &'facts Fact,
+        index: &HashMap<&str, Vec<&'facts Fact>>,
+        shapes: &mut ShapeCache,
+    ) -> Result<&'facts Fact, Error> {
+        let snapshot = context.snapshot;
+        let Some(authority) = fact_header_authority(&snapshot.header_authorities, fact) else {
+            return Ok(fact);
+        };
+        let name = context
+            .source_names
+            .map_or(fact.name.as_str(), |names| names.fact_name(fact));
+        snapshot.require_fact_header_authority(name, fact)?;
+        let absent = || {
+            Error(format!(
+                "RequiredAuthorityDefinitionAbsent: required `{name}`, partition {:?}, \
+                 original input {:?}, header {:?}; no complete defining declaration in \
+                 its semantic scope, and no alternative context is eligible",
+                authority.owner.partition, authority.owner.input, authority.owner.root
+            ))
+        };
+        let identity = self
+            .identities
+            .get(&fact.origin)
+            .ok_or_else(absent)?
+            .as_ref()
+            .map_err(|reason| Error(reason.clone()))?;
+        let choices = self.declarations.get(identity).ok_or_else(absent)?;
+        let eligible: Vec<_> = choices
+            .iter()
+            .copied()
+            .filter(|candidate| {
+                candidate.definition || matches!(candidate.data, FactData::Enum { fixed: true, .. })
+            })
+            .collect();
+        let eligible = if eligible.is_empty() {
+            choices
+                .iter()
+                .copied()
+                .filter(|candidate| {
+                    matches!(candidate.data, FactData::Record { .. })
+                        && snapshot.fact_uuid(candidate).is_none()
+                        && !snapshot.unproved_com_records.contains(&candidate.origin)
+                })
+                .collect()
+        } else {
+            eligible
+        };
+        if eligible.is_empty() {
+            return Err(absent());
+        }
+        if let [unsupported] = eligible.as_slice()
+            && let FactData::Unsupported { reason } = &unsupported.data
+        {
+            return Err(Error(format!(
+                "unsupported authoritative type `{name}` in original input {:?}: {reason}",
+                unsupported.origin.tu
+            )));
+        }
+        let selected = choose_type_root_cached(&fact.name, &eligible, index, shapes)?;
+        if snapshot.type_projection_suppressed(selected, context.declarations, &mut BTreeSet::new())
+            || context
+                .excluded_types
+                .is_some_and(|excluded| excluded.contains(&selected.name))
+        {
+            return Err(Error(format!(
+                "required `{name}` is suppressed or excluded in authoritative partition {:?}, \
+                 original input {:?}, header {:?}; no alternative context is eligible",
+                authority.owner.partition, authority.owner.input, authority.owner.root
+            )));
+        }
+        Ok(selected)
+    }
+}
+
+fn semantic_type_role(kind: FactKind) -> Option<SemanticTypeRole> {
+    match kind {
+        FactKind::Namespace => Some(SemanticTypeRole::Namespace),
+        FactKind::Class | FactKind::Struct => Some(SemanticTypeRole::Record),
+        FactKind::Union => Some(SemanticTypeRole::Union),
+        FactKind::Enum | FactKind::EnumFlag => Some(SemanticTypeRole::Enum),
+        FactKind::Typedef => Some(SemanticTypeRole::Alias),
+        _ => None,
+    }
 }
 
 impl<'facts> Bindings<'facts> {
@@ -1565,7 +1843,11 @@ impl<'facts> Bindings<'facts> {
         if !snapshot.header_partition_policy {
             return Self {
                 providers: BTreeMap::new(),
+                authority_types: None,
             };
+        }
+        if snapshot.ranked_header_partition_policy {
+            return Self::ranked(context, facts);
         }
         let mut phase = TimingPhase::new(snapshot.timing_target.as_deref(), "native-providers");
         let mut eligible: BTreeMap<&str, Vec<&Fact>> = BTreeMap::new();
@@ -1656,7 +1938,57 @@ impl<'facts> Bindings<'facts> {
             providers.insert(origin.clone(), result);
         }
         phase.event("complete", None);
-        Self { providers }
+        Self {
+            providers,
+            authority_types: None,
+        }
+    }
+
+    fn ranked(context: &Context<'_, 'facts>, facts: &HashMap<&Origin, &'facts Fact>) -> Self {
+        let snapshot = context.snapshot;
+        let authority_types = AuthorityTypes::new(context, facts);
+        let mut shapes = ShapeCache::default();
+        let mut providers = BTreeMap::new();
+        for fact in facts.values().copied() {
+            if snapshot.root_owners.contains_key(&fact.origin)
+                || !matches!(fact.kind, FactKind::Class | FactKind::Struct)
+                || !(snapshot.unproved_com_records.contains(&fact.origin)
+                    || snapshot
+                        .native_com_contracts
+                        .get(&fact.origin)
+                        .is_some_and(|contract| !contract.guid.is_empty() && contract.has_fields))
+            {
+                continue;
+            }
+            let selected =
+                authority_types.select(context, fact, &authority_types.facts_index, &mut shapes);
+            let binding = match selected {
+                Ok(provider) if matches!(provider.data, FactData::Interface { .. }) => context
+                    .validate_selected_interface(provider)
+                    .map(|()| provider)
+                    .map_err(|reason| Failure::Authority(reason.into())),
+                Ok(_) => continue,
+                Err(error) => Err(Failure::Authority(error.to_string().into())),
+            };
+            providers.insert(fact.origin.clone(), binding);
+        }
+        Self {
+            providers,
+            authority_types: Some(authority_types),
+        }
+    }
+
+    pub fn authoritative_type(
+        &self,
+        context: &Context<'_, 'facts>,
+        fact: &'facts Fact,
+        index: &HashMap<&str, Vec<&'facts Fact>>,
+        shapes: &mut ShapeCache,
+    ) -> Result<&'facts Fact, Error> {
+        match &self.authority_types {
+            Some(authority) => authority.select(context, fact, index, shapes),
+            None => Ok(fact),
+        }
     }
 
     pub fn provider_for(
@@ -1677,7 +2009,7 @@ impl<'facts> Bindings<'facts> {
         pointer: bool,
         context: &Context<'_, 'facts>,
     ) -> Result<(), Error> {
-        if self.providers.is_empty() {
+        if self.providers.is_empty() && self.authority_types.is_none() {
             return Ok(());
         }
         let counted = counted
@@ -1691,25 +2023,50 @@ impl<'facts> Bindings<'facts> {
                         | Annotation::MemorySizeConst(_)
                 )
             });
-        self.validate(ty, tu, counted, pointer, context, &mut BTreeSet::new())
+        self.validate(
+            ty,
+            tu,
+            UseDemand {
+                counted,
+                pointer,
+                layout: !pointer,
+            },
+            context,
+            &mut BTreeSet::new(),
+        )
     }
 
     fn validate(
         &self,
         ty: &TypeRef,
         tu: &str,
-        counted: bool,
-        pointer: bool,
+        demand: UseDemand,
         context: &Context<'_, 'facts>,
         seen: &mut BTreeSet<Origin>,
     ) -> Result<(), Error> {
         match ty {
-            TypeRef::Pointer { target, .. } => {
-                self.validate(target, tu, false, !counted, context, seen)
-            }
-            TypeRef::Reference { target, .. } | TypeRef::Array { target, .. } => {
-                self.validate(target, tu, false, false, context, seen)
-            }
+            TypeRef::Pointer { target, .. } => self.validate(
+                target,
+                tu,
+                UseDemand {
+                    counted: false,
+                    pointer: !demand.counted,
+                    layout: demand.counted,
+                },
+                context,
+                seen,
+            ),
+            TypeRef::Reference { target, .. } | TypeRef::Array { target, .. } => self.validate(
+                target,
+                tu,
+                UseDemand {
+                    counted: false,
+                    pointer: false,
+                    layout: matches!(ty, TypeRef::Array { .. }),
+                },
+                context,
+                seen,
+            ),
             TypeRef::Named { name, declaration } => {
                 let Some(fact) = context.exact(tu, name, declaration) else {
                     if context
@@ -1727,7 +2084,7 @@ impl<'facts> Bindings<'facts> {
                     return Ok(());
                 };
                 if let Some(provider) = self.providers.get(&fact.origin) {
-                    if !pointer {
+                    if !demand.pointer {
                         return Err(Error(format!(
                             "native COM record `{name}` requires object layout at {}:{} in \
                              translation unit `{tu}`; only COM pointer uses can bind an interface",
@@ -1737,22 +2094,62 @@ impl<'facts> Bindings<'facts> {
                     provider
                         .as_ref()
                         .map_err(|failure| Error(failure.message(name)))?;
+                    return Ok(());
                 }
+                let fact = match &self.authority_types {
+                    Some(authority) => authority.select(
+                        context,
+                        fact,
+                        &authority.facts_index,
+                        &mut ShapeCache::default(),
+                    )?,
+                    None => fact,
+                };
                 if !seen.insert(fact.origin.clone()) {
                     return Ok(());
                 }
                 let result = match &fact.data {
                     FactData::Typedef { target } => {
-                        self.validate(target, tu, counted, pointer, context, seen)
+                        self.validate(target, &fact.origin.tu, demand, context, seen)
+                    }
+                    FactData::Record { .. }
+                        if self.authority_types.is_some() && demand.layout && !fact.definition =>
+                    {
+                        Err(Error(format!(
+                            "incomplete record `{name}` requires a complete authoritative body \
+                             for object layout in original input {:?}; \
+                             no alternative context is eligible",
+                            fact.origin.tu
+                        )))
                     }
                     FactData::Record { base, fields, .. }
                         if !self.providers.contains_key(&fact.origin) =>
                     {
                         if let Some(base) = base {
-                            self.validate(base, tu, false, false, context, seen)?;
+                            self.validate(
+                                base,
+                                &fact.origin.tu,
+                                UseDemand {
+                                    counted: false,
+                                    pointer: false,
+                                    layout: true,
+                                },
+                                context,
+                                seen,
+                            )?;
                         }
                         for field in fields {
-                            self.validate(&field.ty, tu, false, false, context, seen)?;
+                            self.validate(
+                                &field.ty,
+                                &fact.origin.tu,
+                                UseDemand {
+                                    counted: false,
+                                    pointer: false,
+                                    layout: true,
+                                },
+                                context,
+                                seen,
+                            )?;
                         }
                         Ok(())
                     }
@@ -1762,15 +2159,30 @@ impl<'facts> Bindings<'facts> {
                 result
             }
             TypeRef::FunctionPointer { params, result, .. } => {
-                self.validate(result, tu, false, false, context, seen)?;
+                let demand = UseDemand {
+                    counted: false,
+                    pointer: false,
+                    layout: true,
+                };
+                self.validate(result, tu, demand, context, seen)?;
                 for param in params {
-                    self.validate(param, tu, false, false, context, seen)?;
+                    self.validate(param, tu, demand, context, seen)?;
                 }
                 Ok(())
             }
             TypeRef::InlineRecord(record) => {
                 for field in &record.fields {
-                    self.validate(&field.ty, tu, false, false, context, seen)?;
+                    self.validate(
+                        &field.ty,
+                        tu,
+                        UseDemand {
+                            counted: false,
+                            pointer: false,
+                            layout: true,
+                        },
+                        context,
+                        seen,
+                    )?;
                 }
                 Ok(())
             }

@@ -228,6 +228,7 @@ fn extract_impl(
         mut annotations,
         sal_constant_sizes,
         declaration_guids,
+        semantic_parents,
         class_canonical_origins,
         class_canonical_anchors,
         shared_enum_identities,
@@ -472,6 +473,7 @@ fn extract_impl(
         function_annotations,
         sal_constant_sizes,
         declaration_guids,
+        semantic_parents,
         class_canonical_origins,
         class_canonical_anchors,
         shared_enum_identities,
@@ -1555,6 +1557,7 @@ impl TranslationUnit {
             &traversal.seen,
             traversal.class_canonical_origins,
         )?;
+        capture_semantic_parents(self.0, &traversal.seen, output.semantic_parents)?;
         com_contracts::capture(
             &mut traversal,
             output.native_com_contracts,
@@ -1716,6 +1719,7 @@ struct ExtractionState<'a> {
     annotations: &'a mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: &'a mut SalConstantSizes,
     declaration_guids: &'a mut BTreeMap<Origin, String>,
+    semantic_parents: &'a mut BTreeMap<Origin, Option<Origin>>,
     class_canonical_origins: &'a mut BTreeMap<Origin, CanonicalRecord>,
     class_canonical_anchors: &'a mut BTreeMap<Origin, ClassCanonicalAnchor>,
     observation_only_class_origins: &'a mut BTreeSet<Origin>,
@@ -1738,6 +1742,7 @@ struct ExtractionBuffers {
     annotations: BTreeMap<AnnotationTarget, Vec<Annotation>>,
     sal_constant_sizes: SalConstantSizes,
     declaration_guids: BTreeMap<Origin, String>,
+    semantic_parents: BTreeMap<Origin, Option<Origin>>,
     class_canonical_origins: BTreeMap<Origin, CanonicalRecord>,
     class_canonical_anchors: BTreeMap<Origin, ClassCanonicalAnchor>,
     observation_only_class_origins: BTreeSet<Origin>,
@@ -1761,6 +1766,7 @@ impl ExtractionBuffers {
             annotations: &mut self.annotations,
             sal_constant_sizes: &mut self.sal_constant_sizes,
             declaration_guids: &mut self.declaration_guids,
+            semantic_parents: &mut self.semantic_parents,
             class_canonical_origins: &mut self.class_canonical_origins,
             class_canonical_anchors: &mut self.class_canonical_anchors,
             observation_only_class_origins: &mut self.observation_only_class_origins,
@@ -1785,6 +1791,7 @@ impl ExtractionBuffers {
         self.sal_constant_sizes
             .append(&mut other.sal_constant_sizes);
         self.declaration_guids.append(&mut other.declaration_guids);
+        self.semantic_parents.append(&mut other.semantic_parents);
         self.class_canonical_origins
             .append(&mut other.class_canonical_origins);
         self.class_canonical_anchors
@@ -2345,6 +2352,7 @@ mod owned_tests {
         let mut annotations = BTreeMap::new();
         let mut sizes = BTreeMap::new();
         let mut guids = BTreeMap::new();
+        let mut semantic_parents = BTreeMap::new();
         let mut class_origins = BTreeMap::new();
         let mut class_anchors = BTreeMap::new();
         let mut aliases = BTreeSet::new();
@@ -2377,6 +2385,7 @@ mod owned_tests {
                 annotations: &mut annotations,
                 sal_constant_sizes: &mut sizes,
                 declaration_guids: &mut guids,
+                semantic_parents: &mut semantic_parents,
                 class_canonical_origins: &mut class_origins,
                 class_canonical_anchors: &mut class_anchors,
                 observation_only_class_origins: &mut observation_only,
@@ -3428,6 +3437,66 @@ fn observe_specialization_anchors(
             .or_default()
             .push((canonical, origin.clone()));
         traversal.pending_classes.push((origin, canonical));
+    }
+    Ok(())
+}
+
+fn capture_semantic_parents(
+    tu: CXTranslationUnit,
+    seen: &HashMap<u32, Vec<(CXCursor, Origin)>>,
+    output: &mut BTreeMap<Origin, Option<Origin>>,
+) -> Result<(), Error> {
+    for (cursor, origin) in seen.values().flatten().filter(|(cursor, _)| unsafe {
+        matches!(
+            clang_getCursorKind(*cursor),
+            CXCursor_Namespace
+                | CXCursor_ClassDecl
+                | CXCursor_StructDecl
+                | CXCursor_UnionDecl
+                | CXCursor_EnumDecl
+                | CXCursor_TypedefDecl
+                | CXCursor_TypeAliasDecl
+        )
+    }) {
+        let semantic = unsafe { clang_getCursorSemanticParent(*cursor) };
+        if unsafe {
+            clang_Cursor_isNull(semantic) != 0
+                || clang_Cursor_getTranslationUnit(*cursor) != tu
+                || clang_Cursor_getTranslationUnit(semantic) != tu
+        } {
+            continue;
+        }
+        let parent = if unsafe { clang_getCursorKind(semantic) } == CXCursor_TranslationUnit {
+            None
+        } else {
+            let mut matched = None;
+            for (candidate, candidate_origin) in seen
+                .get(&unsafe { clang_hashCursor(semantic) })
+                .into_iter()
+                .flatten()
+            {
+                if unsafe { clang_equalCursors(semantic, *candidate) } == 0 {
+                    continue;
+                }
+                if candidate_origin.tu != origin.tu
+                    || matched.is_some_and(|previous| previous != candidate_origin)
+                {
+                    return Err(Error(
+                        "conflicting exact native semantic parent origins".into(),
+                    ));
+                }
+                matched = Some(candidate_origin);
+            }
+            let Some(parent) = matched else {
+                continue;
+            };
+            Some(parent.clone())
+        };
+        if let Some(previous) = output.insert(origin.clone(), parent.clone())
+            && previous != parent
+        {
+            return Err(Error("conflicting native semantic parent binding".into()));
+        }
     }
     Ok(())
 }

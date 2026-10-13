@@ -540,6 +540,7 @@ fn snapshot(facts: Vec<Fact>) -> Snapshot {
         function_annotations: BTreeMap::new(),
         sal_constant_sizes: BTreeMap::new(),
         declaration_guids: BTreeMap::new(),
+        semantic_parents: BTreeMap::new(),
         class_canonical_origins: BTreeMap::new(),
         class_canonical_anchors: BTreeMap::new(),
         shared_enum_identities: BTreeMap::new(),
