@@ -284,7 +284,21 @@ pub struct RootOwner {
 pub struct HeaderPartitionPolicy {
     headers: BTreeMap<String, HeaderPartitionEntry>,
     input_headers: BTreeMap<(String, String), HeaderPartitionEntry>,
+    partition_authorities: BTreeMap<String, PartitionAuthority>,
     authority_partition: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PartitionAuthority {
+    rank: usize,
+    input: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct HeaderAuthority {
+    owner: RootOwner,
+    alternatives: BTreeSet<RootOwner>,
+    context_present: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -305,6 +319,7 @@ pub enum PartitionConflictReason {
     AmbiguousRootCandidates,
     AmbiguousOwners,
     MissingOwner,
+    AuthoritySelected,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -476,6 +491,104 @@ impl HeaderPartitionPolicy {
         Self::default()
     }
 
+    /// Registers a logical partition's rank and original extraction input.
+    ///
+    /// Lower ranks take precedence. Register the complete policy before selecting inputs to parse.
+    pub fn with_partition_authority(
+        mut self,
+        partition: impl Into<String>,
+        rank: usize,
+        input: impl Into<String>,
+    ) -> Self {
+        self.set_partition_authority(partition, rank, input);
+        self
+    }
+
+    pub fn set_partition_authority(
+        &mut self,
+        partition: impl Into<String>,
+        rank: usize,
+        input: impl Into<String>,
+    ) {
+        self.partition_authorities.insert(
+            partition.into(),
+            PartitionAuthority {
+                rank,
+                input: normalize_name(&input.into()),
+            },
+        );
+    }
+
+    fn validate_partition_authorities(&self) -> Result<(), Error> {
+        if self.partition_authorities.is_empty() {
+            return Ok(());
+        }
+        let mut ranks = BTreeMap::new();
+        for (partition, authority) in &self.partition_authorities {
+            if partition.trim().is_empty() || authority.input.trim().is_empty() {
+                return Err(Error("header partition authority identity is empty".into()));
+            }
+            if let Some(other) = ranks.insert(authority.rank, partition) {
+                return Err(Error(format!(
+                    "header partition authority rank {} is shared by {other:?} and {partition:?}",
+                    authority.rank
+                )));
+            }
+        }
+        for partition in self
+            .headers
+            .values()
+            .chain(self.input_headers.values())
+            .flat_map(|entry| &entry.partitions)
+        {
+            if !self
+                .partition_authorities
+                .contains_key(&partition.partition)
+            {
+                return Err(Error(format!(
+                    "header partition {:?} has no registered authority rank and original input",
+                    partition.partition
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn resolve_owner(
+        &self,
+        name: &str,
+        kind: Option<PartitionItemKind>,
+        owners: BTreeSet<RootOwner>,
+        namespace: Option<&str>,
+    ) -> Result<(RootOwner, Option<PartitionConflict>), Error> {
+        if self.partition_authorities.is_empty() {
+            return resolve_header_owner(name, kind, owners, namespace);
+        }
+        let selected = owners
+            .iter()
+            .min_by_key(|owner| self.partition_authorities[&owner.partition].rank)
+            .ok_or_else(|| Error(format!("traversed item `{name}` has no logical owner")))?;
+        if owners.iter().any(|owner| {
+            owner.partition == selected.partition && !same_owner_policy(owner, selected)
+        }) {
+            return Err(Error(format!(
+                "authoritative partition {:?} has conflicting policy for `{name}`",
+                selected.partition
+            )));
+        }
+        let (owner, _) =
+            resolve_header_owner(name, kind, BTreeSet::from([selected.clone()]), namespace)?;
+        let conflict = (owners.len() > 1).then(|| {
+            kind.map(|kind| PartitionConflict {
+                name: name.to_string(),
+                kind,
+                reason: PartitionConflictReason::AuthoritySelected,
+                owners: owners.into_iter().collect(),
+            })
+        });
+        Ok((owner, conflict.flatten()))
+    }
+
     pub fn with_traversed_header(
         mut self,
         header: impl Into<String>,
@@ -638,6 +751,7 @@ impl HeaderPartitionPolicy {
 
     #[cfg(test)]
     fn owners_for_name(&self, tu: &str, file: &str, name: Option<&str>) -> BTreeSet<RootOwner> {
+        let ranked = !self.partition_authorities.is_empty();
         let normalized_tu = normalize_name(tu).to_ascii_lowercase();
         let file = normalize_name(file);
         let entries = self
@@ -648,7 +762,8 @@ impl HeaderPartitionPolicy {
                 self.input_headers
                     .iter()
                     .filter(|((input, _), entry)| {
-                        input == &normalized_tu && source_path_matches(&entry.header, &file)
+                        (ranked || input == &normalized_tu)
+                            && source_path_matches(&entry.header, &file)
                     })
                     .map(|(_, entry)| entry),
             );
@@ -667,7 +782,13 @@ impl HeaderPartitionPolicy {
         };
         partitions
             .into_iter()
-            .map(|partition| root_owner(tu, &file, partition))
+            .map(|partition| {
+                let input = self
+                    .partition_authorities
+                    .get(&partition.partition)
+                    .map_or(tu, |authority| authority.input.as_str());
+                root_owner(input, &file, partition)
+            })
             .collect()
     }
 }
@@ -701,9 +822,11 @@ impl<'a> HeaderPartitionLookup<'a> {
 
     fn owners_for_name(&mut self, tu: &str, file: &str, name: Option<&str>) -> BTreeSet<RootOwner> {
         // Raw keys preserve owner provenance; each lookup borrows one immutable policy.
+        let ranked = !self.policy.partition_authorities.is_empty();
+        let cache_tu = if ranked { "" } else { tu };
         if self
             .sources
-            .get(tu)
+            .get(cache_tu)
             .is_none_or(|files| !files.contains_key(file))
         {
             let normalized_tu = normalize_name(tu).to_ascii_lowercase();
@@ -718,7 +841,7 @@ impl<'a> HeaderPartitionLookup<'a> {
                         .input_headers
                         .iter()
                         .filter(|((input, _), entry)| {
-                            input == &normalized_tu
+                            (ranked || input == &normalized_tu)
                                 && source_path_matches(&entry.header, &normalized_file)
                         })
                         .map(|(_, entry)| entry),
@@ -731,24 +854,77 @@ impl<'a> HeaderPartitionLookup<'a> {
                     overrides.entry(name).or_default().extend(partitions.iter());
                 }
             }
-            self.sources.entry(tu.to_string()).or_default().insert(
-                file.to_string(),
-                HeaderPartitionCandidates {
-                    file: normalized_file,
-                    defaults,
-                    overrides,
-                },
-            );
+            self.sources
+                .entry(cache_tu.to_string())
+                .or_default()
+                .insert(
+                    file.to_string(),
+                    HeaderPartitionCandidates {
+                        file: normalized_file,
+                        defaults,
+                        overrides,
+                    },
+                );
         }
-        let candidates = &self.sources[tu][file];
+        let candidates = &self.sources[cache_tu][file];
         let partitions = name
             .and_then(|name| candidates.overrides.get(name))
             .filter(|partitions| !partitions.is_empty())
             .unwrap_or(&candidates.defaults);
         partitions
             .iter()
-            .map(|partition| root_owner(tu, &candidates.file, partition))
+            .map(|partition| {
+                let input = self
+                    .policy
+                    .partition_authorities
+                    .get(&partition.partition)
+                    .map_or(tu, |authority| authority.input.as_str());
+                root_owner(input, &candidates.file, partition)
+            })
             .collect()
+    }
+
+    fn refine_owner(
+        &mut self,
+        authority: &RootOwner,
+        name: &str,
+        namespace: Option<&str>,
+    ) -> Result<RootOwner, Error> {
+        self.owners(&authority.input, &authority.root);
+        let candidates = &self.sources[""][&authority.root];
+        let overrides = candidates.overrides.get(name).cloned().unwrap_or_default();
+        let matching: BTreeSet<_> = overrides
+            .iter()
+            .copied()
+            .filter(|partition| {
+                namespace.map_or(partition.partition == authority.partition, |namespace| {
+                    partition.namespace == namespace
+                })
+            })
+            .collect();
+        let choices = if matching.is_empty() {
+            &overrides
+        } else {
+            &matching
+        };
+        if choices.len() > 1 {
+            return Err(Error(format!(
+                "traversed item `{name}` has ambiguous output policy overrides"
+            )));
+        }
+        let mut owner = choices.first().map_or_else(
+            || authority.clone(),
+            |partition| root_owner(&authority.input, &authority.root, partition),
+        );
+        owner
+            .exclusions
+            .extend(authority.exclusions.iter().cloned());
+        owner.exclude_empty_records |= authority.exclude_empty_records;
+        if let Some(namespace) = namespace {
+            owner.namespace = namespace.to_string();
+        }
+        validate_namespace(&owner.namespace)?;
+        Ok(owner)
     }
 }
 
@@ -951,6 +1127,533 @@ mod header_ownership_tests {
             sources * entries,
         );
     }
+
+    fn authority_header() -> String {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("tests")
+            .join("producer_corrections")
+            .join("header-authority.hpp")
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    fn authority_snapshot(inputs: &[&str], required: bool) -> Snapshot {
+        let header = authority_header();
+        let inputs = inputs.iter().map(|input| {
+            let (scalar, value) = if *input == "first.cpp" {
+                ("int", 7)
+            } else {
+                ("unsigned int", 13)
+            };
+            let root = if required && *input == "second.cpp" {
+                "struct REQUESTED_ROOT { AUTHORITY_RECORD payload; };"
+            } else {
+                ""
+            };
+            Input::new(
+                *input,
+                format!(
+                    "#define AUTHORITY_SCALAR {scalar}\n#define AUTHORITY_VALUE {value}\n\
+                     #include \"{header}\"\n{root}\n"
+                ),
+            )
+            .with_roots([header.clone()])
+        });
+        extract(inputs, &["-x", "c++", "--target=x86_64-pc-windows-msvc"]).unwrap()
+    }
+
+    fn authority_policy(
+        first_rank: usize,
+        second_rank: usize,
+        exclusions: &[&str],
+    ) -> HeaderPartitionPolicy {
+        let header = authority_header();
+        let mut first = RootPartition::new("first", "Example.First");
+        first
+            .exclusions
+            .extend(exclusions.iter().map(|name| name.to_string()));
+        HeaderPartitionPolicy::new()
+            .with_partition_authority("second", second_rank, "second.cpp")
+            .with_partition_authority("first", first_rank, "first.cpp")
+            .with_traversed_header_for_input(
+                "second.cpp",
+                &header,
+                RootPartition::new("second", "Example.Second"),
+            )
+            .with_traversed_header_for_input("first.cpp", &header, first)
+    }
+
+    fn assert_authority_roots(plan: &HeaderPartitionPlan, input: &str, scalar: Scalar, value: i64) {
+        let aliases: Vec<_> = plan
+            .snapshot
+            .facts
+            .iter()
+            .filter(|fact| fact.name == "AUTHORITY_ALIAS")
+            .collect();
+        assert_eq!(aliases.len(), 2);
+        let roots: Vec<_> = aliases.iter().filter(|fact| fact.root).collect();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].origin.tu, input);
+        assert_eq!(
+            roots[0].data,
+            FactData::Typedef {
+                target: TypeRef::Scalar(scalar)
+            }
+        );
+        let records: Vec<_> = plan
+            .snapshot
+            .facts
+            .iter()
+            .filter(|fact| fact.name == "AUTHORITY_RECORD" && fact.root)
+            .collect();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].origin.tu, input);
+        let FactData::Record { fields, .. } = &records[0].data else {
+            panic!();
+        };
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].ty, TypeRef::Scalar(scalar));
+        assert!(
+            !plan.snapshot.root_owners.contains_key(
+                &aliases
+                    .iter()
+                    .find(|fact| fact.origin.tu != input)
+                    .unwrap()
+                    .origin
+            )
+        );
+        let constants: Vec<_> = plan
+            .snapshot
+            .constants
+            .iter()
+            .filter(|constant| constant.name == "AUTHORITY_CONSTANT")
+            .collect();
+        assert_eq!(constants.len(), 2);
+        let chosen: Vec<_> = constants
+            .iter()
+            .filter(|constant| {
+                plan.snapshot
+                    .constant_root_owners
+                    .contains_key(&(constant.root.clone(), constant.name.clone()))
+            })
+            .collect();
+        assert_eq!(chosen.len(), 1);
+        assert_eq!(chosen[0].root.tu, input);
+        assert_eq!(chosen[0].value, Value::Signed(value));
+    }
+
+    #[test]
+    fn authority_rank_precedes_execution_order_and_preserves_alternatives() {
+        let policy = authority_policy(1, 8, &[]);
+        let mut lookup = HeaderPartitionLookup::new(&policy);
+        for input in ["first.cpp", "second.cpp", "unparsed.cpp"] {
+            assert_eq!(
+                lookup.owners(input, &authority_header()),
+                policy.owners_for_name(input, &authority_header(), None)
+            );
+        }
+        assert_eq!(lookup.sources.len(), 1);
+        let references = BTreeMap::new();
+        let options = EmitOptions::new("Example.Common", &references);
+        let mut outputs = Vec::new();
+        for inputs in [["first.cpp", "second.cpp"], ["second.cpp", "first.cpp"]] {
+            let plan = authority_snapshot(&inputs, false)
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .unwrap();
+            assert_authority_roots(&plan, "first.cpp", Scalar::I32, 7);
+            let audit = plan.audit(&options).unwrap();
+            assert!(!audit.is_clean());
+            assert!(!audit.has_blocking_conflicts(), "{audit}");
+            assert!(
+                audit.conflicts().iter().all(|conflict| {
+                    conflict.reason == PartitionConflictReason::AuthoritySelected
+                })
+            );
+            let output = plan.emit_with_options(&options).unwrap();
+            assert!(output.keys().all(|key| key.namespace == "Example.First"));
+            outputs.push(output);
+        }
+        assert_eq!(outputs[0], outputs[1]);
+
+        let plan = authority_snapshot(&["first.cpp", "second.cpp"], false)
+            .into_header_partition_plan(&authority_policy(8, 1, &[]), &NamespaceAuthorities::new())
+            .unwrap();
+        assert_authority_roots(&plan, "second.cpp", Scalar::U32, 13);
+        let output = plan.emit_with_options(&options).unwrap();
+        assert!(output.keys().all(|key| key.namespace == "Example.Second"));
+    }
+
+    #[test]
+    fn authority_output_override_cannot_change_definition_home() {
+        let policy = authority_policy(1, 8, &[])
+            .with_partition_authority("elsewhere", 0, "unparsed.cpp")
+            .with_traversed_header_override(
+                authority_header(),
+                "AUTHORITY_ALIAS",
+                RootPartition::new("elsewhere", "Example.Override"),
+            );
+        let plan = authority_snapshot(&["second.cpp", "first.cpp"], false)
+            .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert_authority_roots(&plan, "first.cpp", Scalar::I32, 7);
+        let alias = plan
+            .snapshot
+            .facts
+            .iter()
+            .find(|fact| fact.root && fact.name == "AUTHORITY_ALIAS")
+            .unwrap();
+        let owner = &plan.snapshot.root_owners[&alias.origin];
+        assert_eq!(owner.input, "first.cpp");
+        assert_eq!(owner.namespace, "Example.Override");
+        let references = BTreeMap::new();
+        let output = plan
+            .emit_with_options(&EmitOptions::new("Example.Common", &references))
+            .unwrap();
+        assert!(output.iter().any(|(key, text)| {
+            key.namespace == "Example.Override" && text.contains("AUTHORITY_ALIAS")
+        }));
+    }
+
+    #[test]
+    fn authority_exclusion_omits_without_competing_context_fallback() {
+        let header = authority_header();
+        let policy = HeaderPartitionPolicy::new()
+            .with_partition_authority("first", 1, "first.cpp")
+            .with_partition_authority("second", 8, "second.cpp")
+            .with_traversed_header_for_input(
+                "first.cpp",
+                &header,
+                RootPartition::new("first", "Example.First")
+                    .with_exclusion("AUTHORITY_ALIAS")
+                    .with_exclusion("AUTHORITY_RECORD")
+                    .with_exclusion("AUTHORITY_CONSTANT"),
+            )
+            .with_traversed_header_for_input(
+                "second.cpp",
+                &header,
+                RootPartition::new("second", "Example.Second"),
+            );
+        let plan = authority_snapshot(&["second.cpp", "first.cpp"], false)
+            .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+            .unwrap();
+        assert!(plan.snapshot.facts.iter().all(|fact| !fact.root));
+        assert!(plan.snapshot.constant_root_owners.is_empty());
+        let references = BTreeMap::new();
+        assert!(
+            plan.emit_with_options(&EmitOptions::new("Example.Common", &references))
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn authority_absence_is_promoted_only_by_reachable_output() {
+        let references = BTreeMap::new();
+        let options = EmitOptions::new("Example.Common", &references);
+        for (required, excluded) in [(false, false), (true, false), (false, true), (true, true)] {
+            let exclusions: &[&str] = if excluded { &["AUTHORITY_RECORD"] } else { &[] };
+            let policy = authority_policy(1, 8, exclusions).with_traversed_header_for_input(
+                "second.cpp",
+                "second.cpp",
+                RootPartition::new("second", "Example.Second")
+                    .with_exclusion("AUTHORITY_SCALAR")
+                    .with_exclusion("AUTHORITY_VALUE"),
+            );
+            let plan = authority_snapshot(&["second.cpp"], required)
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .unwrap();
+            let authority = &plan.snapshot.header_authorities
+                [&normalize_name(&authority_header()).to_ascii_lowercase()];
+            assert_eq!(authority.owner.input, "first.cpp");
+            assert!(!authority.context_present);
+            assert!(
+                plan.snapshot
+                    .facts
+                    .iter()
+                    .filter(|fact| fact.name == "AUTHORITY_RECORD")
+                    .all(|fact| !fact.root)
+            );
+            let result = plan.emit_with_options(&options);
+            if required {
+                let error = result.unwrap_err().to_string();
+                for evidence in [
+                    "AUTHORITY_RECORD",
+                    "first",
+                    "first.cpp",
+                    "header-authority.hpp",
+                    "REQUESTED_ROOT",
+                ] {
+                    assert!(error.contains(evidence), "{evidence:?}: {error}");
+                }
+                if excluded {
+                    assert!(
+                        error.contains("excluded by authoritative partition"),
+                        "{error}"
+                    );
+                    assert!(!error.contains("RequiredAuthorityContextAbsent"), "{error}");
+                } else {
+                    assert!(error.contains("RequiredAuthorityContextAbsent"), "{error}");
+                }
+            } else {
+                assert!(result.unwrap().is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn authority_registry_rejects_missing_identity_and_ambiguous_rank() {
+        let policy = authority_policy(1, 1, &[]);
+        assert!(
+            policy
+                .validate_partition_authorities()
+                .unwrap_err()
+                .to_string()
+                .contains("authority rank 1 is shared")
+        );
+        let mut policy = authority_policy(1, 8, &[]);
+        policy.set_partition_authority("first", 1, "");
+        assert_eq!(
+            policy
+                .validate_partition_authorities()
+                .unwrap_err()
+                .to_string(),
+            "header partition authority identity is empty"
+        );
+        let policy = authority_policy(1, 8, &[]).with_traversed_header(
+            "other.hpp",
+            RootPartition::new("unregistered", "Example.Other"),
+        );
+        assert!(
+            policy
+                .validate_partition_authorities()
+                .unwrap_err()
+                .to_string()
+                .contains("unregistered")
+        );
+    }
+
+    #[test]
+    fn authority_home_requires_exact_original_input_and_header_observation() {
+        let header = authority_header();
+        let observed = format!(
+            "#define AUTHORITY_SCALAR int\n#define AUTHORITY_VALUE 7\n#include \"{header}\"\n"
+        );
+        let requested =
+            format!("{observed}struct REQUESTED_ROOT {{ AUTHORITY_RECORD payload; }};\n");
+        let snapshot = extract(
+            [
+                Input::new("first.cpp", ""),
+                Input::new("FIRST.cpp", &observed).with_roots([&header]),
+                Input::new("second.cpp", requested).with_roots([&header]),
+            ],
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        let policy = authority_policy(1, 8, &[]).with_traversed_header_for_input(
+            "second.cpp",
+            "second.cpp",
+            RootPartition::new("second", "Example.Second")
+                .with_exclusion("AUTHORITY_SCALAR")
+                .with_exclusion("AUTHORITY_VALUE"),
+        );
+        let plan = snapshot
+            .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+            .unwrap();
+        let authority =
+            &plan.snapshot.header_authorities[&normalize_name(&header).to_ascii_lowercase()];
+        assert!(plan.snapshot.input_order.contains_key("first.cpp"));
+        assert!(!authority.context_present);
+        let records: Vec<_> = plan
+            .snapshot
+            .facts
+            .iter()
+            .filter(|fact| fact.name == "AUTHORITY_RECORD" && fact.origin.tu == "FIRST.cpp")
+            .collect();
+        assert_eq!(records.len(), 1);
+        assert!(!records[0].root);
+        let references = BTreeMap::new();
+        let error = plan
+            .emit_with_options(&EmitOptions::new("Example.Common", &references))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("RequiredAuthorityContextAbsent"), "{error}");
+        assert!(error.contains("original input \"first.cpp\""), "{error}");
+    }
+
+    #[test]
+    fn authority_constant_filter_preserves_unranked_unowned_observations() {
+        let snapshot = authority_snapshot(&["first.cpp"], false);
+        let header = authority_header();
+        let unranked = HeaderPartitionPolicy::new()
+            .with_traversed_header(&header, RootPartition::new("first", "Example.First"));
+        let ranked = unranked
+            .clone()
+            .with_partition_authority("first", 0, "first.cpp");
+        let unobserved =
+            HeaderPartitionPolicy::new().with_partition_authority("first", 0, "first.cpp");
+        let references = BTreeMap::new();
+        let options = EmitOptions::new("Example.Common", &references);
+        for (policy, registered, observed) in [
+            (&unranked, false, true),
+            (&ranked, true, true),
+            (&unobserved, true, false),
+        ] {
+            let mut plan = snapshot
+                .plan_header_partitions(policy, &NamespaceAuthorities::new())
+                .unwrap();
+            assert!(plan.snapshot.header_partition_policy);
+            assert_eq!(plan.snapshot.ranked_header_partition_policy, registered);
+            assert_eq!(
+                !plan.snapshot.header_authorities.is_empty(),
+                registered && observed
+            );
+            plan.snapshot.constant_root_owners.clear();
+            let constant = plan
+                .snapshot
+                .constants
+                .iter()
+                .find(|constant| constant.name == "AUTHORITY_CONSTANT")
+                .unwrap();
+            assert!(!plan.snapshot.root_owners.contains_key(&constant.root));
+            assert_eq!(constant.value, Value::Signed(7));
+            let output = plan.emit_with_options(&options).unwrap();
+            let text = output.values().cloned().collect::<String>();
+            assert_eq!(text.contains("AUTHORITY_CONSTANT"), !registered, "{text}");
+            if !registered {
+                assert!(text.contains("= 7"), "{text}");
+            }
+            if !observed {
+                assert!(output.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn authority_macro_demand_uses_exact_expansion_provenance() {
+        let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("tests")
+            .join("producer_corrections");
+        let definitions = fixtures.join("header-authority-macros.hpp");
+        let expansion = fixtures.join("header-authority-expansion.hpp");
+        let definitions = definitions.to_string_lossy().into_owned();
+        let expansion = expansion.to_string_lossy().into_owned();
+        let definition_partition = RootPartition::new("definitions", "Example.Definitions");
+        let expansion_partition = RootPartition::new("expansion", "Example.Expansion");
+        let request_partition = RootPartition::new("request", "Example.Request");
+        let policy = HeaderPartitionPolicy::new()
+            .with_partition_authority("definitions", 0, "definitions.cpp")
+            .with_partition_authority("expansion", 1, "expansion.cpp")
+            .with_partition_authority("request", 2, "request.cpp")
+            .with_traversed_header_for_input("definitions.cpp", &definitions, definition_partition)
+            .with_traversed_header_for_input(
+                "expansion.cpp",
+                &expansion,
+                expansion_partition.clone(),
+            )
+            .with_traversed_header_for_input("request.cpp", &expansion, request_partition.clone())
+            .with_traversed_header_for_input("expansion.cpp", "expansion.cpp", expansion_partition)
+            .with_traversed_header_for_input("request.cpp", "request.cpp", request_partition);
+        let references = BTreeMap::new();
+        let options = EmitOptions::new("Example.Common", &references);
+        for (input, required) in [
+            ("expansion.cpp", true),
+            ("request.cpp", false),
+            ("request.cpp", true),
+        ] {
+            let root = if required {
+                "struct MACRO_REQUESTED_ROOT { MACRO_AUTHORITY_RECORD record; \
+                 MACRO_AUTHORITY_ALIAS* alias; };"
+            } else {
+                ""
+            };
+            let snapshot = extract(
+                [
+                    Input::new(input, format!("#include \"{expansion}\"\n{root}\n"))
+                        .with_roots([&definitions, &expansion]),
+                ],
+                &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+            )
+            .unwrap();
+            let plan = snapshot
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .unwrap();
+            let definition_authority = &plan.snapshot.header_authorities
+                [&normalize_name(&definitions).to_ascii_lowercase()];
+            assert!(!definition_authority.context_present);
+            let expansion_authority =
+                &plan.snapshot.header_authorities[&normalize_name(&expansion).to_ascii_lowercase()];
+            assert_eq!(
+                expansion_authority.context_present,
+                input == "expansion.cpp"
+            );
+            for name in ["MACRO_AUTHORITY_RECORD", "MACRO_AUTHORITY_ALIAS"] {
+                let facts: Vec<_> = plan
+                    .snapshot
+                    .facts
+                    .iter()
+                    .filter(|fact| fact.name == name)
+                    .collect();
+                assert_eq!(facts.len(), 1, "{facts:#?}");
+                let fact = facts[0];
+                assert_eq!(fact.origin.tu, input);
+                assert_eq!(fact.spelling.file, normalize_name(&definitions));
+                assert_eq!(fact.expansion.file, normalize_name(&expansion));
+                assert_eq!(fact.root, input == "expansion.cpp");
+                let authority =
+                    fact_header_authority(&plan.snapshot.header_authorities, fact).unwrap();
+                assert_eq!(authority.owner.partition, "expansion");
+                assert_eq!(authority.owner.input, "expansion.cpp");
+                let declarations = DeclarationIndex::new(&plan.snapshot.facts);
+                let bound = declarations.get(input, name, &fact.spelling);
+                assert_eq!(bound.len(), 1);
+                assert_eq!(bound[0].origin, fact.origin);
+                if let FactData::Record { fields, .. } = &fact.data {
+                    assert_eq!(fields.len(), 1);
+                    assert_eq!(fields[0].name, "value");
+                    assert_eq!(fields[0].ty, TypeRef::Scalar(Scalar::I32));
+                }
+            }
+            let result = plan.emit_with_options(&options);
+            if input == "expansion.cpp" {
+                let output = result.unwrap();
+                let text = output.values().cloned().collect::<String>();
+                for declaration in [
+                    "struct MACRO_AUTHORITY_ALIAS",
+                    "value: i32",
+                    "struct MACRO_REQUESTED_ROOT",
+                    "record: MACRO_AUTHORITY_ALIAS",
+                    "alias: *mut MACRO_AUTHORITY_ALIAS",
+                ] {
+                    assert!(text.contains(declaration), "{declaration:?}: {text}");
+                }
+                assert!(!text.contains("struct MACRO_AUTHORITY_RECORD"), "{text}");
+                assert!(
+                    output
+                        .keys()
+                        .all(|key| key.namespace == "Example.Expansion")
+                );
+            } else if required {
+                let error = result.unwrap_err().to_string();
+                for evidence in [
+                    "RequiredAuthorityContextAbsent",
+                    "MACRO_AUTHORITY_RECORD",
+                    "MACRO_REQUESTED_ROOT",
+                    "expansion.cpp",
+                    "header-authority-expansion.hpp",
+                ] {
+                    assert!(error.contains(evidence), "{evidence:?}: {error}");
+                }
+                assert!(
+                    !error.contains("original input \"definitions.cpp\""),
+                    "{error}"
+                );
+            } else {
+                assert!(result.unwrap().is_empty());
+            }
+        }
+    }
 }
 
 impl PartitionAudit {
@@ -960,6 +1663,12 @@ impl PartitionAudit {
 
     pub fn conflicts(&self) -> &[PartitionConflict] {
         &self.conflicts
+    }
+
+    pub fn has_blocking_conflicts(&self) -> bool {
+        self.conflicts
+            .iter()
+            .any(|conflict| conflict.reason != PartitionConflictReason::AuthoritySelected)
     }
 }
 
@@ -981,6 +1690,9 @@ impl Display for PartitionAudit {
                 }
                 PartitionConflictReason::AmbiguousOwners => "has ambiguous logical owners",
                 PartitionConflictReason::MissingOwner => "has no logical owner",
+                PartitionConflictReason::AuthoritySelected => {
+                    "has ranked traversed-header alternatives"
+                }
             };
             let owners = if conflict.owners.is_empty() {
                 "none".to_string()
@@ -1982,6 +2694,7 @@ pub struct Snapshot {
     root_owners: BTreeMap<Origin, RootOwner>,
     constant_root_owners: BTreeMap<(Origin, String), RootOwner>,
     root_partitions: BTreeMap<(String, String), RootOwner>,
+    header_authorities: BTreeMap<String, HeaderAuthority>,
     partition_inputs: BTreeMap<String, String>,
     input_order: BTreeMap<String, usize>,
     partition_exclusions: Vec<ExcludedPartitionDeclaration>,
@@ -1992,6 +2705,7 @@ pub struct Snapshot {
     fact_namespace_authorities: BTreeMap<Origin, String>,
     constant_namespace_authorities: BTreeMap<(Origin, String), String>,
     header_partition_policy: bool,
+    ranked_header_partition_policy: bool,
     header_authority_partition: Option<String>,
     timing_target: Option<String>,
 }
@@ -2212,6 +2926,7 @@ impl PartialEq for Snapshot {
             && self.root_owners == other.root_owners
             && self.constant_root_owners == other.constant_root_owners
             && self.root_partitions == other.root_partitions
+            && self.header_authorities == other.header_authorities
             && self.partition_inputs == other.partition_inputs
             && self.partition_exclusions == other.partition_exclusions
             && self.forced_flags == other.forced_flags
@@ -2221,6 +2936,7 @@ impl PartialEq for Snapshot {
             && self.fact_namespace_authorities == other.fact_namespace_authorities
             && self.constant_namespace_authorities == other.constant_namespace_authorities
             && self.header_partition_policy == other.header_partition_policy
+            && self.ranked_header_partition_policy == other.ranked_header_partition_policy
             && self.header_authority_partition == other.header_authority_partition
     }
 }
@@ -3328,14 +4044,18 @@ impl Snapshot {
         &mut self,
         policy: &HeaderPartitionPolicy,
     ) -> Result<Vec<PartitionConflict>, Error> {
+        policy.validate_partition_authorities()?;
+        let ranked = !policy.partition_authorities.is_empty();
         self.root_owners.clear();
         self.constant_root_owners.clear();
         self.root_partitions.clear();
+        self.header_authorities.clear();
         self.partition_inputs.clear();
         self.partition_exclusions.clear();
         self.forced_flags.clear();
         self.suppressed_type_origins.clear();
         self.header_partition_policy = true;
+        self.ranked_header_partition_policy = ranked;
         self.header_authority_partition
             .clone_from(&policy.authority_partition);
         if self
@@ -3357,6 +4077,7 @@ impl Snapshot {
                     .iter()
                     .map(|constant| constant.root.tu.clone()),
             )
+            .chain(self.input_order.keys().filter(|_| ranked).cloned())
             .collect();
         self.partition_inputs
             .extend(translation_units.iter().map(|tu| (tu.clone(), tu.clone())));
@@ -3374,11 +4095,43 @@ impl Snapshot {
                     .iter()
                     .map(|constant| (constant.root.tu.clone(), constant.spelling.file.clone())),
             )
+            .chain(
+                self.included_files
+                    .iter()
+                    .filter(|_| ranked)
+                    .map(|included| (included.input.clone(), included.path.clone())),
+            )
+            .collect();
+        let contexts: BTreeSet<_> = physical_sources
+            .iter()
+            .map(|(tu, file)| {
+                (
+                    normalize_name(tu),
+                    normalize_name(file).to_ascii_lowercase(),
+                )
+            })
             .collect();
         let mut lookup = HeaderPartitionLookup::new(policy);
         for (tu, file) in physical_sources {
             let owners = lookup.owners(&tu, &file);
-            if owners.len() == 1 {
+            if ranked && !owners.is_empty() {
+                let (owner, _) = policy.resolve_owner(&file, None, owners.clone(), None)?;
+                let context_present = self.input_order.contains_key(&owner.input)
+                    && contexts.contains(&(
+                        owner.input.clone(),
+                        normalize_name(&owner.root).to_ascii_lowercase(),
+                    ));
+                self.header_authorities.insert(
+                    normalize_name(&file).to_ascii_lowercase(),
+                    HeaderAuthority {
+                        owner: owner.clone(),
+                        alternatives: owners,
+                        context_present,
+                    },
+                );
+                self.root_partitions
+                    .insert((owner.input.clone(), file), owner);
+            } else if owners.len() == 1 {
                 self.root_partitions
                     .insert((tu, file), owners.first().unwrap().clone());
             }
@@ -3387,6 +4140,37 @@ impl Snapshot {
         let mut conflicts = Vec::new();
         for fact in &mut self.facts {
             fact.root = false;
+            if ranked {
+                let Some(authority) = fact_header_authority(&self.header_authorities, fact) else {
+                    continue;
+                };
+                if fact.origin.tu != authority.owner.input {
+                    continue;
+                }
+                let namespace = self
+                    .namespace_authorities
+                    .get(&fact.name)
+                    .map(String::as_str);
+                let mut owner = lookup.refine_owner(&authority.owner, &fact.name, namespace)?;
+                owner.input.clone_from(&fact.origin.tu);
+                if authority.alternatives.len() > 1
+                    && let Some(kind) = fact_partition_item_kind(fact)
+                {
+                    conflicts.push(PartitionConflict {
+                        name: fact.name.clone(),
+                        kind,
+                        reason: PartitionConflictReason::AuthoritySelected,
+                        owners: authority.alternatives.iter().cloned().collect(),
+                    });
+                }
+                if !owner_excludes_fact(&owner, fact)
+                    && !self.observation_only_class_origins.contains(&fact.origin)
+                {
+                    fact.root = true;
+                }
+                self.root_owners.insert(fact.origin.clone(), owner);
+                continue;
+            }
             let candidates = header_fact_owner_candidates(&mut lookup, fact);
             if candidates.is_empty() {
                 continue;
@@ -3648,6 +4432,35 @@ impl Snapshot {
             .collect();
         let mut constants = Vec::with_capacity(self.constants.len());
         for constant in std::mem::take(&mut self.constants) {
+            if ranked {
+                let authority = facts_by_origin
+                    .get(&constant.root)
+                    .and_then(|fact| {
+                        self.header_authorities
+                            .get(&normalize_name(&fact.expansion.file).to_ascii_lowercase())
+                    })
+                    .or_else(|| {
+                        self.header_authorities
+                            .get(&normalize_name(&constant.spelling.file).to_ascii_lowercase())
+                    });
+                if let Some(authority) = authority
+                    && constant.root.tu == authority.owner.input
+                {
+                    let namespace = self
+                        .constant_namespace_authorities
+                        .get(&(constant.definition.clone(), constant.name.clone()))
+                        .map(String::as_str);
+                    let mut owner =
+                        lookup.refine_owner(&authority.owner, &constant.name, namespace)?;
+                    owner.input.clone_from(&constant.root.tu);
+                    if !owner.exclusions.contains(&constant.name) {
+                        self.constant_root_owners
+                            .insert((constant.root.clone(), constant.name.clone()), owner);
+                    }
+                }
+                constants.push(constant);
+                continue;
+            }
             let mut candidates = associated_constant_owners
                 .get(&constant.name)
                 .cloned()
@@ -3687,6 +4500,47 @@ impl Snapshot {
         conflicts.sort();
         conflicts.dedup();
         Ok(conflicts)
+    }
+
+    fn require_fact_header_authority(&self, name: &str, fact: &Fact) -> Result<(), Error> {
+        let Some(authority) = fact_header_authority(&self.header_authorities, fact) else {
+            return Ok(());
+        };
+        let owner = &authority.owner;
+        if owner.exclusions.contains(name) {
+            return Err(Error(format!(
+                "required `{name}` is excluded by authoritative partition {:?}, \
+                 original input {:?}, header {:?}; no alternative context is eligible",
+                owner.partition, owner.input, owner.root
+            )));
+        }
+        if authority.context_present {
+            return Ok(());
+        }
+        Err(Error(format!(
+            "RequiredAuthorityContextAbsent: required `{name}`, partition {:?}, \
+             original input {:?}, header {:?}",
+            owner.partition, owner.input, owner.root
+        )))
+    }
+
+    fn require_declaration_header_authority(
+        &self,
+        tu: &str,
+        name: &str,
+        declaration: &Location,
+        declarations: &DeclarationIndex<'_>,
+    ) -> Result<(), Error> {
+        if self.ranked_header_partition_policy {
+            for fact in declarations
+                .get(tu, name, declaration)
+                .iter()
+                .filter(|fact| is_type_declaration_fact(fact))
+            {
+                self.require_fact_header_authority(name, fact)?;
+            }
+        }
+        Ok(())
     }
 
     fn into_partitioned_planning_snapshot(
@@ -5946,6 +6800,14 @@ impl Snapshot {
             roots.entry(&fact.name).or_default().functions.push(fact);
         }
         for constant in &self.constants {
+            if self.ranked_header_partition_policy
+                && !self
+                    .constant_root_owners
+                    .contains_key(&(constant.root.clone(), constant.name.clone()))
+                && !self.root_owners.contains_key(&constant.root)
+            {
+                continue;
+            }
             if excluded_constants.is_some_and(|excluded| excluded.contains(&constant.name))
                 && !associated_constants.contains(constant.name.as_str())
             {
@@ -6377,6 +7239,11 @@ impl Snapshot {
             for missing in selected.iter().filter(|name| {
                 !found.contains(name.as_str()) && !failed_function_roots.contains(name.as_str())
             }) {
+                for fact in self.facts.iter().filter(|fact| {
+                    matches!(&fact.data, FactData::Function { link_name, .. } if link_name == missing)
+                }) {
+                    self.require_fact_header_authority(missing, fact)?;
+                }
                 root_errors.push(root_selection_error(
                     self,
                     missing,
@@ -6950,6 +7817,12 @@ impl Snapshot {
                         },
                     );
                     dependency_diagnostics.resolve(reference);
+                    continue;
+                }
+                if let Err(error) =
+                    self.require_declaration_header_authority(tu, name, declaration, &declarations)
+                {
+                    dependency_diagnostics.block(reference, error.to_string(), source);
                     continue;
                 }
                 let mut matches: Vec<_> = facts_index
@@ -8355,7 +9228,7 @@ impl HeaderPartitionPlan {
         conflicts.sort();
         conflicts.dedup();
         let audit = PartitionAudit { conflicts };
-        if !audit.is_clean() {
+        if audit.has_blocking_conflicts() {
             return phase.check(Err(Error(audit.to_string())));
         }
         let routes = phase.check(snapshot.resolve_partition_routes(candidates))?;
@@ -8369,6 +9242,9 @@ impl HeaderPartitionPlan {
         )?;
         if let Some(summary) = ambiguity_summary {
             eprintln!("{summary}");
+        }
+        if !audit.is_clean() {
+            eprintln!("{audit}");
         }
         Ok(HeaderPartitionReport {
             partitions: result,
@@ -9211,7 +10087,8 @@ fn route_candidate_error(candidate: &RouteCandidate<'_>, reason: PartitionConfli
             candidate.name
         )),
         PartitionConflictReason::AmbiguousRootCandidates
-        | PartitionConflictReason::AmbiguousOwners => Error(format!(
+        | PartitionConflictReason::AmbiguousOwners
+        | PartitionConflictReason::AuthoritySelected => Error(format!(
             "selected {kind} `{}` has ambiguous tagged root owners: {}",
             candidate.name,
             candidate
@@ -9928,6 +10805,15 @@ fn authority_root_owner(partition: &str, namespace: &str, root: &str) -> RootOwn
         preserved_auto_function_pointer_levels: BTreeSet::new(),
         exclude_empty_records: false,
     }
+}
+
+fn fact_header_authority<'a>(
+    authorities: &'a BTreeMap<String, HeaderAuthority>,
+    fact: &Fact,
+) -> Option<&'a HeaderAuthority> {
+    authorities
+        .get(&normalize_name(&fact.expansion.file).to_ascii_lowercase())
+        .or_else(|| authorities.get(&normalize_name(&fact.spelling.file).to_ascii_lowercase()))
 }
 
 fn header_fact_owner_candidates(

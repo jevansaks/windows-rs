@@ -3039,6 +3039,7 @@ mod excluded_enum_raw_context {
             clang_flag_enums: BTreeSet::new(),
             constant_root_owners: BTreeMap::new(),
             root_partitions: BTreeMap::new(),
+            header_authorities: BTreeMap::new(),
             partition_inputs: BTreeMap::new(),
             input_order: BTreeMap::new(),
             partition_exclusions: Vec::new(),
@@ -3049,6 +3050,7 @@ mod excluded_enum_raw_context {
             fact_namespace_authorities: BTreeMap::new(),
             constant_namespace_authorities: BTreeMap::new(),
             header_partition_policy: true,
+            ranked_header_partition_policy: false,
             header_authority_partition: None,
             timing_target: None,
         }

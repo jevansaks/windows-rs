@@ -299,6 +299,30 @@ are finished inspecting extraction results do not retain the original allocation
 planning snapshot. `plan_header_partitions` preserves the borrowed API for callers that still need
 the original snapshot; it clones the snapshot and otherwise produces the same plan.
 
+Original-input callers register every logical partition with
+`with_partition_authority(partition, rank, input)` or
+`set_partition_authority(partition, rank, input)` before selecting inputs to parse. `input` is the
+actual original `Input::name`; lower ranks win independently of execution and registration order.
+The home identity must match that original input exactly, and that input must have observed the
+physical header. A differently named input does not substitute for the home.
+Each physical header's definition authority is chosen from its traversing partitions before root
+planning. Only that partition's own-context observations become roots; other observations remain
+alternatives. Named output overrides refine routing and policy without changing the definition
+home. Excluding the chosen authority's name omits it without selecting a competing observation.
+
+An observed header with an unparsed home does not require that input unless a selected root or
+reachable definition needs it. That demand reports `RequiredAuthorityContextAbsent` with the
+required name, physical header, logical partition, and original input; no other context substitutes
+for the missing home. Ranked owner alternatives are informative `AuthoritySelected` audit entries;
+`has_blocking_conflicts` distinguishes them from unresolved routing errors. Callers that do not
+register authority ranks retain the aggregate-input ownership policy.
+If the chosen authority excludes a needed declaration, the dependency diagnostic reports that
+configured omission before asking for an absent home, without borrowing an alternative.
+Required definitions resolve through exact original-TU declaration facts, using expansion ownership
+before spelling ownership as root selection does. A macro's definition header does not override its
+traversed expansion header. Only registered/ranked plans omit unowned constant observations;
+unranked header plans retain their existing constant selection.
+
 The extraction roots must cover every traversed header whose functions, GUIDs, macros, or deferred
 record bodies are needed. They control extraction coverage only for this API; the
 `HeaderPartitionPolicy` supplies logical root ownership after extraction. Included headers that
