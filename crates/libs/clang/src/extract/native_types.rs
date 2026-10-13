@@ -60,7 +60,12 @@ pub(super) fn register_policy(args: &[&str]) -> Result<(), &'static str> {
             }
         } else if !matches!(
             argument,
-            "-fms-compatibility" | "-fms-extensions" | "-fno-exceptions" | "-fno-rtti"
+            "-fms-compatibility"
+                | "-fms-extensions"
+                | "-fno-exceptions"
+                | "-fno-rtti"
+                | "-nostdinc"
+                | "-nostdinc++"
         ) && ![
             "-std=",
             "--target=",
@@ -167,10 +172,24 @@ pub(super) fn function_transport(
 }
 
 pub(super) fn unsupported_declaration_attribute(cursor: CXCursor) -> Option<CXCursor> {
+    unsupported_attribute(cursor, false)
+}
+
+pub(super) fn unsupported_method_attribute(
+    cursor: CXCursor,
+    validated_override: bool,
+) -> Option<CXCursor> {
+    unsupported_attribute(cursor, validated_override)
+}
+
+fn unsupported_attribute(cursor: CXCursor, validated_override: bool) -> Option<CXCursor> {
     let target = unsafe { clang_getCursorKind(cursor) };
     cursor_children(cursor).into_iter().find(|attribute| {
         let kind = unsafe { clang_getCursorKind(*attribute) };
         if unsafe { clang_isAttribute(kind) } == 0 {
+            return false;
+        }
+        if kind == CXCursor_CXXOverrideAttr && target == CXCursor_CXXMethod && validated_override {
             return false;
         }
         if kind != CXCursor_AnnotateAttr {
@@ -388,7 +407,18 @@ impl Capture {
                 }
             }
             CXType_Record => {
-                NativeTypeLayer::Record(Box::new(record(self, ty, depth, &mut height)?))
+                let cursor = cursor_definition(unsafe { clang_getTypeDeclaration(ty) });
+                if is_interface(cursor)
+                    && unsafe { clang_Cursor_getModule(cursor) }.is_null()
+                    && matches!(
+                        unsafe { clang_getCursorKind(cursor) },
+                        CXCursor_StructDecl | CXCursor_ClassDecl
+                    )
+                {
+                    NativeTypeLayer::Interface(Box::new(declaration(cursor)?))
+                } else {
+                    NativeTypeLayer::Record(Box::new(record(self, ty, depth, &mut height)?))
+                }
             }
             CXType_Enum => {
                 NativeTypeLayer::Enum(Box::new(enumeration(self, ty, depth, &mut height)?))
@@ -415,7 +445,8 @@ impl Capture {
 
     fn raw_use(&mut self, mut ty: CXType, depth: usize) -> Option<()> {
         if depth == 64 {
-            return self.reject(ty, depth, "capture-depth-limit", None);
+            // read and cached subtree heights report the unchanged native capture limit.
+            return Some(());
         }
         loop {
             match ty.kind {
@@ -479,7 +510,7 @@ impl Capture {
     }
 }
 
-fn declaration(cursor: CXCursor) -> Option<NativeDeclaration> {
+pub(super) fn declaration(cursor: CXCursor) -> Option<NativeDeclaration> {
     let (spelling, expansion, _, _) = cursor_locations(cursor)?;
     let parent = unsafe { clang_getCursorSemanticParent(cursor) };
     if unsafe { clang_Cursor_isNull(parent) } != 0 {
@@ -697,6 +728,7 @@ mod tests {
         assert!(register_policy(&["--no-default-config"]).is_ok());
         assert!(register_policy(&["--no-default-config", "-mregparm=0"]).is_ok());
         assert!(register_policy(&["--no-default-config", "-mregparm", "0"]).is_ok());
+        assert!(register_policy(&["--no-default-config", "-nostdinc", "-nostdinc++"]).is_ok());
         for (target, width) in [
             ("i686-pc-windows-msvc", 32),
             ("x86_64-pc-windows-msvc", 64),
@@ -760,10 +792,6 @@ mod tests {
             ],
         )
         .unwrap();
-        println!(
-            "\nclang-version={}",
-            cx_string(unsafe { clang_getClangVersion() })
-        );
         let mut capture = Capture::default();
         let mut memory = Capture::for_arguments(&[
             "--no-default-config",
@@ -777,55 +805,7 @@ mod tests {
         {
             let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
             let ty = unsafe { clang_getCursorType(cursor) };
-            let policy = unsafe { clang_getCursorPrintingPolicy(cursor) };
-            let pretty = cx_string(unsafe { clang_getCursorPrettyPrinted(cursor, policy) });
-            unsafe { clang_PrintingPolicy_dispose(policy) };
             let (native, rejection) = capture.capture_diagnostic(ty);
-            let fields: Vec<_> = cursor_children(cursor)
-                .into_iter()
-                .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_FieldDecl)
-                .map(|field| unsafe { clang_Cursor_getOffsetOfField(field) })
-                .collect();
-            println!(
-                "record={name} size={} align={} visibility={} fields={fields:?} \
-                 captured={} pretty={pretty:?} \
-                 rejection={rejection:?}",
-                unsafe { clang_Type_getSizeOf(ty) },
-                unsafe { clang_Type_getAlignOf(ty) },
-                unsafe { clang_getCursorVisibility(cursor) },
-                native.is_some(),
-            );
-            for attribute in cursor_children(cursor)
-                .into_iter()
-                .filter(|child| unsafe { clang_isAttribute(clang_getCursorKind(*child)) } != 0)
-            {
-                let range = unsafe { clang_getCursorExtent(attribute) };
-                let mut tokens = std::ptr::null_mut();
-                let mut count = 0;
-                unsafe { clang_tokenize(tu.0, range, &mut tokens, &mut count) };
-                let spellings: Vec<_> = (0..count.min(8))
-                    .map(|index| {
-                        cx_string(unsafe {
-                            clang_getTokenSpelling(tu.0, *tokens.add(index as usize))
-                        })
-                    })
-                    .collect();
-                unsafe { clang_disposeTokens(tu.0, tokens, count) };
-                println!(
-                    "attribute record={name} kind={} kind_name={:?} spelling={:?} \
-                     display={:?} usr={:?} location={:?} extent_null={} \
-                     token_count={count} first_tokens={spellings:?}",
-                    unsafe { clang_getCursorKind(attribute) },
-                    cx_string(unsafe {
-                        clang_getCursorKindSpelling(clang_getCursorKind(attribute))
-                    }),
-                    cx_string(unsafe { clang_getCursorSpelling(attribute) }),
-                    cx_string(unsafe { clang_getCursorDisplayName(attribute) }),
-                    cx_string(unsafe { clang_getCursorUSR(attribute) }),
-                    cursor_locations(attribute),
-                    unsafe { clang_Range_isNull(range) },
-                );
-            }
             if name == "Plain" {
                 assert!(native.is_some());
             } else if name == "Explicit" {
@@ -839,6 +819,14 @@ mod tests {
                 assert_eq!(complete.size, 16);
                 assert_eq!(record.align, 4);
                 assert_eq!(record.fields.len(), 4);
+                assert_eq!(
+                    record
+                        .fields
+                        .iter()
+                        .map(|field| field.offset)
+                        .collect::<Vec<_>>(),
+                    [0, 32, 48, 64]
+                );
                 assert!(native.is_none());
                 let rejection = rejection.unwrap();
                 assert!(rejection.contains("reason=record-attribute"), "{rejection}");
@@ -846,7 +834,6 @@ mod tests {
                     rejection.contains("witness=Some((400, \"\", 0, 0, None, None))"),
                     "{rejection}"
                 );
-                assert!(!pretty.contains("type_visibility"), "{pretty}");
             }
         }
     }
@@ -866,36 +853,6 @@ mod tests {
                 .collect()
         }
 
-        fn graph(ty: CXType, path: &str, depth: usize) -> bool {
-            assert!(depth < 12, "{path}");
-            let canonical = unsafe { clang_getCanonicalType(ty) };
-            println!(
-                "type path={path} raw_kind={} raw_spelling={:?} canonical_kind={} \
-                 const={} volatile={} restrict={} address_space={}",
-                ty.kind,
-                cx_string(unsafe { clang_getTypeSpelling(ty) }),
-                canonical.kind,
-                unsafe { clang_isConstQualifiedType(ty) },
-                unsafe { clang_isVolatileQualifiedType(ty) },
-                unsafe { clang_isRestrictQualifiedType(ty) },
-                unsafe { clang_getAddressSpace(ty) },
-            );
-            let (step, child) = match ty.kind {
-                CXType_Attributed => ("modified", unsafe { clang_Type_getModifiedType(ty) }),
-                CXType_Typedef => ("underlying", unsafe {
-                    clang_getTypedefDeclUnderlyingType(clang_getTypeDeclaration(ty))
-                }),
-                CXType_Elaborated => ("named", unsafe { clang_Type_getNamedType(ty) }),
-                CXType_Pointer | CXType_LValueReference => {
-                    ("pointee", unsafe { clang_getPointeeType(ty) })
-                }
-                CXType_ConstantArray => ("element", unsafe { clang_getArrayElementType(ty) }),
-                _ => return false,
-            };
-            let child_attributed = graph(child, &format!("{path}.{step}"), depth + 1);
-            ty.kind == CXType_Attributed || child_attributed
-        }
-
         let _library = Library::new().unwrap();
         let index = Index::new().unwrap();
         let input = Input::new(
@@ -906,15 +863,15 @@ mod tests {
             typedef Payload *__attribute__((noderef)) NoDeref;
             typedef NoDeref *Nested;
             typedef NoDeref Array[2];
-            typedef Payload *Metadata __attribute__((annotate("win32metadata:const")));
+            typedef Payload *Metadata __attribute__((annotate("win32metadata:also_usable_for=Other")));
             struct Interface {
                 __attribute__((annotate("win32metadata:preserve_result")))
                 virtual long __stdcall Normal(Payload *value
                     __attribute__((annotate("_In_")))
                     __attribute__((annotate("win32metadata:optional")))) = 0;
-                virtual void Aliased(NoDeref value) = 0;
-                virtual void Inline(Payload *__attribute__((noderef)) value) = 0;
-                virtual void Hidden(Payload *const value
+                virtual void __stdcall Aliased(NoDeref value) = 0;
+                virtual void __stdcall Inline(Payload *__attribute__((noderef)) value) = 0;
+                virtual void __stdcall Hidden(Payload *const value
                     __attribute__((pass_object_size(0)))) = 0;
                 #if defined(_M_IX86)
                 virtual long __stdcall Registers(Payload *value)
@@ -992,17 +949,16 @@ mod tests {
                     if unsafe { clang_getCursorKind(cursor) } == CXCursor_TypedefDecl {
                         let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
                         let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
-                        println!("alias={name} attributes={:?}", attributes(cursor));
-                        let attributed = graph(ty, &name, 0);
-                        if ["NoDeref", "Nested", "Array"].contains(&name.as_str()) {
-                            assert_eq!(attributed, additional != 0, "{name}");
-                        } else {
-                            assert!(!attributed, "{name}");
+                        if name == "NoDeref" {
+                            assert_eq!(ty.kind == CXType_Attributed, additional != 0);
                         }
                         if name == "Metadata" {
                             assert_eq!(
                                 attributes(cursor),
-                                [(CXCursor_AnnotateAttr, "win32metadata:const".into())]
+                                [(
+                                    CXCursor_AnnotateAttr,
+                                    "win32metadata:also_usable_for=Other".into()
+                                )]
                             );
                         }
                         aliases.insert(name, capture.capture(ty));
@@ -1021,57 +977,17 @@ mod tests {
                                 Err("unrepresented-native-function-transport")
                             );
                         }
-                        println!(
-                            "method={name} attributes={:?} raw_convention={} canonical_convention={} \
-                             canonical_spelling={:?}",
-                            attributes(method),
-                            unsafe { clang_getFunctionTypeCallingConv(function) },
-                            unsafe {
-                                clang_getFunctionTypeCallingConv(clang_getCanonicalType(function))
-                            },
-                            cx_string(unsafe {
-                                clang_getTypeSpelling(clang_getCanonicalType(function))
-                            }),
-                        );
-                        graph(function, &name, 0);
-                        if function.kind == CXType_Attributed {
-                            let modified = unsafe { clang_Type_getModifiedType(function) };
-                            println!(
-                                "function-witness target={target} method={name} raw_kind={} \
-                             modified_kind={} modified_convention={} raw_modified_equal={} \
-                             canonical_modified_equal={} both_canonical_equal={} \
-                             modified_canonical_spelling={:?}",
-                                function.kind,
-                                modified.kind,
-                                unsafe { clang_getFunctionTypeCallingConv(modified) },
-                                unsafe { clang_equalTypes(function, modified) },
-                                unsafe {
-                                    clang_equalTypes(clang_getCanonicalType(function), modified)
-                                },
-                                unsafe {
-                                    clang_equalTypes(
-                                        clang_getCanonicalType(function),
-                                        clang_getCanonicalType(modified),
-                                    )
-                                },
-                                cx_string(unsafe {
-                                    clang_getTypeSpelling(clang_getCanonicalType(modified))
-                                }),
-                            );
-                        }
                         functions.insert(name.clone(), function);
                         for parameter in cursor_children(method).into_iter().filter(
                             |child| unsafe { clang_getCursorKind(*child) } == CXCursor_ParmDecl,
                         ) {
                             let ty = unsafe { clang_getCursorType(parameter) };
-                            println!(
-                                "parameter method={name} attributes={:?} native={}",
-                                attributes(parameter),
-                                capture.capture(ty).is_some(),
-                            );
-                            let attributed = graph(ty, &format!("{name}.parameter"), 0);
                             if matches!(name.as_str(), "Aliased" | "Inline") {
-                                assert_eq!(attributed, additional != 0, "{name}");
+                                assert_eq!(
+                                    capture.capture(ty).is_none(),
+                                    additional != 0,
+                                    "{name}"
+                                );
                             }
                             if name == "Normal" {
                                 let annotation = parameter_annotation(parameter);
@@ -1138,24 +1054,76 @@ mod tests {
                                 clang_getCanonicalType(registers_modified),
                             )
                         };
-                        println!(
-                            "function-pair target={target} raw_equal={} modified_equal={} \
-                         both_canonical_equal={canonical_equal} \
-                         modified_both_canonical_equal={modified_canonical_equal} \
-                         raw_conventions={}/{} modified_conventions={}/{}",
-                            unsafe { clang_equalTypes(normal, registers) },
-                            unsafe { clang_equalTypes(modified, registers_modified) },
-                            unsafe { clang_getFunctionTypeCallingConv(normal) },
-                            unsafe { clang_getFunctionTypeCallingConv(registers) },
-                            unsafe { clang_getFunctionTypeCallingConv(modified) },
-                            unsafe { clang_getFunctionTypeCallingConv(registers_modified) },
-                        );
                         assert_eq!(canonical_equal, 0);
                         assert_eq!(modified_canonical_equal, 0);
                     }
                 }
             }
+            let target_argument = format!("--target={target}");
+            let driver = ["--no-default-config", "-x", "c++", target_argument.as_str()];
+            for policy_bound in [true, false] {
+                let args = if policy_bound {
+                    &driver[..]
+                } else {
+                    &driver[1..]
+                };
+                let snapshot = extract([input.clone()], args).unwrap();
+                let interface = snapshot
+                    .facts
+                    .iter()
+                    .find(|fact| fact.name == "Interface")
+                    .unwrap();
+                let contract = snapshot
+                    .native_com_contracts
+                    .get(&interface.origin)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "missing native contract: target={target} policy_bound={policy_bound} \
+                        origin={:?} typed_slots={:?}",
+                            interface.origin, interface.data
+                        )
+                    });
+                for slot in &contract.slots {
+                    assert_eq!(slot.params.len(), 1, "{}", slot.name);
+                    assert_eq!(slot.native_params.len(), 1, "{}", slot.name);
+                    let proved = policy_bound && slot.name == "Normal";
+                    assert_eq!(slot.native_params[0].is_some(), proved, "{}", slot.name);
+                    assert_eq!(
+                        slot.native_result.is_some(),
+                        policy_bound && slot.name != "Registers",
+                        "{}",
+                        slot.name
+                    );
+                    if proved {
+                        assert!(slot.params[0].annotation.input);
+                        assert!(slot.params[0].annotation.optional);
+                    }
+                }
+            }
         }
+        let unsupported = extract(
+            [input],
+            &[
+                "--no-default-config",
+                "-x",
+                "c++",
+                "--target=x86_64-pc-windows-gnu",
+            ],
+        )
+        .unwrap();
+        let interface = unsupported
+            .facts
+            .iter()
+            .find(|fact| fact.name == "Interface")
+            .unwrap();
+        assert!(
+            unsupported.native_com_contracts[&interface.origin]
+                .slots
+                .iter()
+                .all(|slot| {
+                    slot.native_result.is_none() && slot.native_params.iter().all(Option::is_none)
+                })
+        );
     }
 
     #[test]

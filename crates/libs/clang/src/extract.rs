@@ -1577,6 +1577,8 @@ impl TranslationUnit {
             traversal_ms,
             elapsed_ms: elapsed_ms(total_time),
         });
+        let finalization_time = timing.then(std::time::Instant::now);
+        let phase_time = timing.then(std::time::Instant::now);
         let pending_structs = std::mem::take(&mut traversal.pending_structs);
         let pending_macros = std::mem::take(&mut traversal.pending_macros);
         let root_macros = std::mem::take(&mut traversal.root_macros);
@@ -1584,6 +1586,12 @@ impl TranslationUnit {
         let next_local = traversal.next;
         let pending_callables = std::mem::take(&mut traversal.pending_callables);
         drop(traversal);
+        let traversal_cleanup_ms = elapsed_ms(phase_time);
+        let phase_time = timing.then(std::time::Instant::now);
+        let callable_count = pending_callables.len();
+        let deferred_record_count = pending_structs.len();
+        let deferred_macro_count = pending_macros.len();
+        let root_macro_count = root_macros.len();
         if let Err(error) = macros.resolve_constant_counts(timing) {
             macros
                 .fail_constant_counts(&format!("native SAL count probe/context failure: {error}"));
@@ -1591,10 +1599,14 @@ impl TranslationUnit {
         for (index, cursor) in pending_callables {
             macros.collect_constant_sizes(&output.facts[index], cursor, output.sal_constant_sizes);
         }
+        let sal_binding_ms = elapsed_ms(phase_time);
+        let phase_time = timing.then(std::time::Instant::now);
         let pending_structs = pending_structs
             .into_iter()
             .map(|(index, cursor)| (index, fact_data(cursor, FactKind::Struct, &macros, false)))
             .collect();
+        let deferred_records_ms = elapsed_ms(phase_time);
+        let phase_time = timing.then(std::time::Instant::now);
         let pending_macros = pending_macros
             .into_iter()
             .map(|(index, cursor)| (index, capture_macro(cursor, &macros)))
@@ -1614,10 +1626,33 @@ impl TranslationUnit {
                 })
                 .collect(),
         );
+        let macro_capture_ms = elapsed_ms(phase_time);
+        let phase_time = timing.then(std::time::Instant::now);
+        let diagnostics = self.error_diagnostics();
+        let diagnostics_ms = elapsed_ms(phase_time);
+        if timing {
+            eprintln!(
+                "windows-clang timing phase=native-finalization target={} tu={:?} \
+                 callables={} deferred_records={} deferred_macros={} root_macros={} \
+                 final_macros={} diagnostics={} traversal_cleanup_ms={traversal_cleanup_ms:.3} \
+                 sal_binding_ms={sal_binding_ms:.3} \
+                 deferred_records_ms={deferred_records_ms:.3} macro_capture_ms={macro_capture_ms:.3} \
+                 diagnostics_ms={diagnostics_ms:.3} elapsed_ms={:.3}",
+                timing_target(args),
+                input.name,
+                callable_count,
+                deferred_record_count,
+                deferred_macro_count,
+                root_macro_count,
+                final_macros.0.len(),
+                diagnostics.len(),
+                elapsed_ms(finalization_time),
+            );
+        }
         Ok((
             Extracted {
                 macros: final_macros,
-                diagnostics: self.error_diagnostics(),
+                diagnostics,
                 pending_structs,
                 pending_macros,
                 root_macros,
@@ -1837,6 +1872,86 @@ impl FinalMacros {
 #[cfg(test)]
 mod owned_tests {
     use super::*;
+
+    #[test]
+    fn attributed_projection_preserves_aliases_and_qualifiers() {
+        helpers::ensure_libclang();
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let input = Input::new(
+            "attributed-projection.hpp",
+            "typedef int VALUE;\n\
+             typedef const VALUE* _Nonnull POINTER;\n\
+             typedef VALUE* __ptr32 NARROW_POINTER;\n\
+             typedef VALUE (__stdcall * _Nonnull CALLBACK)(const VALUE* _Nonnull value);\n",
+        );
+        let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+        let tu = TranslationUnit::parse(&index, &input, &args).unwrap();
+        let cursors = cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) });
+        let pointer = cursors
+            .iter()
+            .find(|cursor| cx_string(unsafe { clang_getCursorSpelling(**cursor) }) == "POINTER")
+            .unwrap();
+        let raw = unsafe { clang_getTypedefDeclUnderlyingType(*pointer) };
+        assert_eq!(raw.kind, CXType_Attributed);
+        assert_eq!(projection_type(raw).unwrap().kind, CXType_Pointer);
+        assert!(matches!(
+            type_ref(raw),
+            Some(TypeRef::Pointer { mutable: false, target })
+                if matches!(target.as_ref(), TypeRef::Named { name, .. } if name == "VALUE")
+        ));
+        let callback = cursors
+            .iter()
+            .find(|cursor| cx_string(unsafe { clang_getCursorSpelling(**cursor) }) == "CALLBACK")
+            .unwrap();
+        let raw = unsafe { clang_getTypedefDeclUnderlyingType(*callback) };
+        assert_eq!(raw.kind, CXType_Attributed);
+        let function = unsafe { clang_getPointeeType(projection_type(raw).unwrap()) };
+        assert_eq!(function.kind, CXType_Attributed);
+        assert_eq!(
+            annotation_result_type(*callback).unwrap().kind,
+            CXType_Typedef
+        );
+        assert!(typedef_is_function_pointer_alias(*callback));
+        let FactData::Callback {
+            convention,
+            params,
+            result,
+        } = fact_data(
+            *callback,
+            FactKind::Typedef,
+            &MacroDefinitions::default(),
+            true,
+        )
+        else {
+            panic!("attributed callback was not projected");
+        };
+        assert_eq!(convention, CallingConvention::Platform);
+        assert!(matches!(result, TypeRef::Named { name, .. } if name == "VALUE"));
+        assert!(matches!(
+            &params[0].ty,
+            TypeRef::Pointer { mutable: false, target }
+                if matches!(target.as_ref(), TypeRef::Named { name, .. } if name == "VALUE")
+        ));
+        let narrow = cursors
+            .iter()
+            .find(|cursor| {
+                cx_string(unsafe { clang_getCursorSpelling(**cursor) }) == "NARROW_POINTER"
+            })
+            .unwrap();
+        let raw = unsafe { clang_getTypedefDeclUnderlyingType(*narrow) };
+        assert_eq!(raw.kind, CXType_Attributed);
+        assert!(projection_type(raw).is_none());
+        assert!(matches!(
+            fact_data(
+                *narrow,
+                FactKind::Typedef,
+                &MacroDefinitions::default(),
+                true
+            ),
+            FactData::Unsupported { .. }
+        ));
+    }
 
     const MACRO_SOURCE: &str = "#define REDEF 1\n#undef REDEF\n#define REDEF 2\n\
                                #define SAME 7\n#undef SAME\n#define SAME 7\n\
@@ -5555,12 +5670,19 @@ fn fact_data(
         }
         FactKind::Typedef => {
             let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
-            let function = if ty.kind == CXType_Pointer {
-                unsafe { clang_getPointeeType(ty) }
-            } else {
-                ty
+            let Some(ty) = projection_type(ty) else {
+                return FactData::Unsupported {
+                    reason: "typedef has an unsupported attributed type".to_string(),
+                };
             };
-            if matches!(function.kind, CXType_FunctionProto | CXType_FunctionNoProto) {
+            let function = if ty.kind == CXType_Pointer {
+                callback_function_type(unsafe { clang_getPointeeType(ty) })
+            } else if matches!(ty.kind, CXType_Typedef | CXType_Elaborated) {
+                None
+            } else {
+                callback_function_type(ty)
+            };
+            if let Some(function) = function {
                 let inherited_convention = if ty.kind == CXType_Pointer {
                     inherited_function_typedef_calling_convention(cursor, function, macros)
                 } else {
@@ -6521,17 +6643,19 @@ fn annotation_target_allowed(key: &str, target: CXCursorKind) -> bool {
 fn annotation_result_type(cursor: CXCursor) -> Option<CXType> {
     let kind = unsafe { clang_getCursorKind(cursor) };
     if matches!(kind, CXCursor_FunctionDecl | CXCursor_CXXMethod) {
-        return Some(unsafe { clang_getCursorResultType(cursor) });
+        return projection_type(unsafe { clang_getCursorResultType(cursor) });
     }
     if kind != CXCursor_TypedefDecl {
         return None;
     }
-    let mut ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+    let mut ty = projection_type(unsafe { clang_getTypedefDeclUnderlyingType(cursor) })?;
     if ty.kind == CXType_Pointer {
-        ty = unsafe { clang_getPointeeType(ty) };
+        ty = callback_function_type(unsafe { clang_getPointeeType(ty) })?;
+    } else if matches!(ty.kind, CXType_Typedef | CXType_Elaborated) {
+        return None;
     }
-    matches!(ty.kind, CXType_FunctionProto | CXType_FunctionNoProto)
-        .then(|| unsafe { clang_getResultType(ty) })
+    let function = callback_function_type(ty)?;
+    projection_type(unsafe { clang_getResultType(function) })
 }
 
 fn typedef_is_callback(cursor: CXCursor) -> bool {
@@ -6539,12 +6663,11 @@ fn typedef_is_callback(cursor: CXCursor) -> bool {
 }
 
 fn typedef_is_function_pointer_alias(cursor: CXCursor) -> bool {
-    let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+    let Some(ty) = projection_type(unsafe { clang_getTypedefDeclUnderlyingType(cursor) }) else {
+        return false;
+    };
     ty.kind == CXType_Pointer
-        && matches!(
-            unsafe { clang_getPointeeType(ty) }.kind,
-            CXType_FunctionProto | CXType_FunctionNoProto
-        )
+        && callback_function_type(unsafe { clang_getPointeeType(ty) }).is_some()
 }
 
 fn native_opaque_annotation_target_allowed(target: CXCursor, attribute: CXCursor) -> bool {
@@ -7965,6 +8088,7 @@ fn function_signature(
     ty: CXType,
     convention: Option<CallingConvention>,
 ) -> Option<(CallingConvention, Vec<TypeRef>, TypeRef)> {
+    let ty = callback_function_type(ty)?;
     let convention = convention.or_else(|| calling_convention_fact(ty))?;
     let result = type_ref(unsafe { clang_getResultType(ty) })?;
     let count = unsafe { clang_getNumArgTypes(ty) };
@@ -7980,12 +8104,14 @@ fn function_signature(
 }
 
 fn function_param_type(ty: CXType) -> Option<TypeRef> {
+    let ty = projection_type(ty)?;
     let array = if matches!(ty.kind, CXType_IncompleteArray | CXType_ConstantArray) {
         Some(ty)
     } else {
         let declaration = unsafe { clang_getTypeDeclaration(ty) };
         if unsafe { clang_getCursorKind(declaration) } == CXCursor_TypedefDecl {
-            let underlying = unsafe { clang_getTypedefDeclUnderlyingType(declaration) };
+            let underlying =
+                projection_type(unsafe { clang_getTypedefDeclUnderlyingType(declaration) })?;
             matches!(
                 underlying.kind,
                 CXType_IncompleteArray | CXType_ConstantArray
@@ -8008,7 +8134,10 @@ fn function_param_type(ty: CXType) -> Option<TypeRef> {
             target: Box::new(type_ref(element)?),
         });
     }
-    if matches!(ty.kind, CXType_FunctionProto | CXType_FunctionNoProto) {
+    if matches!(
+        ty.kind,
+        CXType_FunctionProto | CXType_FunctionNoProto | CXType_Attributed
+    ) {
         let (convention, params, result) = function_signature(ty, None)?;
         return Some(TypeRef::FunctionPointer {
             convention,
@@ -8309,6 +8438,8 @@ fn inline_record_with_pointer_class_layouts(
 }
 
 fn field_layout(cursor: CXCursor, ty: CXType, name: &str) -> Result<(i64, i64), String> {
+    let ty = projection_type(ty)
+        .ok_or_else(|| format!("field `{name}` has an unsupported attributed type"))?;
     if ty.kind == CXType_IncompleteArray {
         return Ok((
             unsafe { clang_Type_getAlignOf(clang_getArrayElementType(ty)) },
@@ -8397,10 +8528,11 @@ fn promoted_members(record: &InlineRecord) -> Vec<(&str, i64)> {
 }
 
 fn type_ref_preserving_pointer_class_layouts(ty: CXType) -> Option<TypeRef> {
+    let ty = projection_type(ty)?;
     if ty.kind != CXType_Pointer {
         return type_ref(ty);
     }
-    let pointee = unsafe { clang_getPointeeType(ty) };
+    let pointee = projection_type(unsafe { clang_getPointeeType(ty) })?;
     let canonical_pointee = unsafe { clang_getCanonicalType(pointee) };
     if matches!(
         canonical_pointee.kind,
@@ -8444,7 +8576,44 @@ fn type_ref_preserving_pointer_class_layouts(ty: CXType) -> Option<TypeRef> {
     })
 }
 
+// Function accessors retain attributed calling conventions that modified types can omit.
+// Wrapper handling here preserves source sugar, not native ABI admissibility.
+fn projection_type(mut ty: CXType) -> Option<CXType> {
+    while ty.kind == CXType_Attributed {
+        let modified = unsafe { clang_Type_getModifiedType(ty) };
+        if modified.kind == CXType_Invalid || modified.kind == ty.kind && modified.data == ty.data {
+            return None;
+        }
+        if matches!(modified.kind, CXType_FunctionProto | CXType_FunctionNoProto) {
+            calling_convention_fact(ty)?;
+            return Some(ty);
+        }
+        if unsafe { clang_equalTypes(clang_getCanonicalType(ty), clang_getCanonicalType(modified)) }
+            == 0
+        {
+            return None;
+        }
+        ty = modified;
+    }
+    Some(ty)
+}
+
+fn callback_function_type(mut ty: CXType) -> Option<CXType> {
+    loop {
+        ty = projection_type(ty)?;
+        ty = match ty.kind {
+            CXType_FunctionProto | CXType_FunctionNoProto | CXType_Attributed => return Some(ty),
+            CXType_Elaborated => unsafe { clang_Type_getNamedType(ty) },
+            CXType_Typedef => unsafe {
+                clang_getTypedefDeclUnderlyingType(clang_getTypeDeclaration(ty))
+            },
+            _ => return None,
+        };
+    }
+}
+
 fn type_ref(ty: CXType) -> Option<TypeRef> {
+    let ty = projection_type(ty)?;
     let generic_count = unsafe { clang_Type_getNumTemplateArguments(ty) };
     if generic_count > 0 && ty.kind != CXType_Typedef {
         let declaration = unsafe { clang_getTypeDeclaration(ty) };
@@ -8481,13 +8650,14 @@ fn type_ref(ty: CXType) -> Option<TypeRef> {
         return Some(TypeRef::Void);
     }
     if ty.kind == CXType_Pointer {
-        let pointee = unsafe { clang_getPointeeType(ty) };
+        let pointee = projection_type(unsafe { clang_getPointeeType(ty) })?;
         let canonical_pointee = unsafe { clang_getCanonicalType(pointee) };
         if matches!(
             canonical_pointee.kind,
             CXType_FunctionProto | CXType_FunctionNoProto
         ) {
-            let (convention, params, result) = function_signature(canonical_pointee, None)?;
+            let function = callback_function_type(pointee)?;
+            let (convention, params, result) = function_signature(function, None)?;
             return Some(TypeRef::FunctionPointer {
                 convention,
                 params,
@@ -8531,7 +8701,7 @@ fn type_ref(ty: CXType) -> Option<TypeRef> {
         });
     }
     if ty.kind == CXType_LValueReference || ty.kind == CXType_RValueReference {
-        let referent = unsafe { clang_getPointeeType(ty) };
+        let referent = projection_type(unsafe { clang_getPointeeType(ty) })?;
         let target = type_ref(referent)?;
         return Some(TypeRef::Reference {
             mutable: unsafe { clang_isConstQualifiedType(referent) } == 0,

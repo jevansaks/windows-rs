@@ -48,6 +48,10 @@ impl Bytes {
         self.string(&value.spelling);
         match &value.layer {
             NativeTypeLayer::Primitive => {}
+            NativeTypeLayer::Interface(declaration) => {
+                self.boxed(declaration.as_ref());
+                self.native_declaration(declaration);
+            }
             NativeTypeLayer::Record(record) => {
                 self.boxed(record.as_ref());
                 self.native_declaration(&record.declaration);
@@ -454,6 +458,7 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
     let bytes = receipt.category("layouts");
     bytes.map::<Origin, Arc<NativeComContract>>(native_com_contracts.len());
     let mut contracts = HashSet::new();
+    let mut callables = HashSet::new();
     for (origin, contract) in native_com_contracts {
         bytes.origin(origin);
         if contracts.insert(Arc::as_ptr(contract)) {
@@ -474,6 +479,16 @@ fn measure(enabled: bool, outcome: &Result<NativeExtraction, NativeFailure>) -> 
                 }
                 if let Some(ty) = &slot.native_result {
                     bytes.native_type(ty);
+                }
+                if let Some(owner) = &slot.native_owner
+                    && callables.insert(Arc::as_ptr(owner))
+                {
+                    bytes.boxed(owner.as_ref());
+                    bytes.native_declaration(&owner.declaration);
+                    bytes.vector(&owner.params);
+                    for param in &owner.params {
+                        bytes.native_declaration(param);
+                    }
                 }
             }
         }

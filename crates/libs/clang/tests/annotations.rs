@@ -689,6 +689,24 @@ fn malformed_annotations_are_errors() {
             .contains("win32metadata annotation `agile` is not valid on this declaration"),
         "{result}"
     );
+
+    let result = extract(
+        [Input::new(
+            "void-callback.hpp",
+            r#"
+                __attribute__((annotate("win32metadata:associated_enum=FLAGS")))
+                typedef void (__stdcall * _Nonnull Invalid)();
+            "#,
+        )],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap_err();
+    assert!(
+        result
+            .to_string()
+            .contains("win32metadata annotation `associated_enum` requires a non-void return"),
+        "{result}"
+    );
 }
 
 #[test]
@@ -1179,12 +1197,15 @@ fn anonymous_callback_and_explicit_layout_survive_rdl() {
         [Input::new(
             "SampleApi.hpp",
             r#"
-                typedef int (__stdcall SAMPLE_CALLBACK)(int code);
-                typedef SAMPLE_CALLBACK* PSAMPLE_CALLBACK;
+                typedef int RESULT;
+                __attribute__((annotate("win32metadata:associated_enum=FLAGS")))
+                typedef RESULT (__stdcall SAMPLE_CALLBACK)(int code);
+                typedef SAMPLE_CALLBACK* _Nonnull PSAMPLE_CALLBACK;
+                enum FLAGS { FLAGS_NONE };
                 typedef struct SAMPLE_CALLBACKS {
                     PSAMPLE_CALLBACK chained;
                     PSAMPLE_CALLBACK* pointer;
-                    int (__stdcall *anonymous)(int code);
+                    RESULT (__stdcall * _Nonnull anonymous)(int code);
                 } SAMPLE_CALLBACKS;
 
                 #pragma pack(push, 2)
@@ -1214,7 +1235,7 @@ fn anonymous_callback_and_explicit_layout_survive_rdl() {
         "{rdl}"
     );
     assert!(
-        rdl.contains("extern fn SAMPLE_CALLBACKS_anonymous(arg0: i32) -> i32;"),
+        rdl.contains("extern fn SAMPLE_CALLBACKS_anonymous(arg0: i32) -> RESULT;"),
         "{rdl}"
     );
     assert!(

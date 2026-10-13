@@ -636,14 +636,7 @@ impl HeaderPartitionPolicy {
         self.authority_partition = Some(partition.into());
     }
 
-    fn owners(&self, tu: &str, file: &str) -> BTreeSet<RootOwner> {
-        self.owners_for_name(tu, file, None)
-    }
-
-    fn named_owners(&self, tu: &str, file: &str, name: &str) -> BTreeSet<RootOwner> {
-        self.owners_for_name(tu, file, Some(name))
-    }
-
+    #[cfg(test)]
     fn owners_for_name(&self, tu: &str, file: &str, name: Option<&str>) -> BTreeSet<RootOwner> {
         let normalized_tu = normalize_name(tu).to_ascii_lowercase();
         let file = normalize_name(file);
@@ -676,6 +669,287 @@ impl HeaderPartitionPolicy {
             .into_iter()
             .map(|partition| root_owner(tu, &file, partition))
             .collect()
+    }
+}
+
+struct HeaderPartitionLookup<'a> {
+    policy: &'a HeaderPartitionPolicy,
+    sources: HashMap<String, HashMap<String, HeaderPartitionCandidates<'a>>>,
+}
+
+struct HeaderPartitionCandidates<'a> {
+    file: String,
+    defaults: BTreeSet<&'a RootPartition>,
+    overrides: BTreeMap<&'a str, BTreeSet<&'a RootPartition>>,
+}
+
+impl<'a> HeaderPartitionLookup<'a> {
+    fn new(policy: &'a HeaderPartitionPolicy) -> Self {
+        Self {
+            policy,
+            sources: HashMap::new(),
+        }
+    }
+
+    fn owners(&mut self, tu: &str, file: &str) -> BTreeSet<RootOwner> {
+        self.owners_for_name(tu, file, None)
+    }
+
+    fn named_owners(&mut self, tu: &str, file: &str, name: &str) -> BTreeSet<RootOwner> {
+        self.owners_for_name(tu, file, Some(name))
+    }
+
+    fn owners_for_name(&mut self, tu: &str, file: &str, name: Option<&str>) -> BTreeSet<RootOwner> {
+        // Raw keys preserve owner provenance; each lookup borrows one immutable policy.
+        if self
+            .sources
+            .get(tu)
+            .is_none_or(|files| !files.contains_key(file))
+        {
+            let normalized_tu = normalize_name(tu).to_ascii_lowercase();
+            let normalized_file = normalize_name(file);
+            let entries = self
+                .policy
+                .headers
+                .values()
+                .filter(|entry| source_path_matches(&entry.header, &normalized_file))
+                .chain(
+                    self.policy
+                        .input_headers
+                        .iter()
+                        .filter(|((input, _), entry)| {
+                            input == &normalized_tu
+                                && source_path_matches(&entry.header, &normalized_file)
+                        })
+                        .map(|(_, entry)| entry),
+                );
+            let mut defaults = BTreeSet::new();
+            let mut overrides: BTreeMap<&str, BTreeSet<&RootPartition>> = BTreeMap::new();
+            for entry in entries {
+                defaults.extend(entry.partitions.iter());
+                for (name, partitions) in &entry.overrides {
+                    overrides.entry(name).or_default().extend(partitions.iter());
+                }
+            }
+            self.sources.entry(tu.to_string()).or_default().insert(
+                file.to_string(),
+                HeaderPartitionCandidates {
+                    file: normalized_file,
+                    defaults,
+                    overrides,
+                },
+            );
+        }
+        let candidates = &self.sources[tu][file];
+        let partitions = name
+            .and_then(|name| candidates.overrides.get(name))
+            .filter(|partitions| !partitions.is_empty())
+            .unwrap_or(&candidates.defaults);
+        partitions
+            .iter()
+            .map(|partition| root_owner(tu, &candidates.file, partition))
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod header_ownership_tests {
+    use super::*;
+
+    fn policy() -> HeaderPartitionPolicy {
+        HeaderPartitionPolicy::new()
+            .with_traversed_header("common.h", RootPartition::new("common", "Example.Common"))
+            .with_traversed_header(
+                r"C:\sdk\one\common.h",
+                RootPartition::new("one", "Example.One").with_exclusion("EXCLUDED"),
+            )
+            .with_traversed_header(
+                "sdk/two/common.h",
+                RootPartition::new("two", "Example.Two").with_remap("SPECIAL", "RENAMED"),
+            )
+            .with_traversed_header_for_input(
+                r"BUILD\FIRST.cpp",
+                "common.h",
+                RootPartition::new("input", "Example.Input"),
+            )
+            .with_traversed_header_override(
+                "common.h",
+                "SPECIAL",
+                RootPartition::new("special", "Example.Special"),
+            )
+            .with_traversed_header_override_for_input(
+                "build/first.cpp",
+                "common.h",
+                "SPECIAL",
+                RootPartition::new("input-special", "Example.InputSpecial"),
+            )
+            .with_traversed_header_override(
+                "override.h",
+                "ONLY",
+                RootPartition::new("only", "Example.Only"),
+            )
+    }
+
+    #[test]
+    fn memoized_owner_sets_match_reference_policy() {
+        let policy = policy();
+        let mut lookup = HeaderPartitionLookup::new(&policy);
+        for _ in 0..2 {
+            for tu in [
+                "build/first.cpp",
+                r"BUILD\First.cpp",
+                "build/second.cpp",
+                "",
+            ] {
+                for file in [
+                    r"C:\sdk\one\common.h",
+                    "c:/SDK/ONE/COMMON.H",
+                    "C:/sdk/two/common.h",
+                    "common.h",
+                    "C:/sdk/unclaimed/common.h",
+                    "C:/sdk/one/notcommon.h",
+                    "C:/sdk/override.h",
+                    "unknown.h",
+                    "",
+                    "/",
+                ] {
+                    for name in [
+                        None,
+                        Some("SPECIAL"),
+                        Some("special"),
+                        Some("ONLY"),
+                        Some("EXCLUDED"),
+                    ] {
+                        let expected = policy.owners_for_name(tu, file, name);
+                        let actual = lookup.owners_for_name(tu, file, name);
+                        assert_eq!(actual, expected, "{tu:?} {file:?} {name:?}");
+                        assert_eq!(
+                            actual.iter().collect::<Vec<_>>(),
+                            expected.iter().collect::<Vec<_>>()
+                        );
+                        if !actual.is_empty() {
+                            for namespace in [None, Some("Example.One")] {
+                                assert_eq!(
+                                    resolve_header_owner(
+                                        "TYPE",
+                                        Some(PartitionItemKind::Type),
+                                        actual.clone(),
+                                        namespace
+                                    )
+                                    .unwrap(),
+                                    resolve_header_owner(
+                                        "TYPE",
+                                        Some(PartitionItemKind::Type),
+                                        expected.clone(),
+                                        namespace
+                                    )
+                                    .unwrap()
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(lookup.sources.len(), 4);
+        assert_eq!(lookup.sources.values().map(HashMap::len).sum::<usize>(), 40);
+        let other_policy = HeaderPartitionPolicy::new()
+            .with_traversed_header("common.h", RootPartition::new("other", "Example.Other"));
+        let mut other_lookup = HeaderPartitionLookup::new(&other_policy);
+        assert_ne!(
+            lookup.owners("build/first.cpp", "common.h"),
+            other_lookup.owners("build/first.cpp", "common.h")
+        );
+        assert_eq!(
+            other_lookup.owners("build/first.cpp", "common.h"),
+            other_policy.owners_for_name("build/first.cpp", "common.h", None)
+        );
+    }
+
+    #[test]
+    fn memoized_fact_owners_preserve_expansion_fallback() {
+        let policy = policy();
+        let mut lookup = HeaderPartitionLookup::new(&policy);
+        for name in ["TYPE", "SPECIAL", "ONLY"] {
+            for (expansion, spelling) in [
+                ("C:/sdk/one/common.h", "C:/sdk/two/common.h"),
+                ("unknown.h", "C:/sdk/one/common.h"),
+                ("C:/sdk/override.h", "C:/sdk/one/common.h"),
+                ("unknown.h", "also-unknown.h"),
+                ("unknown.h", "unknown.h"),
+            ] {
+                let fact = Fact {
+                    origin: Origin {
+                        tu: "build/first.cpp".to_string(),
+                        local: 0,
+                    },
+                    parent: None,
+                    kind: FactKind::Typedef,
+                    name: name.to_string(),
+                    spelling: Location {
+                        file: spelling.to_string(),
+                        offset: 1,
+                    },
+                    expansion: Location {
+                        file: expansion.to_string(),
+                        offset: 2,
+                    },
+                    definition: true,
+                    main_file: false,
+                    root: true,
+                    system: false,
+                    data: FactData::Typedef {
+                        target: TypeRef::Scalar(Scalar::I32),
+                    },
+                };
+                let mut expected = policy.owners_for_name(&fact.origin.tu, expansion, Some(name));
+                if expected.is_empty() && expansion != spelling {
+                    expected = policy.owners_for_name(&fact.origin.tu, spelling, Some(name));
+                }
+                assert_eq!(header_fact_owner_candidates(&mut lookup, &fact), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn memoized_owner_queries_remove_repeated_policy_scans() {
+        let mut policy = policy();
+        for index in 0..128 {
+            policy.add_traversed_header(
+                format!("unrelated{index}.h"),
+                RootPartition::new(format!("partition{index}"), "Example.Unrelated"),
+            );
+        }
+        let queries = [
+            ("build/first.cpp", "C:/sdk/one/common.h", Some("SPECIAL")),
+            ("build/second.cpp", "C:/sdk/two/common.h", None),
+            ("build/first.cpp", "unknown.h", Some("TYPE")),
+        ];
+        let start = std::time::Instant::now();
+        let reference: Vec<_> = (0..1024)
+            .flat_map(|_| queries)
+            .map(|(tu, file, name)| std::hint::black_box(policy.owners_for_name(tu, file, name)))
+            .collect();
+        let reference_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let start = std::time::Instant::now();
+        let mut lookup = HeaderPartitionLookup::new(&policy);
+        let memoized: Vec<_> = (0..1024)
+            .flat_map(|_| queries)
+            .map(|(tu, file, name)| std::hint::black_box(lookup.owners_for_name(tu, file, name)))
+            .collect();
+        let memoized_ms = start.elapsed().as_secs_f64() * 1000.0;
+        assert_eq!(memoized, reference);
+        let sources = lookup.sources.values().map(HashMap::len).sum::<usize>();
+        assert_eq!(sources, queries.len());
+        let entries = policy.headers.len() + policy.input_headers.len();
+        eprintln!(
+            "synthetic ownership queries={} policy_entries={entries} reference_entry_visits={} \
+             memoized_entry_visits={} source_contexts={sources} reference_ms={reference_ms:.3} \
+             memoized_ms={memoized_ms:.3}",
+            reference.len(),
+            reference.len() * entries,
+            sources * entries,
+        );
     }
 }
 
@@ -1338,6 +1612,7 @@ struct NativeTypeData {
 enum NativeTypeLayer {
     Primitive,
     Record(Box<NativeRecord>),
+    Interface(Box<NativeDeclaration>),
     Enum(Box<NativeEnum>),
     Indirect(Box<NativeType>),
     Array {
@@ -1414,6 +1689,13 @@ struct NativeComMethod {
     native_params: Vec<Option<NativeType>>,
     native_result: Option<NativeType>,
     native_exception: Option<i32>,
+    native_owner: Option<Arc<NativeComCallable>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NativeComCallable {
+    declaration: NativeDeclaration,
+    params: Vec<NativeDeclaration>,
 }
 
 impl PartialEq for NativeComMethod {
@@ -3093,8 +3375,9 @@ impl Snapshot {
                     .map(|constant| (constant.root.tu.clone(), constant.spelling.file.clone())),
             )
             .collect();
+        let mut lookup = HeaderPartitionLookup::new(policy);
         for (tu, file) in physical_sources {
-            let owners = policy.owners(&tu, &file);
+            let owners = lookup.owners(&tu, &file);
             if owners.len() == 1 {
                 self.root_partitions
                     .insert((tu, file), owners.first().unwrap().clone());
@@ -3104,7 +3387,7 @@ impl Snapshot {
         let mut conflicts = Vec::new();
         for fact in &mut self.facts {
             fact.root = false;
-            let candidates = header_fact_owner_candidates(policy, fact);
+            let candidates = header_fact_owner_candidates(&mut lookup, fact);
             if candidates.is_empty() {
                 continue;
             }
@@ -3369,16 +3652,15 @@ impl Snapshot {
                 .get(&constant.name)
                 .cloned()
                 .unwrap_or_else(|| {
-                    facts_by_origin.get(&constant.root).map_or_else(
-                        || {
-                            policy.named_owners(
-                                &constant.root.tu,
-                                &constant.spelling.file,
-                                &constant.name,
-                            )
-                        },
-                        |fact| header_fact_owner_candidates(policy, fact),
-                    )
+                    if let Some(fact) = facts_by_origin.get(&constant.root) {
+                        header_fact_owner_candidates(&mut lookup, fact)
+                    } else {
+                        lookup.named_owners(
+                            &constant.root.tu,
+                            &constant.spelling.file,
+                            &constant.name,
+                        )
+                    }
                 });
             candidates.retain(|owner| !owner.exclusions.contains(&constant.name));
             if candidates.is_empty() {
@@ -9649,12 +9931,12 @@ fn authority_root_owner(partition: &str, namespace: &str, root: &str) -> RootOwn
 }
 
 fn header_fact_owner_candidates(
-    policy: &HeaderPartitionPolicy,
+    lookup: &mut HeaderPartitionLookup<'_>,
     fact: &Fact,
 ) -> BTreeSet<RootOwner> {
-    let candidates = policy.named_owners(&fact.origin.tu, &fact.expansion.file, &fact.name);
+    let candidates = lookup.named_owners(&fact.origin.tu, &fact.expansion.file, &fact.name);
     if candidates.is_empty() && fact.expansion.file != fact.spelling.file {
-        policy.named_owners(&fact.origin.tu, &fact.spelling.file, &fact.name)
+        lookup.named_owners(&fact.origin.tu, &fact.spelling.file, &fact.name)
     } else {
         candidates
     }
@@ -10554,12 +10836,13 @@ fn contextual_interface_payload(
             return Err(format!("{path}.result: missing canonical native evidence"));
         };
         context
-            .canonical_types_equal(
+            .canonical_types_equal_seen(
                 &left.result,
                 &a.origin.tu,
                 &right.result,
                 &b.origin.tu,
                 (left_native, right_native),
+                active,
             )
             .map_err(|reason| format!("{path}.result: {reason}"))?;
         if left.native_params.len() != left.params.len()
@@ -10586,12 +10869,13 @@ fn contextual_interface_payload(
                 ));
             };
             context
-                .canonical_types_equal(
+                .canonical_types_equal_seen(
                     &left_param.ty,
                     &a.origin.tu,
                     &right_param.ty,
                     &b.origin.tu,
                     (left_native, right_native),
+                    active,
                 )
                 .map_err(|reason| format!("{path}.params[{parameter}]: {reason}"))?;
         }
@@ -10626,12 +10910,13 @@ fn contextual_interface_payload(
             return Err(format!("{path}.result: missing canonical native evidence"));
         };
         context
-            .canonical_types_equal(
+            .canonical_types_equal_seen(
                 &a_method.result,
                 &a.origin.tu,
                 &b_method.result,
                 &b.origin.tu,
                 (an, bn),
+                active,
             )
             .map_err(|reason| format!("{path}.result: {reason}"))?;
         if a_slot.native_params.len() != a_method.params.len()
@@ -10654,7 +10939,14 @@ fn contextual_interface_payload(
                 ));
             }
             context
-                .canonical_types_equal(&ap.ty, &a.origin.tu, &bp.ty, &b.origin.tu, (an, bn))
+                .canonical_types_equal_seen(
+                    &ap.ty,
+                    &a.origin.tu,
+                    &bp.ty,
+                    &b.origin.tu,
+                    (an, bn),
+                    active,
+                )
                 .map_err(|reason| format!("{path}.params[{index}]({}): {reason}", ap.name))?;
         }
     }

@@ -15,7 +15,13 @@ fn repeated_interface_tag_aliases_preserve_native_definition() {
         "x86_64-pc-windows-msvc",
         "aarch64-pc-windows-msvc",
     ] {
-        let arguments = ["-x", "c++", "-std=c++20", &format!("--target={target}")];
+        let arguments = [
+            "--no-default-config",
+            "-x",
+            "c++",
+            "-std=c++20",
+            &format!("--target={target}"),
+        ];
         let mut baseline = None;
         for reversed in [false, true] {
             let provider = Input::new(
@@ -1326,6 +1332,7 @@ fn shared_literal_enum_public_provider() {
 }
 
 const ARGS: &[&str] = &[
+    "--no-default-config",
     "-x",
     "c++",
     "-fms-extensions",

@@ -203,14 +203,56 @@ impl Capture<'_> {
                     {
                         return None;
                     }
+                    let name = cx_string(unsafe { clang_getCursorSpelling(child) });
+                    let mut overridden = std::ptr::null_mut();
+                    let mut count = 0;
+                    unsafe { clang_getOverriddenCursors(child, &mut overridden, &mut count) };
+                    let targets = if count == 0 {
+                        Vec::new()
+                    } else {
+                        unsafe { std::slice::from_raw_parts(overridden, count as usize) }.to_vec()
+                    };
+                    unsafe { clang_disposeOverriddenCursors(overridden) };
+                    let override_slot = match targets.as_slice() {
+                        [] => None,
+                        [target] => {
+                            let canonical = unsafe { clang_getCanonicalCursor(*target) };
+                            let positions: Vec<_> = inherited
+                                .methods
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, candidate)| unsafe {
+                                    clang_equalCursors(
+                                        clang_getCanonicalCursor(**candidate),
+                                        canonical,
+                                    ) != 0
+                                })
+                                .map(|(index, _)| index)
+                                .collect();
+                            let [index] = positions.as_slice() else {
+                                return None;
+                            };
+                            let previous = &slots[*index];
+                            if previous.convention != convention
+                                || previous.name != name
+                                || !same_signature(inherited.methods[*index], child)
+                            {
+                                return None;
+                            }
+                            Some(*index)
+                        }
+                        _ => return None,
+                    };
                     let transport_error =
                         native_types::function_transport(function, self.register_policy)
                             .err()
                             .map(|reason| (reason, child))
                             .or_else(|| {
-                                native_types::unsupported_declaration_attribute(child).map(
-                                    |attribute| ("unsupported-native-method-attribute", attribute),
+                                native_types::unsupported_method_attribute(
+                                    child,
+                                    override_slot.is_some(),
                                 )
+                                .map(|attribute| ("unsupported-native-method-attribute", attribute))
                             });
                     let native_result = transport_error
                         .is_none()
@@ -220,9 +262,21 @@ impl Capture<'_> {
                         })
                         .flatten();
                     let mut rejections = Vec::new();
-                    let native_params = cursor_children(child)
+                    let parameters: Vec<_> = cursor_children(child)
                         .into_iter()
                         .filter(|param| unsafe { clang_getCursorKind(*param) == CXCursor_ParmDecl })
+                        .collect();
+                    let native_owner = native_types::declaration(child).and_then(|declaration| {
+                        Some(Arc::new(NativeComCallable {
+                            declaration,
+                            params: parameters
+                                .iter()
+                                .map(|param| native_types::declaration(*param))
+                                .collect::<Option<_>>()?,
+                        }))
+                    });
+                    let native_params = parameters
+                        .into_iter()
                         .enumerate()
                         .map(|(parameter, param)| {
                             let ty = unsafe { clang_getCursorType(param) };
@@ -254,60 +308,27 @@ impl Capture<'_> {
                         })
                         .collect();
                     let method = NativeComMethod {
-                        name: cx_string(unsafe { clang_getCursorSpelling(child) }),
+                        name,
                         convention,
                         params: callable_params(child, macros, false).ok()?,
                         result: type_ref(unsafe { clang_getCursorResultType(child) })?,
                         native_params,
                         native_result,
                         native_exception: (exception >= 0).then_some(exception),
+                        native_owner,
                     };
-                    let mut overridden = std::ptr::null_mut();
-                    let mut count = 0;
-                    unsafe { clang_getOverriddenCursors(child, &mut overridden, &mut count) };
-                    let targets = if count == 0 {
-                        Vec::new()
-                    } else {
-                        unsafe { std::slice::from_raw_parts(overridden, count as usize) }.to_vec()
-                    };
-                    unsafe { clang_disposeOverriddenCursors(overridden) };
-                    let slot = match targets.as_slice() {
-                        [] => {
+                    let slot = match override_slot {
+                        None => {
                             let index = slots.len();
                             inherited.methods.push(child);
                             slots.push(method);
                             index
                         }
-                        [target] => {
-                            let canonical = unsafe { clang_getCanonicalCursor(*target) };
-                            let positions: Vec<_> = inherited
-                                .methods
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, candidate)| unsafe {
-                                    clang_equalCursors(
-                                        clang_getCanonicalCursor(**candidate),
-                                        canonical,
-                                    ) != 0
-                                })
-                                .map(|(index, _)| index)
-                                .collect();
-                            let [index] = positions.as_slice() else {
-                                return None;
-                            };
-                            let previous = &slots[*index];
-                            if previous.convention != method.convention
-                                || previous.name != method.name
-                                || !same_signature(inherited.methods[*index], child)
-                            {
-                                return None;
-                            }
-
-                            inherited.methods[*index] = child;
-                            slots[*index] = method;
-                            *index
+                        Some(index) => {
+                            inherited.methods[index] = child;
+                            slots[index] = method;
+                            index
                         }
-                        _ => return None,
                     };
                     for (parameter, param, reason) in rejections {
                         let parameter_type = unsafe { clang_getCursorType(param) };
@@ -392,7 +413,7 @@ mod tests {
                 "capture-diagnostics.hpp",
                 r#"
                 struct __declspec(uuid("46aeb9ad-3d5e-497b-8ccd-0479af1ec3cc")) RejectedValue {
-                    int payload;
+                    int payload __attribute__((annotate("unsupported-field-control")));
                 };
                 typedef const volatile int *const volatile __restrict QualifiedPointer;
                 typedef const volatile RejectedValue *const volatile __restrict RejectedPointer;
@@ -407,7 +428,13 @@ mod tests {
             );
             let snapshot = extract(
                 [input],
-                &["-x", "c++", "-std=c++20", "--target=x86_64-pc-windows-msvc"],
+                &[
+                    "--no-default-config",
+                    "-x",
+                    "c++",
+                    "-std=c++20",
+                    "--target=x86_64-pc-windows-msvc",
+                ],
             )
             .unwrap();
             let fact = snapshot
@@ -418,6 +445,18 @@ mod tests {
             let contract = &snapshot.native_com_contracts[&fact.origin];
             assert_eq!(contract.slots.len(), 2);
             assert_eq!(contract.slots[0].name, "Keep");
+            assert!(contract.slots[0].native_result.is_some());
+            assert!(contract.slots[0].native_params[0].is_some());
+            assert_eq!(
+                contract.slots[0]
+                    .native_owner
+                    .as_ref()
+                    .unwrap()
+                    .declaration
+                    .parent
+                    .name,
+                "CaptureProbe"
+            );
             assert_eq!(contract.slots[1].name, "Reject");
             let params = &contract.slots[1].native_params;
             assert_eq!(params.len(), 2);
@@ -496,7 +535,7 @@ mod tests {
                 "parameter_source=Some(",
                 "parameter_type_spelling=\"RejectedPointer\"",
                 "parameter_const=1 parameter_volatile=1 parameter_restrict=1",
-                "reason=record-attribute",
+                "reason=field-attribute",
                 "path=[\"indirect\"] depth=1",
                 "const=1 volatile=1 restrict=0",
                 "witness=Some(",

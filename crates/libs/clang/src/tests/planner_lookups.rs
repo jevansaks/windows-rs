@@ -724,6 +724,7 @@ fn cross_tu_result_alias_snapshot(provider: &str, result: Option<Scalar>) -> Sna
                     native_params: Vec::new(),
                     native_result: Some(native),
                     native_exception: Some(clang_sys::CXCursor_ExceptionSpecificationKind_None),
+                    native_owner: None,
                 }],
             }),
         );
@@ -1686,6 +1687,207 @@ fn contextual_interface_proof_inherited_order_and_context() {
 }
 
 #[test]
+fn contextual_interface_proof_opaque_interface_pointer_provider() {
+    helpers::ensure_libclang();
+    let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("interface-pointer-contract.hpp");
+    let header = header.to_str().unwrap();
+    let original = extract(
+        [
+            Input::new("pointer-provider-a.cpp", format!("#include {header:?}\n"))
+                .with_roots([header]),
+            Input::new("pointer-provider-b.cpp", format!("#include {header:?}\n"))
+                .with_roots([header]),
+        ],
+        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+    )
+    .unwrap();
+    for case in [
+        "matching",
+        "provider-namespace",
+        "provider-source",
+        "missing-contract",
+        "missing-parameter",
+        "missing-owner",
+        "param-owner",
+        "base-cycle",
+        "erased-provider",
+        "exception",
+        "noninterface",
+        "byvalue",
+    ] {
+        let mut snapshot = original.clone();
+        let provider = snapshot
+            .facts
+            .iter()
+            .find(|fact| {
+                fact.origin.tu == "pointer-provider-b.cpp" && fact.name == "NativeProvider"
+            })
+            .unwrap()
+            .origin
+            .clone();
+        match case {
+            "provider-namespace" => {
+                snapshot
+                    .fact_namespace_authorities
+                    .insert(provider.clone(), "Wrong.Provider".into());
+            }
+            "provider-source" => {
+                let contract =
+                    Arc::make_mut(snapshot.native_com_contracts.get_mut(&provider).unwrap());
+                let NativeTypeLayer::Indirect(target) =
+                    &mut contract.slots[0].native_params[0].as_mut().unwrap().layer
+                else {
+                    panic!()
+                };
+                let NativeTypeLayer::Interface(declaration) = &mut target.layer else {
+                    panic!()
+                };
+                declaration.spelling.offset += 1;
+            }
+            "missing-contract" => {
+                snapshot.native_com_contracts.remove(&provider);
+            }
+            "base-cycle" => {
+                for fact in snapshot
+                    .facts
+                    .iter_mut()
+                    .filter(|fact| fact.name == "NativeProvider")
+                {
+                    let target = named(fact);
+                    let FactData::Interface { base, .. } = &mut fact.data else {
+                        panic!()
+                    };
+                    *base = Some(target);
+                }
+            }
+            "missing-parameter" | "missing-owner" | "param-owner" | "exception" => {
+                let contract =
+                    Arc::make_mut(snapshot.native_com_contracts.get_mut(&provider).unwrap());
+                match case {
+                    "missing-parameter" => contract.slots[0].native_params[0] = None,
+                    "missing-owner" => contract.slots[0].native_owner = None,
+                    "param-owner" => {
+                        let witness =
+                            Arc::make_mut(contract.slots[0].native_owner.as_mut().unwrap());
+                        witness.params[0].parent.spelling.as_mut().unwrap().offset += 1;
+                    }
+                    "exception" => contract.slots[0].native_exception = None,
+                    _ => unreachable!(),
+                }
+            }
+            _ => {}
+        }
+        let declarations = DeclarationIndex::new(&snapshot.facts);
+        let by_declaration = snapshot
+            .facts
+            .iter()
+            .map(|fact| ((fact.origin.tu.clone(), fact.spelling.clone()), fact))
+            .collect();
+        let source_annotations = snapshot.source_annotation_signatures();
+        let effective_annotations = Snapshot::relative_annotation_signatures(&snapshot.annotations);
+        let context = crate::com_pointer::Context {
+            snapshot: &snapshot,
+            declarations: &declarations,
+            facts_by_declaration: &by_declaration,
+            source_names: None,
+            excluded_types: None,
+            source_annotations: &source_annotations,
+            effective_annotations: &effective_annotations,
+        };
+        let fact = |tu: &str, name: &str| {
+            snapshot
+                .facts
+                .iter()
+                .find(|fact| fact.origin.tu == tu && fact.name == name)
+                .unwrap()
+        };
+        if case == "noninterface" {
+            assert!(
+                snapshot.native_typedef_types
+                    [&fact("pointer-provider-a.cpp", "NonInterfacePointer").origin]
+                    .is_none()
+            );
+            continue;
+        }
+        if case == "byvalue" {
+            let left = fact("pointer-provider-a.cpp", "NativeProviderValue");
+            let FactData::Typedef { target } = &left.data else {
+                panic!()
+            };
+            let native = snapshot.native_typedef_types[&left.origin]
+                .as_ref()
+                .unwrap();
+            let error = context
+                .canonical_types_equal(
+                    target,
+                    &left.origin.tu,
+                    target,
+                    &left.origin.tu,
+                    (native, native),
+                )
+                .unwrap_err();
+            assert!(error.contains("unsupported canonical native"), "{error}");
+            continue;
+        }
+        if case == "erased-provider" {
+            let left = fact("pointer-provider-a.cpp", "NativeProvider");
+            let native = snapshot.native_com_contracts[&left.origin].slots[0].native_params[0]
+                .as_ref()
+                .unwrap();
+            let erased = TypeRef::Pointer {
+                mutable: true,
+                target: Box::new(TypeRef::Object),
+            };
+            let error = context
+                .canonical_types_equal(
+                    &erased,
+                    &left.origin.tu,
+                    &erased,
+                    &left.origin.tu,
+                    (native, native),
+                )
+                .unwrap_err();
+            assert!(error.contains("exact named interface provider"), "{error}");
+            continue;
+        }
+        let result = contextual_interface_matches(
+            &context,
+            fact("pointer-provider-a.cpp", "NativeConsumer"),
+            fact("pointer-provider-b.cpp", "NativeConsumer"),
+        );
+        if case == "matching" {
+            result.unwrap();
+            let provider = &snapshot.native_com_contracts
+                [&fact("pointer-provider-a.cpp", "NativeProvider").origin];
+            let consumer = &snapshot.native_com_contracts
+                [&fact("pointer-provider-a.cpp", "NativeConsumer").origin];
+            assert!(Arc::ptr_eq(
+                provider.slots[0].native_owner.as_ref().unwrap(),
+                consumer.slots[0].native_owner.as_ref().unwrap(),
+            ));
+        } else {
+            let error = result.unwrap_err();
+            let expected = match case {
+                "provider-namespace" => "namespace contract differs",
+                "provider-source" => "native nominal binding",
+                "missing-contract" => "missing native interface contract",
+                "missing-parameter" => "missing canonical native evidence",
+                "missing-owner" => "missing native callable owner witness",
+                "param-owner" => "native ParmDecl witness",
+                "base-cycle" => "cyclic exact interface bases",
+                "exception" => "missing native exception specification",
+                _ => unreachable!(),
+            };
+            assert!(error.contains(expected), "{case}: {error}");
+        }
+    }
+}
+
+#[test]
 fn contextual_interface_proof_inherited_matching_emits() {
     let snapshot = inherited_interface_snapshot(false);
     inherited_interface_proof(&snapshot).unwrap();
@@ -1830,22 +2032,38 @@ fn contextual_interface_proof_native_pointer_layers() {
     ] {
         compare(a, b).unwrap();
     }
-    for (a, b) in [
-        ("LP", "IP"),
-        ("CV", "V"),
-        ("VV", "V"),
-        ("Restricted", "V"),
-        ("P32", "P64"),
-        ("AS", "AS"),
-    ] {
+    for (a, b) in [("LP", "IP"), ("CV", "V"), ("VV", "V"), ("Restricted", "V")] {
         assert!(compare(a, b).is_err(), "{a}/{b}");
     }
+    for name in ["P32", "P64", "AS"] {
+        assert!(
+            snapshot.native_typedef_types[&fact(name).origin].is_none(),
+            "{name}"
+        );
+    }
+    assert!(matches!(fact("P32").data, FactData::Unsupported { .. }));
+    assert!(matches!(fact("AS").data, FactData::Unsupported { .. }));
     assert_eq!(native("V").size, 8);
     assert_eq!(native("V").address_space, 0);
-    let NativeTypeLayer::Indirect(target) = &native("AS").layer else {
+    let mut address_space = native("V").clone();
+    let NativeTypeLayer::Indirect(target) = &mut address_space.layer else {
         panic!()
     };
-    assert_eq!(target.address_space, 1);
+    target.address_space = 1;
+    let FactData::Typedef { target: projected } = &fact("V").data else {
+        panic!()
+    };
+    assert!(
+        context
+            .canonical_types_equal(
+                projected,
+                &fact("V").origin.tu,
+                projected,
+                &fact("V").origin.tu,
+                (&address_space, &address_space)
+            )
+            .is_err()
+    );
 }
 
 #[test]
@@ -2158,18 +2376,55 @@ fn native_evidence_nominal_declarations_members_and_absence() {
             panic!()
         };
         assert!(scoped.scoped);
-        for name in [
-            "IncompleteAlias",
-            "RecursiveAlias",
-            "NonPodAlias",
-            "AttributedAlias",
-        ] {
+        for name in ["IncompleteAlias", "RecursiveAlias", "NonPodAlias"] {
             assert_eq!(
                 snapshot.native_typedef_types[&fact("nominal-a.cpp", name).origin],
                 None,
                 "{name}"
             );
         }
+        let attributed_fact = fact("nominal-a.cpp", "AttributedAlias");
+        let attributed = snapshot.native_typedef_types[&attributed_fact.origin]
+            .as_ref()
+            .unwrap();
+        let NativeTypeLayer::Record(record) = &attributed.layer else {
+            panic!()
+        };
+        assert!(!record.aggregate_abi_proved);
+        assert_eq!(record.declaration.tu, attributed_fact.origin.tu);
+        assert_eq!(record.fields.len(), 1);
+        let FactData::Typedef { target } = &attributed_fact.data else {
+            panic!()
+        };
+        let declarations = DeclarationIndex::new(&snapshot.facts);
+        let by_declaration = snapshot
+            .facts
+            .iter()
+            .map(|fact| ((fact.origin.tu.clone(), fact.spelling.clone()), fact))
+            .collect();
+        let source_annotations = snapshot.source_annotation_signatures();
+        let effective_annotations = Snapshot::relative_annotation_signatures(&snapshot.annotations);
+        let context = crate::com_pointer::Context {
+            snapshot: &snapshot,
+            declarations: &declarations,
+            facts_by_declaration: &by_declaration,
+            source_names: None,
+            excluded_types: None,
+            source_annotations: &source_annotations,
+            effective_annotations: &effective_annotations,
+        };
+        assert!(
+            context
+                .canonical_types_equal(
+                    target,
+                    &attributed_fact.origin.tu,
+                    target,
+                    &attributed_fact.origin.tu,
+                    (attributed, attributed)
+                )
+                .unwrap_err()
+                .contains("value-ABI")
+        );
         for tu in ["nominal-a.cpp", "nominal-b.cpp"] {
             let slot = &snapshot.native_com_contracts[&fact(tu, "Interface").origin].slots[0];
             assert_eq!(

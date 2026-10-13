@@ -806,6 +806,7 @@ fn colliding_identified_native_interfaces_retain_provider_iids() {
             input("unrelated.cpp", &unrelated),
         ],
         &[
+            "--no-default-config",
             "-x",
             "c++",
             "-fms-extensions",

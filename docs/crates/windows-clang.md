@@ -16,6 +16,12 @@ headers -> windows-clang -> RDL -> windows-rdl -> WinMD
 It extracts declarations and source annotations into immutable facts, then plans and emits RDL
 from the completed fact graph. It does not generate Rust bindings or provision libclang.
 
+Projection peels nonfunction attributed wrappers through their modified types only when their
+canonical types agree. Function accessors retain attributed wrappers because their modified types
+can omit represented calling conventions. Projection keeps source aliases and qualifiers rather
+than canonicalizing every use. These checks do not prove native ABI admissibility; native transport
+validation is separate.
+
 ## High-level generation
 
 `clang()` returns a `Clang` builder for the common case of extracting one set of headers and
@@ -129,10 +135,32 @@ The compiler's canonical function rendering must match its represented result, p
 and supported calling convention without extra transport effects. Unsupported method or parameter
 attributes leave native evidence absent while retaining the extracted declaration.
 
+Complete native POD evidence retains record-declaration attributes as an unproved aggregate-value ABI.
+Ordinary pointers and lvalue references compare the referent's ordered memory schema and exact
+declaration/provider context instead of aggregate call ABI. That memory domain extends through stored
+POD records and arrays, not function signatures. Qualifiers, native rank, address space, field layout,
+and metadata contracts remain required. An unproved attributed record value is rejected even when the
+two captured nodes are identical.
+
+Ordinary interface pointers retain a source-bound nominal witness separate from POD record layout
+evidence. Paired comparison binds each witness to its exact interface declaration and provider
+context, then compares the ordered native slots, signatures, annotations and exception evidence.
+Each native slot shares an immutable owning-method and ordered ParmDecl source witness. Inherited
+slots retain their declaring interface's witness; overriding methods supply their own. The witness
+must bind to that exact interface's native contract and the receiver's base path.
+Only matching ordinary pointer paths may close an active exact interface pair; inheritance cycles
+remain errors. This nominal witness does not admit field-bearing objects or interface values.
+
 `WINDOWS_CLANG_TIMINGS` (or `WINDOWS_CLANG_TIMING`) enables stderr phase entry, sparse work-count
 progress, and completion or error events. Durations use a monotonic clock. Progress counts visited
 work items, not successful outputs; growing queues have no fixed total. Stored `parse-tu` and
 `extract-tu` summaries are replayed during aggregation, not active native parse notifications.
+One `native-finalization` summary per original TU separates traversal-state cleanup, SAL count
+resolution and binding, deferred-record capture, macro capture, and diagnostic collection, with
+their work counts. These durations partition that finalization interval. They exclude traversal,
+remaining local destruction, native disposal, and the owned-buffer diagnostic estimate.
+`sal_binding_ms` includes the existing `sal-count-probes` duration; do not add those two measurements.
+The existing `extract-tu` elapsed time ends before finalization.
 Native COM parameter capture reports the actual outer parameter type, first rejection path, and
 compiler/source witnesses for up to eight rejected parameters per original TU. Its summary reports
 the total, detailed, and truncated counts. Unsupported capture remains missing evidence, not a new
@@ -470,6 +498,13 @@ case-insensitive and may be full paths or path-component suffixes. Once a header
 settings and emitted `RdlPartition::header` values use the extracted physical path. This keeps
 remaps and other exact source lookups consistent when policy spelling differs by case or uses a
 relative suffix.
+
+Each ownership pass borrows one immutable policy and memoizes the complete matching default and
+named-override candidate sets for each raw translation-unit/source-path pair. Names still select
+their exact override set, and all candidates reach exclusion, authority, and conflict resolution.
+Raw cache keys preserve owner provenance across case and separator aliases. Unmapped paths retain
+empty candidate sets; expansion-to-spelling fallback uses the same rules. The memo is dropped at
+the end of the pass and never crosses policies or changes native declaration identity.
 
 Pointer projection is chosen for each use, independently of output namespace ownership. Ordinary
 `LPVOID` and `PVOID` uses become raw pointers even when another use retains their native declaration.

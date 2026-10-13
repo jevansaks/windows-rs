@@ -183,3 +183,89 @@ fn metric(line: &str, name: &str) -> usize {
         .parse()
         .unwrap()
 }
+
+#[test]
+fn native_finalization_timings_preserve_output() {
+    const CHILD: &str = "WINDOWS_CLANG_FINALIZATION_CHILD";
+    if std::env::var_os(CHILD).is_some() {
+        helpers::ensure_libclang();
+        let snapshot = extract(
+            [Input::new(
+                "finalization.h",
+                "#define VALUE 7\n\
+                 #define TEXT \"text\"\n\
+                 typedef struct ITEM { int value; } ITEM;\n",
+            )],
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        let rdl = snapshot.emit("Finalization").unwrap();
+        assert!(rdl.contains("const VALUE: i32 = 7"), "{rdl}");
+        assert!(rdl.contains("struct ITEM"), "{rdl}");
+        print!("{rdl}");
+        return;
+    }
+
+    let run = |timing: &str| {
+        Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "native_finalization_timings_preserve_output",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env("WINDOWS_CLANG_TIMINGS", timing)
+            .env("WINDOWS_CLANG_TIMING", "0")
+            .output()
+            .unwrap()
+    };
+    let normal = run("0");
+    let timed = run("1");
+    for output in [&normal, &timed] {
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let rdl = |output: &std::process::Output| {
+        let stdout = String::from_utf8(output.stdout.clone()).unwrap();
+        stdout
+            .split_once("#[win32]")
+            .unwrap()
+            .1
+            .split_once("test native_finalization")
+            .unwrap()
+            .0
+            .to_string()
+    };
+    assert_eq!(rdl(&normal), rdl(&timed));
+    assert!(!String::from_utf8_lossy(&normal.stderr).contains("windows-clang timing "));
+    let stderr = String::from_utf8(timed.stderr).unwrap();
+    let summaries: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.contains("phase=native-finalization "))
+        .collect();
+    assert_eq!(summaries.len(), 1, "{stderr}");
+    let summary = summaries[0];
+    assert!(summary.contains("tu=\"finalization.h\""), "{summary}");
+    assert_eq!(metric(summary, "root_macros"), 2, "{summary}");
+    assert_eq!(metric(summary, "diagnostics"), 0, "{summary}");
+    for name in [
+        "traversal_cleanup_ms",
+        "sal_binding_ms",
+        "deferred_records_ms",
+        "macro_capture_ms",
+        "diagnostics_ms",
+        "elapsed_ms",
+    ] {
+        let prefix = format!("{name}=");
+        let duration: f64 = summary
+            .split_ascii_whitespace()
+            .find_map(|part| part.strip_prefix(&prefix))
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(duration.is_finite() && duration >= 0.0, "{summary}");
+    }
+}

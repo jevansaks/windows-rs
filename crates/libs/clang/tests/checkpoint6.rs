@@ -2815,8 +2815,9 @@ fn callback_array_parameters_decay_to_pointers() {
     let snapshot = extract(
         [Input::new(
             "callback-array.hpp",
-            "typedef int (__stdcall *CALLBACK)(unsigned count, const unsigned values[], \
-             const wchar_t* const names[]);\n",
+            "typedef unsigned VALUE;\n\
+             typedef int (__stdcall * _Nonnull CALLBACK)(unsigned count, const VALUE values[], \
+             const wchar_t* _Nonnull const names[]);\n",
         )],
         &[
             "-x",
@@ -2828,7 +2829,7 @@ fn callback_array_parameters_decay_to_pointers() {
     .unwrap();
     let rdl = snapshot.emit("Callback").unwrap();
 
-    assert!(rdl.contains("values: *const u32"), "{rdl}");
+    assert!(rdl.contains("values: *const VALUE"), "{rdl}");
     assert!(rdl.contains("names: *const *const u16"), "{rdl}");
 }
 
@@ -2841,7 +2842,8 @@ fn callback_parameters_preserve_names_and_annotations() {
             "callback-annotations.hpp",
             "#define IN_OPT __attribute__((annotate(\"_In_opt_\")))\n\
              #define INOUT __attribute__((annotate(\"_Inout_\")))\n\
-             typedef void (*CALLBACK)(IN_OPT void* context, INOUT unsigned* value);\n",
+             typedef void (__stdcall * _Nonnull CALLBACK)(IN_OPT void* _Nullable context, \
+             INOUT unsigned* _Nonnull value);\n",
         )],
         &["-x", "c++"],
     )
@@ -2942,7 +2944,8 @@ fn output_pointer_chains_preserve_source_constness() {
         [Input::new(
             "output-pointer-chain.hpp",
             "#define OUT __attribute__((annotate(\"_Out_\")))\n\
-             extern \"C\" void GetValue(OUT const int** value);\n",
+             typedef int VALUE;\n\
+             extern \"C\" void GetValue(OUT const VALUE* _Nonnull * _Nonnull value);\n",
         )],
         &["-x", "c++"],
     )
@@ -2952,7 +2955,7 @@ fn output_pointer_chains_preserve_source_constness() {
         .unwrap();
 
     assert!(
-        rdl.contains("GetValue(#[out] value: *const *const i32)"),
+        rdl.contains("GetValue(#[out] value: *const *const VALUE)"),
         "{rdl}"
     );
 }

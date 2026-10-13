@@ -49,6 +49,16 @@ impl<'a> TypeExpansion<'a> {
     }
 }
 
+fn native_interface_pointer(ty: &NativeType) -> bool {
+    if ty.kind != clang_sys::CXType_Pointer {
+        return false;
+    }
+    let NativeTypeLayer::Indirect(target) = &ty.layer else {
+        return false;
+    };
+    matches!(target.layer, NativeTypeLayer::Interface(_)) || native_interface_pointer(target)
+}
+
 struct RecordLayout<'a> {
     base: Option<&'a TypeRef>,
     fields: &'a [Field],
@@ -199,6 +209,155 @@ impl<'facts> Context<'_, 'facts> {
         })();
         seen.remove(&pair);
         result
+    }
+
+    fn interface_callable_owner(
+        &self,
+        receiver: &'facts Fact,
+        method: &NativeComMethod,
+    ) -> Result<&'facts Fact, String> {
+        use clang_sys::*;
+        let witness = method
+            .native_owner
+            .as_ref()
+            .ok_or_else(|| "missing native callable owner witness".to_string())?;
+        let declaration = &witness.declaration;
+        if declaration.tu != receiver.origin.tu
+            || declaration.kind != CXCursor_CXXMethod
+            || declaration.name != method.name
+            || witness.params.len() != method.params.len()
+        {
+            return Err("native callable TU, kind, name or parameter count differs".into());
+        }
+        let parent = &declaration.parent;
+        let location = parent
+            .spelling
+            .as_ref()
+            .ok_or_else(|| "missing native callable owner source".to_string())?;
+        let owner = self
+            .exact(&declaration.tu, &parent.name, location)
+            .ok_or_else(|| "unresolved exact native callable owner".to_string())?;
+        let kind = match owner.kind {
+            FactKind::Class => CXCursor_ClassDecl,
+            FactKind::Struct => CXCursor_StructDecl,
+            _ => return Err("native callable owner is not an interface declaration".into()),
+        };
+        if !owner.definition
+            || !matches!(owner.data, FactData::Interface { .. })
+            || parent.kind != kind
+            || parent.expansion.as_ref() != Some(&owner.expansion)
+            || self
+                .declarations
+                .get(&owner.origin.tu, &owner.name, &owner.spelling)
+                .len()
+                != 1
+        {
+            return Err("native callable owner source, kind or exact uniqueness differs".into());
+        }
+        let mut current = receiver;
+        let mut bases = BTreeSet::new();
+        while current.origin != owner.origin {
+            if !bases.insert(&current.origin) {
+                return Err("cyclic native callable owner base path".into());
+            }
+            let FactData::Interface {
+                base: Some(TypeRef::Named { name, declaration }),
+                ..
+            } = &current.data
+            else {
+                return Err("native callable owner is outside receiver base path".into());
+            };
+            current = self
+                .exact(&receiver.origin.tu, name, declaration)
+                .ok_or_else(|| "unresolved native callable owner base path".to_string())?;
+        }
+        let owner_contract = self
+            .snapshot
+            .native_com_contracts
+            .get(&owner.origin)
+            .ok_or_else(|| "missing exact native callable owner contract".to_string())?;
+        if owner_contract.has_fields
+            || !owner_contract.slots.iter().any(|slot| {
+                slot.native_owner
+                    .as_ref()
+                    .is_some_and(|candidate| Arc::ptr_eq(candidate, witness))
+            })
+        {
+            return Err("native callable witness does not belong to owner contract".into());
+        }
+        for param in &witness.params {
+            if param.tu != declaration.tu
+                || param.kind != CXCursor_ParmDecl
+                || param.parent.kind != declaration.kind
+                || param.parent.name != declaration.name
+                || param.parent.spelling.as_ref() != Some(&declaration.spelling)
+                || param.parent.expansion.as_ref() != Some(&declaration.expansion)
+            {
+                return Err("native ParmDecl witness does not belong to owning method".into());
+            }
+        }
+        Ok(owner)
+    }
+
+    fn interface_callables_equal(&self, a: &'facts Fact, b: &'facts Fact) -> Result<(), String> {
+        let (Some(left), Some(right)) = (
+            self.snapshot.native_com_contracts.get(&a.origin),
+            self.snapshot.native_com_contracts.get(&b.origin),
+        ) else {
+            return Err("missing paired native interface contracts".into());
+        };
+        if left.slots.len() != right.slots.len() {
+            return Err("paired native callable slot count differs".into());
+        }
+        for (index, (left, right)) in left.slots.iter().zip(&right.slots).enumerate() {
+            if [left, right].iter().any(|slot| {
+                slot.native_result.is_none()
+                    || slot.native_params.len() != slot.params.len()
+                    || slot.native_params.iter().any(Option::is_none)
+                    || !matches!(
+                        slot.native_exception,
+                        Some(
+                            clang_sys::CXCursor_ExceptionSpecificationKind_None
+                                | clang_sys::CXCursor_ExceptionSpecificationKind_BasicNoexcept
+                        )
+                    )
+            }) {
+                return Err(format!(
+                    "native slot[{index}] has unproved callable evidence"
+                ));
+            }
+            let a_owner = self.interface_callable_owner(a, left)?;
+            let b_owner = self.interface_callable_owner(b, right)?;
+            self.interface_owners_equal(a_owner, b_owner)?;
+            if self.provider_contract(a_owner)? != self.provider_contract(b_owner)? {
+                return Err(format!(
+                    "native slot[{index}] owner provider context differs"
+                ));
+            }
+            let (Some(left), Some(right)) = (&left.native_owner, &right.native_owner) else {
+                return Err(format!("native slot[{index}] owner witness missing"));
+            };
+            fn physical_equal(a: &NativeDeclaration, b: &NativeDeclaration) -> bool {
+                a.kind == b.kind
+                    && a.name == b.name
+                    && a.spelling == b.spelling
+                    && a.expansion == b.expansion
+                    && a.anonymous == b.anonymous
+                    && a.parent == b.parent
+            }
+            if !physical_equal(&left.declaration, &right.declaration)
+                || !left
+                    .params
+                    .iter()
+                    .zip(&right.params)
+                    .all(|(a, b)| physical_equal(a, b))
+            {
+                return Err(format!(
+                    "native slot[{index}] callable source witness differs"
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn pointer_target<'b>(&'b self, ty: &'b TypeRef, tu: &str) -> Option<(bool, &'b TypeRef)> {
@@ -412,6 +571,7 @@ impl<'facts> Context<'_, 'facts> {
         self.types_equal_expanded(a, a_tu, b, b_tu, pointer, &mut TypeExpansion::new(seen))
     }
 
+    #[cfg(test)]
     pub(super) fn canonical_types_equal(
         &self,
         a: &TypeRef,
@@ -420,7 +580,19 @@ impl<'facts> Context<'_, 'facts> {
         b_tu: &str,
         native: (&NativeType, &NativeType),
     ) -> Result<(), String> {
-        fn supported(ty: &NativeType, mode: ComparisonMode) -> bool {
+        self.canonical_types_equal_seen(a, a_tu, b, b_tu, native, &mut BTreeSet::new())
+    }
+
+    pub(super) fn canonical_types_equal_seen(
+        &self,
+        a: &TypeRef,
+        a_tu: &str,
+        b: &TypeRef,
+        b_tu: &str,
+        native: (&NativeType, &NativeType),
+        seen: &mut BTreeSet<(Origin, Origin)>,
+    ) -> Result<(), String> {
+        fn supported(ty: &NativeType, mode: ComparisonMode, pointer: bool) -> bool {
             use clang_sys::*;
             if ty.address_space != 0 {
                 return false;
@@ -465,25 +637,32 @@ impl<'facts> Context<'_, 'facts> {
                         CXType_LValueReference if ty.size >= 0 && ty.size == target.size => "&",
                         _ => return false,
                     };
-                    supported(target, ComparisonMode::ReferentMemory)
-                        && compact
-                            == format!("{}{operator}{qualifiers}", target.spelling.replace(' ', ""))
+                    supported(
+                        target,
+                        ComparisonMode::ReferentMemory,
+                        ty.kind == CXType_Pointer,
+                    ) && compact
+                        == format!("{}{operator}{qualifiers}", target.spelling.replace(' ', ""))
                 }
                 NativeTypeLayer::Record(record) => {
                     ty.kind == CXType_Record
                         && ty.size >= 0
                         && (mode == ComparisonMode::ReferentMemory || record.aggregate_abi_proved)
-                        && record.fields.iter().all(|field| supported(&field.ty, mode))
+                        && record
+                            .fields
+                            .iter()
+                            .all(|field| supported(&field.ty, mode, false))
                 }
+                NativeTypeLayer::Interface(_) => pointer && ty.kind == CXType_Record,
                 NativeTypeLayer::Enum(enumeration) => {
                     ty.kind == CXType_Enum
                         && ty.size >= 0
                         && enumeration.underlying.layer == NativeTypeLayer::Primitive
-                        && supported(&enumeration.underlying, mode)
+                        && supported(&enumeration.underlying, mode, false)
                 }
                 // Function exception specifications are not proved.
                 NativeTypeLayer::Function { .. } => false,
-                NativeTypeLayer::Array { target, .. } => supported(target, mode),
+                NativeTypeLayer::Array { target, .. } => supported(target, mode, false),
             }
         }
         fn referent_record(ty: &NativeType) -> bool {
@@ -509,7 +688,8 @@ impl<'facts> Context<'_, 'facts> {
             NativeTypeLayer::Record(_) | NativeTypeLayer::Enum(_)
         ) || (native.0.kind == clang_sys::CXType_LValueReference
             && native.1.kind == clang_sys::CXType_LValueReference)
-            || (referent_record(native.0) && referent_record(native.1)))
+            || (referent_record(native.0) && referent_record(native.1))
+            || (native_interface_pointer(native.0) && native_interface_pointer(native.1)))
             && native.0 != native.1
         {
             return Err(format!(
@@ -517,16 +697,15 @@ impl<'facts> Context<'_, 'facts> {
                 native.0, native.1
             ));
         }
-        if !supported(native.0, ComparisonMode::AggregateValue)
-            || !supported(native.1, ComparisonMode::AggregateValue)
+        if !supported(native.0, ComparisonMode::AggregateValue, false)
+            || !supported(native.1, ComparisonMode::AggregateValue, false)
         {
             return Err(format!(
                 "unsupported canonical native kind/modifier/address-space/value-ABI evidence: {:?}",
                 native.0
             ));
         }
-        let mut seen = BTreeSet::new();
-        let mut expansion = TypeExpansion::new(&mut seen);
+        let mut expansion = TypeExpansion::new(seen);
         expansion.canonical = Some(native);
         self.types_equal_expanded(a, a_tu, b, b_tu, false, &mut expansion)
     }
@@ -540,6 +719,7 @@ impl<'facts> Context<'_, 'facts> {
         use clang_sys::*;
         let declaration = match &native.layer {
             NativeTypeLayer::Record(record) if native.kind == CXType_Record => &record.declaration,
+            NativeTypeLayer::Interface(declaration) if native.kind == CXType_Record => declaration,
             NativeTypeLayer::Enum(enumeration) if native.kind == CXType_Enum => {
                 &enumeration.declaration
             }
@@ -565,6 +745,9 @@ impl<'facts> Context<'_, 'facts> {
         }
         let kind = match fact.kind {
             FactKind::Struct => CXCursor_StructDecl,
+            FactKind::Class if matches!(native.layer, NativeTypeLayer::Interface(_)) => {
+                CXCursor_ClassDecl
+            }
             FactKind::Union => CXCursor_UnionDecl,
             FactKind::Enum => CXCursor_EnumDecl,
             _ => return Err("native nominal binding: unsupported declaration kind".into()),
@@ -617,6 +800,9 @@ impl<'facts> Context<'_, 'facts> {
         let (left, right) = match (&native.0.layer, &native.1.layer) {
             (NativeTypeLayer::Record(left), NativeTypeLayer::Record(right)) => {
                 (&left.declaration, &right.declaration)
+            }
+            (NativeTypeLayer::Interface(left), NativeTypeLayer::Interface(right)) => {
+                (left.as_ref(), right.as_ref())
             }
             (NativeTypeLayer::Enum(left), NativeTypeLayer::Enum(right)) => {
                 (&left.declaration, &right.declaration)
@@ -990,6 +1176,21 @@ impl<'facts> Context<'_, 'facts> {
                 right.spelling
             ));
         }
+        if let Some((left, right)) = expansion.canonical {
+            if (native_interface_pointer(left) || native_interface_pointer(right))
+                && (!matches!(a, TypeRef::Pointer { .. }) || !matches!(b, TypeRef::Pointer { .. }))
+            {
+                return Err("missing projected native interface pointer shell".into());
+            }
+            if (matches!(left.layer, NativeTypeLayer::Interface(_))
+                || matches!(right.layer, NativeTypeLayer::Interface(_)))
+                && (!pointer
+                    || !matches!(a, TypeRef::Named { .. })
+                    || !matches!(b, TypeRef::Named { .. }))
+            {
+                return Err("native pointer requires an exact named interface provider".into());
+            }
+        }
         match (a, b) {
             (
                 TypeRef::Pointer {
@@ -1111,6 +1312,34 @@ impl<'facts> Context<'_, 'facts> {
                 };
                 if let Some(native) = expansion.canonical {
                     self.canonical_nominal_context(a, b, native)?;
+                    if matches!(
+                        (&native.0.layer, &native.1.layer),
+                        (NativeTypeLayer::Interface(_), NativeTypeLayer::Interface(_))
+                    ) {
+                        if !pointer
+                            || !matches!(a.data, FactData::Interface { .. })
+                            || !matches!(b.data, FactData::Interface { .. })
+                            || [a, b].iter().any(|fact| {
+                                self.snapshot
+                                    .native_com_contracts
+                                    .get(&fact.origin)
+                                    .is_none_or(|contract| contract.has_fields)
+                            })
+                        {
+                            return Err("ineligible native interface pointer provider".into());
+                        }
+                        self.interface_callables_equal(a, b)?;
+                        let pair = (a.origin.clone(), b.origin.clone());
+                        if expansion.structural_pairs.contains(&pair) {
+                            return Ok(());
+                        }
+                        return contextual_interface_matches_seen(
+                            self,
+                            a,
+                            b,
+                            expansion.structural_pairs,
+                        );
+                    }
                 }
                 if pointer
                     && self

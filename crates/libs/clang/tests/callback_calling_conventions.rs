@@ -19,6 +19,7 @@ typedef HMODULE (*IEGetProcessModule_t)();
 
 struct IE80TabWindowExports {
     void (WINAPI *TLSFreeImmutableTabData)();
+    PSTDCALL_CALLBACK _Nonnull typed;
 };
 
 #define IETabWindowExports IE80TabWindowExports
@@ -114,6 +115,10 @@ fn ie_callback_contract_survives_all_producer_stages() {
         );
         assert!(
             rdl.contains("extern fn IE80TabWindowExports_TLSFreeImmutableTabData()"),
+            "{architecture}: {rdl}"
+        );
+        assert!(
+            rdl.contains("typed: PSTDCALL_CALLBACK"),
             "{architecture}: {rdl}"
         );
         assert!(
