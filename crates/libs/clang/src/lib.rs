@@ -1376,6 +1376,7 @@ struct NativeParent {
 struct NativeRecord {
     declaration: NativeDeclaration,
     align: i64,
+    aggregate_abi_proved: bool,
     fields: Vec<NativeField>,
 }
 

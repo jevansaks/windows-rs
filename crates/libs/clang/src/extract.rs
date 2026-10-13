@@ -1290,7 +1290,8 @@ impl TranslationUnit {
                 &mut unsaved,
                 1,
                 CXTranslationUnit_DetailedPreprocessingRecord
-                    | CXTranslationUnit_SkipFunctionBodies,
+                    | CXTranslationUnit_SkipFunctionBodies
+                    | CXTranslationUnit_IncludeAttributedTypes,
             )
         };
         if value.is_null() {
@@ -1528,7 +1529,7 @@ impl TranslationUnit {
             embeddable_class_layouts: &mut *output.embeddable_class_layouts,
             clang_flag_enums: &mut *output.clang_flag_enums,
             native_typedef_types: &mut *output.native_typedef_types,
-            native_types: native_types::Capture::default(),
+            native_types: native_types::Capture::for_arguments(args),
             error: None,
             validate_annotations,
         };
@@ -1556,6 +1557,7 @@ impl TranslationUnit {
             &mut traversal,
             output.native_com_contracts,
             output.unproved_com_records,
+            args,
         );
         if output.module_free_headers {
             shared_enums::capture(&traversal, output.shared_enum_identities);
@@ -3087,9 +3089,7 @@ fn extract_child(
                     if fact_kind == FactKind::Typedef {
                         traversal.native_typedef_types.insert(
                             origin.clone(),
-                            traversal
-                                .native_types
-                                .capture(unsafe { clang_getTypedefDeclUnderlyingType(child) }),
+                            traversal.native_types.capture_typedef(child),
                         );
                     }
                     let data = if deferred_struct || fact_kind == FactKind::Macro {
@@ -7841,79 +7841,83 @@ fn parameter_annotation(cursor: CXCursor) -> ParamAnnotation {
         }
 
         let annotation = cx_string(unsafe { clang_getCursorSpelling(child) });
-        if annotation == "win32metadata:in" {
-            result.input = true;
-        }
-        if annotation == "win32metadata:out" {
-            result.output = true;
-        }
-        if annotation == "win32metadata:optional" {
-            result.optional = true;
-        }
-        if annotation == "win32metadata:reserved" {
-            result.reserved = true;
-        }
-        if annotation == "win32metadata:com_out_ptr" {
-            result.com_out_ptr = is_void_double_pointer(unsafe { clang_getCursorType(cursor) });
-        }
-        if annotation.starts_with("_In_") || annotation.starts_with("_Inout_") {
-            result.input = true;
-        }
-        if annotation.starts_with("_Out_")
-            || annotation.starts_with("_Outptr_")
-            || annotation.starts_with("_COM_Outptr_")
-            || annotation.starts_with("_Inout_")
-        {
-            result.output = true;
-        }
-        if annotation.contains("_opt_")
-            || (annotation.starts_with("_Outptr_") && annotation.contains("_result_maybenull_"))
-        {
-            result.optional = true;
-        }
-        if annotation == "_Reserved_" {
-            result.reserved = true;
-        }
-        if annotation.starts_with("_COM_Outptr_") {
-            result.com_out_ptr = is_void_double_pointer(unsafe { clang_getCursorType(cursor) });
-        }
-        let sal_name = annotation
-            .split_once('(')
-            .map_or(annotation.as_str(), |value| value.0);
-        if sal_name.contains("_z_") || sal_name.ends_with("_z") {
-            result.null_terminated = true;
-        }
-        if annotation == "_NullNull_terminated_" {
-            result.null_null_terminated = true;
-        }
-        if result.size.is_none()
-            && (annotation.contains("_reads_")
-                || annotation.contains("_writes_")
-                || annotation.contains("_updates_"))
-            && let Some(argument) = annotation
-                .split_once('(')
-                .and_then(|(_, rest)| rest.strip_suffix(')'))
-                .and_then(|arguments| arguments.split(',').next())
-        {
-            let argument = argument.trim();
-            let value = if let Some(value) = parse_sal_integer(argument) {
-                SalSizeValue::Constant(value)
-            } else if is_c_identifier(argument) {
-                SalSizeValue::Parameter(argument.to_string())
-            } else if let Some(argument) = argument.strip_prefix('*').map(str::trim)
-                && is_c_identifier(argument)
-            {
-                SalSizeValue::IndirectParameter(argument.to_string())
-            } else {
-                SalSizeValue::Expression(argument.to_string())
-            };
-            result.size = Some(SalSize {
-                bytes: annotation.contains("_bytes"),
-                value,
-            });
-        }
+        apply_parameter_annotation(&mut result, &annotation, cursor);
     }
     result
+}
+
+fn apply_parameter_annotation(result: &mut ParamAnnotation, annotation: &str, cursor: CXCursor) {
+    if annotation == "win32metadata:in" {
+        result.input = true;
+    }
+    if annotation == "win32metadata:out" {
+        result.output = true;
+    }
+    if annotation == "win32metadata:optional" {
+        result.optional = true;
+    }
+    if annotation == "win32metadata:reserved" {
+        result.reserved = true;
+    }
+    if annotation == "win32metadata:com_out_ptr" {
+        result.com_out_ptr = is_void_double_pointer(unsafe { clang_getCursorType(cursor) });
+    }
+    if annotation.starts_with("_In_") || annotation.starts_with("_Inout_") {
+        result.input = true;
+    }
+    if annotation.starts_with("_Out_")
+        || annotation.starts_with("_Outptr_")
+        || annotation.starts_with("_COM_Outptr_")
+        || annotation.starts_with("_Inout_")
+    {
+        result.output = true;
+    }
+    if annotation.contains("_opt_")
+        || (annotation.starts_with("_Outptr_") && annotation.contains("_result_maybenull_"))
+    {
+        result.optional = true;
+    }
+    if annotation == "_Reserved_" {
+        result.reserved = true;
+    }
+    if annotation.starts_with("_COM_Outptr_") {
+        result.com_out_ptr = is_void_double_pointer(unsafe { clang_getCursorType(cursor) });
+    }
+    let sal_name = annotation
+        .split_once('(')
+        .map_or(annotation, |value| value.0);
+    if sal_name.contains("_z_") || sal_name.ends_with("_z") {
+        result.null_terminated = true;
+    }
+    if annotation == "_NullNull_terminated_" {
+        result.null_null_terminated = true;
+    }
+    if result.size.is_none()
+        && (annotation.contains("_reads_")
+            || annotation.contains("_writes_")
+            || annotation.contains("_updates_"))
+        && let Some(argument) = annotation
+            .split_once('(')
+            .and_then(|(_, rest)| rest.strip_suffix(')'))
+            .and_then(|arguments| arguments.split(',').next())
+    {
+        let argument = argument.trim();
+        let value = if let Some(value) = parse_sal_integer(argument) {
+            SalSizeValue::Constant(value)
+        } else if is_c_identifier(argument) {
+            SalSizeValue::Parameter(argument.to_string())
+        } else if let Some(argument) = argument.strip_prefix('*').map(str::trim)
+            && is_c_identifier(argument)
+        {
+            SalSizeValue::IndirectParameter(argument.to_string())
+        } else {
+            SalSizeValue::Expression(argument.to_string())
+        };
+        result.size = Some(SalSize {
+            bytes: annotation.contains("_bytes"),
+            value,
+        });
+    }
 }
 
 fn function_is_noreturn(cursor: CXCursor) -> bool {

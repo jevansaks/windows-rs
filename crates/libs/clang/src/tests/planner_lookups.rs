@@ -1,5 +1,11 @@
 use super::*;
 
+fn extract(inputs: impl IntoIterator<Item = Input>, args: &[&str]) -> Result<Snapshot, Error> {
+    let mut controlled = vec!["--no-default-config"];
+    controlled.extend_from_slice(args);
+    crate::extract(inputs, &controlled)
+}
+
 #[test]
 fn native_evidence_shares_canonical_subgraphs_only_within_tu() {
     let snapshot = extract(
@@ -13,7 +19,12 @@ fn native_evidence_shares_canonical_subgraphs_only_within_tu() {
             ),
             Input::new("other-sharing.hpp", "typedef int OtherInt;"),
         ],
-        &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        &[
+            "--no-default-config",
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+        ],
     )
     .unwrap();
     let origin = |name: &str| {
@@ -66,6 +77,9 @@ fn contextual_interface_proof_lvalue_reference_native_identity() {
             "primitive",
             "long-long",
             "record",
+            "record-attribute",
+            "record-attribute-pointer",
+            "record-attribute-value",
             "primitive-rank",
             "record-rank",
             "cv",
@@ -88,18 +102,43 @@ fn contextual_interface_proof_lvalue_reference_native_identity() {
             };
             let right_cv = if case == "cv" { "" } else { "const" };
             let right_operator = if case == "pointer" { "*" } else { "&" };
+            let attributed = case.starts_with("record-attribute");
+            let prefix = if attributed {
+                "#pragma clang attribute push (__attribute__((annotate(\"record-memory-control\"))), apply_to = record)\n"
+            } else {
+                ""
+            };
+            let reference_override = match case {
+                "record-attribute-pointer" => "#define REF_OPERATOR *\n",
+                "record-attribute-value" => "#define REF_OPERATOR\n",
+                _ => "",
+            };
+            let suffix = if attributed {
+                "#pragma clang attribute pop\n"
+            } else {
+                ""
+            };
+            let right_reference = if reference_override.is_empty() {
+                format!("#define REF_OPERATOR {right_operator}\n")
+            } else {
+                reference_override.to_string()
+            };
             let snapshot = extract(
                 [
                     Input::new(
                         "reference-a.cpp",
-                        format!("#define FIELD_KIND {left_kind}\n#include {header:?}\n"),
+                        format!(
+                            "{prefix}{reference_override}#define FIELD_KIND {left_kind}\n\
+                             #include {header:?}\n{suffix}"
+                        ),
                     )
                     .with_roots([header]),
                     Input::new(
                         "reference-b.cpp",
                         format!(
-                            "#define FIELD_KIND {right_kind}\n#define REF_CV {right_cv}\n\
-                             #define REF_OPERATOR {right_operator}\n#include {header:?}\n"
+                            "{prefix}#define FIELD_KIND {right_kind}\n#define REF_CV {right_cv}\n\
+                             {right_reference}\
+                             #include {header:?}\n{suffix}"
                         ),
                     )
                     .with_roots([header]),
@@ -107,16 +146,18 @@ fn contextual_interface_proof_lvalue_reference_native_identity() {
                 &[
                     "-x",
                     "c++",
+                    "--no-default-config",
                     &format!("--target={target}"),
                     "-fms-extensions",
                 ],
             )
             .unwrap();
-            let alias_name = if matches!(case, "record" | "record-rank" | "source" | "tu") {
-                "PayloadReference"
-            } else {
-                "PrimitiveReference"
-            };
+            let alias_name =
+                if attributed || matches!(case, "record" | "record-rank" | "source" | "tu") {
+                    "PayloadReference"
+                } else {
+                    "PrimitiveReference"
+                };
             let observation = |tu: &str| {
                 let facts: Vec<_> = snapshot
                     .facts
@@ -142,7 +183,20 @@ fn contextual_interface_proof_lvalue_reference_native_identity() {
                 .as_ref()
                 .unwrap()
                 .clone();
-            assert_eq!(ln.kind, clang_sys::CXType_LValueReference);
+            if !matches!(case, "record-attribute-pointer" | "record-attribute-value") {
+                assert_eq!(ln.kind, clang_sys::CXType_LValueReference);
+            }
+            if attributed {
+                let record_type = match &ln.layer {
+                    NativeTypeLayer::Indirect(target) => target,
+                    NativeTypeLayer::Record(_) => ln,
+                    _ => panic!(),
+                };
+                let NativeTypeLayer::Record(record) = &record_type.layer else {
+                    panic!()
+                };
+                assert!(!record.aggregate_abi_proved);
+            }
             if case == "record" {
                 assert_eq!(ln.size, 16);
                 assert_ne!(ln, &rn);
@@ -187,7 +241,20 @@ fn contextual_interface_proof_lvalue_reference_native_identity() {
             };
             let result =
                 context.canonical_types_equal(lt, &left.origin.tu, rt, &right.origin.tu, (ln, &rn));
-            if matches!(case, "primitive" | "long-long" | "record") {
+            if case == "record-attribute-value" {
+                let identical = context
+                    .canonical_types_equal(lt, &left.origin.tu, lt, &left.origin.tu, (ln, ln))
+                    .unwrap_err();
+                assert!(identical.contains("value-ABI"), "{identical}");
+            }
+            if matches!(
+                case,
+                "primitive"
+                    | "long-long"
+                    | "record"
+                    | "record-attribute"
+                    | "record-attribute-pointer"
+            ) {
                 result.unwrap();
                 println!("reference case={case} target={target} assertions=passed");
             } else {
@@ -203,6 +270,7 @@ fn contextual_interface_proof_lvalue_reference_native_identity() {
                     "modifier" | "address-space" => {
                         "unsupported canonical native kind/modifier/address-space"
                     }
+                    "record-attribute-value" => "value-ABI",
                     _ => unreachable!(),
                 };
                 assert!(error.contains(expected), "{case}/{target}: {error}");

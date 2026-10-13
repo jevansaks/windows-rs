@@ -1,9 +1,199 @@
 use super::*;
 
+pub(super) fn register_policy(args: &[&str]) -> Result<(), &'static str> {
+    let mut disabled = false;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = args[index];
+        if argument == "--no-default-config" {
+            disabled = true;
+        } else if matches!(
+            argument,
+            "-x" | "-target"
+                | "--target"
+                | "-I"
+                | "-D"
+                | "-U"
+                | "-include"
+                | "-imacros"
+                | "-isystem"
+                | "-iquote"
+                | "-idirafter"
+                | "-isysroot"
+                | "--sysroot"
+                | "-resource-dir"
+                | "-working-directory"
+        ) {
+            index += 1;
+            let Some(operand) = args.get(index) else {
+                return Err("missing-driver-option-operand");
+            };
+            if operand.starts_with('@') {
+                return Err("unbound-driver-option-operand");
+            }
+        } else if argument.starts_with('@')
+            || argument == "--"
+            || argument == "--config"
+            || argument.starts_with("--config=")
+            || argument == "-Xclang"
+            || argument.starts_with("-Xclang=")
+            || argument.starts_with("-Xarch")
+            || argument == "-Xpreprocessor"
+            || argument.starts_with("-Wp,")
+            || argument == "-Xassembler"
+            || argument.starts_with("-Wa,")
+            || argument == "-mllvm"
+            || argument.starts_with("-mllvm=")
+            || argument.starts_with("/clang:")
+            || argument == "-cc1"
+            || argument.starts_with("--driver-mode=")
+        {
+            return Err("unbound-driver-argument-indirection");
+        } else if let Some(value) = argument.strip_prefix("-mregparm=") {
+            if value != "0" {
+                return Err("nonzero-or-malformed-driver-register-policy");
+            }
+        } else if argument == "-mregparm" {
+            index += 1;
+            if args.get(index) != Some(&"0") {
+                return Err("nonzero-or-malformed-driver-register-policy");
+            }
+        } else if !matches!(
+            argument,
+            "-fms-compatibility" | "-fms-extensions" | "-fno-exceptions" | "-fno-rtti"
+        ) && ![
+            "-std=",
+            "--target=",
+            "-target=",
+            "-D",
+            "-U",
+            "-I",
+            "-Wno-",
+            "-ferror-limit=",
+            "-fms-compatibility-version=",
+        ]
+        .iter()
+        .any(|prefix| argument.starts_with(prefix))
+        {
+            return Err("unbound-driver-option-grammar");
+        }
+        index += 1;
+    }
+    if disabled {
+        Ok(())
+    } else {
+        Err("driver-default-configuration-not-disabled")
+    }
+}
+
+pub(super) fn target_policy(triple: &str, width: i32) -> Result<(), &'static str> {
+    let mut parts = triple.split('-');
+    let architecture = parts.next();
+    let _vendor = parts.next();
+    let operating_system = parts.next();
+    let environment = parts.next();
+    let expected_width = match architecture {
+        Some("i386" | "i486" | "i586" | "i686") => 32,
+        Some("x86_64" | "aarch64") => 64,
+        _ => return Err("unsupported-native-target-architecture"),
+    };
+    if operating_system != Some("windows")
+        || !environment.is_some_and(|environment| {
+            environment.strip_prefix("msvc").is_some_and(|version| {
+                version
+                    .chars()
+                    .all(|character| character.is_ascii_digit() || character == '.')
+            })
+        })
+        || parts.next().is_some()
+        || width != expected_width
+    {
+        return Err("unsupported-native-target-abi");
+    }
+    Ok(())
+}
+
+pub(super) fn function_transport(
+    ty: CXType,
+    policy: Result<(), &'static str>,
+) -> Result<(), &'static str> {
+    policy?;
+    let canonical = unsafe { clang_getCanonicalType(ty) };
+    if canonical.kind != CXType_FunctionProto
+        || unsafe { clang_isFunctionTypeVariadic(canonical) } != 0
+    {
+        return Err("unsupported-native-function-prototype");
+    }
+    let convention = match unsafe { clang_getFunctionTypeCallingConv(canonical) } {
+        CXCallingConv_C => "",
+        CXCallingConv_X86StdCall => "__attribute__((stdcall))",
+        CXCallingConv_Win64 => "__attribute__((ms_abi))",
+        _ => return Err("unsupported-native-function-convention"),
+    };
+    let count = unsafe { clang_getNumArgTypes(canonical) };
+    if count < 0 {
+        return Err("unavailable-native-function-parameters");
+    }
+    let result = cx_string(unsafe {
+        clang_getTypeSpelling(clang_getCanonicalType(clang_getResultType(canonical)))
+    });
+    let parameters = (0..count)
+        .map(|index| {
+            cx_string(unsafe {
+                clang_getTypeSpelling(clang_getCanonicalType(clang_getArgType(
+                    canonical,
+                    index as u32,
+                )))
+            })
+        })
+        .collect::<Vec<_>>();
+    let exception = match unsafe { clang_getExceptionSpecificationType(canonical) } {
+        CXCursor_ExceptionSpecificationKind_None => "",
+        CXCursor_ExceptionSpecificationKind_BasicNoexcept => "noexcept",
+        _ => return Err("unsupported-native-function-exception-specification"),
+    };
+    let expected = format!("{result}({}){convention}{exception}", parameters.join(","));
+    let actual = cx_string(unsafe { clang_getTypeSpelling(canonical) });
+    let compact = |value: &str| {
+        value
+            .chars()
+            .filter(|character| !character.is_ascii_whitespace())
+            .collect::<String>()
+    };
+    if compact(&actual) != compact(&expected) {
+        return Err("unrepresented-native-function-transport");
+    }
+    Ok(())
+}
+
+pub(super) fn unsupported_declaration_attribute(cursor: CXCursor) -> Option<CXCursor> {
+    let target = unsafe { clang_getCursorKind(cursor) };
+    cursor_children(cursor).into_iter().find(|attribute| {
+        let kind = unsafe { clang_getCursorKind(*attribute) };
+        if unsafe { clang_isAttribute(kind) } == 0 {
+            return false;
+        }
+        if kind != CXCursor_AnnotateAttr {
+            return true;
+        }
+        let spelling = cx_string(unsafe { clang_getCursorSpelling(*attribute) });
+        if let Some(raw) = parse_raw_annotation(&spelling) {
+            return !annotation_target_allowed(&raw.key, target) || annotation_value(raw).is_none();
+        }
+        if target != CXCursor_ParmDecl {
+            return true;
+        }
+        let mut represented = ParamAnnotation::default();
+        apply_parameter_annotation(&mut represented, &spelling, cursor);
+        represented == ParamAnnotation::default()
+    })
+}
+
 #[derive(Default)]
 pub(super) struct Capture {
     cached: HashMap<usize, Vec<(CXType, NativeType, usize)>>,
     trace: Option<RejectionTrace>,
+    referent_memory: bool,
 }
 
 #[derive(Default)]
@@ -35,6 +225,33 @@ impl Display for Step {
 }
 
 impl Capture {
+    pub(super) fn for_arguments(args: &[&str]) -> Self {
+        Self {
+            referent_memory: register_policy(args).is_ok(),
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn capture_typedef(&mut self, cursor: CXCursor) -> Option<NativeType> {
+        let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+        if let Some(attribute) = unsupported_declaration_attribute(cursor) {
+            return self.reject(ty, 0, "unsupported-typedef-attribute", Some(attribute));
+        }
+        self.capture(ty)
+    }
+
+    pub(super) fn rejected_diagnostic(
+        &mut self,
+        ty: CXType,
+        reason: &'static str,
+        witness: CXCursor,
+    ) -> (Option<NativeType>, Option<String>) {
+        self.trace = Some(RejectionTrace::default());
+        let native = self.reject(ty, 0, reason, Some(witness));
+        let rejection = self.trace.take().and_then(|trace| trace.first);
+        (native, rejection)
+    }
+
     pub(super) fn capture(&mut self, ty: CXType) -> Option<NativeType> {
         self.read(ty, 0).map(|(native, _)| native)
     }
@@ -97,6 +314,7 @@ impl Capture {
         if depth == 64 {
             return self.reject(ty, depth, "capture-depth-limit", None);
         }
+        self.raw_use(ty, depth)?;
         let ty = unsafe { clang_getCanonicalType(ty) };
         // Canonical QualType identity selects a bucket; native equality confirms the key.
         let key = ty.data[0] as usize;
@@ -195,6 +413,52 @@ impl Capture {
         Some((native, height))
     }
 
+    fn raw_use(&mut self, mut ty: CXType, depth: usize) -> Option<()> {
+        if depth == 64 {
+            return self.reject(ty, depth, "capture-depth-limit", None);
+        }
+        loop {
+            match ty.kind {
+                CXType_Typedef => {
+                    let cursor = unsafe { clang_getTypeDeclaration(ty) };
+                    if let Some(attribute) = unsupported_declaration_attribute(cursor) {
+                        return self.reject(
+                            ty,
+                            depth,
+                            "unsupported-typedef-attribute",
+                            Some(attribute),
+                        );
+                    }
+                    ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+                }
+                CXType_Elaborated => ty = unsafe { clang_Type_getNamedType(ty) },
+                CXType_Attributed => {
+                    if !self.referent_memory || function_transport(ty, Ok(())).is_err() {
+                        return self.reject(ty, depth, "unsupported-type-use-attribute", None);
+                    }
+                    ty = unsafe { clang_Type_getModifiedType(ty) };
+                }
+                CXType_Pointer | CXType_LValueReference | CXType_RValueReference => {
+                    return self.raw_use(unsafe { clang_getPointeeType(ty) }, depth + 1);
+                }
+                CXType_ConstantArray | CXType_IncompleteArray => {
+                    return self.raw_use(unsafe { clang_getArrayElementType(ty) }, depth + 1);
+                }
+                CXType_FunctionProto => {
+                    let count = unsafe { clang_getNumArgTypes(ty) };
+                    if count < 0 {
+                        return self.reject(ty, depth, "unavailable-function-type-use", None);
+                    }
+                    for index in 0..count {
+                        self.raw_use(unsafe { clang_getArgType(ty, index as u32) }, depth + 1)?;
+                    }
+                    return self.raw_use(unsafe { clang_getResultType(ty) }, depth + 1);
+                }
+                _ => return Some(()),
+            }
+        }
+    }
+
     fn child(
         &mut self,
         ty: CXType,
@@ -271,10 +535,15 @@ fn record(
         );
     }
     let mut fields = Vec::new();
+    let mut aggregate_abi_proved = true;
     for child in cursor_children(cursor) {
         let kind = unsafe { clang_getCursorKind(child) };
         if unsafe { clang_isAttribute(kind) } != 0 {
-            return capture.reject(ty, depth, "record-attribute", Some(child));
+            if !capture.referent_memory {
+                return capture.reject(ty, depth, "record-attribute", Some(child));
+            }
+            aggregate_abi_proved = false;
+            continue;
         }
         let anonymous = matches!(kind, CXCursor_StructDecl | CXCursor_UnionDecl)
             && unsafe { clang_Cursor_isAnonymousRecordDecl(child) } != 0;
@@ -340,6 +609,7 @@ fn record(
         declaration: declaration(cursor)
             .or_else(|| capture.reject(ty, depth, "record-source-or-parent", Some(cursor)))?,
         align,
+        aggregate_abi_proved,
         fields,
     })
 }
@@ -419,6 +689,474 @@ fn enumeration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_attribute_public_api_evidence() {
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        assert!(register_policy(&["--no-default-config"]).is_ok());
+        assert!(register_policy(&["--no-default-config", "-mregparm=0"]).is_ok());
+        assert!(register_policy(&["--no-default-config", "-mregparm", "0"]).is_ok());
+        for (target, width) in [
+            ("i686-pc-windows-msvc", 32),
+            ("x86_64-pc-windows-msvc", 64),
+            ("aarch64-pc-windows-msvc", 64),
+        ] {
+            assert!(target_policy(target, width).is_ok());
+        }
+        for (target, width) in [
+            ("i686-pc-windows-msvc", 64),
+            ("x86_64-pc-linux-gnu", 64),
+            ("x86_64-pc-windows-gnu", 64),
+            ("i586-intel-elfiamcu", 32),
+        ] {
+            assert!(target_policy(target, width).is_err());
+        }
+        for arguments in [
+            vec![],
+            vec!["--no-default-config", "-mregparm=2"],
+            vec!["--no-default-config", "-mregparm="],
+            vec!["--no-default-config", "-mregparm"],
+            vec!["--no-default-config", "-Xclang", "-mregparm"],
+            vec!["--no-default-config", "--config=unknown.cfg"],
+            vec!["--no-default-config", "@unknown.rsp"],
+            vec!["-I", "--no-default-config"],
+            vec!["-isystem", "--no-default-config"],
+            vec!["--", "--no-default-config"],
+            vec!["-unknown-option", "--no-default-config"],
+            vec!["--no-default-config", "-unknown-option"],
+            vec!["--no-default-config", "-Wp,@unknown.rsp"],
+            vec!["--no-default-config", "-Xpreprocessor", "@unknown.rsp"],
+            vec!["--no-default-config", "-I", "@unknown.rsp"],
+        ] {
+            assert!(register_policy(&arguments).is_err(), "{arguments:?}");
+        }
+        let input = Input::new(
+            "attribute-evidence.hpp",
+            r#"
+            struct Plain { char first; int second; };
+            #pragma pack(push, 8)
+            struct Pack8 { char first; int second; };
+            #pragma pack(pop)
+            #pragma pack(push, 1)
+            struct Pack1 { char first; int second; };
+            #pragma pack(pop)
+            struct __declspec(uuid("e0e043c4-87b6-433a-84ad-75c33e3a0584")) Explicit { int value; };
+            struct _GUID {
+                unsigned long data1;
+                unsigned short data2, data3;
+                unsigned char data4[8];
+            };
+            "#,
+        );
+        let tu = TranslationUnit::parse(
+            &index,
+            &input,
+            &[
+                "--no-default-config",
+                "-x",
+                "c++",
+                "--target=x86_64-pc-windows-msvc",
+            ],
+        )
+        .unwrap();
+        println!(
+            "\nclang-version={}",
+            cx_string(unsafe { clang_getClangVersion() })
+        );
+        let mut capture = Capture::default();
+        let mut memory = Capture::for_arguments(&[
+            "--no-default-config",
+            "-x",
+            "c++",
+            "--target=x86_64-pc-windows-msvc",
+        ]);
+        for cursor in cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) })
+            .into_iter()
+            .filter(|cursor| unsafe { clang_getCursorKind(*cursor) } == CXCursor_StructDecl)
+        {
+            let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
+            let ty = unsafe { clang_getCursorType(cursor) };
+            let policy = unsafe { clang_getCursorPrintingPolicy(cursor) };
+            let pretty = cx_string(unsafe { clang_getCursorPrettyPrinted(cursor, policy) });
+            unsafe { clang_PrintingPolicy_dispose(policy) };
+            let (native, rejection) = capture.capture_diagnostic(ty);
+            let fields: Vec<_> = cursor_children(cursor)
+                .into_iter()
+                .filter(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_FieldDecl)
+                .map(|field| unsafe { clang_Cursor_getOffsetOfField(field) })
+                .collect();
+            println!(
+                "record={name} size={} align={} visibility={} fields={fields:?} \
+                 captured={} pretty={pretty:?} \
+                 rejection={rejection:?}",
+                unsafe { clang_Type_getSizeOf(ty) },
+                unsafe { clang_Type_getAlignOf(ty) },
+                unsafe { clang_getCursorVisibility(cursor) },
+                native.is_some(),
+            );
+            for attribute in cursor_children(cursor)
+                .into_iter()
+                .filter(|child| unsafe { clang_isAttribute(clang_getCursorKind(*child)) } != 0)
+            {
+                let range = unsafe { clang_getCursorExtent(attribute) };
+                let mut tokens = std::ptr::null_mut();
+                let mut count = 0;
+                unsafe { clang_tokenize(tu.0, range, &mut tokens, &mut count) };
+                let spellings: Vec<_> = (0..count.min(8))
+                    .map(|index| {
+                        cx_string(unsafe {
+                            clang_getTokenSpelling(tu.0, *tokens.add(index as usize))
+                        })
+                    })
+                    .collect();
+                unsafe { clang_disposeTokens(tu.0, tokens, count) };
+                println!(
+                    "attribute record={name} kind={} kind_name={:?} spelling={:?} \
+                     display={:?} usr={:?} location={:?} extent_null={} \
+                     token_count={count} first_tokens={spellings:?}",
+                    unsafe { clang_getCursorKind(attribute) },
+                    cx_string(unsafe {
+                        clang_getCursorKindSpelling(clang_getCursorKind(attribute))
+                    }),
+                    cx_string(unsafe { clang_getCursorSpelling(attribute) }),
+                    cx_string(unsafe { clang_getCursorDisplayName(attribute) }),
+                    cx_string(unsafe { clang_getCursorUSR(attribute) }),
+                    cursor_locations(attribute),
+                    unsafe { clang_Range_isNull(range) },
+                );
+            }
+            if name == "Plain" {
+                assert!(native.is_some());
+            } else if name == "Explicit" {
+                assert!(native.is_none());
+            } else if name == "_GUID" && unsafe { clang_isCursorDefinition(cursor) } != 0 {
+                let complete = memory.capture(ty).unwrap();
+                let NativeTypeLayer::Record(record) = &complete.layer else {
+                    panic!()
+                };
+                assert!(!record.aggregate_abi_proved);
+                assert_eq!(complete.size, 16);
+                assert_eq!(record.align, 4);
+                assert_eq!(record.fields.len(), 4);
+                assert!(native.is_none());
+                let rejection = rejection.unwrap();
+                assert!(rejection.contains("reason=record-attribute"), "{rejection}");
+                assert!(
+                    rejection.contains("witness=Some((400, \"\", 0, 0, None, None))"),
+                    "{rejection}"
+                );
+                assert!(!pretty.contains("type_visibility"), "{pretty}");
+            }
+        }
+    }
+
+    #[test]
+    fn native_use_site_attribute_observability() {
+        fn attributes(cursor: CXCursor) -> Vec<(i32, String)> {
+            cursor_children(cursor)
+                .into_iter()
+                .filter(|child| unsafe { clang_isAttribute(clang_getCursorKind(*child)) } != 0)
+                .map(|child| {
+                    (
+                        unsafe { clang_getCursorKind(child) },
+                        cx_string(unsafe { clang_getCursorSpelling(child) }),
+                    )
+                })
+                .collect()
+        }
+
+        fn graph(ty: CXType, path: &str, depth: usize) -> bool {
+            assert!(depth < 12, "{path}");
+            let canonical = unsafe { clang_getCanonicalType(ty) };
+            println!(
+                "type path={path} raw_kind={} raw_spelling={:?} canonical_kind={} \
+                 const={} volatile={} restrict={} address_space={}",
+                ty.kind,
+                cx_string(unsafe { clang_getTypeSpelling(ty) }),
+                canonical.kind,
+                unsafe { clang_isConstQualifiedType(ty) },
+                unsafe { clang_isVolatileQualifiedType(ty) },
+                unsafe { clang_isRestrictQualifiedType(ty) },
+                unsafe { clang_getAddressSpace(ty) },
+            );
+            let (step, child) = match ty.kind {
+                CXType_Attributed => ("modified", unsafe { clang_Type_getModifiedType(ty) }),
+                CXType_Typedef => ("underlying", unsafe {
+                    clang_getTypedefDeclUnderlyingType(clang_getTypeDeclaration(ty))
+                }),
+                CXType_Elaborated => ("named", unsafe { clang_Type_getNamedType(ty) }),
+                CXType_Pointer | CXType_LValueReference => {
+                    ("pointee", unsafe { clang_getPointeeType(ty) })
+                }
+                CXType_ConstantArray => ("element", unsafe { clang_getArrayElementType(ty) }),
+                _ => return false,
+            };
+            let child_attributed = graph(child, &format!("{path}.{step}"), depth + 1);
+            ty.kind == CXType_Attributed || child_attributed
+        }
+
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let input = Input::new(
+            "use-site-attributes.hpp",
+            r#"
+            struct Payload { int value; };
+            typedef Payload *Plain;
+            typedef Payload *__attribute__((noderef)) NoDeref;
+            typedef NoDeref *Nested;
+            typedef NoDeref Array[2];
+            typedef Payload *Metadata __attribute__((annotate("win32metadata:const")));
+            struct Interface {
+                __attribute__((annotate("win32metadata:preserve_result")))
+                virtual long __stdcall Normal(Payload *value
+                    __attribute__((annotate("_In_")))
+                    __attribute__((annotate("win32metadata:optional")))) = 0;
+                virtual void Aliased(NoDeref value) = 0;
+                virtual void Inline(Payload *__attribute__((noderef)) value) = 0;
+                virtual void Hidden(Payload *const value
+                    __attribute__((pass_object_size(0)))) = 0;
+                #if defined(_M_IX86)
+                virtual long __stdcall Registers(Payload *value)
+                    __attribute__((regparm(2))) = 0;
+                #endif
+            };
+            "#,
+        );
+        let name = CString::new(input.name.as_str()).unwrap();
+        let source = CString::new(input.source.as_str()).unwrap();
+        let mut unsaved = CXUnsavedFile {
+            Filename: name.as_ptr(),
+            Contents: source.as_ptr(),
+            Length: input.source.len().try_into().unwrap(),
+        };
+        for target in ["x86_64-pc-windows-msvc", "i686-pc-windows-msvc"] {
+            let argument_values = [
+                "-x".into(),
+                "c++".into(),
+                "--no-default-config".into(),
+                format!("--target={target}"),
+            ];
+            let policy = register_policy(
+                &argument_values
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            );
+            assert!(policy.is_ok());
+            let arguments: Vec<_> = argument_values
+                .map(|argument| CString::new(argument).unwrap())
+                .into();
+            let arguments: Vec<_> = arguments.iter().map(|argument| argument.as_ptr()).collect();
+            for additional in [0, CXTranslationUnit_IncludeAttributedTypes] {
+                let options = CXTranslationUnit_DetailedPreprocessingRecord
+                    | CXTranslationUnit_SkipFunctionBodies
+                    | additional;
+                let value = unsafe {
+                    clang_parseTranslationUnit(
+                        index.0,
+                        name.as_ptr(),
+                        arguments.as_ptr(),
+                        arguments.len().try_into().unwrap(),
+                        &mut unsaved,
+                        1,
+                        options,
+                    )
+                };
+                assert!(!value.is_null());
+                let tu = TranslationUnit(value, native_lifetime::original());
+                let diagnostic_count = unsafe { clang_getNumDiagnostics(tu.0) };
+                for diagnostic_index in 0..diagnostic_count {
+                    let diagnostic = unsafe { clang_getDiagnostic(tu.0, diagnostic_index) };
+                    println!(
+                        "diagnostic target={target} severity={} text={:?}",
+                        unsafe { clang_getDiagnosticSeverity(diagnostic) },
+                        cx_string(unsafe {
+                            clang_formatDiagnostic(
+                                diagnostic,
+                                clang_defaultDiagnosticDisplayOptions(),
+                            )
+                        }),
+                    );
+                    unsafe { clang_disposeDiagnostic(diagnostic) };
+                }
+                assert!(tu.errors().is_empty(), "{:?}", tu.errors());
+                println!(
+                    "target={target} options={options} include_attributed={} diagnostics={diagnostic_count}",
+                    additional != 0
+                );
+                let mut capture = Capture::default();
+                let mut aliases = BTreeMap::new();
+                let mut functions = BTreeMap::new();
+                for cursor in cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) }) {
+                    if unsafe { clang_getCursorKind(cursor) } == CXCursor_TypedefDecl {
+                        let name = cx_string(unsafe { clang_getCursorSpelling(cursor) });
+                        let ty = unsafe { clang_getTypedefDeclUnderlyingType(cursor) };
+                        println!("alias={name} attributes={:?}", attributes(cursor));
+                        let attributed = graph(ty, &name, 0);
+                        if ["NoDeref", "Nested", "Array"].contains(&name.as_str()) {
+                            assert_eq!(attributed, additional != 0, "{name}");
+                        } else {
+                            assert!(!attributed, "{name}");
+                        }
+                        if name == "Metadata" {
+                            assert_eq!(
+                                attributes(cursor),
+                                [(CXCursor_AnnotateAttr, "win32metadata:const".into())]
+                            );
+                        }
+                        aliases.insert(name, capture.capture(ty));
+                    }
+                    for method in cursor_children(cursor).into_iter().filter(
+                        |child| unsafe { clang_getCursorKind(*child) } == CXCursor_CXXMethod,
+                    ) {
+                        let name = cx_string(unsafe { clang_getCursorSpelling(method) });
+                        let function = unsafe { clang_getCursorType(method) };
+                        if name == "Normal" {
+                            assert!(function_transport(function, policy).is_ok());
+                            assert!(unsupported_declaration_attribute(method).is_none());
+                        } else if name == "Registers" {
+                            assert_eq!(
+                                function_transport(function, policy),
+                                Err("unrepresented-native-function-transport")
+                            );
+                        }
+                        println!(
+                            "method={name} attributes={:?} raw_convention={} canonical_convention={} \
+                             canonical_spelling={:?}",
+                            attributes(method),
+                            unsafe { clang_getFunctionTypeCallingConv(function) },
+                            unsafe {
+                                clang_getFunctionTypeCallingConv(clang_getCanonicalType(function))
+                            },
+                            cx_string(unsafe {
+                                clang_getTypeSpelling(clang_getCanonicalType(function))
+                            }),
+                        );
+                        graph(function, &name, 0);
+                        if function.kind == CXType_Attributed {
+                            let modified = unsafe { clang_Type_getModifiedType(function) };
+                            println!(
+                                "function-witness target={target} method={name} raw_kind={} \
+                             modified_kind={} modified_convention={} raw_modified_equal={} \
+                             canonical_modified_equal={} both_canonical_equal={} \
+                             modified_canonical_spelling={:?}",
+                                function.kind,
+                                modified.kind,
+                                unsafe { clang_getFunctionTypeCallingConv(modified) },
+                                unsafe { clang_equalTypes(function, modified) },
+                                unsafe {
+                                    clang_equalTypes(clang_getCanonicalType(function), modified)
+                                },
+                                unsafe {
+                                    clang_equalTypes(
+                                        clang_getCanonicalType(function),
+                                        clang_getCanonicalType(modified),
+                                    )
+                                },
+                                cx_string(unsafe {
+                                    clang_getTypeSpelling(clang_getCanonicalType(modified))
+                                }),
+                            );
+                        }
+                        functions.insert(name.clone(), function);
+                        for parameter in cursor_children(method).into_iter().filter(
+                            |child| unsafe { clang_getCursorKind(*child) } == CXCursor_ParmDecl,
+                        ) {
+                            let ty = unsafe { clang_getCursorType(parameter) };
+                            println!(
+                                "parameter method={name} attributes={:?} native={}",
+                                attributes(parameter),
+                                capture.capture(ty).is_some(),
+                            );
+                            let attributed = graph(ty, &format!("{name}.parameter"), 0);
+                            if matches!(name.as_str(), "Aliased" | "Inline") {
+                                assert_eq!(attributed, additional != 0, "{name}");
+                            }
+                            if name == "Normal" {
+                                let annotation = parameter_annotation(parameter);
+                                assert!(annotation.input && annotation.optional);
+                                assert!(unsupported_declaration_attribute(parameter).is_none());
+                                assert_eq!(
+                                    attributes(method),
+                                    [(
+                                        CXCursor_AnnotateAttr,
+                                        "win32metadata:preserve_result".into()
+                                    )]
+                                );
+                                assert_eq!(
+                                    unsafe { clang_getFunctionTypeCallingConv(function) },
+                                    if target.starts_with("i686") {
+                                        CXCallingConv_X86StdCall
+                                    } else {
+                                        CXCallingConv_C
+                                    }
+                                );
+                            } else if name == "Hidden" {
+                                assert!(unsupported_declaration_attribute(parameter).is_some());
+                                assert_eq!(
+                                    attributes(parameter),
+                                    [(CXCursor_UnexposedAttr, String::new())]
+                                );
+                            }
+                        }
+                    }
+                }
+                assert_eq!(aliases.len(), 5);
+                assert!(aliases["Plain"].is_some());
+                if additional == 0 {
+                    assert_eq!(aliases["Plain"], aliases["NoDeref"]);
+                } else {
+                    for name in ["NoDeref", "Nested", "Array"] {
+                        assert!(aliases[name].is_none(), "{name}");
+                    }
+                }
+                if additional != 0 {
+                    let normal = functions["Normal"];
+                    assert_eq!(normal.kind, CXType_Attributed);
+                    let modified = unsafe { clang_Type_getModifiedType(normal) };
+                    if target.starts_with("i686") {
+                        let registers = functions["Registers"];
+                        assert!(matches!(
+                            registers.kind,
+                            CXType_Attributed | CXType_FunctionProto
+                        ));
+                        let registers_modified = if registers.kind == CXType_Attributed {
+                            unsafe { clang_Type_getModifiedType(registers) }
+                        } else {
+                            registers
+                        };
+                        let canonical_equal = unsafe {
+                            clang_equalTypes(
+                                clang_getCanonicalType(normal),
+                                clang_getCanonicalType(registers),
+                            )
+                        };
+                        let modified_canonical_equal = unsafe {
+                            clang_equalTypes(
+                                clang_getCanonicalType(modified),
+                                clang_getCanonicalType(registers_modified),
+                            )
+                        };
+                        println!(
+                            "function-pair target={target} raw_equal={} modified_equal={} \
+                         both_canonical_equal={canonical_equal} \
+                         modified_both_canonical_equal={modified_canonical_equal} \
+                         raw_conventions={}/{} modified_conventions={}/{}",
+                            unsafe { clang_equalTypes(normal, registers) },
+                            unsafe { clang_equalTypes(modified, registers_modified) },
+                            unsafe { clang_getFunctionTypeCallingConv(normal) },
+                            unsafe { clang_getFunctionTypeCallingConv(registers) },
+                            unsafe { clang_getFunctionTypeCallingConv(modified) },
+                            unsafe { clang_getFunctionTypeCallingConv(registers_modified) },
+                        );
+                        assert_eq!(canonical_equal, 0);
+                        assert_eq!(modified_canonical_equal, 0);
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn native_evidence_diagnostics_preserve_capture_and_rejection() {

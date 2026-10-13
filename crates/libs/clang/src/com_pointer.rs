@@ -26,6 +26,13 @@ struct TypeExpansion<'a> {
     canonical: Option<(&'a NativeType, &'a NativeType)>,
     left_contracts: Vec<(Origin, ProviderContract)>,
     right_contracts: Vec<(Origin, ProviderContract)>,
+    mode: ComparisonMode,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ComparisonMode {
+    AggregateValue,
+    ReferentMemory,
 }
 
 impl<'a> TypeExpansion<'a> {
@@ -37,6 +44,7 @@ impl<'a> TypeExpansion<'a> {
             canonical: None,
             left_contracts: Vec::new(),
             right_contracts: Vec::new(),
+            mode: ComparisonMode::AggregateValue,
         }
     }
 }
@@ -265,6 +273,8 @@ impl<'facts> Context<'_, 'facts> {
                     };
                     if a.base.is_some()
                         || b.base.is_some()
+                        || (expansion.mode == ComparisonMode::AggregateValue
+                            && (!left.aggregate_abi_proved || !right.aggregate_abi_proved))
                         || left.align != a.align
                         || right.align != b.align
                         || left.fields.len() != a.fields.len()
@@ -410,7 +420,7 @@ impl<'facts> Context<'_, 'facts> {
         b_tu: &str,
         native: (&NativeType, &NativeType),
     ) -> Result<(), String> {
-        fn supported(ty: &NativeType) -> bool {
+        fn supported(ty: &NativeType, mode: ComparisonMode) -> bool {
             use clang_sys::*;
             if ty.address_space != 0 {
                 return false;
@@ -455,25 +465,41 @@ impl<'facts> Context<'_, 'facts> {
                         CXType_LValueReference if ty.size >= 0 && ty.size == target.size => "&",
                         _ => return false,
                     };
-                    supported(target)
+                    supported(target, ComparisonMode::ReferentMemory)
                         && compact
                             == format!("{}{operator}{qualifiers}", target.spelling.replace(' ', ""))
                 }
                 NativeTypeLayer::Record(record) => {
                     ty.kind == CXType_Record
                         && ty.size >= 0
-                        && record.fields.iter().all(|field| supported(&field.ty))
+                        && (mode == ComparisonMode::ReferentMemory || record.aggregate_abi_proved)
+                        && record.fields.iter().all(|field| supported(&field.ty, mode))
                 }
                 NativeTypeLayer::Enum(enumeration) => {
                     ty.kind == CXType_Enum
                         && ty.size >= 0
                         && enumeration.underlying.layer == NativeTypeLayer::Primitive
-                        && supported(&enumeration.underlying)
+                        && supported(&enumeration.underlying, mode)
                 }
                 // Function exception specifications are not proved.
                 NativeTypeLayer::Function { .. } => false,
-                NativeTypeLayer::Array { target, .. } => supported(target),
+                NativeTypeLayer::Array { target, .. } => supported(target, mode),
             }
+        }
+        fn referent_record(ty: &NativeType) -> bool {
+            fn stored_record(ty: &NativeType) -> bool {
+                match &ty.layer {
+                    NativeTypeLayer::Record(_) => true,
+                    NativeTypeLayer::Indirect(target) | NativeTypeLayer::Array { target, .. } => {
+                        stored_record(target)
+                    }
+                    _ => false,
+                }
+            }
+            matches!(
+                ty.kind,
+                clang_sys::CXType_Pointer | clang_sys::CXType_LValueReference
+            ) && matches!(&ty.layer, NativeTypeLayer::Indirect(target) if stored_record(target))
         }
         if !(matches!(
             &native.0.layer,
@@ -482,7 +508,8 @@ impl<'facts> Context<'_, 'facts> {
             &native.1.layer,
             NativeTypeLayer::Record(_) | NativeTypeLayer::Enum(_)
         ) || (native.0.kind == clang_sys::CXType_LValueReference
-            && native.1.kind == clang_sys::CXType_LValueReference))
+            && native.1.kind == clang_sys::CXType_LValueReference)
+            || (referent_record(native.0) && referent_record(native.1)))
             && native.0 != native.1
         {
             return Err(format!(
@@ -490,9 +517,11 @@ impl<'facts> Context<'_, 'facts> {
                 native.0, native.1
             ));
         }
-        if !supported(native.0) || !supported(native.1) {
+        if !supported(native.0, ComparisonMode::AggregateValue)
+            || !supported(native.1, ComparisonMode::AggregateValue)
+        {
             return Err(format!(
-                "unsupported canonical native kind/modifier/address-space evidence: {:?}",
+                "unsupported canonical native kind/modifier/address-space/value-ABI evidence: {:?}",
                 native.0
             ));
         }
@@ -973,16 +1002,22 @@ impl<'facts> Context<'_, 'facts> {
                 },
             ) if a_mut == b_mut => {
                 let previous = expansion.canonical;
+                let previous_mode = expansion.mode;
                 if let Some((a, b)) = previous {
+                    if a.kind != clang_sys::CXType_Pointer || b.kind != clang_sys::CXType_Pointer {
+                        return Err("missing canonical pointer kind".into());
+                    }
                     let (NativeTypeLayer::Indirect(a), NativeTypeLayer::Indirect(b)) =
                         (&a.layer, &b.layer)
                     else {
                         return Err("missing canonical pointer layer".to_string());
                     };
                     expansion.canonical = Some((a, b));
+                    expansion.mode = ComparisonMode::ReferentMemory;
                 }
                 let result = self.types_equal_expanded(a, a_tu, b, b_tu, true, expansion);
                 expansion.canonical = previous;
+                expansion.mode = previous_mode;
                 result.map_err(|reason| format!("pointer target -> {reason}"))
             }
             (
@@ -996,6 +1031,7 @@ impl<'facts> Context<'_, 'facts> {
                 },
             ) if a_mut == b_mut => {
                 let previous = expansion.canonical;
+                let previous_mode = expansion.mode;
                 if let Some((left, right)) = previous {
                     if left.kind != clang_sys::CXType_LValueReference
                         || right.kind != clang_sys::CXType_LValueReference
@@ -1008,9 +1044,11 @@ impl<'facts> Context<'_, 'facts> {
                         return Err("missing canonical lvalue reference layer".into());
                     };
                     expansion.canonical = Some((left, right));
+                    expansion.mode = ComparisonMode::ReferentMemory;
                 }
                 let result = self.types_equal_expanded(a, a_tu, b, b_tu, false, expansion);
                 expansion.canonical = previous;
+                expansion.mode = previous_mode;
                 result.map_err(|reason| format!("reference layout -> {reason}"))
             }
             (

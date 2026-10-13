@@ -15,12 +15,14 @@ struct Capture<'a> {
     target: Option<String>,
     rejected_parameters: usize,
     reported_parameters: usize,
+    register_policy: Result<(), &'static str>,
 }
 
 pub(super) fn capture(
     traversal: &mut Traversal<'_>,
     output: &mut BTreeMap<Origin, Arc<NativeComContract>>,
     unproved: &mut BTreeSet<Origin>,
+    args: &[&str],
 ) {
     let Some((_, cursor)) = traversal.pending_classes.first() else {
         return;
@@ -28,8 +30,9 @@ pub(super) fn capture(
     let target =
         unsafe { clang_getTranslationUnitTargetInfo(clang_Cursor_getTranslationUnit(*cursor)) };
     let timing = timings_enabled();
-    let target_name = (timing && !target.is_null())
-        .then(|| cx_string(unsafe { clang_TargetInfo_getTriple(target) }));
+    let triple =
+        (!target.is_null()).then(|| cx_string(unsafe { clang_TargetInfo_getTriple(target) }));
+    let target_name = timing.then(|| triple.clone()).flatten();
     let mut phase = TimingPhase::new(target_name.as_deref(), "native-com-capture");
     let pointer_width = if target.is_null() {
         0
@@ -47,6 +50,12 @@ pub(super) fn capture(
         target: target_name,
         rejected_parameters: 0,
         reported_parameters: 0,
+        register_policy: native_types::register_policy(args).and_then(|()| {
+            triple
+                .as_deref()
+                .ok_or("missing-native-target")
+                .and_then(|triple| native_types::target_policy(triple, pointer_width))
+        }),
     };
     for (origin, cursor) in &traversal.pending_classes {
         phase.visit(Some(traversal.pending_classes.len()));
@@ -178,11 +187,14 @@ impl Capture<'_> {
                 }
                 CXCursor_CXXMethod if unsafe { clang_CXXMethod_isVirtual(child) } != 0 => {
                     let function = unsafe { clang_getCursorType(child) };
-                    let convention = unsafe { clang_getFunctionTypeCallingConv(function) };
+                    let canonical_function = unsafe { clang_getCanonicalType(function) };
+                    let convention =
+                        unsafe { clang_getFunctionTypeCallingConv(canonical_function) };
                     let exception = unsafe { clang_getCursorExceptionSpecificationType(child) };
                     if unsafe { clang_Cursor_isVariadic(child) } != 0
                         || unsafe { clang_CXXMethod_isConst(child) } != 0
-                        || unsafe { clang_Type_getCXXRefQualifier(function) } != CXRefQualifier_None
+                        || unsafe { clang_Type_getCXXRefQualifier(canonical_function) }
+                            != CXRefQualifier_None
                         || !match self.pointer_width {
                             32 => convention == CXCallingConv_X86StdCall,
                             64 => matches!(convention, CXCallingConv_C | CXCallingConv_Win64),
@@ -191,9 +203,22 @@ impl Capture<'_> {
                     {
                         return None;
                     }
-                    let native_result = self
-                        .native_types
-                        .capture(unsafe { clang_getCursorResultType(child) });
+                    let transport_error =
+                        native_types::function_transport(function, self.register_policy)
+                            .err()
+                            .map(|reason| (reason, child))
+                            .or_else(|| {
+                                native_types::unsupported_declaration_attribute(child).map(
+                                    |attribute| ("unsupported-native-method-attribute", attribute),
+                                )
+                            });
+                    let native_result = transport_error
+                        .is_none()
+                        .then(|| {
+                            self.native_types
+                                .capture(unsafe { clang_getCursorResultType(child) })
+                        })
+                        .flatten();
                     let mut rejections = Vec::new();
                     let native_params = cursor_children(child)
                         .into_iter()
@@ -201,12 +226,24 @@ impl Capture<'_> {
                         .enumerate()
                         .map(|(parameter, param)| {
                             let ty = unsafe { clang_getCursorType(param) };
-                            let (native, rejection) =
+                            let unsupported = transport_error.or_else(|| {
+                                native_types::unsupported_declaration_attribute(param).map(
+                                    |attribute| {
+                                        ("unsupported-native-parameter-attribute", attribute)
+                                    },
+                                )
+                            });
+                            let (native, rejection) = if let Some((reason, witness)) = unsupported {
                                 if self.target.is_some() && self.rejected_parameters < 8 {
-                                    self.native_types.capture_diagnostic(ty)
+                                    self.native_types.rejected_diagnostic(ty, reason, witness)
                                 } else {
-                                    (self.native_types.capture(ty), None)
-                                };
+                                    (None, None)
+                                }
+                            } else if self.target.is_some() && self.rejected_parameters < 8 {
+                                self.native_types.capture_diagnostic(ty)
+                            } else {
+                                (self.native_types.capture(ty), None)
+                            };
                             if self.target.is_some() && native.is_none() {
                                 self.rejected_parameters += 1;
                                 if let Some(reason) = rejection {

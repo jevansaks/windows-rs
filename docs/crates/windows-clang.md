@@ -121,6 +121,14 @@ structural across nodes and translation units. Cached subtree heights preserve t
 limit at every use, and failed captures are not cached. Owned-buffer estimates count each shared node
 once; Arc control blocks, allocator overhead and native allocations remain unmeasured.
 
+Native COM transport proof requires `--no-default-config` in the actual combined driver arguments
+for each original TU. Register-argument overrides must be zero. Explicit configuration files,
+response files, and opaque argument forwarding leave the transport unproved; the extractor does
+not replace caller arguments or read ambient environment variables to assume an ABI policy.
+The compiler's canonical function rendering must match its represented result, parameter types,
+and supported calling convention without extra transport effects. Unsupported method or parameter
+attributes leave native evidence absent while retaining the extracted declaration.
+
 `WINDOWS_CLANG_TIMINGS` (or `WINDOWS_CLANG_TIMING`) enables stderr phase entry, sparse work-count
 progress, and completion or error events. Durations use a monotonic clock. Progress counts visited
 work items, not successful outputs; growing queues have no fixed total. Stored `parse-tu` and
