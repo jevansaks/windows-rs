@@ -107,10 +107,16 @@ original input order; private captured-fact indices are offset. Parse errors tak
 traversal errors across all inputs, with input order preserved within each phase. Synthetic
 constant-probe translation units keep their existing bounded probe scheduling after this native map.
 
+Record classification retains its ordered child cursors locally. Record lowering borrows that slice
+only when native cursor equality proves it is lowering the same definition. Forward declarations,
+other definitions, and recursive anonymous records keep separate child visits.
+
 Traversal captures deferred native record and macro data in private owned sidecars. Root and deferred
 macro captures share immutable token payloads with the final macro map only for the same exact native
 definition in that translation unit. Earlier physical redefinitions have separate payloads, including
 equal-token redefinitions. Completed worker results contain no native cursors or API handles.
+Macro payload capture reads token spellings without querying token kinds and omits the macro-name
+token. Annotation and declaration token capture also reads kinds.
 Root macros are materialized before global fact consumers; selected deferred macros are materialized
 at their existing selection stage. Public `FactData::Macro` vectors and all `Snapshot` fields remain
 unchanged. Materialization moves uniquely owned tokens and copies shared tokens when public vectors

@@ -1834,12 +1834,20 @@ struct OwnedMacro {
 
 impl OwnedMacro {
     fn from_cursor(cursor: CXCursor) -> Self {
+        let tu = unsafe { clang_Cursor_getTranslationUnit(cursor) };
+        let range = expansion_range(tu, unsafe { clang_getCursorExtent(cursor) });
+        let mut tokens = std::ptr::null_mut();
+        let mut count = 0;
+        unsafe { clang_tokenize(tu, range, &mut tokens, &mut count) };
+        let spellings = (1..count)
+            .map(|index| {
+                let token = unsafe { *tokens.add(index as usize) };
+                cx_string(unsafe { clang_getTokenSpelling(tu, token) })
+            })
+            .collect();
+        unsafe { clang_disposeTokens(tu, tokens, count) };
         Self {
-            tokens: cursor_tokens(cursor)
-                .into_iter()
-                .map(|(_, token)| token)
-                .skip(1)
-                .collect(),
+            tokens: spellings,
             function_like: unsafe { clang_Cursor_isMacroFunctionLike(cursor) } != 0,
         }
     }
@@ -1881,6 +1889,136 @@ impl FinalMacros {
 #[cfg(test)]
 mod owned_tests {
     use super::*;
+
+    thread_local! {
+        static RECORD_CHILD_WORK: RefCell<Option<(CXCursor, usize, usize)>> =
+            const { RefCell::new(None) };
+    }
+
+    pub(super) fn record_child_visit(cursor: CXCursor) {
+        record_child_work(cursor, false);
+    }
+
+    pub(super) fn record_child_reuse(cursor: CXCursor) {
+        record_child_work(cursor, true);
+    }
+
+    fn record_child_work(cursor: CXCursor, reuse: bool) {
+        RECORD_CHILD_WORK.with_borrow_mut(|work| {
+            if let Some((target, visits, reuses)) = work
+                && unsafe { clang_equalCursors(cursor, *target) } != 0
+            {
+                if reuse {
+                    *reuses += 1;
+                } else {
+                    *visits += 1;
+                }
+            }
+        });
+    }
+
+    fn measure_record_children<T>(
+        cursor: CXCursor,
+        run: impl FnOnce() -> T,
+    ) -> (T, (usize, usize)) {
+        RECORD_CHILD_WORK.with_borrow_mut(|work| {
+            assert!(work.is_none());
+            *work = Some((cursor, 0, 0));
+        });
+        let result = run();
+        let (_, visits, reuses) = RECORD_CHILD_WORK.with_borrow_mut(|work| work.take().unwrap());
+        (result, (visits, reuses))
+    }
+
+    #[test]
+    fn record_children_reuse_requires_exact_definition_cursor() {
+        helpers::ensure_libclang();
+        let _library = Library::new().unwrap();
+        let index = Index::new().unwrap();
+        let input = Input::new(
+            "record-children.hpp",
+            "struct Data;\nstruct Data { int value; };\n\
+             struct Other { short other; };\n\
+             struct Opaque;\n\
+             struct Interface;\nstruct Interface { virtual int Call() = 0; };\n",
+        );
+        let tu = TranslationUnit::parse(
+            &index,
+            &input,
+            &["-x", "c++", "--target=x86_64-pc-windows-msvc"],
+        )
+        .unwrap();
+        let cursors = cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) });
+        let find = |name, definition| {
+            *cursors
+                .iter()
+                .find(|cursor| {
+                    cx_string(unsafe { clang_getCursorSpelling(**cursor) }) == name
+                        && (unsafe { clang_isCursorDefinition(**cursor) } != 0) == definition
+                })
+                .unwrap()
+        };
+        let data = find("Data", true);
+        let forward = find("Data", false);
+        let other = find("Other", true);
+        let macros = MacroDefinitions::default();
+        let (reference, reference_work) = measure_record_children(data, || {
+            assert!(!is_interface(data));
+            inline_record(data, false, Some(&macros)).unwrap()
+        });
+        let (reused, reused_work) = measure_record_children(data, || {
+            let (definition, children) = defined_record_children(data).unwrap();
+            assert!(!is_interface_with_children(definition, &children));
+            inline_record_with_children(
+                data,
+                false,
+                Some(&macros),
+                false,
+                Some((definition, &children)),
+            )
+            .unwrap()
+        });
+        assert_eq!(reference, reused);
+        assert_eq!(reference_work, (2, 0));
+        assert_eq!(reused_work, (1, 1));
+        let (captured, captured_work) =
+            measure_record_children(data, || fact_data(data, FactKind::Struct, &macros, true));
+        assert_eq!(
+            captured,
+            FactData::Record {
+                base: reference.base,
+                fields: reference.fields,
+                size: reference.size,
+                align: reference.align,
+                packing: reference.packing,
+                alignment: reference.alignment,
+                union: reference.union,
+            }
+        );
+        // UUID inspection still has its own visit; classification and lowering share one.
+        assert_eq!(captured_work, (2, 1));
+        let (_, children) = defined_record_children(other).unwrap();
+        let (separate, work) = measure_record_children(data, || {
+            inline_record_with_children(data, false, Some(&macros), false, Some((other, &children)))
+                .unwrap()
+        });
+        assert_eq!(separate, reused);
+        assert_eq!(work, (1, 0));
+        assert!(unsafe { clang_equalCursors(forward, data) } == 0);
+        let (forward_data, work) = measure_record_children(data, || {
+            fact_data(forward, FactKind::Struct, &macros, false)
+        });
+        assert!(matches!(forward_data, FactData::Record { fields, .. } if fields.is_empty()));
+        assert_eq!(work, (1, 0));
+        assert!(defined_record_children(find("Opaque", false)).is_none());
+        let interface = find("Interface", true);
+        assert!(is_interface(find("Interface", false)));
+        let (interface_data, (_, reuses)) = measure_record_children(interface, || {
+            fact_data(interface, FactKind::Struct, &macros, true)
+        });
+        assert!(matches!(interface_data, FactData::Interface { .. }));
+        assert_eq!(reuses, 0);
+    }
 
     #[test]
     fn attributed_projection_preserves_aliases_and_qualifiers() {
@@ -2202,6 +2340,66 @@ mod owned_tests {
             panic!();
         };
         assert_eq!(tokens.as_ptr(), pointer);
+    }
+
+    #[test]
+    fn macro_ownership_spelling_capture_skips_kind_queries() {
+        use std::cell::Cell;
+
+        thread_local! {
+            static KIND_QUERIES: Cell<usize> = const { Cell::new(0) };
+            static NATIVE_KIND: Cell<Option<unsafe extern "C" fn(CXToken) -> CXTokenKind>> =
+                const { Cell::new(None) };
+        }
+        unsafe extern "C" fn counted_kind(token: CXToken) -> CXTokenKind {
+            KIND_QUERIES.set(KIND_QUERIES.get() + 1);
+            unsafe { NATIVE_KIND.get().unwrap()(token) }
+        }
+
+        helpers::ensure_libclang();
+        let mut library = load_manually().unwrap();
+        NATIVE_KIND.set(library.functions.clang_getTokenKind);
+        library.functions.clang_getTokenKind = Some(counted_kind);
+        let _library = Library::from_shared(Arc::new(library));
+        let index = Index::new().unwrap();
+        let input = Input::new("macro-work.hpp", MACRO_SOURCE);
+        let args = ["-x", "c++", "--target=x86_64-pc-windows-msvc"];
+        let tu = TranslationUnit::parse(&index, &input, &args).unwrap();
+        let mut total = 0;
+        let mut definitions = 0;
+        for cursor in cursor_children(unsafe { clang_getTranslationUnitCursor(tu.0) }) {
+            if unsafe { clang_getCursorKind(cursor) } != CXCursor_MacroDefinition
+                || !cursor_locations(cursor)
+                    .is_some_and(|(spelling, _, _, _)| spelling.file == input.name)
+            {
+                continue;
+            }
+            KIND_QUERIES.set(0);
+            let full = cursor_tokens(cursor);
+            assert_eq!(KIND_QUERIES.get(), full.len());
+            total += full.len();
+            definitions += 1;
+            KIND_QUERIES.set(0);
+            let captured = OwnedMacro::from_cursor(cursor);
+            assert_eq!(KIND_QUERIES.get(), 0);
+            let expected = OwnedMacro {
+                tokens: full
+                    .iter()
+                    .map(|(_, spelling)| spelling.clone())
+                    .skip(1)
+                    .collect(),
+                function_like: unsafe { clang_Cursor_isMacroFunctionLike(cursor) } != 0,
+            };
+            assert_eq!(captured, expected);
+            eprintln!(
+                "macro_spelling_capture location={:?} oracle={expected:?} candidate={captured:?} oracle_kind_queries={} candidate_kind_queries={}",
+                cursor_locations(cursor),
+                full.len(),
+                KIND_QUERIES.get(),
+            );
+        }
+        assert_eq!(definitions, 9);
+        assert_eq!(total, 26);
     }
 
     #[test]
@@ -4127,6 +4325,9 @@ fn type_names(ty: &TypeRef, names: &mut HashSet<String>) {
 }
 
 fn cursor_children(cursor: CXCursor) -> Vec<CXCursor> {
+    #[cfg(test)]
+    owned_tests::record_child_visit(cursor);
+
     struct Visit {
         children: Vec<CXCursor>,
         panic: Option<Box<dyn std::any::Any + Send>>,
@@ -5683,7 +5884,12 @@ fn fact_data(
             {
                 return layout;
             }
-            if matches!(kind, FactKind::Class | FactKind::Struct) && is_interface(cursor) {
+            let definition_children = matches!(kind, FactKind::Class | FactKind::Struct)
+                .then(|| defined_record_children(cursor))
+                .flatten();
+            if let Some((definition, children)) = &definition_children
+                && is_interface_with_children(*definition, children)
+            {
                 return interface_fact(cursor, macros);
             }
             let guid = cursor_uuid(cursor);
@@ -5709,7 +5915,15 @@ fn fact_data(
             let union = kind == FactKind::Union;
             let definition = unsafe { clang_isCursorDefinition(cursor) } != 0;
             let mut record = if definition {
-                match inline_record(cursor, union, Some(macros)) {
+                match inline_record_with_children(
+                    cursor,
+                    union,
+                    Some(macros),
+                    false,
+                    definition_children
+                        .as_ref()
+                        .map(|(definition, children)| (*definition, children.as_slice())),
+                ) {
                     Ok(record) => record,
                     Err(reason) => return FactData::Unsupported { reason },
                 }
@@ -5959,16 +6173,21 @@ fn external_link_name(cursor: CXCursor) -> String {
 }
 
 fn is_interface(cursor: CXCursor) -> bool {
-    let definition = unsafe { clang_getCursorDefinition(cursor) };
-    let cursor = if unsafe { clang_Cursor_isNull(definition) } == 0 {
-        definition
-    } else {
-        cursor
-    };
-    if unsafe { clang_isCursorDefinition(cursor) } == 0 {
+    let Some((cursor, children)) = defined_record_children(cursor) else {
         return false;
+    };
+    is_interface_with_children(cursor, &children)
+}
+
+fn defined_record_children(cursor: CXCursor) -> Option<(CXCursor, Vec<CXCursor>)> {
+    let cursor = cursor_definition(cursor);
+    if unsafe { clang_isCursorDefinition(cursor) } == 0 {
+        return None;
     }
-    let children = cursor_children(cursor);
+    Some((cursor, cursor_children(cursor)))
+}
+
+fn is_interface_with_children(cursor: CXCursor, children: &[CXCursor]) -> bool {
     if children
         .iter()
         .any(|child| unsafe { clang_getCursorKind(*child) } == CXCursor_FieldDecl)
@@ -8363,11 +8582,32 @@ fn inline_record_with_pointer_class_layouts(
     macros: Option<&MacroDefinitions>,
     preserve_pointer_class_layouts: bool,
 ) -> Result<InlineRecord, String> {
+    inline_record_with_children(cursor, union, macros, preserve_pointer_class_layouts, None)
+}
+
+fn inline_record_with_children(
+    cursor: CXCursor,
+    union: bool,
+    macros: Option<&MacroDefinitions>,
+    preserve_pointer_class_layouts: bool,
+    definition_children: Option<(CXCursor, &[CXCursor])>,
+) -> Result<InlineRecord, String> {
+    let owned_children;
+    let children = if let Some((definition, children)) = definition_children
+        && unsafe { clang_equalCursors(cursor, definition) } != 0
+    {
+        #[cfg(test)]
+        owned_tests::record_child_reuse(cursor);
+        children
+    } else {
+        owned_children = cursor_children(cursor);
+        &owned_children
+    };
     let mut base = None;
     let mut base_count = 0;
     let mut fields: Vec<Field> = vec![];
     let mut anonymous = 0;
-    for child in cursor_children(cursor) {
+    for &child in children {
         let kind = unsafe { clang_getCursorKind(child) };
         if kind == CXCursor_CXXBaseSpecifier {
             if union || unsafe { clang_isVirtualBase(child) } != 0 {
