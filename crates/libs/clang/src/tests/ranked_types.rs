@@ -1,6 +1,8 @@
 use super::*;
 use windows_metadata::HasAttributes;
 
+mod bodies;
+
 const TARGETS: [&str; 3] = [
     "i686-pc-windows-msvc",
     "x86_64-pc-windows-msvc",
@@ -705,12 +707,59 @@ fn evidence<'a>(report: &'a HeaderPartitionReport, name: &str) -> &'a Definition
         .unwrap()
 }
 
+fn ranked_record_rows(report: &HeaderPartitionReport) -> Vec<&DefinitionEvidence> {
+    let rows: Vec<_> = report
+        .definition_evidence
+        .iter()
+        .filter(|row| row.body_kind == DefinitionBodyKind::Interface)
+        .collect();
+    assert_eq!(rows.len(), 1, "{report:?}");
+    let row = rows[0];
+    assert_eq!(row.identity.name, "AuthorityInterface");
+    let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+        panic!("{row:?}")
+    };
+    assert!(
+        keys.iter()
+            .any(|key| key.path == "slots.count" && key.selected == "2" && key.alternative == "3"),
+        "{row:?}"
+    );
+    assert!(unknown.iter().any(|key| key.path == "declared"), "{row:?}");
+    let DefinitionEvidenceCoverage::CapturedBodiesAndReferentConst {
+        interfaces, enums, ..
+    } = &report.definition_evidence_coverage
+    else {
+        panic!("{report:?}")
+    };
+    assert_eq!(
+        *interfaces,
+        DefinitionDomainCoverage {
+            selected_definitions: 3,
+            alternative_definitions: 2,
+            declaration_only_observations: 0,
+        }
+    );
+    assert_eq!(*enums, DefinitionDomainCoverage::default());
+    assert!(
+        !report
+            .definition_evidence
+            .iter()
+            .any(|row| row.body_kind == DefinitionBodyKind::Enum)
+    );
+    report
+        .definition_evidence
+        .iter()
+        .filter(|row| row.body_kind == DefinitionBodyKind::Record)
+        .collect()
+}
+
 fn without_evidence_comments(text: &str) -> String {
     text.lines()
         .filter(|line| {
-            !line
-                .trim_start()
-                .starts_with("// windows-clang: record definition ")
+            !["record", "interface", "enum"].iter().any(|kind| {
+                line.trim_start()
+                    .starts_with(&format!("// windows-clang: {kind} definition "))
+            })
         })
         .map(|line| format!("{line}\n"))
         .collect()
@@ -839,7 +888,7 @@ fn ranked_record_difference_reports_causal_key_without_changing_selected_body() 
             let legacy = output_without_notes(plan.clone());
             let report = report(plan).unwrap();
             assert!(report.omissions.is_empty());
-            assert_eq!(report.definition_evidence.len(), 1);
+            assert_eq!(ranked_record_rows(&report).len(), 1);
             let row = evidence(&report, "EvidenceRecord");
             assert_eq!(row.selected.rank, Some(0));
             assert_eq!(row.selected.partition.as_deref(), Some("Home"));
@@ -889,7 +938,7 @@ fn ranked_record_alias_const_is_normalized_only_at_its_own_indirection_level() {
                 assert_selected_alias_record(&plan, target, case == "evidence-reference");
                 let report = report(plan).unwrap();
                 assert!(
-                    report.definition_evidence.is_empty(),
+                    ranked_record_rows(&report).is_empty(),
                     "{target} {case}: {report:?}"
                 );
                 let text = report.partitions.values().cloned().collect::<String>();
@@ -967,7 +1016,7 @@ fn ranked_record_missing_alternative_alias_evidence_is_unknown_not_borrowed() {
                 *plan.snapshot.native_typedef_types.get_mut(&alias).unwrap() = None;
             }
             let report = report(plan).unwrap();
-            assert_eq!(report.definition_evidence.len(), 1, "{report:?}");
+            assert_eq!(ranked_record_rows(&report).len(), 1, "{report:?}");
             let row = evidence(&report, "EvidenceRecord");
             let DefinitionComparison::Unknown(keys) = &row.outcome else {
                 panic!("{row:?}")
@@ -999,8 +1048,8 @@ fn ranked_record_forward_only_alternative_is_accounted_without_body_evidence() {
         let mut baseline = None;
         for reversed in [false, true] {
             let report = report(ranked_plan(target, "evidence-forward", reversed)).unwrap();
-            assert!(report.definition_evidence.is_empty(), "{report:?}");
-            let DefinitionEvidenceCoverage::RecordsAndReferentConst {
+            assert!(ranked_record_rows(&report).is_empty(), "{report:?}");
+            let DefinitionEvidenceCoverage::CapturedBodiesAndReferentConst {
                 selected_records,
                 declaration_only_observations,
                 ..
@@ -1030,7 +1079,7 @@ fn ranked_record_nominal_referents_report_their_own_body_only() {
     helpers::ensure_libclang();
     for target in TARGETS {
         let report = report(ranked_plan(target, "evidence-nominal", false)).unwrap();
-        assert_eq!(report.definition_evidence.len(), 1, "{report:?}");
+        assert_eq!(ranked_record_rows(&report).len(), 1, "{report:?}");
         let row = evidence(&report, "EvidenceNominal");
         let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
             panic!("{row:?}")
@@ -1292,7 +1341,7 @@ fn ranked_record_forward_redeclarations_count_contexts_not_facts() {
                     usize::from(case == "forward-defined")
                 );
                 let report = report(plan).unwrap();
-                let DefinitionEvidenceCoverage::RecordsAndReferentConst {
+                let DefinitionEvidenceCoverage::CapturedBodiesAndReferentConst {
                     alternative_definitions,
                     declaration_only_observations,
                     ..
@@ -1401,7 +1450,7 @@ fn ranked_record_ambiguous_provenance_retains_candidates_and_independent_body_ev
                 }
                 assert!(matches!(
                     report.definition_evidence_coverage,
-                    DefinitionEvidenceCoverage::RecordsAndReferentConst {
+                    DefinitionEvidenceCoverage::CapturedBodiesAndReferentConst {
                         alternative_definitions: 1,
                         declaration_only_observations: 0,
                         ..

@@ -87,15 +87,24 @@ overrides replace the default candidates for selected declarations, including in
 compile variants. Call the consuming `emit_with_options` for normal generation; it audits
 internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report without
 emission because auditing before emission repeats planning and clones the snapshot.
-Ranked plans also observe emitted record definitions after successful selected-type validation.
+Ranked plans observe emitted record, COM-interface, and native enum definitions after successful
+selected-type validation.
 `emit_with_enum_diagnostics` returns `HeaderPartitionReport::definition_evidence` and an explicit
-records/referent-const coverage marker. Genuine differences appear both as structured keys and
+captured-bodies/referent-const coverage. Genuine differences appear as structured keys and
 matching RDL comments; missing or unsupported evidence is report-only `Unknown`. Observations do
-not gate authoritative definitions. COM and enum bodies, standalone aliases, functions, constants,
-SAL-only differences, volatile, and restrict are outside this comparison domain.
-Coverage counts alternative contexts, not redeclarations. Provenance follows the physical header's
-traversing owners and immutable ranks. Ambiguous provenance retains its candidates and is `Unknown`
-without discarding independent body differences.
+not gate authoritative definitions. Declared interface members and inherited projected COM slots
+are separate domains. Native enums compare representation, ordered variants, fixed/scoped shape,
+and bounded captured annotations. Selected IID/flag settings and emitted overload order are reported
+separately from native-body keys. Standalone aliases, functions, constants, SAL, shared/synthetic
+enum production, full native ABI witnesses, volatile, and restrict are outside this domain.
+Supported annotation families and parameter properties compare independently. Unsupported annotations
+and unresolved counts have localized `Unknown` keys, so they cannot hide a known direction or
+result-status difference. Equal supported evidence with unknown siblings remains report-only.
+The emitter's merged effective annotations can include alternative-context metadata. Unchanged
+output proves observer noninterference, not selected-annotation authority.
+Coverage counts alternative contexts per body kind, not redeclarations. Provenance follows the
+physical header's traversing owners and immutable ranks. Ambiguous provenance retains its candidates
+and is `Unknown` without discarding independent body differences.
 `RootPartition::with_preserved_auto_function_pointer_level` restores the implicit pointer level for
 uses of a bare function typedef. A pointer typedef promoted to a delegate already contains that
 source pointer, so its uses keep only their authored outer pointer depth.

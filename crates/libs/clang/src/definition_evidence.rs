@@ -10,15 +10,45 @@ thread_local! {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DefinitionEvidenceCoverage {
     NotCompared,
-    /// Emitted defining records, layout and pointer/reference referent const only.
+    /// Captured defining bodies and pointer/reference referent const, not full native ABI.
     ///
-    /// COM bodies, enum bodies, standalone aliases, functions, constants, SAL, volatile and
-    /// restrict are not compared. Named referents contribute identity, not recursive body proof.
-    RecordsAndReferentConst {
+    /// The three record counters retain their record-only meanings. Interface and enum contexts
+    /// are counted separately. Named referents contribute identity, not recursive body proof.
+    CapturedBodiesAndReferentConst {
         selected_records: usize,
         alternative_definitions: usize,
         /// Distinct alternative contexts without a defining observation.
         declaration_only_observations: usize,
+        interfaces: DefinitionDomainCoverage,
+        enums: DefinitionDomainCoverage,
+    },
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DefinitionDomainCoverage {
+    pub selected_definitions: usize,
+    pub alternative_definitions: usize,
+    pub declaration_only_observations: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DefinitionBodyKind {
+    Record,
+    Interface,
+    Enum,
+}
+
+/// Finalized selected emission settings, separate from native-body comparison keys.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DefinitionEmission {
+    Interface {
+        guid: Option<String>,
+        /// Captured declared-method ordinals in emitted order.
+        method_order: Vec<usize>,
+    },
+    Enum {
+        repr: Scalar,
+        flags: bool,
     },
 }
 
@@ -77,6 +107,8 @@ pub enum DefinitionComparison {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DefinitionEvidence {
     pub identity: DefinitionIdentity,
+    pub body_kind: DefinitionBodyKind,
+    pub selected_emission: Option<DefinitionEmission>,
     pub selected: DefinitionObservation,
     pub alternative: DefinitionObservation,
     pub outcome: DefinitionComparison,
@@ -378,7 +410,337 @@ impl Normalizer<'_, '_> {
         keys
     }
 
-    fn definition(&mut self, fact: &Fact) -> Keys {
+    fn annotations(&self, target: AnnotationTarget) -> Keys {
+        let mut families: BTreeMap<&str, Result<BTreeSet<String>, String>> = BTreeMap::new();
+        for annotation in annotations_for(&self.snapshot.source_annotations, &target) {
+            let (family, value) = match annotation {
+                Annotation::PreserveResult => ("preserve_result", Ok("true".to_string())),
+                Annotation::DoNotRelease => ("do_not_release", Ok("true".to_string())),
+                Annotation::NotNullTerminated => ("not_null_terminated", Ok("true".to_string())),
+                Annotation::NullNullTerminated => ("null_null_terminated", Ok("true".to_string())),
+                Annotation::CanReturnErrorsAsSuccess => {
+                    ("can_return_errors_as_success", Ok("true".to_string()))
+                }
+                Annotation::CanReturnMultipleSuccessValues => {
+                    ("can_return_multiple_success_values", Ok("true".to_string()))
+                }
+                Annotation::Retained => ("retained", Ok("true".to_string())),
+                Annotation::Ansi => ("ansi", Ok("true".to_string())),
+                Annotation::Unicode => ("unicode", Ok("true".to_string())),
+                Annotation::Agile => ("agile", Ok("true".to_string())),
+                Annotation::Const => ("const", Ok("true".to_string())),
+                Annotation::In => ("in", Ok("true".to_string())),
+                Annotation::Out => ("out", Ok("true".to_string())),
+                Annotation::Optional => ("optional", Ok("true".to_string())),
+                Annotation::Reserved => ("reserved", Ok("true".to_string())),
+                Annotation::ComOutPtr => ("com_out_ptr", Ok("true".to_string())),
+                Annotation::Retval => ("retval", Ok("true".to_string())),
+                Annotation::SupportedOs(value) => ("supported_os", Ok(value.clone())),
+                Annotation::ArrayCountConst(value) | Annotation::MemorySizeConst(value) => {
+                    let value = value
+                        .parse::<i32>()
+                        .map(|value| value.to_string())
+                        .map_err(|_| "unsupported captured constant count".to_string());
+                    (
+                        if matches!(annotation, Annotation::ArrayCountConst(_)) {
+                            "array_count_const"
+                        } else {
+                            "memory_size_const"
+                        },
+                        value,
+                    )
+                }
+                Annotation::ArrayCountParam(value) | Annotation::MemorySizeParam(value) => {
+                    let value = value
+                        .parse::<i16>()
+                        .map(|value| value.to_string())
+                        .map_err(|_| "unsupported captured parameter count".to_string());
+                    (
+                        if matches!(annotation, Annotation::ArrayCountParam(_)) {
+                            "array_count_param"
+                        } else {
+                            "memory_size_param"
+                        },
+                        value,
+                    )
+                }
+                _ => (
+                    "uncompared",
+                    Err("annotation outside the captured comparison domain".to_string()),
+                ),
+            };
+            let values = families
+                .entry(family)
+                .or_insert_with(|| Ok(BTreeSet::new()));
+            match (values.as_mut(), value) {
+                (Ok(values), Ok(value)) => {
+                    values.insert(value);
+                }
+                (_, Err(reason)) => *values = Err(reason),
+                (Err(_), Ok(_)) => {}
+            }
+        }
+        families
+            .into_iter()
+            .map(|(family, values)| {
+                (
+                    format!(".{family}"),
+                    values.map(|values| format!("{values:?}")),
+                )
+            })
+            .collect()
+    }
+
+    fn parameter_annotation(&self, annotation: &ParamAnnotation, params: &[Parameter]) -> Keys {
+        let mut keys = BTreeMap::new();
+        for (name, value) in [
+            ("input", annotation.input),
+            ("output", annotation.output),
+            ("optional", annotation.optional),
+            ("reserved", annotation.reserved),
+            ("com_out_ptr", annotation.com_out_ptr),
+            ("retval", annotation.retval),
+            ("null_terminated", annotation.null_terminated),
+            ("null_null_terminated", annotation.null_null_terminated),
+        ] {
+            keys.insert(format!(".{name}"), Ok(value.to_string()));
+        }
+        if let Some(reason) = &annotation.unsupported {
+            keys.insert(
+                ".unsupported".to_string(),
+                Err(format!(
+                    "unsupported captured parameter annotation: {reason}"
+                )),
+            );
+        }
+        keys.insert(
+            ".size.present".to_string(),
+            Ok(annotation.size.is_some().to_string()),
+        );
+        if let Some(size) = &annotation.size {
+            keys.insert(".size.bytes".to_string(), Ok(size.bytes.to_string()));
+            let value = match &size.value {
+                SalSizeValue::Constant(value) => Ok(format!("constant:{value}")),
+                SalSizeValue::Parameter(name) | SalSizeValue::IndirectParameter(name) => params
+                    .iter()
+                    .position(|param| param.name == *name)
+                    .map(|index| {
+                        format!(
+                            "{}:{index}",
+                            if matches!(size.value, SalSizeValue::Parameter(_)) {
+                                "parameter"
+                            } else {
+                                "indirect-parameter"
+                            }
+                        )
+                    })
+                    .ok_or_else(|| "missing own-method count parameter".to_string()),
+                SalSizeValue::Expression(_) => {
+                    Err("unsupported captured count expression".to_string())
+                }
+            };
+            keys.insert(".size.value".to_string(), value);
+        }
+        keys
+    }
+
+    fn parameters(&mut self, params: &[Parameter], tu: &str, path: &str) -> Keys {
+        let mut keys = BTreeMap::from([(String::new(), Ok(params.len().to_string()))]);
+        for (index, param) in params.iter().enumerate() {
+            let key = format!(".param[{index}]");
+            keys.insert(format!("{key}.name"), Ok(param.name.clone()));
+            extend(
+                &mut keys,
+                &format!("{key}.type"),
+                self.ty(&param.ty, tu, &format!("{path}{key}.type")).keys,
+            );
+            extend(
+                &mut keys,
+                &format!("{key}.annotation"),
+                self.parameter_annotation(&param.annotation, params),
+            );
+        }
+        keys
+    }
+
+    fn interface(&mut self, fact: &Fact) -> Keys {
+        let tu = &fact.origin.tu;
+        let mut keys = BTreeMap::new();
+        if let FactData::Interface {
+            base,
+            guid,
+            methods,
+        } = &fact.data
+        {
+            keys.insert(".declared.guid".to_string(), Ok(format!("{guid:?}")));
+            if let Some(base) = base {
+                extend(
+                    &mut keys,
+                    ".declared.base",
+                    self.ty(base, tu, ".declared.base").keys,
+                );
+            } else {
+                keys.insert(".declared.base".to_string(), Ok("none".to_string()));
+            }
+            extend(
+                &mut keys,
+                ".declared.annotations",
+                self.annotations(AnnotationTarget::Declaration(fact.origin.clone())),
+            );
+            keys.insert(
+                ".declared.methods".to_string(),
+                Ok(methods.len().to_string()),
+            );
+            for (index, method) in methods.iter().enumerate() {
+                let key = format!(".declared.method[{index}]");
+                keys.insert(format!("{key}.name"), Ok(method.name.clone()));
+                keys.insert(format!("{key}.special"), Ok(method.special.to_string()));
+                extend(
+                    &mut keys,
+                    &format!("{key}.annotations"),
+                    self.annotations(AnnotationTarget::Method {
+                        declaration: fact.origin.clone(),
+                        index,
+                    }),
+                );
+                extend(
+                    &mut keys,
+                    &format!("{key}.params"),
+                    self.parameters(&method.params, tu, &format!("{key}.params")),
+                );
+                for parameter in 0..method.params.len() {
+                    extend(
+                        &mut keys,
+                        &format!("{key}.params.param[{parameter}].annotations"),
+                        self.annotations(AnnotationTarget::MethodParameter {
+                            declaration: fact.origin.clone(),
+                            method: index,
+                            parameter,
+                        }),
+                    );
+                }
+                extend(
+                    &mut keys,
+                    &format!("{key}.result.type"),
+                    self.ty(&method.result, tu, &format!("{key}.result.type"))
+                        .keys,
+                );
+                extend(
+                    &mut keys,
+                    &format!("{key}.result.annotations"),
+                    self.annotations(AnnotationTarget::MethodReturn {
+                        declaration: fact.origin.clone(),
+                        index,
+                    }),
+                );
+            }
+        } else {
+            keys.insert(
+                ".declared".to_string(),
+                Err("missing captured declared-interface body, base and annotations".to_string()),
+            );
+        }
+        let snapshot = self.snapshot;
+        if let Some(contract) = snapshot.native_com_contracts.get(&fact.origin) {
+            keys.insert(".slots.guid".to_string(), Ok(contract.guid.clone()));
+            let base = match &fact.data {
+                FactData::Interface { base, .. } | FactData::Record { base, .. } => base.as_ref(),
+                _ => None,
+            };
+            if let Some(base) = base {
+                extend(
+                    &mut keys,
+                    ".slots.base",
+                    self.ty(base, tu, ".slots.base").keys,
+                );
+            } else if contract.bases.is_empty() {
+                keys.insert(".slots.base".to_string(), Ok("none".to_string()));
+            } else {
+                // Base IID strings do not establish semantic declaration identity.
+                keys.insert(
+                    ".slots.base".to_string(),
+                    Err("contract base IIDs have no declaration linkage".to_string()),
+                );
+            }
+            keys.insert(
+                ".slots.count".to_string(),
+                Ok(contract.slots.len().to_string()),
+            );
+            for (index, slot) in contract.slots.iter().enumerate() {
+                let key = format!(".slots.slot[{index}]");
+                keys.insert(format!("{key}.name"), Ok(slot.name.clone()));
+                keys.insert(format!("{key}.convention"), Ok(slot.convention.to_string()));
+                extend(
+                    &mut keys,
+                    &format!("{key}.params"),
+                    self.parameters(&slot.params, tu, &format!("{key}.params")),
+                );
+                extend(
+                    &mut keys,
+                    &format!("{key}.result"),
+                    self.ty(&slot.result, tu, &format!("{key}.result")).keys,
+                );
+            }
+        } else {
+            keys.insert(
+                ".slots".to_string(),
+                Err("missing captured COM contract".to_string()),
+            );
+        }
+        keys
+    }
+
+    fn enumeration(&self, fact: &Fact) -> Keys {
+        if self
+            .snapshot
+            .shared_enum_identities
+            .contains_key(&fact.origin)
+        {
+            return NormalizedType::unknown("shared literal enum is outside the comparison domain")
+                .keys;
+        }
+        let FactData::Enum {
+            repr,
+            variants,
+            fixed,
+            scoped,
+        } = &fact.data
+        else {
+            return NormalizedType::unknown("alternative is not a captured enum body").keys;
+        };
+        let mut keys = BTreeMap::from([
+            (".repr".to_string(), Ok(format!("{repr:?}"))),
+            (".fixed".to_string(), Ok(fixed.to_string())),
+            (".scoped".to_string(), Ok(scoped.to_string())),
+            (".variants".to_string(), Ok(variants.len().to_string())),
+        ]);
+        extend(
+            &mut keys,
+            ".annotations",
+            self.annotations(AnnotationTarget::Declaration(fact.origin.clone())),
+        );
+        for (index, variant) in variants.iter().enumerate() {
+            let key = format!(".variant[{index}]");
+            keys.insert(format!("{key}.name"), Ok(variant.name.clone()));
+            keys.insert(format!("{key}.value"), Ok(enum_value(variant.value, *repr)));
+            extend(
+                &mut keys,
+                &format!("{key}.annotations"),
+                self.annotations(AnnotationTarget::Variant {
+                    declaration: fact.origin.clone(),
+                    index,
+                }),
+            );
+        }
+        keys
+    }
+
+    fn definition(&mut self, fact: &Fact, kind: DefinitionBodyKind) -> Keys {
+        match kind {
+            DefinitionBodyKind::Interface => return self.interface(fact),
+            DefinitionBodyKind::Enum => return self.enumeration(fact),
+            DefinitionBodyKind::Record => {}
+        }
         let FactData::Record {
             base,
             fields,
@@ -406,8 +768,8 @@ impl Normalizer<'_, '_> {
         )
     }
 
-    fn definitions(&mut self, facts: &[&Fact]) -> Keys {
-        let mut shapes = facts.iter().map(|fact| self.definition(fact));
+    fn definitions(&mut self, facts: &[&Fact], kind: DefinitionBodyKind) -> Keys {
+        let mut shapes = facts.iter().map(|fact| self.definition(fact, kind));
         let first = shapes.next().unwrap();
         if shapes.any(|shape| shape != first) {
             BTreeMap::from([(
@@ -622,8 +984,13 @@ fn render(row: &DefinitionEvidence) -> String {
         }
     }
     format!(
-        "record definition {:?} scope={:?} header={:?} selected={:?} rank={} \
+        "{} definition {:?} scope={:?} header={:?} selected={:?} rank={} \
          alternative={:?} rank={} comparison={} [{changes}]{provenance}",
+        match row.body_kind {
+            DefinitionBodyKind::Record => "record",
+            DefinitionBodyKind::Interface => "interface",
+            DefinitionBodyKind::Enum => "enum",
+        },
         row.identity.name,
         row.identity.scope,
         row.identity.header,
@@ -653,6 +1020,8 @@ pub(super) fn observe(
     snapshot: &Snapshot,
     bindings: &com_pointer::Bindings<'_>,
     types: &[PlannedFact<'_>],
+    interface_guids: &BTreeMap<String, String>,
+    flag_enums: &BTreeSet<(String, String)>,
 ) -> DefinitionObservations {
     #[cfg(test)]
     OBSERVATION_CALLS.set(OBSERVATION_CALLS.get() + 1);
@@ -664,16 +1033,64 @@ pub(super) fn observe(
         };
     };
     let mut selected: BTreeMap<_, Vec<_>> = BTreeMap::new();
+    let mut kinds = BTreeMap::new();
+    let mut emissions = BTreeMap::new();
     for planned in types {
         let fact = planned.fact;
         if fact.definition
-            && matches!(fact.data, FactData::Record { .. })
+            && matches!(
+                fact.data,
+                FactData::Record { .. } | FactData::Interface { .. } | FactData::Enum { .. }
+            )
+            && (!matches!(fact.data, FactData::Enum { .. })
+                || (fact.kind == FactKind::Enum
+                    && !snapshot.shared_enum_identities.contains_key(&fact.origin)))
             && let Some(Ok(identity)) = authorities.identities.get(&fact.origin)
         {
-            selected
-                .entry(DefinitionIdentity::from(identity))
-                .or_default()
-                .push(fact);
+            let identity = DefinitionIdentity::from(identity);
+            let (kind, emission) = match &fact.data {
+                FactData::Interface { guid, methods, .. } => {
+                    let mut method_order = Vec::new();
+                    let mut start = 0;
+                    while start < methods.len() {
+                        let mut end = start + 1;
+                        while end < methods.len() && methods[end].name == methods[start].name {
+                            end += 1;
+                        }
+                        method_order.extend((start..end).rev());
+                        start = end;
+                    }
+                    (
+                        DefinitionBodyKind::Interface,
+                        Some(DefinitionEmission::Interface {
+                            guid: guid
+                                .as_ref()
+                                .or_else(|| interface_guids.get(&planned.name))
+                                .cloned(),
+                            method_order,
+                        }),
+                    )
+                }
+                FactData::Enum { repr, .. } => {
+                    let coerced =
+                        flag_enums.contains(&(fact.origin.tu.clone(), planned.name.clone()));
+                    (
+                        DefinitionBodyKind::Enum,
+                        Some(DefinitionEmission::Enum {
+                            repr: if coerced {
+                                unsigned_scalar(*repr)
+                            } else {
+                                *repr
+                            },
+                            flags: coerced || snapshot.clang_flag_enums.contains(&fact.origin),
+                        }),
+                    )
+                }
+                _ => (DefinitionBodyKind::Record, None),
+            };
+            kinds.insert(identity.clone(), kind);
+            emissions.insert(identity.clone(), emission);
+            selected.entry(identity).or_default().push(fact);
         }
     }
     let mut groups: BTreeMap<_, Vec<_>> = BTreeMap::new();
@@ -694,17 +1111,26 @@ pub(super) fn observe(
             .or_default()
             .push(fact);
     }
-    let mut declaration_only_observations = 0;
-    groups.retain(|_, facts| {
+    let mut coverage: [DefinitionDomainCoverage; 3] = std::array::from_fn(|_| Default::default());
+    let index = |kind| match kind {
+        DefinitionBodyKind::Record => 0,
+        DefinitionBodyKind::Interface => 1,
+        DefinitionBodyKind::Enum => 2,
+    };
+    for kind in kinds.values() {
+        coverage[index(*kind)].selected_definitions += 1;
+    }
+    groups.retain(|(identity, _), facts| {
         facts.retain(|fact| fact.definition);
         if facts.is_empty() {
-            declaration_only_observations += 1;
+            coverage[index(kinds[identity])].declaration_only_observations += 1;
             false
         } else {
+            coverage[index(kinds[identity])].alternative_definitions += 1;
             true
         }
     });
-    let alternative_definitions = groups.len();
+    let [records, interfaces, enums] = coverage;
     let mut normalizer = Normalizer {
         snapshot,
         authorities,
@@ -714,6 +1140,7 @@ pub(super) fn observe(
     let mut selected_shapes = BTreeMap::new();
     let mut rows = Vec::new();
     for ((identity, input), definitions) in groups {
+        let kind = kinds[&identity];
         let selected_definitions = &selected[&identity];
         let (selected_observation, selected_unknown) = observation(
             snapshot,
@@ -724,8 +1151,8 @@ pub(super) fn observe(
         let (alternative, alternative_unknown) = observation(snapshot, input, &definitions, false);
         let selected_shape = selected_shapes
             .entry(identity.clone())
-            .or_insert_with(|| normalizer.definitions(selected_definitions));
-        let alternative_shape = normalizer.definitions(&definitions);
+            .or_insert_with(|| normalizer.definitions(selected_definitions, kind));
+        let alternative_shape = normalizer.definitions(&definitions, kind);
         let mut outcome = compare(selected_shape, &alternative_shape)
             .unwrap_or_else(|| DefinitionComparison::Unknown(Vec::new()));
         let unknown = match &mut outcome {
@@ -742,6 +1169,8 @@ pub(super) fn observe(
             continue;
         }
         let mut row = DefinitionEvidence {
+            body_kind: kind,
+            selected_emission: emissions[&identity].clone(),
             identity,
             selected: selected_observation,
             alternative,
@@ -785,10 +1214,12 @@ pub(super) fn observe(
     }
     DefinitionObservations {
         rows,
-        coverage: DefinitionEvidenceCoverage::RecordsAndReferentConst {
-            selected_records: selected.len(),
-            alternative_definitions,
-            declaration_only_observations,
+        coverage: DefinitionEvidenceCoverage::CapturedBodiesAndReferentConst {
+            selected_records: records.selected_definitions,
+            alternative_definitions: records.alternative_definitions,
+            declaration_only_observations: records.declaration_only_observations,
+            interfaces,
+            enums,
         },
         notes,
     }

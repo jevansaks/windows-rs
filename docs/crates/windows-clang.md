@@ -346,20 +346,25 @@ definition. COM pointer routing uses this header/declaration relation, not globa
 counted pointers, references, and by-value object-layout uses cannot borrow an interface
 representation. Captured alternatives remain available for definition-conflict reporting.
 
-Ranked plans observe record definitions only after selected closure and representation validation
+Ranked plans observe definitions only after selected closure and representation validation
 succeed. `HeaderPartitionReport::definition_evidence` reports `Different` or `Unknown` for each
-selected defining record and alternative original input. Equal observations produce no row.
+selected defining record, COM interface, or native enum and alternative original input. Each row has
+a `body_kind` separate from its semantic authority identity; interfaces retain the native record
+identity role. Equal observations produce no row.
 Alternative definitions never affect admission, exclusions, ownership, or blocking audit conflicts.
 The selected type body, namespace, and annotations are retained.
 `Different` rows have ordered causal keys such as `field[0:value].type`. Their stored `message` is
 also emitted before the type with the prefix `// windows-clang: `. `Unknown` is report-only.
 
 `definition_evidence_coverage` marks unranked plans as `NotCompared`. Ranked plans declare
-`RecordsAndReferentConst` coverage and count selected defining records, alternative definition
-contexts, and declaration-only contexts, grouped by semantic identity and original input. Repeated
+`CapturedBodiesAndReferentConst` coverage. Its original three record counters retain their record-only
+meanings; `interfaces` and `enums` each count selected definitions, alternative defining contexts,
+and declaration-only contexts, grouped by semantic identity and original input. Repeated
 forwards count once only when that context has no definition. Forward-only alternatives have no body
 evidence row.
-An emitted opaque forward declaration is not a compared definition. An empty evidence list does
+An emitted opaque record or fixed enum forward is not a compared definition. A fixed enum forward
+counts as declaration-only according to its captured definition flag, not its number of variants.
+An empty evidence list does
 not establish complete cross-context or native equivalence.
 
 Record observations compare base identity, size, alignment, packing, union status, and ordered
@@ -380,13 +385,60 @@ Known differences remain in `Different` rows alongside unknown paths; an unknown
 produce guessed differences in its descendants. A comparison with only unknown paths has no RDL
 comment.
 
+| Body domain | Compared captured evidence |
+| --- | --- |
+| Declared interface | Semantic base identity, native IID, ordered declared methods, method/parameter names, normalized types, results, special shape, bounded annotations |
+| COM slots | Ordered inherited projected slots, names, parameter names/types/annotations, results, calling convention, captured IID and linked base identity |
+| Native enum | Scalar representation, ordered variant names and width-normalized values, fixed/scoped flags, bounded declaration/variant annotations |
+
+Declared methods and inherited contract slots are not zipped together. Their native ordinals remain
+independent, including when the emitter reverses contiguous same-name overload groups. Each row's
+`selected_emission` records that selected emitted order and the finalized IID or enum repr/flags
+settings; these settings do not replace native-body keys or describe an alternative's emission.
+Member annotations use each declaration's own captured ordinal.
+
+A field-bearing alternative COM record can supply its own captured projected contract slots. It
+cannot supply a declared-interface body or special/method-metadata annotations, which remain
+`Unknown`. Missing contracts and unsupported type or annotation shapes are also `Unknown`, without
+discarding independent known differences. A base `TypeRef` uses own-context declaration linkage and
+the existing semantic identity normalizer. A contract's base IID strings alone cannot establish that
+identity. Slot comparison does not compare native type, owner, parameter, result, exception, or
+aggregate-value ABI witnesses; selected validation still enforces its existing native guards.
+
+Annotation sets ignore textual ordering and duplicates. This bounded domain includes captured
+direction, optional/reserved/retval, COM-output-pointer and termination flags, constant/parameter
+counts, preserve-result, release/retention, result-status, encoding, const, agile and supported-OS
+annotations. Each supported semantic family and captured parameter property has its own key.
+Captured parameter count references use own-method parameter ordinals. Invalid numeric counts mark
+only their family `Unknown`; unsupported annotations have an `uncompared` sibling key. Parameter
+count expressions and missing count parameters mark only `size.value` `Unknown`, retaining the
+captured size presence/units and direction, optional, and termination flags. A captured unsupported
+parameter diagnostic has its own `unsupported` key. Unsupported text is not compared as a known
+value, and unknown families are not replaced with empty sets. Known differences in other keys still
+produce the stored-message RDL note; equal supported evidence with unknown siblings is report-only.
+This is not standalone SAL coverage or proof of every native annotation.
+
+Record/interface/enum emission consumes legacy merged effective annotations. Compatible alternative
+contexts can contribute metadata to that merge, including an alternative-only method static-library
+attribute. Observations use own-source evidence, but cannot repair the emitted annotation source.
+Note-stripped or observer-disabled output equality proves observer noninterference, not that
+selected annotations are authoritative. Selected-annotation source consistency is outside this
+observational comparison.
+
+Only defining native enums with an existing physical-header semantic authority enter comparison.
+Shared literal provider selection, synthetic/associated enum generation, and standalone alias-owned
+output do not gain comparison or guessed identities. WinMD-reader controls prove the actual selected
+namespace, IID, method result/parameter types, enum underlying type and constants where represented.
+Native fixed/scoped/order/layout evidence remains a source/Fact/RDL assertion, not an ABI or metadata
+equivalence claim.
+
 Direct field callbacks can fail selected-root validation when their generated callback declaration
 lacks captured semantic-parent evidence. Observation does not make them roots or bypass that guard.
 Authored callback typedef fields can pass the selected path. Raw direct function-pointer comparison
 is tested on extracted record evidence separately from this emission boundary.
 
-This coverage excludes COM-interface bodies, enum bodies, standalone aliases, functions, constants,
-SAL-only differences, shared-enum equivalence, volatile, and restrict. Const comparison is limited to
+This coverage excludes standalone aliases, functions, constants, standalone SAL, shared/synthetic
+enum production, full native ABI witnesses, volatile, and restrict. Const comparison is limited to
 represented pointer/reference referent mutability plus canonical alias top-level const at that
 boundary. It does not compare every native qualifier or ABI property.
 
