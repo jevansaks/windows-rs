@@ -998,9 +998,70 @@ impl<'facts> Context<'_, 'facts> {
                 .len()
                 != 1
         {
+            let captured = self.snapshot.native_typedef_types.get(&fact.origin);
+            let binding = match captured {
+                None => "missing",
+                Some(None) => "unsupported",
+                Some(Some(captured)) if captured == native => "matched",
+                Some(Some(_)) => "mismatch",
+            };
+            let describe = |ty: &NativeType| {
+                let declaration = match &ty.layer {
+                    NativeTypeLayer::Record(record) => Some(&record.declaration),
+                    NativeTypeLayer::Enum(enumeration) => Some(&enumeration.declaration),
+                    NativeTypeLayer::Interface(declaration) => Some(declaration.as_ref()),
+                    _ => None,
+                };
+                format!(
+                    "kind={} spelling={:?} qualifiers={:?} size={} address-space={} \
+                     declaration={declaration:?}",
+                    ty.kind,
+                    ty.spelling,
+                    (ty.is_const, ty.is_volatile, ty.is_restrict),
+                    ty.size,
+                    ty.address_space,
+                )
+            };
+            let source_name = self
+                .source_names
+                .map_or(fact.name.as_str(), |names| names.fact_name(fact));
+            let origins: Vec<_> = self
+                .declarations
+                .get(&fact.origin.tu, &fact.name, &fact.spelling)
+                .iter()
+                .map(|fact| &fact.origin)
+                .collect();
             return Err(format!(
-                "native nominal binding/provider: ineligible canonical typedef provider {:?}",
-                fact.origin
+                "native nominal binding/provider: ineligible canonical typedef provider {:?}: \
+                 kind={:?} name={:?} source-name={source_name:?} spelling={:?} expansion={:?} \
+                 parent={:?} definition={} root={} native-binding={binding} suppressed={} \
+                 excluded={} declaration-count={} declaration-origins={origins:?} \
+                 captured-native=({}) use-native=({}) projection={:?} namespace={:?} \
+                 source-annotations={:?} effective-annotations={:?} owner={:?} source-owner={:?}",
+                fact.origin,
+                fact.kind,
+                fact.name,
+                fact.spelling,
+                fact.expansion,
+                fact.parent,
+                fact.definition,
+                fact.root,
+                self.snapshot.suppressed_type_origins.contains(&fact.origin),
+                self.excluded_types
+                    .is_some_and(|excluded| excluded.contains(&fact.name)),
+                origins.len(),
+                captured
+                    .and_then(Option::as_ref)
+                    .map_or_else(|| "absent".into(), describe),
+                describe(native),
+                self.snapshot.projected_type_names.get(&fact.origin),
+                self.snapshot.fact_namespace_authorities.get(&fact.origin),
+                self.source_annotations.get(&fact.origin),
+                self.effective_annotations.get(&fact.origin),
+                self.snapshot.root_owners.get(&fact.origin),
+                self.snapshot
+                    .root_partitions
+                    .get(&(fact.origin.tu.clone(), fact.spelling.file.clone())),
             ));
         }
         self.provider_contract(fact)

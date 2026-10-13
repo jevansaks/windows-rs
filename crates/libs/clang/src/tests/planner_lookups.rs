@@ -282,6 +282,252 @@ fn contextual_interface_proof_lvalue_reference_native_identity() {
     }
 }
 
+#[test]
+fn contextual_interface_proof_typedef_provider_rejection_evidence() {
+    let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("typedef-provider-contract.hpp");
+    let header = header.to_str().unwrap();
+    for target in [
+        "i686-pc-windows-msvc",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+    ] {
+        for (qualifier, alias_qualifier) in [("", ""), ("", "const"), ("const", "")] {
+            let original = extract(
+                [
+                    Input::new(
+                        "typedef-provider-a.cpp",
+                        format!(
+                            "#define PROVIDER_CV {qualifier}\n\
+                             #define PROVIDER_ALIAS_CV {alias_qualifier}\n#include {header:?}\n"
+                        ),
+                    )
+                    .with_roots([header]),
+                    Input::new(
+                        "typedef-provider-b.cpp",
+                        format!(
+                            "#define PROVIDER_CV {qualifier}\n\
+                             #define PROVIDER_ALIAS_CV {alias_qualifier}\n#include {header:?}\n"
+                        ),
+                    )
+                    .with_roots([header]),
+                ],
+                &["-x", "c++", &format!("--target={target}")],
+            )
+            .unwrap();
+            let cases: &[&str] = if !alias_qualifier.is_empty() {
+                &["qualified-provider"]
+            } else if qualifier.is_empty() {
+                &[
+                    "matching",
+                    "missing",
+                    "unsupported",
+                    "native-source",
+                    "suppression",
+                    "context-exclusion",
+                    "parent",
+                    "duplicate",
+                    "owner-exclusion",
+                    "projection",
+                    "namespace",
+                ]
+            } else {
+                &["qualified-use"]
+            };
+            for &case in cases {
+                let mut snapshot = original.clone();
+                let provider = snapshot
+                    .facts
+                    .iter()
+                    .find(|fact| {
+                        fact.origin.tu == "typedef-provider-b.cpp" && fact.name == "PayloadAlias"
+                    })
+                    .unwrap()
+                    .clone();
+                let mut excluded = BTreeSet::new();
+                match case {
+                    "missing" => {
+                        snapshot.native_typedef_types.remove(&provider.origin);
+                    }
+                    "unsupported" => {
+                        snapshot
+                            .native_typedef_types
+                            .insert(provider.origin.clone(), None);
+                    }
+                    "native-source" => {
+                        let native = snapshot
+                            .native_typedef_types
+                            .get_mut(&provider.origin)
+                            .unwrap()
+                            .as_mut()
+                            .unwrap();
+                        let NativeTypeLayer::Record(record) = &mut native.layer else {
+                            panic!()
+                        };
+                        record.declaration.spelling.file = "other-provider.hpp".into();
+                    }
+                    "suppression" => {
+                        snapshot
+                            .suppressed_type_origins
+                            .insert(provider.origin.clone());
+                    }
+                    "context-exclusion" => {
+                        excluded.insert(provider.name.clone());
+                    }
+                    "parent" => {
+                        snapshot
+                            .facts
+                            .iter_mut()
+                            .find(|fact| fact.origin == provider.origin)
+                            .unwrap()
+                            .parent = Some(provider.origin.clone());
+                    }
+                    "duplicate" => {
+                        let mut duplicate = provider.clone();
+                        duplicate.origin.local += 1_000_000;
+                        snapshot.native_typedef_types.insert(
+                            duplicate.origin.clone(),
+                            snapshot.native_typedef_types[&provider.origin].clone(),
+                        );
+                        snapshot.facts.push(duplicate);
+                    }
+                    "owner-exclusion" => {
+                        let mut owner = root_owner(
+                            &provider.origin.tu,
+                            &provider.spelling.file,
+                            &RootPartition::new("provider", "Example.Provider"),
+                        );
+                        owner.exclusions.insert(provider.name.clone());
+                        snapshot.root_owners.insert(provider.origin.clone(), owner);
+                    }
+                    "projection" => {
+                        snapshot
+                            .projected_type_names
+                            .insert(provider.origin.clone(), "OtherPayload".into());
+                    }
+                    "namespace" => {
+                        snapshot
+                            .fact_namespace_authorities
+                            .insert(provider.origin.clone(), "Other.Provider".into());
+                    }
+                    _ => {}
+                }
+                let declarations = DeclarationIndex::new(&snapshot.facts);
+                let by_declaration = snapshot
+                    .facts
+                    .iter()
+                    .map(|fact| ((fact.origin.tu.clone(), fact.spelling.clone()), fact))
+                    .collect();
+                let source_names = PlanningSourceNames::new(&snapshot);
+                let source_annotations = snapshot.source_annotation_signatures();
+                let effective_annotations =
+                    Snapshot::relative_annotation_signatures(&snapshot.annotations);
+                let context = crate::com_pointer::Context {
+                    snapshot: &snapshot,
+                    declarations: &declarations,
+                    facts_by_declaration: &by_declaration,
+                    source_names: Some(&source_names),
+                    excluded_types: Some(&excluded),
+                    source_annotations: &source_annotations,
+                    effective_annotations: &effective_annotations,
+                };
+                let interface = |tu: &str| {
+                    snapshot
+                        .facts
+                        .iter()
+                        .find(|fact| fact.origin.tu == tu && fact.name == "ProviderDerived")
+                        .unwrap()
+                };
+                let left = interface("typedef-provider-a.cpp");
+                let right = interface("typedef-provider-b.cpp");
+                let contract = &snapshot.native_com_contracts[&right.origin];
+                assert_eq!(contract.slots[0].name, "Observe");
+                assert!(contract.slots[0].native_params[0].is_some());
+                assert_eq!(
+                    contract.slots[0]
+                        .native_owner
+                        .as_ref()
+                        .unwrap()
+                        .declaration
+                        .parent
+                        .name,
+                    "ProviderBase"
+                );
+                let result = contextual_interface_matches(&context, left, right);
+                if matches!(case, "matching" | "qualified-provider") {
+                    result.unwrap();
+                    println!("typedef provider case={case} target={target} assertions=passed");
+                    continue;
+                }
+                let error = result.unwrap_err();
+                assert!(
+                    error.contains("method[0](Observe).params[0]: reference layout"),
+                    "{case}/{target}: {error}"
+                );
+                let expected = match case {
+                    "missing" => "native-binding=missing",
+                    "unsupported" => "native-binding=unsupported",
+                    "native-source" | "qualified-use" => "native-binding=mismatch",
+                    "suppression" => "native-binding=matched suppressed=true excluded=false",
+                    "context-exclusion" => "native-binding=matched suppressed=false excluded=true",
+                    "parent" => "parent=Some(Origin",
+                    "duplicate" => {
+                        "native-binding=matched suppressed=false excluded=false declaration-count=2"
+                    }
+                    "owner-exclusion" => "unsupported source ownership or excluded provider",
+                    "projection" | "namespace" => "canonical provider contract differs",
+                    _ => unreachable!(),
+                };
+                assert!(error.contains(expected), "{case}/{target}: {error}");
+                if !matches!(case, "owner-exclusion" | "projection" | "namespace") {
+                    let rejected_tu = if matches!(case, "context-exclusion" | "qualified-use") {
+                        "typedef-provider-a.cpp"
+                    } else {
+                        "typedef-provider-b.cpp"
+                    };
+                    let rejected = context
+                        .exact(rejected_tu, &provider.name, &provider.spelling)
+                        .unwrap();
+                    assert!(
+                        error.contains(&format!(
+                            "ineligible canonical typedef provider {:?}: kind=Typedef",
+                            rejected.origin
+                        )),
+                        "{error}"
+                    );
+                    assert!(error.contains("name=\"PayloadAlias\""), "{error}");
+                    assert!(
+                        error.contains(&format!("spelling={:?}", rejected.spelling)),
+                        "{error}"
+                    );
+                    assert!(
+                        error.contains(&format!(
+                            "suppressed={} excluded={} declaration-count={}",
+                            case == "suppression",
+                            case == "context-exclusion",
+                            if case == "duplicate" { 2 } else { 1 },
+                        )),
+                        "{error}"
+                    );
+                    assert!(error.contains("captured-native=("), "{error}");
+                    assert!(error.contains("use-native=("), "{error}");
+                    if case == "qualified-use" {
+                        assert!(
+                            error.contains("qualifiers=(false, false, false)"),
+                            "{error}"
+                        );
+                        assert!(error.contains("qualifiers=(true, false, false)"), "{error}");
+                    }
+                }
+                println!("typedef provider case={case} target={target} rejection={error}");
+            }
+        }
+    }
+}
+
 fn snapshot(facts: Vec<Fact>) -> Snapshot {
     Snapshot {
         facts,

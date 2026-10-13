@@ -142,6 +142,12 @@ POD records and arrays, not function signatures. Qualifiers, native rank, addres
 and metadata contracts remain required. An unproved attributed record value is rejected even when the
 two captured nodes are identical.
 
+Canonical typedef provider rejections distinguish missing, unsupported and mismatched native
+evidence from suppression, context exclusion, parent scope and declaration ambiguity. They include
+the exact provider source, captured and use-site native summaries, projection and ownership context.
+Native binding and output ownership remain separate required checks; these diagnostics change
+neither eligibility nor namespace selection.
+
 Ordinary interface pointers retain a source-bound nominal witness separate from POD record layout
 evidence. Paired comparison binds each witness to its exact interface declaration and provider
 context, then compares the ordered native slots, signatures, annotations and exception evidence.
