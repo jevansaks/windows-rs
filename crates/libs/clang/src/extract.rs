@@ -1567,6 +1567,7 @@ impl TranslationUnit {
             root_macros: vec![],
             pending_callables: vec![],
             pending_classes: vec![],
+            pending_values: vec![],
             declare_handle_expansions: vec![],
             facts: &mut *output.facts,
             constants: &mut *output.constants,
@@ -1606,6 +1607,12 @@ impl TranslationUnit {
             traversal.class_canonical_origins,
         )?;
         capture_semantic_parents(self.0, &traversal.seen, output.semantic_parents)?;
+        capture_value_semantic_parents(
+            self.0,
+            &traversal.pending_values,
+            &traversal.seen,
+            output.semantic_parents,
+        );
         com_contracts::capture(
             &mut traversal,
             output.native_com_contracts,
@@ -1741,6 +1748,7 @@ struct Traversal<'a> {
     root_macros: Vec<(usize, CXCursor)>,
     pending_callables: Vec<(usize, CXCursor)>,
     pending_classes: Vec<(Origin, CXCursor)>,
+    pending_values: Vec<(CXCursor, Origin)>,
     declare_handle_expansions: Vec<DeclareHandleExpansion>,
     facts: &'a mut Vec<Fact>,
     constants: &'a mut Vec<Constant>,
@@ -3311,6 +3319,7 @@ fn extract_child(
                 root: true,
                 system,
             });
+            traversal.pending_values.push((child, origin.clone()));
             traversal.constants.push(Constant {
                 root: origin.clone(),
                 definition: origin.clone(),
@@ -3350,6 +3359,7 @@ fn extract_child(
                 root: true,
                 system,
             });
+            traversal.pending_values.push((child, origin.clone()));
             for constant in cursor_children(child).into_iter().filter(|cursor| unsafe {
                 clang_getCursorKind(*cursor) == CXCursor_EnumConstantDecl
             }) {
@@ -3687,6 +3697,58 @@ fn observe_specialization_anchors(
     Ok(())
 }
 
+enum NativeSemanticParent<'a> {
+    Unproved,
+    ConflictingOrigins,
+    Captured {
+        kind: CXCursorKind,
+        parent: Option<&'a Origin>,
+    },
+}
+
+fn native_semantic_parent<'a>(
+    tu: CXTranslationUnit,
+    cursor: CXCursor,
+    origin: &Origin,
+    seen: &'a HashMap<u32, Vec<(CXCursor, Origin)>>,
+) -> NativeSemanticParent<'a> {
+    let semantic = unsafe { clang_getCursorSemanticParent(cursor) };
+    if unsafe {
+        clang_Cursor_isNull(semantic) != 0
+            || clang_Cursor_getTranslationUnit(cursor) != tu
+            || clang_Cursor_getTranslationUnit(semantic) != tu
+    } {
+        return NativeSemanticParent::Unproved;
+    }
+    let kind = unsafe { clang_getCursorKind(semantic) };
+    if kind == CXCursor_TranslationUnit {
+        return NativeSemanticParent::Captured { kind, parent: None };
+    }
+    let mut matched = None;
+    for (candidate, candidate_origin) in seen
+        .get(&unsafe { clang_hashCursor(semantic) })
+        .into_iter()
+        .flatten()
+    {
+        if unsafe { clang_equalCursors(semantic, *candidate) } == 0 {
+            continue;
+        }
+        if candidate_origin.tu != origin.tu
+            || matched.is_some_and(|previous| previous != candidate_origin)
+        {
+            return NativeSemanticParent::ConflictingOrigins;
+        }
+        matched = Some(candidate_origin);
+    }
+    match matched {
+        Some(parent) => NativeSemanticParent::Captured {
+            kind,
+            parent: Some(parent),
+        },
+        None => NativeSemanticParent::Unproved,
+    }
+}
+
 fn capture_semantic_parents(
     tu: CXTranslationUnit,
     seen: &HashMap<u32, Vec<(CXCursor, Origin)>>,
@@ -3704,39 +3766,14 @@ fn capture_semantic_parents(
                 | CXCursor_TypeAliasDecl
         )
     }) {
-        let semantic = unsafe { clang_getCursorSemanticParent(*cursor) };
-        if unsafe {
-            clang_Cursor_isNull(semantic) != 0
-                || clang_Cursor_getTranslationUnit(*cursor) != tu
-                || clang_Cursor_getTranslationUnit(semantic) != tu
-        } {
-            continue;
-        }
-        let parent = if unsafe { clang_getCursorKind(semantic) } == CXCursor_TranslationUnit {
-            None
-        } else {
-            let mut matched = None;
-            for (candidate, candidate_origin) in seen
-                .get(&unsafe { clang_hashCursor(semantic) })
-                .into_iter()
-                .flatten()
-            {
-                if unsafe { clang_equalCursors(semantic, *candidate) } == 0 {
-                    continue;
-                }
-                if candidate_origin.tu != origin.tu
-                    || matched.is_some_and(|previous| previous != candidate_origin)
-                {
-                    return Err(Error(
-                        "conflicting exact native semantic parent origins".into(),
-                    ));
-                }
-                matched = Some(candidate_origin);
+        let parent = match native_semantic_parent(tu, *cursor, origin, seen) {
+            NativeSemanticParent::Unproved => continue,
+            NativeSemanticParent::ConflictingOrigins => {
+                return Err(Error(
+                    "conflicting exact native semantic parent origins".into(),
+                ));
             }
-            let Some(parent) = matched else {
-                continue;
-            };
-            Some(parent.clone())
+            NativeSemanticParent::Captured { parent, .. } => parent.cloned(),
         };
         if let Some(previous) = output.insert(origin.clone(), parent.clone())
             && previous != parent
@@ -3746,6 +3783,37 @@ fn capture_semantic_parents(
     }
     Ok(())
 }
+
+fn capture_value_semantic_parents(
+    tu: CXTranslationUnit,
+    pending: &[(CXCursor, Origin)],
+    seen: &HashMap<u32, Vec<(CXCursor, Origin)>>,
+    output: &mut BTreeMap<Origin, Option<Origin>>,
+) {
+    for (cursor, origin) in pending {
+        let NativeSemanticParent::Captured { kind, parent } =
+            native_semantic_parent(tu, *cursor, origin, seen)
+        else {
+            continue;
+        };
+        if matches!(
+            kind,
+            CXCursor_TranslationUnit
+                | CXCursor_Namespace
+                | CXCursor_ClassDecl
+                | CXCursor_StructDecl
+                | CXCursor_UnionDecl
+                | CXCursor_EnumDecl
+                | CXCursor_TypedefDecl
+                | CXCursor_TypeAliasDecl
+        ) {
+            output.insert(origin.clone(), parent.cloned());
+        }
+    }
+}
+
+#[cfg(test)]
+mod value_scope_tests;
 
 fn bind_class_origins(
     tu: CXTranslationUnit,

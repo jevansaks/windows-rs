@@ -239,6 +239,19 @@ and anonymous enums whose constant origins have no `Fact`. Capture occurs at the
 cursor. Anonymous enum constants share the enum's origin; the enum does not become a metadata type.
 Macros and named enum variants keep their existing fact-backed evidence. This source collection
 does not participate in emission or change native value types and declaration annotations.
+The private semantic-parent map also retains native scope relations for these value declarations.
+Each captured variable or anonymous enum retains one temporary cursor until the existing
+pre-disposal capture point; enum members share that declaration relation. Value declarations stay
+outside the type traversal's seen registry, and their public parent field remains lexical.
+Only an explicitly captured translation-unit parent proves global scope. Named parents resolve
+against the native hash/equality registry. Missing, unsupported, foreign, or ambiguous parents leave
+the relation absent, not global, without making optional value identity an extraction error.
+The type authority path's checked semantic-chain walk requires every same-TU link and a supported
+named parent fact through that explicit terminus. Locations remain provenance, not scope keys.
+Captured values and native definition flags are separate observations. An in-class static constant
+can have an evaluated initializer while `definition` is false; its out-of-line definition retains
+`definition = true`. These scope relations do not establish identity across physical headers or
+count defining native bodies.
 Synthetic callback origins start after the original traversal's allocation domain, including
 native value declarations and cursors that do not produce facts.
 Generated callback names bind to the native owner's spelling and expansion locations, kind and

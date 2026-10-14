@@ -1647,50 +1647,15 @@ impl AuthorityTypeIdentity {
         fact: &Fact,
         authority: &HeaderAuthority,
     ) -> Result<Self, String> {
-        let snapshot = context.snapshot;
         let name = |fact: &Fact| {
             context
                 .source_names
                 .map_or(fact.name.as_str(), |names| names.fact_name(fact))
                 .to_string()
         };
-        let parent = |origin: &Origin| {
-            snapshot.semantic_parents.get(origin).ok_or_else(|| {
-                format!(
-                    "required type `{}` has no captured native semantic-parent relation for {}",
-                    name(fact),
-                    super::origin(origin)
-                )
-            })
-        };
-        let mut scope = Vec::new();
-        let mut current = parent(&fact.origin)?.as_ref();
-        let mut seen = HashSet::new();
-        while let Some(origin) = current {
-            if origin.tu != fact.origin.tu || !seen.insert(origin) {
-                return Err(format!(
-                    "required type `{}` has a cyclic or cross-TU native semantic scope",
-                    name(fact)
-                ));
-            }
-            let ancestor = facts.get(origin).ok_or_else(|| {
-                format!(
-                    "required type `{}` has no captured native semantic parent fact for {}",
-                    name(fact),
-                    super::origin(origin)
-                )
-            })?;
-            let role = semantic_type_role(ancestor.kind).ok_or_else(|| {
-                format!(
-                    "required type `{}` has an unsupported native semantic parent {:?}",
-                    name(fact),
-                    ancestor.kind
-                )
-            })?;
-            scope.push((role, name(ancestor)));
-            current = parent(origin)?.as_ref();
-        }
-        scope.reverse();
+        let scope = checked_semantic_scope(context.snapshot, facts, &fact.origin, name, || {
+            format!("required type `{}`", name(fact))
+        })?;
         Ok(Self {
             header: normalize_name(&authority.owner.root),
             input: authority.owner.input.clone(),
@@ -1699,6 +1664,53 @@ impl AuthorityTypeIdentity {
             role: semantic_type_role(fact.kind).unwrap(),
         })
     }
+}
+
+pub(super) fn checked_semantic_scope(
+    snapshot: &Snapshot,
+    facts: &HashMap<&Origin, &Fact>,
+    declaration: &Origin,
+    name: impl Fn(&Fact) -> String,
+    subject: impl Fn() -> String,
+) -> Result<Vec<(SemanticTypeRole, String)>, String> {
+    let parent = |origin: &Origin| {
+        snapshot.semantic_parents.get(origin).ok_or_else(|| {
+            format!(
+                "{} has no captured native semantic-parent relation for {}",
+                subject(),
+                super::origin(origin)
+            )
+        })
+    };
+    let mut scope = Vec::new();
+    let mut current = parent(declaration)?.as_ref();
+    let mut seen = HashSet::new();
+    while let Some(origin) = current {
+        if origin.tu != declaration.tu || !seen.insert(origin) {
+            return Err(format!(
+                "{} has a cyclic or cross-TU native semantic scope",
+                subject()
+            ));
+        }
+        let ancestor = facts.get(origin).ok_or_else(|| {
+            format!(
+                "{} has no captured native semantic parent fact for {}",
+                subject(),
+                super::origin(origin)
+            )
+        })?;
+        let role = semantic_type_role(ancestor.kind).ok_or_else(|| {
+            format!(
+                "{} has an unsupported native semantic parent {:?}",
+                subject(),
+                ancestor.kind
+            )
+        })?;
+        scope.push((role, name(ancestor)));
+        current = parent(origin)?.as_ref();
+    }
+    scope.reverse();
+    Ok(scope)
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
