@@ -1,0 +1,7 @@
+#if defined(CONTROL_UNPROVED)
+typedef enum { CONTROL_NONE = 0, CONTROL_VALUE = (3) } CONTROL_ENUM;
+#elif defined(CONTROL_DIFFERENT)
+typedef enum { CONTROL_NONE = 0, CONTROL_VALUE = 2 } CONTROL_ENUM;
+#else
+typedef enum { CONTROL_NONE = 0, CONTROL_VALUE = 1 } CONTROL_ENUM;
+#endif

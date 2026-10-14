@@ -9703,6 +9703,9 @@ impl PlanningSourceNames {
             .filter(|fact| {
                 matches!(fact.kind, FactKind::Enum | FactKind::Typedef)
                     && snapshot.shared_enum_identities.contains_key(&fact.origin)
+                    && (!snapshot.ranked_header_partition_policy
+                        || fact_header_authority(&snapshot.header_authorities, fact)
+                            .is_none_or(|authority| fact.origin.tu == authority.owner.input))
             })
             .map(|fact| (&fact.origin, fact))
             .collect();
@@ -9728,14 +9731,32 @@ impl PlanningSourceNames {
             if declarations.len() <= 1 {
                 continue;
             }
-            let first = &members[0].1.definition;
-            let compatible = members.iter().all(|(_, identity)| {
-                identity.definition == *first
-                    && facts
-                        .get(&identity.enumeration)
-                        .is_some_and(|fact| fact.data == identity.definition.data)
+            let cohort: Vec<_> = members
+                .iter()
+                .copied()
+                .filter(|(origin, _)| {
+                    !snapshot.ranked_header_partition_policy
+                        || facts.get(*origin).is_some_and(|fact| {
+                            fact_header_authority(&snapshot.header_authorities, fact).is_some()
+                        })
+                })
+                .collect();
+            let matches_definition =
+                |identity: &SharedEnumIdentity, definition: &SharedEnumDefinition| {
+                    identity.definition.as_ref() == definition
+                        && facts
+                            .get(&identity.enumeration)
+                            .is_some_and(|fact| fact.data == identity.definition.data)
+                };
+            let first = cohort
+                .first()
+                .map(|(_, identity)| identity.definition.as_ref());
+            let compatible = first.is_none_or(|first| {
+                cohort
+                    .iter()
+                    .all(|(_, identity)| matches_definition(identity, first))
             });
-            let providers: Vec<_> = members
+            let providers: Vec<_> = cohort
                 .iter()
                 .filter_map(|(origin, identity)| {
                     if **origin != identity.enumeration {
@@ -9763,8 +9784,15 @@ impl PlanningSourceNames {
             } else {
                 Err(SharedEnumProviderFailure::MissingProvider)
             };
-            for (origin, _) in members {
-                result.insert((*origin).clone(), selected.clone());
+            for (origin, identity) in members {
+                let admission = if selected.is_ok()
+                    && first.is_some_and(|first| !matches_definition(identity, first))
+                {
+                    Err(SharedEnumProviderFailure::ConflictingDefinitions)
+                } else {
+                    selected.clone()
+                };
+                result.insert((*origin).clone(), admission);
             }
         }
         result
@@ -11517,6 +11545,58 @@ fn choose_type_root<'a>(
     choose_type_root_cached(name, roots, facts_index, &mut ShapeCache::default())
 }
 
+fn choose_shared_enum_root<'a>(
+    context: &com_pointer::Context<'_, 'a>,
+    name: &str,
+    roots: &[&'a Fact],
+    facts_index: &HashMap<&str, Vec<&'a Fact>>,
+    shape_cache: &mut ShapeCache,
+    source_names: Option<&PlanningSourceNames>,
+    com_bindings: &com_pointer::Bindings<'a>,
+) -> Result<Option<&'a Fact>, Error> {
+    let Some(names) = source_names.filter(|names| {
+        !roots.is_empty()
+            && roots
+                .iter()
+                .all(|fact| names.shared_enum_providers.contains_key(&fact.origin))
+    }) else {
+        return Ok(None);
+    };
+    let provider = names.shared_enum_providers[&roots[0].origin]
+        .as_ref()
+        .map_err(|error| Error(error.message().to_string()))?;
+    for fact in roots {
+        if names.shared_enum_providers[&fact.origin]
+            .as_ref()
+            .map_err(|error| Error(error.message().to_string()))?
+            != provider
+        {
+            return Err(Error(format!(
+                "conflicting shared enum providers for `{name}`"
+            )));
+        }
+    }
+    let fact = facts_index
+        .get(name)
+        .into_iter()
+        .flatten()
+        .find(|fact| &fact.origin == provider)
+        .copied()
+        .ok_or_else(|| Error(format!("missing proved shared enum provider for `{name}`")))?;
+    if context.snapshot.ranked_header_partition_policy {
+        let authority = com_bindings.authoritative_type(context, fact, facts_index, shape_cache)?;
+        if authority.origin != *provider {
+            return Err(Error(format!(
+                "proved shared enum provider for `{name}` does not retain its exact \
+                 authoritative origin: {} -> {}",
+                origin(provider),
+                origin(&authority.origin),
+            )));
+        }
+    }
+    emittable_type(name, fact).map(Some)
+}
+
 fn choose_proven_type_root<'a>(
     context: &com_pointer::Context<'_, 'a>,
     name: &str,
@@ -11542,7 +11622,18 @@ fn choose_proven_type_root<'a>(
                 selected.push(authority);
             }
         }
-        let selected = choose_type_root_cached(name, &selected, facts_index, shape_cache)?;
+        let selected = match choose_shared_enum_root(
+            context,
+            name,
+            &selected,
+            facts_index,
+            shape_cache,
+            source_names,
+            com_bindings,
+        )? {
+            Some(provider) => provider,
+            None => choose_type_root_cached(name, &selected, facts_index, shape_cache)?,
+        };
         if matches!(selected.data, FactData::Interface { .. }) {
             context
                 .validate_selected_interface(selected)
@@ -11567,37 +11658,16 @@ fn choose_proven_type_root<'a>(
         }
         return choose_type_root_cached(name, &proved, facts_index, shape_cache);
     }
-    if let Some(names) = source_names
-        && !roots.is_empty()
-        && roots
-            .iter()
-            .all(|fact| names.shared_enum_providers.contains_key(&fact.origin))
-    {
-        let provider = names.shared_enum_providers[&roots[0].origin]
-            .as_ref()
-            .map_err(|error| Error(error.message().to_string()))?;
-        for fact in roots {
-            if names.shared_enum_providers[&fact.origin]
-                .as_ref()
-                .map_err(|error| Error(error.message().to_string()))?
-                != provider
-            {
-                return Err(Error(format!(
-                    "conflicting shared enum providers for `{name}`"
-                )));
-            }
-        }
-        if let Some(fact) = facts_index
-            .get(name)
-            .into_iter()
-            .flatten()
-            .find(|fact| &fact.origin == provider)
-        {
-            return emittable_type(name, fact);
-        }
-        return Err(Error(format!(
-            "missing proved shared enum provider for `{name}`"
-        )));
+    if let Some(provider) = choose_shared_enum_root(
+        context,
+        name,
+        roots,
+        facts_index,
+        shape_cache,
+        source_names,
+        com_bindings,
+    )? {
+        return Ok(provider);
     }
     let definition = roots
         .iter()
@@ -15686,6 +15756,7 @@ mod tests {
     mod planner_lookups;
     mod producer_corrections;
     mod ranked_types;
+    mod shared_enum_authority_control;
 
     fn test_fact(
         local: u32,

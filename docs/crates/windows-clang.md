@@ -580,6 +580,21 @@ no explicit base, and no scoped enum. Native enum and alias USRs, raw declaratio
 representation, and enumerators must all agree. Macros, anonymous or internal contexts, and
 unsupported declarations do not acquire this proof from equal evaluated values.
 
+With ranked header authority, shared-identity admission uses only the chosen original input for
+each registered physical header. Chosen-but-excluded declarations still constrain compatibility;
+public root, owner, exclusion, and suppression checks separately select emitted providers. Losing
+contexts cannot supply missing proof or veto compatible chosen declarations. A chosen declaration
+outside the literal-token proof subset keeps normal exact native emission and dependency checks,
+without acquiring cross-header identity from a provable alternative. Missing original contexts
+remain demand-time authority errors, not errors for unrelated observations.
+Unregistered observations do not constrain that chosen cohort. A required unregistered origin can
+use its own captured native identity to reach a compatible chosen public provider; incompatibility
+is recorded for that origin without invalidating registered providers or other compatible uses.
+Ranked type coalescing checks every original authority demand before consuming shared-provider
+proof. Every resolved candidate must designate the same exact provider, whose own authority and
+representation checks still apply. Missing candidate proof keeps normal declaration selection;
+shared identity does not waive an original exclusion, suppression, or absent context.
+
 Header planning can satisfy an excluded presentation's exact dependency through a proved compatible
 public enum provider. Original facts, Origins, and local alias-to-enum edges remain unchanged.
 The chosen provider retains its own owner and namespace; excluded metadata is not transferred.
