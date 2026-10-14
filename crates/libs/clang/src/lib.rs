@@ -9253,7 +9253,18 @@ impl HeaderPartitionPlan {
         self,
         options: &EmitOptions<'_>,
     ) -> Result<BTreeMap<RdlPartition, String>, Error> {
-        Ok(self.emit_report(options, false)?.partitions)
+        Ok(self.emit_with_report(options)?.partitions)
+    }
+
+    /// Emits strict metadata with structured definition evidence and comparison coverage.
+    ///
+    /// Selected declaration and dependency failures remain errors; this does not allow omissions.
+    /// Unknown evidence is returned without an RDL difference note.
+    pub fn emit_with_report(
+        self,
+        options: &EmitOptions<'_>,
+    ) -> Result<HeaderPartitionReport, Error> {
+        self.emit_report(options, false)
     }
 
     /// Emits valid partial metadata for enum conflicts and reports every affected declaration.

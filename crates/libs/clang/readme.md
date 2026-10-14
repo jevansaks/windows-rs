@@ -97,10 +97,13 @@ projection, dependencies, and emission. Alternative annotation differences do no
 output. Ordinary `extract*` APIs retain their legacy cross-context union and extraction errors.
 Ranked plans observe emitted record, COM-interface, and native enum definitions after successful
 selected-type validation.
-`emit_with_enum_diagnostics` returns `HeaderPartitionReport::definition_evidence` and an explicit
-captured-bodies/referent-const coverage. Genuine differences appear as structured keys and
-matching RDL comments; missing or unsupported evidence is report-only `Unknown`. Observations do
-not gate authoritative definitions. Declared interface members and inherited projected COM slots
+`emit_with_report` returns strict RDL partitions, `HeaderPartitionReport::definition_evidence`, and
+explicit captured-bodies/referent-const coverage. Selected declaration and dependency failures remain
+errors, without omissions. `emit_with_options` returns only the partitions from that same strict path.
+`emit_with_enum_diagnostics` returns a report with the explicit partial enum-omission policy.
+Both report methods retain `Unknown` evidence without an RDL difference note.
+Genuine differences appear as structured keys and matching RDL comments. Observations do not gate
+authoritative definitions. Declared interface members and inherited projected COM slots
 are separate domains. Native enums compare representation, ordered variants, fixed/scoped shape,
 and bounded captured annotations. Selected IID/flag settings and emitted overload order are reported
 separately from native-body keys. Standalone aliases, functions, constants, SAL, shared/synthetic

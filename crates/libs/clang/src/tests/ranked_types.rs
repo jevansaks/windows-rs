@@ -886,7 +886,10 @@ fn ranked_record_difference_reports_causal_key_without_changing_selected_body() 
             options.library = Some("authority.dll");
             assert!(!plan.audit(&options).unwrap().has_blocking_conflicts());
             let legacy = output_without_notes(plan.clone());
+            let strict = plan.clone().emit_with_report(&options).unwrap();
+            assert_eq!(strict.partitions, output(plan.clone()).unwrap());
             let report = report(plan).unwrap();
+            assert_eq!(strict, report);
             assert!(report.omissions.is_empty());
             assert_eq!(ranked_record_rows(&report).len(), 1);
             let row = evidence(&report, "EvidenceRecord");
@@ -936,7 +939,13 @@ fn ranked_record_alias_const_is_normalized_only_at_its_own_indirection_level() {
             for reversed in [false, true] {
                 let plan = ranked_plan(target, case, reversed);
                 assert_selected_alias_record(&plan, target, case == "evidence-reference");
+                let references = BTreeMap::new();
+                let mut options = EmitOptions::new("Test", &references);
+                options.library = Some("authority.dll");
+                let strict = plan.clone().emit_with_report(&options).unwrap();
+                assert_eq!(strict.partitions, output(plan.clone()).unwrap());
                 let report = report(plan).unwrap();
+                assert_eq!(strict, report);
                 assert!(
                     ranked_record_rows(&report).is_empty(),
                     "{target} {case}: {report:?}"
@@ -1015,7 +1024,13 @@ fn ranked_record_missing_alternative_alias_evidence_is_unknown_not_borrowed() {
             } else {
                 *plan.snapshot.native_typedef_types.get_mut(&alias).unwrap() = None;
             }
+            let references = BTreeMap::new();
+            let mut options = EmitOptions::new("Test", &references);
+            options.library = Some("authority.dll");
+            let strict = plan.clone().emit_with_report(&options).unwrap();
+            assert_eq!(strict.partitions, output(plan.clone()).unwrap());
             let report = report(plan).unwrap();
+            assert_eq!(strict, report);
             assert_eq!(ranked_record_rows(&report).len(), 1, "{report:?}");
             let row = evidence(&report, "EvidenceRecord");
             let DefinitionComparison::Unknown(keys) = &row.outcome else {
@@ -1037,6 +1052,73 @@ fn ranked_record_missing_alternative_alias_evidence_is_unknown_not_borrowed() {
                 "{text}"
             );
             assert!(text.contains("struct EvidenceRecord"), "{text}");
+        }
+    }
+}
+
+#[test]
+fn ranked_strict_report_required_excluded_enum_keeps_partial_policy_explicit() {
+    helpers::ensure_libclang();
+    for target in TARGETS {
+        for reversed in [false, true] {
+            let mut inputs = vec![
+                Input::new(
+                    "report-enum.hpp",
+                    "enum ReportEnum { ReportValue=1 };
+                     struct EnumUser { ReportEnum value; };",
+                ),
+                Input::new(
+                    "report-independent.hpp",
+                    "struct Independent { int value; };",
+                ),
+            ];
+            if reversed {
+                inputs.reverse();
+            }
+            let target = format!("--target={target}");
+            let snapshot = extract(inputs, &["-x", "c++", "--no-default-config", &target]).unwrap();
+            let policy = HeaderPartitionPolicy::new()
+                .with_traversed_header(
+                    "report-enum.hpp",
+                    RootPartition::new("Api", "Test.Api").with_exclusion("ReportEnum"),
+                )
+                .with_traversed_header(
+                    "report-independent.hpp",
+                    RootPartition::new("Independent", "Test.Independent"),
+                );
+            let plan = snapshot
+                .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
+                .unwrap();
+            let references = BTreeMap::new();
+            let options = EmitOptions::new("Test", &references);
+            let strict = plan
+                .clone()
+                .emit_with_report(&options)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(
+                strict,
+                plan.clone()
+                    .emit_with_options(&options)
+                    .unwrap_err()
+                    .to_string()
+            );
+            assert!(strict.contains("ReportEnum"), "{strict}");
+            assert!(strict.contains("EnumUser"), "{strict}");
+            assert!(strict.contains("owner-excluded"), "{strict}");
+            let partial = plan.emit_with_enum_diagnostics(&options).unwrap();
+            assert!(partial.is_partial());
+            assert!(partial.omissions.iter().any(|omission| {
+                omission.declaration.name == "EnumUser"
+                    && omission.cause == EnumOmissionCause::ExcludedDependency
+            }));
+            let text = partial.partitions.values().cloned().collect::<String>();
+            assert!(text.contains("struct Independent"), "{text}");
+            assert!(!text.contains("struct EnumUser"), "{text}");
+            assert_eq!(
+                partial.definition_evidence_coverage,
+                DefinitionEvidenceCoverage::NotCompared
+            );
         }
     }
 }

@@ -373,6 +373,13 @@ The selected type body, namespace, and annotations are retained.
 `Different` rows have ordered causal keys such as `field[0:value].type`. Their stored `message` is
 also emitted before the type with the prefix `// windows-clang: `. `Unknown` is report-only.
 
+`HeaderPartitionPlan::emit_with_report` returns this evidence and coverage under strict emission:
+selected declaration, dependency, and enum representation failures remain errors, with no omissions.
+`emit_with_options` is the same strict path returning only the RDL partitions.
+`emit_with_enum_diagnostics` returns the report with the explicit enum-omission policy described
+below. Both report methods retain `Unknown` evidence without an RDL difference note; alternative
+native definition differences remain nonfatal observations in both modes.
+
 `definition_evidence_coverage` marks unranked plans as `NotCompared`. Ranked plans declare
 `CapturedBodiesAndReferentConst` coverage. Its original three record counters retain their record-only
 meanings; `interfaces` and `enums` each count selected definitions, alternative defining contexts,
