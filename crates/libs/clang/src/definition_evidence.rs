@@ -13,7 +13,9 @@ pub enum DefinitionEvidenceCoverage {
     /// Captured defining bodies and pointer/reference referent const, not full native ABI.
     ///
     /// The three record counters retain their record-only meanings. Interface and enum contexts
-    /// are counted separately. Named referents contribute identity, not recursive body proof.
+    /// are counted separately. Shared enums count physical authority bodies represented by an
+    /// emitted provider, not output enums or aliases. Named referents contribute identity, not
+    /// recursive body proof.
     CapturedBodiesAndReferentConst {
         selected_records: usize,
         alternative_definitions: usize,
@@ -105,12 +107,21 @@ pub enum DefinitionComparison {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefinitionProvider {
+    pub identity: DefinitionIdentity,
+    pub observation: DefinitionObservation,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DefinitionEvidence {
     pub identity: DefinitionIdentity,
     pub body_kind: DefinitionBodyKind,
+    /// Final output settings, which may belong to `emitted_provider` rather than `selected`.
     pub selected_emission: Option<DefinitionEmission>,
     pub selected: DefinitionObservation,
     pub alternative: DefinitionObservation,
+    /// The actual emitted provider when it differs from the selected physical authority body.
+    pub emitted_provider: Option<DefinitionProvider>,
     pub outcome: DefinitionComparison,
     /// The same message is prepended to RDL for `Different` only.
     pub message: String,
@@ -699,6 +710,10 @@ impl Normalizer<'_, '_> {
             return NormalizedType::unknown("shared literal enum is outside the comparison domain")
                 .keys;
         }
+        self.enumeration_body(fact)
+    }
+
+    fn enumeration_body(&self, fact: &Fact) -> Keys {
         let FactData::Enum {
             repr,
             variants,
@@ -768,8 +783,19 @@ impl Normalizer<'_, '_> {
         )
     }
 
-    fn definitions(&mut self, facts: &[&Fact], kind: DefinitionBodyKind) -> Keys {
-        let mut shapes = facts.iter().map(|fact| self.definition(fact, kind));
+    fn definitions(
+        &mut self,
+        facts: &[&Fact],
+        kind: DefinitionBodyKind,
+        shared_enum: bool,
+    ) -> Keys {
+        let mut shapes = facts.iter().map(|fact| {
+            if shared_enum {
+                self.enumeration_body(fact)
+            } else {
+                self.definition(fact, kind)
+            }
+        });
         let first = shapes.next().unwrap();
         if shapes.any(|shape| shape != first) {
             BTreeMap::from([(
@@ -983,6 +1009,18 @@ fn render(row: &DefinitionEvidence) -> String {
             ));
         }
     }
+    if let Some(provider) = &row.emitted_provider {
+        provenance.push_str(&format!(
+            " emitted-provider={:?} header={:?} input={:?} partition={:?} rank={:?} \
+             locations={:?}",
+            provider.identity.name,
+            provider.identity.header,
+            provider.observation.input,
+            provider.observation.partition,
+            provider.observation.rank,
+            provider.observation.defining_locations,
+        ));
+    }
     format!(
         "{} definition {:?} scope={:?} header={:?} selected={:?} rank={} \
          alternative={:?} rank={} comparison={} [{changes}]{provenance}",
@@ -1022,6 +1060,7 @@ pub(super) fn observe(
     types: &[PlannedFact<'_>],
     interface_guids: &BTreeMap<String, String>,
     flag_enums: &BTreeSet<(String, String)>,
+    source_names: Option<&PlanningSourceNames>,
 ) -> DefinitionObservations {
     #[cfg(test)]
     OBSERVATION_CALLS.set(OBSERVATION_CALLS.get() + 1);
@@ -1035,8 +1074,26 @@ pub(super) fn observe(
     let mut selected: BTreeMap<_, Vec<_>> = BTreeMap::new();
     let mut kinds = BTreeMap::new();
     let mut emissions = BTreeMap::new();
+    let mut enum_providers = HashMap::new();
     for planned in types {
         let fact = planned.fact;
+        if let FactData::Enum { repr, .. } = &fact.data {
+            let coerced = flag_enums.contains(&(fact.origin.tu.clone(), planned.name.clone()));
+            enum_providers.insert(
+                &fact.origin,
+                (
+                    fact,
+                    DefinitionEmission::Enum {
+                        repr: if coerced {
+                            unsigned_scalar(*repr)
+                        } else {
+                            *repr
+                        },
+                        flags: coerced || snapshot.clang_flag_enums.contains(&fact.origin),
+                    },
+                ),
+            );
+        }
         if fact.definition
             && matches!(
                 fact.data,
@@ -1071,26 +1128,48 @@ pub(super) fn observe(
                         }),
                     )
                 }
-                FactData::Enum { repr, .. } => {
-                    let coerced =
-                        flag_enums.contains(&(fact.origin.tu.clone(), planned.name.clone()));
-                    (
-                        DefinitionBodyKind::Enum,
-                        Some(DefinitionEmission::Enum {
-                            repr: if coerced {
-                                unsigned_scalar(*repr)
-                            } else {
-                                *repr
-                            },
-                            flags: coerced || snapshot.clang_flag_enums.contains(&fact.origin),
-                        }),
-                    )
-                }
+                FactData::Enum { .. } => (
+                    DefinitionBodyKind::Enum,
+                    Some(enum_providers[&fact.origin].1.clone()),
+                ),
                 _ => (DefinitionBodyKind::Record, None),
             };
             kinds.insert(identity.clone(), kind);
             emissions.insert(identity.clone(), emission);
             selected.entry(identity).or_default().push(fact);
+        }
+    }
+    let mut shared_providers = BTreeMap::new();
+    if let Some(source_names) = source_names {
+        for fact in &snapshot.facts {
+            if fact.kind != FactKind::Enum
+                || !fact.definition
+                || !snapshot.shared_enum_identities.contains_key(&fact.origin)
+                || fact_header_authority(&snapshot.header_authorities, fact)
+                    .is_none_or(|authority| authority.owner.input != fact.origin.tu)
+            {
+                continue;
+            }
+            let Some(Ok(provider)) = source_names.shared_enum_providers.get(&fact.origin) else {
+                continue;
+            };
+            let Some((provider, emission)) = enum_providers.get(provider) else {
+                continue;
+            };
+            let Some(Ok(identity)) = authorities.identities.get(&fact.origin) else {
+                continue;
+            };
+            let Some(Ok(provider_identity)) = authorities.identities.get(&provider.origin) else {
+                continue;
+            };
+            let identity = DefinitionIdentity::from(identity);
+            kinds.insert(identity.clone(), DefinitionBodyKind::Enum);
+            emissions.insert(identity.clone(), Some(emission.clone()));
+            selected.entry(identity.clone()).or_default().push(fact);
+            shared_providers.insert(
+                identity,
+                (*provider, DefinitionIdentity::from(provider_identity)),
+            );
         }
     }
     let mut groups: BTreeMap<_, Vec<_>> = BTreeMap::new();
@@ -1149,10 +1228,15 @@ pub(super) fn observe(
             true,
         );
         let (alternative, alternative_unknown) = observation(snapshot, input, &definitions, false);
-        let selected_shape = selected_shapes
-            .entry(identity.clone())
-            .or_insert_with(|| normalizer.definitions(selected_definitions, kind));
-        let alternative_shape = normalizer.definitions(&definitions, kind);
+        let selected_shape = selected_shapes.entry(identity.clone()).or_insert_with(|| {
+            normalizer.definitions(
+                selected_definitions,
+                kind,
+                shared_providers.contains_key(&identity),
+            )
+        });
+        let alternative_shape =
+            normalizer.definitions(&definitions, kind, shared_providers.contains_key(&identity));
         let mut outcome = compare(selected_shape, &alternative_shape)
             .unwrap_or_else(|| DefinitionComparison::Unknown(Vec::new()));
         let unknown = match &mut outcome {
@@ -1161,6 +1245,21 @@ pub(super) fn observe(
         };
         unknown.extend(selected_unknown);
         unknown.extend(alternative_unknown);
+        let emitted_provider = shared_providers
+            .get(&identity)
+            .filter(|(_, provider_identity)| *provider_identity != identity)
+            .map(|(provider, provider_identity)| {
+                let (observation, provider_unknown) =
+                    observation(snapshot, &provider.origin.tu, &[*provider], true);
+                unknown.extend(provider_unknown.map(|mut unknown| {
+                    unknown.path = "emitted_provider.provenance".to_string();
+                    unknown
+                }));
+                DefinitionProvider {
+                    identity: provider_identity.clone(),
+                    observation,
+                }
+            });
         unknown.sort();
         unknown.dedup();
         if let DefinitionComparison::Unknown(unknown) = &outcome
@@ -1174,6 +1273,7 @@ pub(super) fn observe(
             identity,
             selected: selected_observation,
             alternative,
+            emitted_provider,
             outcome,
             message: String::new(),
         };
@@ -1204,9 +1304,16 @@ pub(super) fn observe(
     let mut notes: HashMap<Origin, String> = HashMap::new();
     for row in &rows {
         if matches!(row.outcome, DefinitionComparison::Different { .. }) {
-            for fact in &selected[&row.identity] {
+            let origins: BTreeSet<_> = match shared_providers.get(&row.identity) {
+                Some((provider, _)) => BTreeSet::from([&provider.origin]),
+                None => selected[&row.identity]
+                    .iter()
+                    .map(|fact| &fact.origin)
+                    .collect(),
+            };
+            for origin in origins {
                 notes
-                    .entry(fact.origin.clone())
+                    .entry(origin.clone())
                     .or_default()
                     .push_str(&format!("    // windows-clang: {}\n", row.message));
             }

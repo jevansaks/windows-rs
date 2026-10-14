@@ -386,6 +386,15 @@ meanings; `interfaces` and `enums` each count selected definitions, alternative 
 and declaration-only contexts, grouped by semantic identity and original input. Repeated
 forwards count once only when that context has no definition. Forward-only alternatives have no body
 evidence row.
+The supported shared-literal subset also observes physical authority enum bodies linked by the
+cached exact native shared-provider map to an actual emitted enum. Unregistered headers without
+physical authority proof, excluded-only families, and families without an emitted provider are
+outside this subset. Enum and alias observations do not count twice. Shared coverage counts physical
+selected identities and alternative original contexts, not the number of output enums.
+If excluded physical A shares an admitted public provider B, a row compares chosen A with losing A.
+Its `emitted_provider: Some(DefinitionProvider)` retains B's separate identity and observation;
+`selected_emission` describes B's finalized settings. `None` retains the ordinary selected-provider
+meaning. The identical stored difference message is routed to B's RDL, not to a fictitious A output.
 An emitted opaque record or fixed enum forward is not a compared definition. A fixed enum forward
 counts as declaration-only according to its captured definition flag, not its number of variants.
 An empty evidence list does

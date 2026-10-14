@@ -3,23 +3,12 @@ use super::*;
 #[test]
 fn native_ranked_shared_enum_losing_context_control() {
     helpers::ensure_libclang();
-    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("tests")
-        .join("shared_enum_authority_control");
-    let a = directory.join("a.h");
-    let b = directory.join("b.h");
-    let consumer = directory.join("consumer.h");
-    let a = a.to_str().unwrap();
-    let b = b.to_str().unwrap();
-    let consumer = consumer.to_str().unwrap();
     for target in [
         "x86_64-pc-windows-msvc",
         "i686-pc-windows-msvc",
         "aarch64-pc-windows-msvc",
     ] {
         println!("TARGET {target}");
-        let target_arg = format!("--target={target}");
         let mut baseline = None;
         for case in [
             "baseline",
@@ -38,58 +27,8 @@ fn native_ranked_shared_enum_losing_context_control() {
                 } else {
                     ""
                 };
-                let mut inputs = vec![
-                    Input::new("control-a.cpp", format!("#include {a:?}\n"))
-                        .with_roots([a])
-                        .partitioned("A"),
-                    Input::new(
-                        "control-b.cpp",
-                        format!("{selected_prefix}#include {b:?}\n"),
-                    )
-                    .with_roots([b])
-                    .partitioned("B"),
-                    Input::new("control-use.cpp", format!("#include {consumer:?}\n"))
-                        .with_roots([a, consumer])
-                        .partitioned("Use"),
-                    Input::new(
-                        "control-losing.cpp",
-                        format!("{losing_prefix}#include {a:?}\n"),
-                    )
-                    .with_roots([a])
-                    .partitioned("Losing"),
-                ];
-                if reversed {
-                    inputs.reverse();
-                }
-                let policy = HeaderPartitionPolicy::new()
-                    .with_partition_authority("A", 0, "control-a.cpp")
-                    .with_partition_authority("B", 1, "control-b.cpp")
-                    .with_partition_authority("Use", 2, "control-use.cpp")
-                    .with_partition_authority("Losing", 3, "control-losing.cpp")
-                    .with_traversed_header(
-                        a,
-                        RootPartition::new("A", "Test.A").with_exclusion("CONTROL_ENUM"),
-                    )
-                    .with_traversed_header(b, RootPartition::new("Use", "Test.Use"))
-                    .with_traversed_header(a, RootPartition::new("Losing", "Test.Losing"))
-                    .with_traversed_header(b, RootPartition::new("B", "Test.B"))
-                    .with_traversed_header(consumer, RootPartition::new("Use", "Test.Use"));
-                let snapshot = extract_partitioned_with_options(
-                    inputs,
-                    &[
-                        "--no-default-config",
-                        "-x",
-                        "c++",
-                        "-std=c++17",
-                        &target_arg,
-                        "-nostdinc",
-                    ],
-                    &ExtractionOptions::new().with_module_free_headers(),
-                )
-                .unwrap();
-                let plan = snapshot
-                    .into_header_partition_plan(&policy, &NamespaceAuthorities::new())
-                    .unwrap();
+                let plan =
+                    shared_control_plan(target, selected_prefix, losing_prefix, "", reversed);
                 let snapshot = &plan.snapshot;
                 assert_eq!(snapshot.shared_enum_identities.len(), 8);
                 let keys: BTreeSet<_> = snapshot
@@ -210,10 +149,12 @@ fn native_ranked_shared_enum_losing_context_control() {
                                 .count(),
                             1
                         );
+                        let body =
+                            certified_shared_body(&report, case == "losing-disagreement", false);
                         if let Some(baseline) = &baseline {
-                            assert_eq!(&report.partitions, baseline);
+                            assert_eq!(&body, baseline);
                         } else {
-                            baseline = Some(report.partitions.clone());
+                            baseline = Some(body);
                         }
                         assert_control_metadata(&report, 1);
                     }
@@ -232,6 +173,354 @@ fn native_ranked_shared_enum_losing_context_control() {
                     }
                 }
             }
+        }
+    }
+}
+
+fn shared_control_plan(
+    target: &str,
+    selected_prefix: &str,
+    losing_prefix: &str,
+    use_prefix: &str,
+    reversed: bool,
+) -> HeaderPartitionPlan {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("shared_enum_authority_control");
+    let a = directory.join("a.h");
+    let b = directory.join("b.h");
+    let consumer = directory.join("consumer.h");
+    let a = a.to_str().unwrap();
+    let b = b.to_str().unwrap();
+    let consumer = consumer.to_str().unwrap();
+    let mut inputs = vec![
+        Input::new("control-a.cpp", format!("#include {a:?}\n"))
+            .with_roots([a])
+            .partitioned("A"),
+        Input::new(
+            "control-b.cpp",
+            format!("{selected_prefix}#include {b:?}\n"),
+        )
+        .with_roots([b])
+        .partitioned("B"),
+        Input::new(
+            "control-use.cpp",
+            format!("{use_prefix}#include {consumer:?}\n"),
+        )
+        .with_roots([a, consumer])
+        .partitioned("Use"),
+        Input::new(
+            "control-losing.cpp",
+            format!("{losing_prefix}#include {a:?}\n"),
+        )
+        .with_roots([a])
+        .partitioned("Losing"),
+    ];
+    if reversed {
+        inputs.reverse();
+    }
+    let policy = HeaderPartitionPolicy::new()
+        .with_partition_authority("A", 0, "control-a.cpp")
+        .with_partition_authority("B", 1, "control-b.cpp")
+        .with_partition_authority("Use", 2, "control-use.cpp")
+        .with_partition_authority("Losing", 3, "control-losing.cpp")
+        .with_traversed_header(
+            a,
+            RootPartition::new("A", "Test.A").with_exclusion("CONTROL_ENUM"),
+        )
+        .with_traversed_header(b, RootPartition::new("Use", "Test.Use"))
+        .with_traversed_header(a, RootPartition::new("Losing", "Test.Losing"))
+        .with_traversed_header(b, RootPartition::new("B", "Test.B"))
+        .with_traversed_header(consumer, RootPartition::new("Use", "Test.Use"));
+    extract_ranked_header_partitions_with_options(
+        inputs,
+        &[
+            "--no-default-config",
+            "-x",
+            "c++",
+            "-std=c++17",
+            &format!("--target={target}"),
+            "-nostdinc",
+        ],
+        &policy,
+        &NamespaceAuthorities::new(),
+        &ExtractionOptions::new().with_module_free_headers(),
+    )
+    .unwrap()
+}
+
+fn certified_shared_body(
+    report: &HeaderPartitionReport,
+    different_a: bool,
+    different_b: bool,
+) -> BTreeMap<RdlPartition, String> {
+    assert!(report.omissions.is_empty());
+    let DefinitionEvidenceCoverage::CapturedBodiesAndReferentConst { enums, .. } =
+        &report.definition_evidence_coverage
+    else {
+        panic!("{report:?}")
+    };
+    assert_eq!(
+        *enums,
+        DefinitionDomainCoverage {
+            selected_definitions: 2,
+            alternative_definitions: 2,
+            declaration_only_observations: 0,
+        }
+    );
+    if !different_a && !different_b {
+        assert!(report.definition_evidence.is_empty(), "{report:?}");
+        assert!(
+            report
+                .partitions
+                .values()
+                .all(|text| !text.contains("// windows-clang:")),
+            "{report:?}"
+        );
+        return report.partitions.clone();
+    }
+    let mut expected = Vec::new();
+    if different_a {
+        expected.push((
+            "/a.h",
+            "control-a.cpp",
+            "A",
+            0,
+            "control-losing.cpp",
+            "Losing",
+            3,
+        ));
+    }
+    if different_b {
+        expected.push(("/b.h", "control-b.cpp", "B", 1, "control-use.cpp", "Use", 2));
+    }
+    assert_eq!(
+        report.definition_evidence.len(),
+        expected.len(),
+        "{report:?}"
+    );
+    let mut certified_notes = Vec::new();
+    let mut messages = BTreeSet::new();
+    for (
+        row,
+        (
+            header,
+            selected_input,
+            selected_partition,
+            selected_rank,
+            alternative_input,
+            alternative_partition,
+            alternative_rank,
+        ),
+    ) in report.definition_evidence.iter().zip(expected)
+    {
+        assert_eq!(row.body_kind, DefinitionBodyKind::Enum);
+        assert_eq!(row.identity.name, "CONTROL_ENUM");
+        assert_eq!(row.identity.role, DefinitionTypeRole::Enum);
+        assert!(row.identity.scope.is_empty());
+        assert!(row.identity.header.ends_with(header));
+        assert_eq!(row.identity.authority_input, selected_input);
+        assert_eq!(row.selected.input, selected_input);
+        assert_eq!(row.selected.partition.as_deref(), Some(selected_partition));
+        assert_eq!(row.selected.rank, Some(selected_rank));
+        assert_eq!(
+            row.selected.candidate_partitions,
+            [(selected_partition.to_string(), selected_rank)]
+        );
+        assert_eq!(row.selected.location.file, row.identity.header);
+        assert_eq!(
+            row.selected.defining_locations,
+            [row.selected.location.clone()]
+        );
+        assert_eq!(row.alternative.input, alternative_input);
+        assert_eq!(
+            row.alternative.partition.as_deref(),
+            Some(alternative_partition)
+        );
+        assert_eq!(row.alternative.rank, Some(alternative_rank));
+        assert_eq!(
+            row.alternative.candidate_partitions,
+            [(alternative_partition.to_string(), alternative_rank)]
+        );
+        assert_eq!(row.alternative.location.file, row.identity.header);
+        assert_eq!(
+            row.alternative.defining_locations,
+            [row.alternative.location.clone()]
+        );
+        if header == "/a.h" {
+            let provider = row.emitted_provider.as_ref().unwrap();
+            assert!(provider.identity.header.ends_with("/b.h"));
+            assert_eq!(provider.identity.authority_input, "control-b.cpp");
+            assert_eq!(provider.identity.name, "CONTROL_ENUM");
+            assert_eq!(provider.identity.role, DefinitionTypeRole::Enum);
+            assert!(provider.identity.scope.is_empty());
+            assert_eq!(provider.observation.input, "control-b.cpp");
+            assert_eq!(provider.observation.partition.as_deref(), Some("B"));
+            assert_eq!(provider.observation.rank, Some(1));
+            assert_eq!(
+                provider.observation.candidate_partitions,
+                [("B".to_string(), 1)]
+            );
+            assert_eq!(provider.observation.location.file, provider.identity.header);
+            assert_eq!(
+                provider.observation.defining_locations,
+                [provider.observation.location.clone()]
+            );
+            assert!(row.message.contains("emitted-provider="));
+        } else {
+            assert!(row.emitted_provider.is_none(), "{row:?}");
+            assert!(!row.message.contains("emitted-provider="));
+        }
+        assert_eq!(
+            row.selected_emission,
+            Some(DefinitionEmission::Enum {
+                repr: Scalar::I32,
+                flags: false,
+            })
+        );
+        let DefinitionComparison::Different { keys, unknown } = &row.outcome else {
+            panic!("{row:?}")
+        };
+        assert!(unknown.is_empty(), "{row:?}");
+        assert_eq!(
+            keys,
+            &[DefinitionDifference {
+                path: "variant[1].value".to_string(),
+                selected: "1".to_string(),
+                alternative: "2".to_string(),
+            }]
+        );
+        assert!(row.message.contains(selected_input));
+        assert!(row.message.contains(alternative_input));
+        assert!(row.message.contains("control-b.cpp"));
+        assert!(messages.insert(&row.message), "{row:?}");
+        certified_notes.push(format!("        // windows-clang: {}\n", row.message));
+    }
+    let mut body = report.partitions.clone();
+    let mut notes_count = 0;
+    for (partition, text) in &mut body {
+        if partition.partition == "B" {
+            let block = certified_notes.join("");
+            assert!(
+                text.contains(&format!("{block}        #[repr(i32)]")),
+                "{text}"
+            );
+        }
+        for note in &certified_notes {
+            let count = text.matches(note).count();
+            let expected = usize::from(partition.partition == "B");
+            assert_eq!(count, expected, "{text}");
+            if expected == 1 {
+                *text = text.replacen(note, "", 1);
+            }
+            notes_count += count;
+        }
+        assert!(!text.contains("// windows-clang:"), "{text}");
+    }
+    assert_eq!(notes_count, certified_notes.len());
+    body
+}
+
+#[test]
+fn native_ranked_shared_enum_reporting_provenance_and_unknown() {
+    helpers::ensure_libclang();
+    let references = BTreeMap::new();
+    let options = EmitOptions::new("Test", &references);
+    let mut baseline_body = None;
+    for (different, different_b) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut baseline_report = None;
+        for reversed in [false, true] {
+            let plan = shared_control_plan(
+                "x86_64-pc-windows-msvc",
+                "",
+                if different {
+                    "#define CONTROL_DIFFERENT\n"
+                } else {
+                    ""
+                },
+                if different_b {
+                    "#define CONTROL_DIFFERENT\n"
+                } else {
+                    ""
+                },
+                reversed,
+            );
+            let report = plan.clone().emit_with_report(&options).unwrap();
+            let body = certified_shared_body(&report, different, different_b);
+            if let Some(baseline_body) = &baseline_body {
+                assert_eq!(&body, baseline_body);
+            } else {
+                baseline_body = Some(body);
+            }
+            assert_control_metadata(&report, 1);
+            if let Some(baseline_report) = &baseline_report {
+                assert_eq!(&report, baseline_report);
+            } else {
+                baseline_report = Some(report.clone());
+            }
+            println!(
+                "REPORTING different_a={different} different_b={different_b} reversed={reversed} report={report:?}"
+            );
+            if different_b {
+                continue;
+            }
+            let mut unknown_plan = plan;
+            let origin = unknown_plan
+                .snapshot
+                .facts
+                .iter()
+                .find(|fact| fact.origin.tu == "control-losing.cpp" && fact.kind == FactKind::Enum)
+                .unwrap()
+                .origin
+                .clone();
+            unknown_plan.snapshot.source_annotations.insert(
+                AnnotationTarget::Declaration(origin),
+                vec![Annotation::AssociatedConstant(
+                    "uncompared control".to_string(),
+                )],
+            );
+            let unknown_report = unknown_plan.emit_with_report(&options).unwrap();
+            assert_eq!(unknown_report.definition_evidence.len(), 1);
+            let row = &unknown_report.definition_evidence[0];
+            let unknown = match &row.outcome {
+                DefinitionComparison::Different { keys, unknown } => {
+                    assert!(different);
+                    assert_eq!(
+                        keys,
+                        match &report.definition_evidence[0].outcome {
+                            DefinitionComparison::Different { keys, .. } => keys,
+                            _ => unreachable!(),
+                        }
+                    );
+                    unknown
+                }
+                DefinitionComparison::Unknown(unknown) => {
+                    assert!(!different);
+                    unknown
+                }
+            };
+            assert_eq!(unknown.len(), 1, "{row:?}");
+            assert_eq!(unknown[0].path, "annotations.uncompared");
+            assert_eq!(
+                row.emitted_provider.as_ref().unwrap().observation.input,
+                "control-b.cpp"
+            );
+            let note = format!("        // windows-clang: {}\n", row.message);
+            let mut unknown_body = unknown_report.partitions.clone();
+            for (partition, text) in &mut unknown_body {
+                let expected = usize::from(different && partition.partition == "B");
+                assert_eq!(text.matches(&note).count(), expected, "{text}");
+                if expected == 1 {
+                    *text = text.replacen(&note, "", 1);
+                }
+                assert!(!text.contains("// windows-clang:"), "{text}");
+            }
+            assert_eq!(&unknown_body, baseline_body.as_ref().unwrap());
+            println!(
+                "REPORTING_UNKNOWN different={different} reversed={reversed} coverage={:?} row={:?} unknown={row:?}",
+                report.definition_evidence_coverage, report.definition_evidence
+            );
         }
     }
 }
@@ -273,6 +562,7 @@ fn assert_control_metadata(report: &HeaderPartitionReport, value: i32) {
     let record = index.expect("Test.Use", "CONTROL_REQUIRED");
     let fields: Vec<_> = record.fields().collect();
     assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0].name(), "value");
     assert_eq!(
         fields[0].ty(),
         windows_metadata::Type::ValueName(windows_metadata::TypeName::named(

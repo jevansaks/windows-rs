@@ -9194,7 +9194,14 @@ impl Snapshot {
             rows: definition_evidence,
             coverage: definition_evidence_coverage,
             notes: definition_notes,
-        } = observe(self, &com_bindings, &types, &interface_guids, &flag_enums);
+        } = observe(
+            self,
+            &com_bindings,
+            &types,
+            &interface_guids,
+            &flag_enums,
+            source_names,
+        );
         Ok(Plan {
             definition_evidence,
             definition_evidence_coverage,

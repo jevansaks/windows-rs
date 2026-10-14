@@ -106,8 +106,14 @@ Genuine differences appear as structured keys and matching RDL comments. Observa
 authoritative definitions. Declared interface members and inherited projected COM slots
 are separate domains. Native enums compare representation, ordered variants, fixed/scoped shape,
 and bounded captured annotations. Selected IID/flag settings and emitted overload order are reported
-separately from native-body keys. Standalone aliases, functions, constants, SAL, shared/synthetic
-enum production, full native ABI witnesses, volatile, and restrict are outside this domain.
+separately from native-body keys. Shared literal enum bodies are observed only when physical
+authorities have exact native links to an actual emitted provider. `emitted_provider` retains a
+different public provider's identity and observation without replacing the selected physical body.
+The stored difference message is prepended to that provider's RDL. Coverage counts physical bodies
+and original contexts, not emitted enums or aliases. Unregistered headers without physical authority
+proof and families without an emitted provider are outside this subset.
+Standalone aliases, functions, constants, SAL, synthetic enum production, full native ABI witnesses,
+volatile, and restrict are outside this domain.
 Supported annotation families and parameter properties compare independently. Unsupported annotations
 and unresolved counts have localized `Unknown` keys, so they cannot hide a known direction or
 result-status difference. Equal supported evidence with unknown siblings remains report-only.
