@@ -3712,7 +3712,7 @@ fn native_semantic_parent<'a>(
     origin: &Origin,
     seen: &'a HashMap<u32, Vec<(CXCursor, Origin)>>,
 ) -> NativeSemanticParent<'a> {
-    let semantic = unsafe { clang_getCursorSemanticParent(cursor) };
+    let mut semantic = unsafe { clang_getCursorSemanticParent(cursor) };
     if unsafe {
         clang_Cursor_isNull(semantic) != 0
             || clang_Cursor_getTranslationUnit(cursor) != tu
@@ -3720,7 +3720,25 @@ fn native_semantic_parent<'a>(
     } {
         return NativeSemanticParent::Unproved;
     }
-    let kind = unsafe { clang_getCursorKind(semantic) };
+    let mut kind = unsafe { clang_getCursorKind(semantic) };
+    let mut linkage = Vec::new();
+    while kind == CXCursor_LinkageSpec {
+        if unsafe { clang_equalCursors(semantic, cursor) } != 0
+            || linkage
+                .iter()
+                .any(|previous| unsafe { clang_equalCursors(*previous, semantic) } != 0)
+        {
+            return NativeSemanticParent::Unproved;
+        }
+        linkage.push(semantic);
+        semantic = unsafe { clang_getCursorSemanticParent(semantic) };
+        if unsafe {
+            clang_Cursor_isNull(semantic) != 0 || clang_Cursor_getTranslationUnit(semantic) != tu
+        } {
+            return NativeSemanticParent::Unproved;
+        }
+        kind = unsafe { clang_getCursorKind(semantic) };
+    }
     if kind == CXCursor_TranslationUnit {
         return NativeSemanticParent::Captured { kind, parent: None };
     }
@@ -3766,6 +3784,8 @@ fn capture_semantic_parents(
                 | CXCursor_TypeAliasDecl
         )
     }) {
+        #[cfg(test)]
+        linkage_scope_tests::observe(tu, *cursor, origin, seen);
         let parent = match native_semantic_parent(tu, *cursor, origin, seen) {
             NativeSemanticParent::Unproved => continue,
             NativeSemanticParent::ConflictingOrigins => {
@@ -3814,6 +3834,9 @@ fn capture_value_semantic_parents(
 
 #[cfg(test)]
 mod value_scope_tests;
+
+#[cfg(test)]
+mod linkage_scope_tests;
 
 fn bind_class_origins(
     tu: CXTranslationUnit,
