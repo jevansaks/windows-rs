@@ -169,6 +169,16 @@ counts, and mixed raw pointer qualifiers are reported rather than replaced with 
 Set `WINDOWS_CLANG_TIMINGS=1` to write structured extraction, planning, and emission measurements
 to stderr without changing the generated RDL.
 
+Ranked partition reports compare final emitted scalar constants against identity-proven observations
+in other original inputs. Type and value evidence remain independent; stored difference messages
+also appear at the corresponding emitted member. Scalar coverage and unproved identities are
+reported separately from native type bodies. Excluded, unprojectable, string, pointer, and
+enum-consumed constants are outside this coverage.
+Constant remapping and namespace scoping preserve original-member tokens, authoritative owners, and
+namespace pins as one stage. Overlapping target names do not remove authoritative roots.
+Conflicting propagated metadata is an error only for a final admitted constant; ordinary collision
+admission and selected-value validation remain unchanged.
+
 The caller owns libclang installation, compiler arguments, package versions, import-library
 discovery, architecture merging, output promotion, and RDL-to-WinMD compilation. See the [crate
 documentation][docs] for both APIs and the extraction model.

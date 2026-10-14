@@ -722,7 +722,7 @@ fn macro_after_enum_value(
     enum_override_value(&constant.value, repr)
 }
 
-fn macro_scalar_type(
+pub(super) fn macro_scalar_type(
     ty: &TypeRef,
     tu: &str,
     scalar_aliases: &HashMap<(&str, &str, &Location), &TypeRef>,

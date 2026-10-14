@@ -756,10 +756,12 @@ fn ranked_record_rows(report: &HeaderPartitionReport) -> Vec<&DefinitionEvidence
 fn without_evidence_comments(text: &str) -> String {
     text.lines()
         .filter(|line| {
-            !["record", "interface", "enum"].iter().any(|kind| {
-                line.trim_start()
-                    .starts_with(&format!("// windows-clang: {kind} definition "))
-            })
+            !["record", "interface", "enum", "constant"]
+                .iter()
+                .any(|kind| {
+                    line.trim_start()
+                        .starts_with(&format!("// windows-clang: {kind} definition "))
+                })
         })
         .map(|line| format!("{line}\n"))
         .collect()
@@ -780,6 +782,7 @@ fn output_without_notes(plan: HeaderPartitionPlan) -> BTreeMap<RdlPartition, Str
         .unwrap();
     let routes = snapshot.resolve_partition_routes(candidates).unwrap();
     plan.definition_notes.clear();
+    plan.constant_notes.clear();
     snapshot
         .format_partitioned_plan(plan, &options, &routes, &display_names, None)
         .unwrap()

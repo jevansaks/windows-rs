@@ -38,6 +38,7 @@ pub enum DefinitionBodyKind {
     Record,
     Interface,
     Enum,
+    Constant,
 }
 
 /// Finalized selected emission settings, separate from native-body comparison keys.
@@ -61,6 +62,9 @@ pub enum DefinitionTypeRole {
     Union,
     Enum,
     Alias,
+    Variable,
+    AnonymousEnumMember,
+    Macro,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -126,6 +130,552 @@ pub struct DefinitionEvidence {
     /// The same message is prepended to RDL for `Different` only.
     pub message: String,
 }
+
+/// Direct emitted scalar members, separate from record/interface/enum body coverage.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ConstantEvidenceCoverage {
+    NotCompared,
+    CapturedScalars {
+        selected_members: usize,
+        captured_observations: usize,
+        /// Distinct captured native origins with `definition=true`, not evaluated locations.
+        defining_native_bodies: usize,
+        matched_alternative_observations: usize,
+        unproved_observations: usize,
+    },
+}
+
+/// An observation whose complete identity is unproved. No property comparison was made.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConstantNotCompared {
+    pub name: String,
+    pub selected: bool,
+    pub observation: DefinitionObservation,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(super) struct ConstantMember {
+    root: Origin,
+    definition: Origin,
+    spelling: Location,
+    pub name: String,
+}
+
+impl From<&Constant> for ConstantMember {
+    fn from(constant: &Constant) -> Self {
+        Self {
+            root: constant.root.clone(),
+            definition: constant.definition.clone(),
+            spelling: constant.spelling.clone(),
+            name: constant.name.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ScalarObservationValue {
+    Integral(i128),
+    F32(u32),
+    F64(u64),
+}
+
+fn scalar_observation_value(value: &Value) -> Result<ScalarObservationValue, String> {
+    match value {
+        Value::Signed(value) => Ok(ScalarObservationValue::Integral(i128::from(*value))),
+        Value::Unsigned(value) => Ok(ScalarObservationValue::Integral(i128::from(*value))),
+        Value::F32(bits) if f32::from_bits(*bits).is_finite() => {
+            Ok(ScalarObservationValue::F32(*bits))
+        }
+        Value::F64(bits) if f64::from_bits(*bits).is_finite() => {
+            Ok(ScalarObservationValue::F64(*bits))
+        }
+        Value::F32(_) | Value::F64(_) => Err("non-finite captured float".to_string()),
+        _ => Err("unsupported captured value form".to_string()),
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct ScalarConstantObservation {
+    header: Option<String>,
+    role: Option<DefinitionTypeRole>,
+    identity: Result<DefinitionIdentity, String>,
+    observation: DefinitionObservation,
+    ty: Result<Scalar, String>,
+    value: Result<ScalarObservationValue, String>,
+}
+
+impl ScalarConstantObservation {
+    fn coalesce(&mut self, other: Self) {
+        if self.identity != other.identity || self.observation != other.observation {
+            self.identity = Err("conflicting original-member identity or provenance".to_string());
+        }
+        if self.header != other.header {
+            self.header = None;
+        }
+        if self.role != other.role {
+            self.role = None;
+        }
+        if self.ty != other.ty {
+            self.ty = Err("conflicting original-member scalar type".to_string());
+        }
+        if self.value != other.value {
+            self.value = Err("conflicting original-member scalar value".to_string());
+        }
+    }
+
+    fn keys(&self) -> Keys {
+        BTreeMap::from([
+            (
+                ".type".to_string(),
+                self.ty
+                    .as_ref()
+                    .map(|ty| format!("{ty:?}"))
+                    .map_err(Clone::clone),
+            ),
+            (
+                ".value".to_string(),
+                self.value
+                    .as_ref()
+                    .map(|value| match value {
+                        ScalarObservationValue::Integral(value) => value.to_string(),
+                        ScalarObservationValue::F32(bits) => format!("F32-bits:{bits:08x}"),
+                        ScalarObservationValue::F64(bits) => format!("F64-bits:{bits:016x}"),
+                    })
+                    .map_err(Clone::clone),
+            ),
+        ])
+    }
+}
+
+fn constant_observation(
+    snapshot: &Snapshot,
+    constant: &Constant,
+    authority: Option<&HeaderAuthority>,
+    defining: bool,
+) -> DefinitionObservation {
+    let mut candidates = BTreeSet::new();
+    if let Some(authority) = authority {
+        let owners: Vec<_> = if authority.owner.input == constant.root.tu {
+            vec![&authority.owner]
+        } else {
+            authority
+                .alternatives
+                .iter()
+                .filter(|owner| owner.input == constant.root.tu)
+                .collect()
+        };
+        for owner in owners {
+            if let Some(registered) = snapshot.partition_authorities.get(&owner.partition)
+                && registered.input == constant.root.tu
+            {
+                candidates.insert((registered.rank, owner.partition.clone()));
+            }
+        }
+    }
+    let candidate_partitions: Vec<_> = candidates
+        .into_iter()
+        .map(|(rank, partition)| (partition, rank))
+        .collect();
+    let unique = (candidate_partitions.len() == 1).then(|| &candidate_partitions[0]);
+    DefinitionObservation {
+        partition: unique.map(|(partition, _)| partition.clone()),
+        rank: unique.map(|(_, rank)| *rank),
+        candidate_partitions,
+        input: constant.root.tu.clone(),
+        location: constant.spelling.clone(),
+        defining_locations: if defining {
+            vec![constant.spelling.clone()]
+        } else {
+            Vec::new()
+        },
+    }
+}
+
+pub(super) fn scalar_constant_index(
+    snapshot: &Snapshot,
+) -> BTreeMap<ConstantMember, Option<ScalarConstantObservation>> {
+    let mut facts = HashMap::new();
+    for fact in &snapshot.facts {
+        facts
+            .entry(&fact.origin)
+            .and_modify(|entry| *entry = None)
+            .or_insert(Some(fact));
+    }
+    let facts: HashMap<_, _> = facts
+        .into_iter()
+        .filter_map(|(origin, fact)| fact.map(|fact| (origin, fact)))
+        .collect();
+    let mut declarations = HashMap::new();
+    for declaration in &snapshot.value_declarations {
+        declarations
+            .entry(&declaration.origin)
+            .and_modify(|entry| *entry = None)
+            .or_insert(Some(declaration));
+    }
+    let mut aliases = HashMap::new();
+    for fact in &snapshot.facts {
+        if let FactData::Typedef { target } = &fact.data {
+            let key = (fact.origin.tu.as_str(), fact.name.as_str(), &fact.spelling);
+            aliases
+                .entry(key)
+                .and_modify(|entry| {
+                    if *entry != Some(target) {
+                        *entry = None;
+                    }
+                })
+                .or_insert(Some(target));
+        }
+    }
+    let aliases = aliases
+        .into_iter()
+        .filter_map(|(key, target)| target.map(|target| (key, target)))
+        .collect();
+    let observations = snapshot.constants.iter().map(|constant| {
+        let member = ConstantMember::from(constant);
+        if !snapshot.ranked_header_partition_policy {
+            return (member, None);
+        }
+        let fact = facts.get(&constant.root).copied();
+        let declaration = declarations.get(&constant.root).copied().flatten();
+        let authority = constant_header_authority(&snapshot.header_authorities, fact, constant);
+        let header = authority.map(|authority| normalize_name(&authority.owner.root));
+        let role = declaration
+            .map(|declaration| match declaration.kind {
+                ValueDeclarationKind::Variable => DefinitionTypeRole::Variable,
+                ValueDeclarationKind::AnonymousEnum => DefinitionTypeRole::AnonymousEnumMember,
+            })
+            .or_else(|| {
+                fact.filter(|fact| {
+                    fact.kind == FactKind::Macro
+                        && fact.name == constant.name
+                        && matches!(
+                            fact.data,
+                            FactData::Macro {
+                                function_like: false,
+                                ..
+                            }
+                        )
+                })
+                .map(|_| DefinitionTypeRole::Macro)
+            });
+        let identity = (|| {
+            let authority = authority.ok_or("missing physical-header authority")?;
+            let role = role.ok_or("missing unambiguous captured source declaration kind")?;
+            let scope = if role == DefinitionTypeRole::Macro {
+                Vec::new()
+            } else {
+                com_pointer::checked_semantic_scope(
+                    snapshot,
+                    &facts,
+                    &constant.root,
+                    |fact| fact.name.clone(),
+                    || format!("constant member {:?}", constant.name),
+                )?
+            };
+            if constant.name.is_empty() || scope.iter().any(|(_, name)| name.is_empty()) {
+                return Err("anonymous or unnamed native semantic scope".to_string());
+            }
+            let scope = scope
+                .into_iter()
+                .map(|(role, name)| {
+                    let role = match role {
+                        SemanticTypeRole::Namespace => DefinitionTypeRole::Namespace,
+                        SemanticTypeRole::Record => DefinitionTypeRole::Record,
+                        SemanticTypeRole::Union => DefinitionTypeRole::Union,
+                        SemanticTypeRole::Enum => DefinitionTypeRole::Enum,
+                        SemanticTypeRole::Alias => DefinitionTypeRole::Alias,
+                    };
+                    (role, name)
+                })
+                .collect();
+            Ok(DefinitionIdentity {
+                header: header.clone().unwrap(),
+                authority_input: authority.owner.input.clone(),
+                scope,
+                name: constant.name.clone(),
+                role,
+            })
+        })();
+        let defining = declaration.is_some_and(|declaration| declaration.definition)
+            || fact.is_some_and(|fact| fact.definition);
+        let observation = constant_observation(snapshot, constant, authority, defining);
+        let ty = extract::macro_scalar_type(&constant.ty, &constant.root.tu, &aliases, None)
+            .ok_or_else(|| "unsupported or unresolved own-TU scalar type".to_string());
+        (
+            member,
+            Some(ScalarConstantObservation {
+                header,
+                role,
+                identity,
+                observation,
+                ty,
+                value: scalar_observation_value(&constant.value),
+            }),
+        )
+    });
+    let mut result: BTreeMap<_, Option<ScalarConstantObservation>> = BTreeMap::new();
+    for (member, observation) in observations {
+        match result.entry(member) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(observation);
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                if let (Some(previous), Some(observation)) = (entry.get_mut(), observation) {
+                    previous.coalesce(observation);
+                }
+            }
+        }
+    }
+    result
+}
+
+pub(super) struct ConstantObservations {
+    pub rows: Vec<DefinitionEvidence>,
+    pub coverage: ConstantEvidenceCoverage,
+    pub not_compared: Vec<ConstantNotCompared>,
+    pub notes: BTreeMap<ConstantMember, String>,
+    pub members: BTreeMap<ConstantMember, ConstantMember>,
+}
+
+pub(super) fn observe_constants(
+    snapshot: &Snapshot,
+    constants: &[PlannedConstant<'_>],
+    source_names: Option<&PlanningSourceNames>,
+) -> ConstantObservations {
+    let mut result = ConstantObservations {
+        rows: Vec::new(),
+        coverage: ConstantEvidenceCoverage::NotCompared,
+        not_compared: Vec::new(),
+        notes: BTreeMap::new(),
+        members: BTreeMap::new(),
+    };
+    let Some(source_names) = source_names.filter(|_| snapshot.ranked_header_partition_policy)
+    else {
+        return result;
+    };
+    // Header/name/kind only discover candidates. Complete proved identities gate all keys.
+    let mut candidates: BTreeMap<_, Vec<_>> = BTreeMap::new();
+    for (member, observation) in &source_names.constant_evidence {
+        if let Some(observation) = observation {
+            candidates
+                .entry((&observation.header, &member.name, observation.role))
+                .or_default()
+                .push((member, observation));
+        }
+    }
+    let mut selected_members = 0;
+    let mut captured = BTreeSet::new();
+    let mut defining = BTreeSet::new();
+    let mut matched_alternatives = BTreeSet::new();
+    let mut unproved = BTreeSet::new();
+    for planned in constants {
+        let current = ConstantMember::from(planned.constant);
+        let originals = source_names.constant_members.get(&current);
+        if !matches!(
+            planned.constant.value,
+            Value::Signed(_) | Value::Unsigned(_) | Value::F32(_) | Value::F64(_)
+        ) || (!matches!(planned.constant.ty, TypeRef::Scalar(_))
+            && !originals.is_some_and(|members| {
+                members.iter().any(|member| {
+                    source_names
+                        .constant_evidence
+                        .get(member)
+                        .and_then(Option::as_ref)
+                        .is_some_and(|observation| observation.ty.is_ok())
+                })
+            }))
+        {
+            continue;
+        }
+        let Some(member) = source_names.constant_member(planned.constant) else {
+            selected_members += 1;
+            unproved.insert(current.clone());
+            if let Some(originals) = originals {
+                for member in originals {
+                    if let Some(Some(observation)) = source_names.constant_evidence.get(member) {
+                        captured.insert(member.clone());
+                        if !observation.observation.defining_locations.is_empty() {
+                            defining.insert(member.root.clone());
+                        }
+                    }
+                }
+            } else {
+                captured.insert(current.clone());
+            }
+            let root = snapshot
+                .facts
+                .iter()
+                .find(|fact| fact.origin == current.root);
+            let authority =
+                constant_header_authority(&snapshot.header_authorities, root, planned.constant);
+            let is_definition = root.is_some_and(|fact| fact.definition)
+                || snapshot.value_declarations.iter().any(|declaration| {
+                    declaration.origin == current.root && declaration.definition
+                });
+            if is_definition {
+                defining.insert(current.root.clone());
+            }
+            result.not_compared.push(ConstantNotCompared {
+                name: planned.constant.name.clone(),
+                selected: true,
+                observation: constant_observation(
+                    snapshot,
+                    planned.constant,
+                    authority,
+                    is_definition,
+                ),
+                reason: match originals {
+                    Some(originals) => format!(
+                        "ambiguous original-member token: {}",
+                        originals
+                            .iter()
+                            .map(|member| format!("{:?}", member.name))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    None => "missing original-member token".to_string(),
+                },
+            });
+            continue;
+        };
+        let Some(Some(selected)) = source_names.constant_evidence.get(member) else {
+            continue;
+        };
+        if selected.ty.is_err()
+            || matches!(planned.constant.value, Value::Utf8(_) | Value::Utf16(_))
+        {
+            continue;
+        }
+        selected_members += 1;
+        result.members.insert(current, member.clone());
+        captured.insert(member.clone());
+        if !selected.observation.defining_locations.is_empty() {
+            defining.insert(member.root.clone());
+        }
+        let identity = match &selected.identity {
+            Ok(identity) => identity,
+            Err(reason) => {
+                unproved.insert(member.clone());
+                result.not_compared.push(ConstantNotCompared {
+                    name: member.name.clone(),
+                    selected: true,
+                    observation: selected.observation.clone(),
+                    reason: reason.clone(),
+                });
+                continue;
+            }
+        };
+        let selected_keys = selected.keys();
+        let mut alternatives: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for &(other_member, alternative) in
+            &candidates[&(&selected.header, &member.name, selected.role)]
+        {
+            if other_member.root.tu == member.root.tu {
+                continue;
+            }
+            match &alternative.identity {
+                Ok(other_identity) if other_identity == identity => {
+                    captured.insert(other_member.clone());
+                    matched_alternatives.insert(other_member);
+                    if !alternative.observation.defining_locations.is_empty() {
+                        defining.insert(other_member.root.clone());
+                    }
+                    alternatives
+                        .entry(&other_member.root.tu)
+                        .or_default()
+                        .push(alternative);
+                }
+                Err(reason) if unproved.insert(other_member.clone()) => {
+                    captured.insert(other_member.clone());
+                    result.not_compared.push(ConstantNotCompared {
+                        name: other_member.name.clone(),
+                        selected: false,
+                        observation: alternative.observation.clone(),
+                        reason: reason.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+        for observations in alternatives.into_values() {
+            let keys: Vec<_> = observations
+                .iter()
+                .map(|observation| observation.keys())
+                .collect();
+            let coalesce = |key: &str| {
+                let first = keys[0][key].clone();
+                if keys.iter().all(|keys| keys[key] == first) {
+                    first
+                } else {
+                    Err("same-context scalar observations cannot be coalesced".to_string())
+                }
+            };
+            let alternative_keys = BTreeMap::from([
+                (".type".to_string(), coalesce(".type")),
+                (".value".to_string(), coalesce(".value")),
+            ]);
+            let mut outcome = compare(&selected_keys, &alternative_keys)
+                .unwrap_or_else(|| DefinitionComparison::Unknown(Vec::new()));
+            let mut alternative = observations[0].observation.clone();
+            alternative.defining_locations = observations
+                .iter()
+                .flat_map(|observation| observation.observation.defining_locations.iter().cloned())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let unknown = match &mut outcome {
+                DefinitionComparison::Different { unknown, .. }
+                | DefinitionComparison::Unknown(unknown) => unknown,
+            };
+            for (side, observation) in [
+                ("selected", &selected.observation),
+                ("alternative", &alternative),
+            ] {
+                if observation.partition.is_none() {
+                    unknown.push(DefinitionUnknown {
+                        path: format!("{side}.provenance"),
+                        reason: "missing or ambiguous registered traversing owner".to_string(),
+                    });
+                }
+            }
+            if matches!(&outcome, DefinitionComparison::Unknown(unknown) if unknown.is_empty()) {
+                continue;
+            }
+            let mut row = DefinitionEvidence {
+                identity: identity.clone(),
+                body_kind: DefinitionBodyKind::Constant,
+                selected_emission: None,
+                selected: selected.observation.clone(),
+                alternative,
+                emitted_provider: None,
+                outcome,
+                message: String::new(),
+            };
+            row.message = render(&row);
+            if matches!(row.outcome, DefinitionComparison::Different { .. }) {
+                result
+                    .notes
+                    .entry(member.clone())
+                    .or_default()
+                    .push_str(&format!("    // windows-clang: {}\n", row.message));
+            }
+            result.rows.push(row);
+        }
+    }
+    result.coverage = ConstantEvidenceCoverage::CapturedScalars {
+        selected_members,
+        captured_observations: captured.len(),
+        defining_native_bodies: defining.len(),
+        matched_alternative_observations: matched_alternatives.len(),
+        unproved_observations: unproved.len(),
+    };
+    result
+}
+
+#[cfg(test)]
+#[path = "tests/scalar_constants.rs"]
+mod scalar_constant_tests;
 
 impl From<&AuthorityTypeIdentity> for DefinitionIdentity {
     fn from(identity: &AuthorityTypeIdentity) -> Self {
@@ -755,6 +1305,9 @@ impl Normalizer<'_, '_> {
             DefinitionBodyKind::Interface => return self.interface(fact),
             DefinitionBodyKind::Enum => return self.enumeration(fact),
             DefinitionBodyKind::Record => {}
+            DefinitionBodyKind::Constant => {
+                return NormalizedType::unknown("constant is not a type body").keys;
+            }
         }
         let FactData::Record {
             base,
@@ -1028,6 +1581,7 @@ fn render(row: &DefinitionEvidence) -> String {
             DefinitionBodyKind::Record => "record",
             DefinitionBodyKind::Interface => "interface",
             DefinitionBodyKind::Enum => "enum",
+            DefinitionBodyKind::Constant => "constant",
         },
         row.identity.name,
         row.identity.scope,
@@ -1195,6 +1749,7 @@ pub(super) fn observe(
         DefinitionBodyKind::Record => 0,
         DefinitionBodyKind::Interface => 1,
         DefinitionBodyKind::Enum => 2,
+        DefinitionBodyKind::Constant => unreachable!(),
     };
     for kind in kinds.values() {
         coverage[index(*kind)].selected_definitions += 1;

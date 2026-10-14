@@ -202,6 +202,7 @@ impl<'a> DependencyClosureDiagnostics<'a> {
                             let namespace = snapshot
                                 .constant_root_owners
                                 .get(&(origin.clone(), root.name.to_string()))
+                                .and_then(|owner| owner.as_ref().ok())
                                 .map_or_else(
                                     || fallback.to_string(),
                                     |owner| owner.namespace.clone(),

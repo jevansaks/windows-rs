@@ -447,6 +447,36 @@ counts as declaration-only according to its captured definition flag, not its nu
 An empty evidence list does
 not establish complete cross-context or native equivalence.
 
+Final emitted direct scalar constants also enter `definition_evidence`, with body kind `Constant`
+and source roles `Variable`, `AnonymousEnumMember`, or `Macro`. Complete identity includes the same
+physical-header authority used for admission, its original input, captured original semantic scope,
+original member name, and source kind. Offsets are provenance, not cross-input identity. Macros use
+their captured preprocessor declaration, not C++ variable scope. Missing or ambiguous identity is
+retained in `constant_not_compared` with its original observation; no type/value comparison is made.
+
+`constant_evidence_coverage` counts final selected scalar members, captured observations, distinct
+defining native origins, matched alternatives, and unproved observations separately. An evaluated
+in-class constant with `definition=false` is an observation, not a defining body. Anonymous-enum
+siblings count as separate members but share a defining origin. Excluded, unprojectable, string,
+pointer, and enum-consumed constants are outside scalar coverage. Alternatives never veto admission.
+Type and value keys are independent after identity proof: one known difference survives a localized
+unknown in the other. Aliases resolve only through exact own-input declarations. Integral magnitude
+is lossless; finite float bits describe captured representation, not mathematical or ABI equivalence.
+Repeated original-member tokens coalesce only equivalent evidence; contradictory type or value
+evidence becomes unknown for that property, and inconsistent identity remains unproved.
+Each difference message is stored once and prepended unchanged to its emitted original member,
+including after renaming and namespace scoping, without changing routing or annotations.
+Original-member note tokens are separate from the routing-name index and its existing fallback.
+Each remapping and namespace-scoping stage reads immutable original-member, owner, and namespace-pin
+metadata, then publishes the complete rekeyed maps. Authoritative roots retain their exact owner and
+pin when transformed names overlap; raw alternative inputs keep their original names and settings.
+Equivalent metadata coalesces. Conflicting owners or pins remain ambiguous and fail only when their
+constant reaches the final emitted-member list, not for excluded or unrequested candidates. Ordinary
+collision admission, selected-value guards, and namespace precedence are unchanged.
+Targets that converge retain all original member candidates; an emitted scalar with no unique
+original token is reported as not compared, with provenance and coverage, without borrowing a
+candidate's note.
+
 Record observations compare base identity, size, alignment, packing, union status, and ordered
 fields with names, offsets, sizes, alignments, bit widths, and normalized types. Named non-alias
 referents compare by captured semantic authority identity, not by recursively proving their bodies.

@@ -218,7 +218,7 @@ fn body_report(plan: HeaderPartitionPlan) -> HeaderPartitionReport {
                     flags: false
                 }),
             ),
-            DefinitionBodyKind::Record => panic!("{row:?}"),
+            DefinitionBodyKind::Record | DefinitionBodyKind::Constant => panic!("{row:?}"),
         }
     }
     report
