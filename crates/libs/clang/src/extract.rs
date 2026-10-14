@@ -3838,6 +3838,9 @@ mod value_scope_tests;
 #[cfg(test)]
 mod linkage_scope_tests;
 
+#[cfg(test)]
+mod parameter_adjustment_tests;
+
 fn bind_class_origins(
     tu: CXTranslationUnit,
     pending: &[(Origin, CXCursor)],
@@ -8534,7 +8537,7 @@ fn function_signature(
     Some((convention, params, result))
 }
 
-fn function_param_type(ty: CXType) -> Option<TypeRef> {
+fn function_param_view(ty: CXType) -> Option<(CXType, Option<CXType>)> {
     let ty = projection_type(ty)?;
     let array = if matches!(ty.kind, CXType_IncompleteArray | CXType_ConstantArray) {
         Some(ty)
@@ -8552,6 +8555,11 @@ fn function_param_type(ty: CXType) -> Option<TypeRef> {
             None
         }
     };
+    Some((ty, array))
+}
+
+fn function_param_type(ty: CXType) -> Option<TypeRef> {
+    let (ty, array) = function_param_view(ty)?;
     if let Some(array) = array {
         let canonical = unsafe { clang_getCanonicalType(ty) };
         if canonical.kind == CXType_Pointer {

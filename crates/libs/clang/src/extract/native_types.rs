@@ -118,6 +118,52 @@ pub(super) fn target_policy(triple: &str, width: i32) -> Result<(), &'static str
     Ok(())
 }
 
+pub(super) fn array_parameter_element_match(
+    source_use: CXType,
+    array: CXType,
+    pointee: CXType,
+) -> Result<(), &'static str> {
+    if !clang_getUnqualifiedType::is_loaded() {
+        return Err("unavailable-native-array-parameter-qualification-query");
+    }
+    let element = unsafe { clang_getCanonicalType(clang_getArrayElementType(array)) };
+    let pointee = unsafe { clang_getCanonicalType(pointee) };
+    let qualifiers = |ty| unsafe {
+        (
+            clang_isConstQualifiedType(ty) != 0,
+            clang_isVolatileQualifiedType(ty) != 0,
+            clang_isRestrictQualifiedType(ty) != 0,
+        )
+    };
+    let source = qualifiers(source_use);
+    let element_qualifiers = qualifiers(element);
+    // C++17 [dcl.array] applies the array use's const qualifier to its element.
+    let effective = (
+        source.0 || element_qualifiers.0,
+        element_qualifiers.1,
+        element_qualifiers.2,
+    );
+    if element.kind == CXType_Invalid
+        || pointee.kind == CXType_Invalid
+        || (source.1 && !element_qualifiers.1)
+        || (source.2 && !element_qualifiers.2)
+        || effective != qualifiers(pointee)
+        || unsafe { clang_getAddressSpace(element) } != unsafe { clang_getAddressSpace(pointee) }
+    {
+        return Err("unproved-native-array-parameter-qualification");
+    }
+    if unsafe {
+        clang_equalTypes(
+            clang_getUnqualifiedType(element),
+            clang_getUnqualifiedType(pointee),
+        )
+    } == 0
+    {
+        return Err("unproved-native-array-parameter-element");
+    }
+    Ok(())
+}
+
 pub(super) fn function_transport(
     ty: CXType,
     policy: Result<(), &'static str>,
@@ -283,6 +329,102 @@ impl Capture {
         let native = self.capture(ty);
         let rejection = self.trace.take().and_then(|trace| trace.first);
         (native, rejection)
+    }
+
+    pub(super) fn capture_parameter(
+        &mut self,
+        method: CXCursor,
+        parameters: &[CXCursor],
+        index: usize,
+        pointer_width: i32,
+        diagnostic: bool,
+    ) -> (Option<NativeType>, Option<String>) {
+        if diagnostic {
+            self.trace = Some(RejectionTrace::default());
+        }
+        let native = self.parameter(method, parameters, index, pointer_width);
+        let rejection = self.trace.take().and_then(|trace| trace.first);
+        (native, rejection)
+    }
+
+    fn parameter(
+        &mut self,
+        method: CXCursor,
+        parameters: &[CXCursor],
+        index: usize,
+        pointer_width: i32,
+    ) -> Option<NativeType> {
+        let Some(&parameter) = parameters.get(index) else {
+            return self.reject(
+                unsafe { clang_getCursorType(method) },
+                0,
+                "unproved-native-array-parameter-index",
+                Some(method),
+            );
+        };
+        let raw = unsafe { clang_getCursorType(parameter) };
+        let Some((source_use, Some(array))) = function_param_view(raw) else {
+            if matches!(
+                unsafe { clang_getCanonicalType(raw) }.kind,
+                CXType_IncompleteArray | CXType_ConstantArray
+            ) {
+                self.raw_use(raw, 0)?;
+                return self.reject(
+                    raw,
+                    0,
+                    "unproved-native-array-parameter-source",
+                    Some(parameter),
+                );
+            }
+            return self.capture(raw);
+        };
+        self.raw_use(raw, 0)?;
+        let function = unsafe { clang_getCanonicalType(clang_getCursorType(method)) };
+        let tu = unsafe { clang_Cursor_getTranslationUnit(method) };
+        let count = unsafe { clang_getNumArgTypes(function) };
+        if tu.is_null()
+            || function.kind != CXType_FunctionProto
+            || usize::try_from(count).ok() != Some(parameters.len())
+            || unsafe { clang_Cursor_getNumArguments(method) } != count
+            || unsafe {
+                clang_equalCursors(
+                    clang_Cursor_getArgument(method, u32::try_from(index).ok()?),
+                    parameter,
+                )
+            } == 0
+            || unsafe { clang_Cursor_getTranslationUnit(parameter) } != tu
+            || unsafe { clang_getCursorKind(parameter) } != CXCursor_ParmDecl
+            || unsafe { clang_equalCursors(clang_getCursorSemanticParent(parameter), method) } == 0
+        {
+            return self.reject(
+                raw,
+                0,
+                "unproved-native-array-parameter-owner",
+                Some(parameter),
+            );
+        }
+        let pointer = unsafe { clang_getArgType(function, u32::try_from(index).ok()?) };
+        let pointer = unsafe { clang_getCanonicalType(pointer) };
+        let pointee = unsafe { clang_getCanonicalType(clang_getPointeeType(pointer)) };
+        let size = unsafe { clang_Type_getSizeOf(pointer) };
+        let align = unsafe { clang_Type_getAlignOf(pointer) };
+        if pointer.kind != CXType_Pointer
+            || !matches!(pointer_width, 32 | 64)
+            || size * 8 != i64::from(pointer_width)
+            || align <= 0
+            || unsafe { clang_getAddressSpace(pointer) } != 0
+        {
+            return self.reject(
+                raw,
+                0,
+                "unproved-native-array-parameter-pointer",
+                Some(parameter),
+            );
+        }
+        if let Err(reason) = array_parameter_element_match(source_use, array, pointee) {
+            return self.reject(raw, 0, reason, Some(parameter));
+        }
+        self.capture(pointer)
     }
 
     fn reject<T>(

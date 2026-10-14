@@ -276,7 +276,8 @@ impl Capture<'_> {
                         }))
                     });
                     let native_params = parameters
-                        .into_iter()
+                        .iter()
+                        .copied()
                         .enumerate()
                         .map(|(parameter, param)| {
                             let ty = unsafe { clang_getCursorType(param) };
@@ -293,10 +294,14 @@ impl Capture<'_> {
                                 } else {
                                     (None, None)
                                 }
-                            } else if self.target.is_some() && self.rejected_parameters < 8 {
-                                self.native_types.capture_diagnostic(ty)
                             } else {
-                                (self.native_types.capture(ty), None)
+                                self.native_types.capture_parameter(
+                                    child,
+                                    &parameters,
+                                    parameter,
+                                    self.pointer_width,
+                                    self.target.is_some() && self.rejected_parameters < 8,
+                                )
                             };
                             if self.target.is_some() && native.is_none() {
                                 self.rejected_parameters += 1;
@@ -304,6 +309,14 @@ impl Capture<'_> {
                                     rejections.push((parameter, param, reason));
                                 }
                             }
+                            #[cfg(test)]
+                            parameter_adjustment_tests::observe(
+                                child,
+                                param,
+                                parameter,
+                                native.as_ref(),
+                                unsupported,
+                            );
                             native
                         })
                         .collect();

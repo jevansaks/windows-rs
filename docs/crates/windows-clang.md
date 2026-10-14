@@ -22,6 +22,16 @@ can omit represented calling conventions. Projection keeps source aliases and qu
 than canonicalizing every use. These checks do not prove native ABI admissibility; native transport
 validation is separate.
 
+COM method parameters retain their original declaration and type-use attribute checks before
+array adjustment. Incomplete and fixed-bound outer arrays use an actual pointer type obtained from
+the canonical owning function, with checked element qualifiers, target pointer width, address space
+and positive native alignment. Inner array bounds remain on the pointee. This does not admit
+incomplete record fields or standalone arrays, or change direct pointer capture.
+For a const-qualified array typedef use, C++17 array qualification applies const to the element.
+Native matching checks that effective qualification separately from unqualified native element
+identity. Nested qualifications, declaration identity and inner bounds remain part of that identity;
+unaccounted outer volatile/restrict qualification is rejected.
+
 ## High-level generation
 
 `clang()` returns a `Clang` builder for the common case of extracting one set of headers and
