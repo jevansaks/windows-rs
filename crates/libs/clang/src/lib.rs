@@ -9224,6 +9224,20 @@ impl Snapshot {
 }
 
 impl HeaderPartitionPlan {
+    /// Borrows captured observations after header and namespace policy application.
+    ///
+    /// This view precedes emission preparation and projection. For plans with registered ranked
+    /// authority, only the chosen original context retains root status. Alternative facts,
+    /// signatures, annotations, and constant values remain observations, not an inventory of
+    /// selected output or an emittability verdict.
+    ///
+    /// Derive owned option data within the borrow's scope, then consume this same plan with
+    /// [`Self::emit_with_options`] or [`Self::emit_with_report`]. Inspection does not clone,
+    /// re-extract, prepare emission, or change validation boundaries.
+    pub fn snapshot(&self) -> &Snapshot {
+        &self.snapshot
+    }
+
     /// Reports unrepresented size hints using this plan's header and selection policies.
     pub fn sal_count_diagnostics(
         &self,

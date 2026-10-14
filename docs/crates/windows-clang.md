@@ -328,6 +328,40 @@ relative member slots select that effective map for dependencies, routing, and e
 contexts cannot contribute annotations or reject the chosen output because their values differ.
 Selected annotation representation errors and source syntax/target errors remain explicit.
 
+`HeaderPartitionPlan::snapshot` is a read-only borrow of captured observations after header and
+namespace policy application, before emission preparation and projection. Facts retain their native
+names, linker symbols, origins, and signatures. Only the chosen original context retains root status;
+losing-context annotations must not supply root import or selection demands. Effective
+`associated_enum` targets can follow policy remaps while original source annotations remain captured.
+Constants retain every observed name and value, including alternatives; their eligible-home ownership
+is separate. Inspect names for exclusions, not values for output selection. Namespace routes do not
+replace physical ranks, and emitted source-name remaps are not yet applied.
+
+Keep option storage owned outside the borrow and consume the same plan once:
+
+```rust,ignore
+let plan = windows_clang::extract_ranked_header_partitions_with_options(
+    inputs, &args, &policy, &authorities, &extraction_options,
+)?;
+let functions = {
+    let snapshot = plan.snapshot();
+    snapshot.facts().iter().filter(|fact| fact.root).filter_map(|fact| {
+        match &fact.data {
+            windows_clang::FactData::Function { link_name, .. } => Some(link_name.clone()),
+            _ => None,
+        }
+    }).collect::<std::collections::BTreeSet<_>>()
+};
+let mut options = windows_clang::EmitOptions::new("Example", &references);
+options.functions = Some(&functions);
+let report = plan.emit_with_report(&options)?;
+```
+
+This view is not a selected-values-only inventory, a byte-identical pre-policy snapshot, finalized
+emitted output, or an emittability verdict. Inspection does not prepare emission or filter invalid
+selected observations into absence. Selected-invalid, required excluded/absent-home, and native
+representation errors remain at their existing extraction, planning, or emission boundaries.
+
 The ordinary `extract*` snapshot APIs retain their cross-context annotation union and conflict
 behavior. Applying a ranked header policy to one of those snapshots does not undo that earlier
 merge or admit annotation conflicts that already failed extraction. Use the opt-in extraction

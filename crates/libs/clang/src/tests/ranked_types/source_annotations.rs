@@ -1,5 +1,245 @@
 use super::*;
 
+fn inspection_plan(reversed: bool, flipped: bool, routed: bool) -> HeaderPartitionPlan {
+    let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("producer_corrections")
+        .join("header-authority.hpp");
+    let header = header.to_str().unwrap();
+    let mut inputs: Vec<_> = [
+        ("first.cpp", "First", "int", 7, "first.dll", ""),
+        (
+            "second.cpp",
+            "Second",
+            "unsigned int",
+            13,
+            "second.dll",
+            "#define AUTHORITY_ALTERNATIVE\n",
+        ),
+    ]
+    .into_iter()
+    .map(|(input, partition, scalar, value, library, prefix)| {
+        Input::new(
+            input,
+            format!(
+                "{prefix}#define AUTHORITY_INSPECTION\n#define AUTHORITY_SCALAR {scalar}\n\
+             #define AUTHORITY_VALUE {value}\n\
+             #define AUTHORITY_IMPORT \"win32metadata:import_library={library}\"\n\
+             #include {header:?}\n"
+            ),
+        )
+        .with_roots([header])
+        .partitioned(partition)
+    })
+    .collect();
+    if reversed {
+        inputs.reverse();
+    }
+    let policy = HeaderPartitionPolicy::new()
+        .with_partition_authority("First", usize::from(flipped), "first.cpp")
+        .with_partition_authority("Second", usize::from(!flipped), "second.cpp")
+        .with_traversed_header(header, RootPartition::new("First", "Test.First"))
+        .with_traversed_header(header, RootPartition::new("Second", "Test.Second"));
+    let authorities = if routed {
+        NamespaceAuthorities::new()
+            .with_wildcard("AUTHORITY_*", "Test.Routed")
+            .with_exact("InspectAuthority", "Test.Routed")
+            .with_exact("AlternativeOnly", "Test.Routed")
+    } else {
+        NamespaceAuthorities::new()
+    };
+    extract_ranked_header_partitions_with_options(
+        inputs,
+        &[
+            "--no-default-config",
+            "-x",
+            "c++",
+            "-std=c++17",
+            "--target=x86_64-pc-windows-msvc",
+            "-nostdinc",
+        ],
+        &policy,
+        &authorities,
+        &ExtractionOptions::new().with_module_free_headers(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn ranked_plan_snapshot_queries_keep_authority_through_consuming_emission() {
+    helpers::ensure_libclang();
+    for flipped in [false, true] {
+        for routed in [false, true] {
+            let mut baseline = None;
+            for reversed in [false, true] {
+                let plan = inspection_plan(reversed, flipped, routed);
+                let (functions, libraries, excluded_constants) = {
+                    let snapshot = plan.snapshot();
+                    let observations: BTreeSet<_> = snapshot
+                        .constants()
+                        .iter()
+                        .filter(|constant| constant.name == "AUTHORITY_CONSTANT")
+                        .map(|constant| constant.value.clone())
+                        .collect();
+                    assert_eq!(
+                        observations,
+                        BTreeSet::from([Value::Signed(7), Value::Signed(13)])
+                    );
+                    let mut functions = BTreeSet::new();
+                    let mut libraries = BTreeMap::new();
+                    for fact in snapshot.facts().iter().filter(|fact| fact.root) {
+                        let FactData::Function { link_name, .. } = &fact.data else {
+                            continue;
+                        };
+                        assert_eq!(
+                            fact.origin.tu,
+                            if flipped { "second.cpp" } else { "first.cpp" }
+                        );
+                        assert_eq!(&fact.name, link_name);
+                        functions.insert(link_name.clone());
+                        for annotation in &snapshot.annotations()
+                            [&AnnotationTarget::Declaration(fact.origin.clone())]
+                        {
+                            if let Annotation::ImportLibrary(library) = annotation {
+                                libraries.insert(link_name.clone(), library.clone());
+                            }
+                        }
+                    }
+                    assert_eq!(functions.contains("AlternativeOnly"), flipped);
+                    assert_eq!(
+                        libraries["InspectAuthority"],
+                        if flipped { "second.dll" } else { "first.dll" }
+                    );
+                    let excluded_constants = snapshot
+                        .constants()
+                        .iter()
+                        .filter(|constant| constant.name != "AUTHORITY_CONSTANT")
+                        .map(|constant| constant.name.clone())
+                        .collect::<BTreeSet<_>>();
+                    (functions, libraries, excluded_constants)
+                };
+                let references = BTreeMap::new();
+                let mut options = EmitOptions::new("Test", &references);
+                options.functions = Some(&functions);
+                options.libraries = Some(&libraries);
+                options.excluded_constants = Some(&excluded_constants);
+                let report = plan.emit_with_report(&options).unwrap();
+                let direct = inspection_plan(reversed, flipped, routed)
+                    .emit_with_report(&options)
+                    .unwrap();
+                assert_eq!(report, direct);
+                if let Some(baseline) = &baseline {
+                    assert_eq!(&report, baseline);
+                }
+                let namespace = if routed {
+                    "Test.Routed"
+                } else if flipped {
+                    "Test.Second"
+                } else {
+                    "Test.First"
+                };
+                let path = std::env::temp_dir().join(format!(
+                    "ranked-plan-snapshot-{}-{:?}.winmd",
+                    std::process::id(),
+                    std::thread::current().id()
+                ));
+                windows_rdl::reader()
+                    .input_texts(report.partitions.values())
+                    .reference_default()
+                    .output(&path)
+                    .write()
+                    .unwrap();
+                let index = windows_metadata::reader::Index::read(&path).unwrap();
+                let apis = index.expect(namespace, "Apis");
+                let constant = apis
+                    .fields()
+                    .find(|field| field.name() == "AUTHORITY_CONSTANT")
+                    .unwrap();
+                assert_eq!(constant.ty(), windows_metadata::Type::I32);
+                assert_eq!(
+                    constant.constant().unwrap().value(),
+                    windows_metadata::Value::I32(if flipped { 13 } else { 7 })
+                );
+                let record = index.expect(namespace, "AUTHORITY_RECORD");
+                assert_eq!(
+                    record.fields().next().unwrap().ty(),
+                    if flipped {
+                        windows_metadata::Type::U32
+                    } else {
+                        windows_metadata::Type::I32
+                    }
+                );
+                let function = apis
+                    .methods()
+                    .find(|method| method.name() == "InspectAuthority")
+                    .unwrap();
+                assert_eq!(
+                    function.impl_map().unwrap().import_scope().name(),
+                    if flipped { "second.dll" } else { "first.dll" }
+                );
+                assert_eq!(
+                    function.impl_map().unwrap().import_name(),
+                    "InspectAuthority"
+                );
+                assert_eq!(
+                    function.signature(&[]).types,
+                    [windows_metadata::Type::PtrMut(
+                        Box::new(windows_metadata::Type::value_named(
+                            namespace,
+                            "AUTHORITY_RECORD"
+                        )),
+                        1
+                    )]
+                );
+                assert_eq!(
+                    apis.methods()
+                        .any(|method| method.name() == "AlternativeOnly"),
+                    flipped
+                );
+                std::fs::remove_file(path).unwrap();
+                baseline = Some(report);
+            }
+        }
+    }
+}
+
+#[test]
+fn ranked_plan_snapshot_inspection_preserves_strict_error_boundaries() {
+    helpers::ensure_libclang();
+    for (case, diagnostic) in [
+        ("unrepresentable", "AuthorityInterface"),
+        ("excluded", "excluded"),
+        ("absent-home", "RequiredAuthorityContextAbsent"),
+        ("absent-definition", "RequiredAuthorityDefinitionAbsent"),
+    ] {
+        let plan = ranked_plan("x86_64-pc-windows-msvc", case, false);
+        assert!(!plan.snapshot().facts().is_empty());
+        let inspected = output(plan).unwrap_err().to_string();
+        let direct = output(ranked_plan("x86_64-pc-windows-msvc", case, false))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(inspected, direct);
+        assert!(inspected.contains(diagnostic), "{case}: {inspected}");
+    }
+    let plan = source_plan(
+        "x86_64-pc-windows-msvc",
+        "#define ANNOTATION_COUNTS\n#define ANNOTATION_COUNT_TEXT \"invalid\"",
+        "#define ANNOTATION_COUNTS",
+        false,
+    )
+    .unwrap();
+    assert!(
+        plan.snapshot()
+            .annotations()
+            .values()
+            .flatten()
+            .any(|value| matches!(value, Annotation::ArrayCountConst(count) if count == "invalid"))
+    );
+    let error = report(plan).unwrap_err();
+    assert!(error.to_string().contains("not an i32"), "{error}");
+}
+
 fn source_inputs(
     home: &str,
     alternative: &str,

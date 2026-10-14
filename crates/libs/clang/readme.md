@@ -91,6 +91,13 @@ For original inputs with registered authority ranks, use `extract_ranked_header_
 extract and construct the header plan with the same `HeaderPartitionPolicy` and
 `NamespaceAuthorities`. Its `_with_options` variant also accepts `ExtractionOptions`.
 These opt-in APIs reject an unranked policy and reconcile annotations only within each original TU.
+`HeaderPartitionPlan::snapshot` borrows captured observations after header and namespace policy
+application, before emission preparation and projection. Use a scoped borrow to derive owned import,
+function-selection, or name-exclusion data, then consume that same plan with `emit_with_options` or
+`emit_with_report`. Chosen-context roots identify eligible declarations; alternative facts,
+signatures, annotations, and all constant values remain observable. Constant names can inform
+exclusions, but this view must not select constant values. It is neither a pre-policy snapshot nor
+finalized output or an emittability verdict; strict validation remains at its existing stages.
 Raw source evidence stays independent, while the effective map preserves same-context inheritance
 and validation. The finalized provider's origin and relative member slots supply annotation
 projection, dependencies, and emission. Alternative annotation differences do not veto selected
