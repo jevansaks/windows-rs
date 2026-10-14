@@ -316,6 +316,23 @@ planning. Only that partition's own-context observations become roots; other obs
 alternatives. Named output overrides refine routing and policy without changing the definition
 home. Excluding the chosen authority's name omits it without selecting a competing observation.
 
+Use `extract_ranked_header_partitions` for original-input extraction with source-context annotation
+authority. It accepts `PartitionedInput` values, compiler arguments, the registered
+`HeaderPartitionPolicy`, and `NamespaceAuthorities`, and returns a `HeaderPartitionPlan`.
+`extract_ranked_header_partitions_with_options` also accepts `ExtractionOptions`. Both reject an
+unranked policy and carry the supplied policy through extraction and existing plan construction.
+During extraction, compatible declarations reconcile annotations only within their original TU.
+Raw source annotations remain independent; the effective map retains same-context inheritance,
+repeatable-value normalization, and singleton validation. The finalized provider's origin and
+relative member slots select that effective map for dependencies, routing, and emission. Alternative
+contexts cannot contribute annotations or reject the chosen output because their values differ.
+Selected annotation representation errors and source syntax/target errors remain explicit.
+
+The ordinary `extract*` snapshot APIs retain their cross-context annotation union and conflict
+behavior. Applying a ranked header policy to one of those snapshots does not undo that earlier
+merge or admit annotation conflicts that already failed extraction. Use the opt-in extraction
+boundary rather than replacing raw annotations during emission.
+
 An observed header with an unparsed home does not require that input unless a selected root or
 reachable definition needs it. That demand reports `RequiredAuthorityContextAbsent` with the
 required name, physical header, logical partition, and original input; no other context substitutes
@@ -418,12 +435,13 @@ value, and unknown families are not replaced with empty sets. Known differences 
 produce the stored-message RDL note; equal supported evidence with unknown siblings is report-only.
 This is not standalone SAL coverage or proof of every native annotation.
 
-Record/interface/enum emission consumes legacy merged effective annotations. Compatible alternative
-contexts can contribute metadata to that merge, including an alternative-only method static-library
-attribute. Observations use own-source evidence, but cannot repair the emitted annotation source.
-Note-stripped or observer-disabled output equality proves observer noninterference, not that
-selected annotations are authoritative. Selected-annotation source consistency is outside this
-observational comparison.
+The observer uses own-source evidence and does not change annotation selection. Snapshots from the
+ordinary extraction APIs retain merged effective annotations, so compatible alternative contexts
+can contribute metadata, including an alternative-only method static-library attribute. The opt-in
+ranked extraction boundary keeps effective annotations source-context-owned instead.
+Note-stripped or observer-disabled output equality proves observer noninterference; separate native
+source controls prove chosen annotation authority. Unsupported pseudo attributes retain source/RDL
+limits when default metadata references cannot represent them.
 
 Only defining native enums with an existing physical-header semantic authority enter comparison.
 Shared literal provider selection, synthetic/associated enum generation, and standalone alias-owned
@@ -994,6 +1012,10 @@ sentinels. Symbolic sentinels are resolved in the source macro environment. `ass
 adds only the named provider constant to the dependency closure. `supported_os` is repeatable.
 Compatible redeclarations union repeatable annotations. Singleton conflicts are errors except for
 `import_library`, which uses deterministic source-order first-wins behavior.
+The ranked extraction boundary confines this reconciliation to the original TU and semantic scope.
+Count spelling differences in another TU do not become singleton conflicts; numeric representation
+is still checked when the selected annotation is projected to RDL. Source-bound SAL count
+validation checks the selected context and same-context observations, not alternative TUs.
 
 `native_opaque` is valueless and valid only on a named, non-COM C++ class definition without a
 UUID. Place the attribute after the `class` keyword and before the name. It is an extraction

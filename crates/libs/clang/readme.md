@@ -87,6 +87,14 @@ overrides replace the default candidates for selected declarations, including in
 compile variants. Call the consuming `emit_with_options` for normal generation; it audits
 internally and refuses to emit a dirty plan. Use `audit` only when a caller needs the report without
 emission because auditing before emission repeats planning and clones the snapshot.
+For original inputs with registered authority ranks, use `extract_ranked_header_partitions` to
+extract and construct the header plan with the same `HeaderPartitionPolicy` and
+`NamespaceAuthorities`. Its `_with_options` variant also accepts `ExtractionOptions`.
+These opt-in APIs reject an unranked policy and reconcile annotations only within each original TU.
+Raw source evidence stays independent, while the effective map preserves same-context inheritance
+and validation. The finalized provider's origin and relative member slots supply annotation
+projection, dependencies, and emission. Alternative annotation differences do not veto selected
+output. Ordinary `extract*` APIs retain their legacy cross-context union and extraction errors.
 Ranked plans observe emitted record, COM-interface, and native enum definitions after successful
 selected-type validation.
 `emit_with_enum_diagnostics` returns `HeaderPartitionReport::definition_evidence` and an explicit
@@ -100,8 +108,9 @@ enum production, full native ABI witnesses, volatile, and restrict are outside t
 Supported annotation families and parameter properties compare independently. Unsupported annotations
 and unresolved counts have localized `Unknown` keys, so they cannot hide a known direction or
 result-status difference. Equal supported evidence with unknown siblings remains report-only.
-The emitter's merged effective annotations can include alternative-context metadata. Unchanged
-output proves observer noninterference, not selected-annotation authority.
+Effective annotations from ordinary extraction can include alternative-context metadata. The opt-in
+ranked boundary keeps them source-context-owned. Unchanged observer-disabled output proves observer
+noninterference, not selected-annotation authority; native source controls check the latter.
 Coverage counts alternative contexts per body kind, not redeclarations. Provenance follows the
 physical header's traversing owners and immutable ranks. Ambiguous provenance retains its candidates
 and is `Unknown` without discarding independent body differences.

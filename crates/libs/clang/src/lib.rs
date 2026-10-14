@@ -183,7 +183,9 @@ mod enum_diagnostics;
 mod extract;
 use enum_diagnostics::*;
 pub use extract::{
-    extract, extract_partitioned, extract_partitioned_with_options, extract_with_options,
+    extract, extract_partitioned, extract_partitioned_with_options,
+    extract_ranked_header_partitions, extract_ranked_header_partitions_with_options,
+    extract_with_options,
 };
 
 mod builder;
@@ -4303,6 +4305,9 @@ impl Snapshot {
                             continue;
                         }
                         let candidate_origin = candidate_target.origin();
+                        if ranked && candidate_origin.tu != origin.tu {
+                            continue;
+                        }
                         let Some(candidate) = facts_by_origin.get(candidate_origin) else {
                             continue;
                         };
@@ -6504,6 +6509,9 @@ impl Snapshot {
             let Some(observation) = facts.get(observation_target.origin()) else {
                 continue;
             };
+            if self.ranked_header_partition_policy && observation.origin.tu != fact.origin.tu {
+                continue;
+            }
             let observation_policy = policy(observation);
             let same_policy = match (selected_policy, observation_policy) {
                 (Some(left), Some(right)) => same_owner_policy(left, right),

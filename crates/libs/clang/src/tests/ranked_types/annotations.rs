@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "source_annotations.rs"]
+mod source_annotations;
+
 fn annotation_plan(target: &str, flags: &[&str], reversed: bool) -> HeaderPartitionPlan {
     let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src")
@@ -167,8 +170,9 @@ fn annotation_report(plan: HeaderPartitionPlan) -> HeaderPartitionReport {
 
 fn assert_annotation_metadata(report: &HeaderPartitionReport, target: &str) {
     let path = std::env::temp_dir().join(format!(
-        "annotation-evidence-{}-{target}.winmd",
-        std::process::id()
+        "annotation-evidence-{}-{:?}-{target}.winmd",
+        std::process::id(),
+        std::thread::current().id()
     ));
     windows_rdl::reader()
         .input_texts(report.partitions.values())

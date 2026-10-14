@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef ANNOTATION_COUNT_TEXT
+#define ANNOTATION_COUNT_TEXT "2"
+#endif
+
 struct __declspec(uuid("79000000-0000-0000-0000-000000000001")) AnnotationBase {
     virtual long __stdcall Base(int value) = 0;
 };
@@ -27,6 +31,9 @@ struct __declspec(uuid("79000000-0000-0000-0000-000000000001")) AnnotationBase {
 #define PARAMETER_ATTRIBUTES __attribute__((annotate("_Out_writes_(count + 1)")))
 #elif defined(ANNOTATION_ALTERNATIVE) && defined(ANNOTATION_PARAMETER_CHANGE)
 #define PARAMETER_ATTRIBUTES __attribute__((annotate("_Out_")))
+#elif defined(ANNOTATION_NATIVE_COUNTS)
+#define PARAMETER_ATTRIBUTES \
+    __attribute__((annotate("_In_reads_(" ANNOTATION_COUNT_TEXT ")")))
 #elif defined(ANNOTATION_EQUAL_COUNT)
 #if defined(ANNOTATION_ALTERNATIVE)
 #define PARAMETER_ATTRIBUTES __attribute__((annotate("_In_reads_(count + 1)")))
@@ -48,10 +55,10 @@ struct __declspec(uuid("79000000-0000-0000-0000-000000000001")) AnnotationBase {
 #elif defined(ANNOTATION_ALTERNATIVE)
 #define PARAMETER_EXTRA \
     __attribute__((annotate("win32metadata:memory_size_const=8"))) \
-    __attribute__((annotate("win32metadata:array_count_const=2")))
+    __attribute__((annotate("win32metadata:array_count_const=" ANNOTATION_COUNT_TEXT)))
 #else
 #define PARAMETER_EXTRA \
-    __attribute__((annotate("win32metadata:array_count_const=2"))) \
+    __attribute__((annotate("win32metadata:array_count_const=" ANNOTATION_COUNT_TEXT))) \
     __attribute__((annotate("win32metadata:memory_size_const=8")))
 #endif
 #else

@@ -28,6 +28,7 @@ pub fn extract_with_options(
         BTreeMap::new(),
         args,
         options,
+        None,
     )
 }
 
@@ -42,6 +43,49 @@ pub fn extract_partitioned_with_options(
     inputs: impl IntoIterator<Item = PartitionedInput>,
     args: &[&str],
     options: &ExtractionOptions,
+) -> Result<Snapshot, Error> {
+    extract_partitioned_impl(inputs, args, options, None)
+}
+
+/// Extracts source-context annotations and constructs a plan with the supplied ranked policy.
+pub fn extract_ranked_header_partitions(
+    inputs: impl IntoIterator<Item = PartitionedInput>,
+    args: &[&str],
+    policy: &HeaderPartitionPolicy,
+    authorities: &NamespaceAuthorities,
+) -> Result<HeaderPartitionPlan, Error> {
+    extract_ranked_header_partitions_with_options(
+        inputs,
+        args,
+        policy,
+        authorities,
+        &ExtractionOptions::default(),
+    )
+}
+
+/// Bounds native extraction while retaining the same ranked policy through plan construction.
+pub fn extract_ranked_header_partitions_with_options(
+    inputs: impl IntoIterator<Item = PartitionedInput>,
+    args: &[&str],
+    policy: &HeaderPartitionPolicy,
+    authorities: &NamespaceAuthorities,
+    options: &ExtractionOptions,
+) -> Result<HeaderPartitionPlan, Error> {
+    policy.validate_partition_authorities()?;
+    if policy.partition_authorities.is_empty() {
+        return Err(Error(
+            "ranked extraction requires registered partition authorities".into(),
+        ));
+    }
+    extract_partitioned_impl(inputs, args, options, Some(policy))?
+        .into_header_partition_plan(policy, authorities)
+}
+
+fn extract_partitioned_impl(
+    inputs: impl IntoIterator<Item = PartitionedInput>,
+    args: &[&str],
+    options: &ExtractionOptions,
+    ranked_policy: Option<&HeaderPartitionPolicy>,
 ) -> Result<Snapshot, Error> {
     let inputs: Vec<_> = inputs.into_iter().collect();
     let mut identities = BTreeSet::new();
@@ -88,6 +132,7 @@ pub fn extract_partitioned_with_options(
         input_arguments,
         args,
         options,
+        ranked_policy,
     )
 }
 
@@ -98,6 +143,7 @@ fn extract_impl(
     input_arguments: BTreeMap<String, Vec<String>>,
     args: &[&str],
     options: &ExtractionOptions,
+    ranked_policy: Option<&HeaderPartitionPolicy>,
 ) -> Result<Snapshot, Error> {
     let input_order: BTreeMap<_, _> = inputs
         .iter()
@@ -261,7 +307,8 @@ fn extract_impl(
         .filter(|(target, _)| function_origins.contains(annotation_target_origin(target)))
         .map(|(target, annotations)| (target.clone(), annotations.clone()))
         .collect();
-    let reconciliation = merge_redeclaration_annotations(&facts, &mut annotations, &mut phase);
+    let reconciliation =
+        merge_redeclaration_annotations(&facts, &mut annotations, ranked_policy, &mut phase);
     phase.check(reconciliation)?;
     let annotation_macros = annotation_macro_names(&annotations);
     let associated_constants = associated_constant_names(&facts, &annotations);
@@ -7385,6 +7432,7 @@ fn insert_annotations(
 fn merge_redeclaration_annotations(
     facts: &[Fact],
     annotations: &mut BTreeMap<AnnotationTarget, Vec<Annotation>>,
+    ranked_policy: Option<&HeaderPartitionPolicy>,
     phase: &mut TimingPhase,
 ) -> Result<(), Error> {
     let facts_by_origin: HashMap<_, _> = facts.iter().map(|fact| (&fact.origin, fact)).collect();
@@ -7410,7 +7458,8 @@ fn merge_redeclaration_annotations(
             phase.visit(None);
             if let Some(group) = groups.iter_mut().find(|group| {
                 group.iter().all(|fact| {
-                    annotation_declarations_compatible(fact, candidate, &facts_by_origin)
+                    (ranked_policy.is_none() || fact.origin.tu == candidate.origin.tu)
+                        && annotation_declarations_compatible(fact, candidate, &facts_by_origin)
                 })
             }) {
                 group.push(candidate);
@@ -7420,7 +7469,7 @@ fn merge_redeclaration_annotations(
         }
 
         for group in groups {
-            if !group.iter().any(|fact| fact.root) {
+            if ranked_policy.is_none() && !group.iter().any(|fact| fact.root) {
                 continue;
             }
             let origins: BTreeSet<_> = group.iter().map(|fact| fact.origin.clone()).collect();
